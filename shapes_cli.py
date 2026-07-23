@@ -8,6 +8,7 @@
   python3 shapes_cli.py program.planes --no-follow   # this file only
   python3 shapes_cli.py program.planes --rules        # check its rules
   python3 shapes_cli.py program.planes --fingerprints # print rule fingerprints
+  python3 shapes_cli.py program.planes --derivation-stats  # P-Q10 node/depth measurement
   python3 shapes_cli.py --diff old.planes new.planes
   python3 shapes_cli.py --index demo/pkgs           # index a corpus
   python3 shapes_cli.py --search network demo/pkgs  # search by behaviour
@@ -72,6 +73,45 @@ def as_json(surface, path):
             for e in surface.used_but_undeclared()
         ],
         "unresolved_calls": sorted(set(surface.unresolved)),
+    }
+
+
+def derivation_stats(surface):
+    """Max/mean node count per effect, and max graph depth — P-Q10.
+
+    Measures whether derivation survives arithmetic without Jif-style label
+    creep. The creep bounds already in shapes.py (is_recursive, the depth
+    caps in const_call/specialise, assigned_in's join widening) are what
+    keep this bounded; this only measures the result, it does not enforce
+    anything new.
+    """
+    def count_and_depth(node, seen=None):
+        seen = seen if seen is not None else set()
+        if node is None or id(node) in seen:
+            return 0, 0
+        seen.add(id(node))
+        count, depth = 1, 1
+        for i in node.inputs:
+            c, d = count_and_depth(i, seen)
+            count += c
+            depth = max(depth, 1 + d)
+        return count, depth
+
+    counts, depths = [], []
+    for e in surface.declared:
+        if e.derivation is None:
+            continue
+        c, d = count_and_depth(e.derivation)
+        counts.append(c)
+        depths.append(d)
+    if not counts:
+        return {"effects_with_derivation": 0, "max_nodes": 0, "mean_nodes": 0,
+                "max_depth": 0}
+    return {
+        "effects_with_derivation": len(counts),
+        "max_nodes": max(counts),
+        "mean_nodes": round(sum(counts) / len(counts), 2),
+        "max_depth": max(depths),
     }
 
 
@@ -156,6 +196,15 @@ def main(argv):
     except ModuleError as e:
         print(f"module error — {e}", file=sys.stderr)
         return 1
+
+    if "--derivation-stats" in args:
+        stats = derivation_stats(surface)
+        print(f"derivation stats for {os.path.basename(path)}")
+        print(f"  effects with a derivation: {stats['effects_with_derivation']}")
+        print(f"  max nodes per effect:      {stats['max_nodes']}")
+        print(f"  mean nodes per effect:     {stats['mean_nodes']}")
+        print(f"  max graph depth:           {stats['max_depth']}")
+        return 0
 
     if "--rules" in args or "--fingerprints" in args:
         # Rules are collected from this file's own top-level statements,
