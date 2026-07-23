@@ -15,12 +15,20 @@ from typing import Any, Optional
 # ================================================================ tokens
 
 TOKEN_SPEC = [
-    ("COMMENT", r"#[^\n]*"),
-    ("NUMBER",  r"\d+(\.\d+)?"),
-    ("STRING",  r'"[^"]*"'),
-    ("NAME",    r"[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*"),
-    ("OP",      r"->|==|!=|<=|>=|[+\-*/=<>().,;:\[\]]"),
-    ("WS",      r"[ \t]+"),
+    ("COMMENT",     r"#[^\n]*"),
+    # A rule fingerprint — @ plus exactly six hex characters — has to be
+    # its own token, ahead of NUMBER and NAME: most fingerprints start
+    # with a digit, and NUMBER would otherwise split "@3f9c2d" into a
+    # number and a name at the first letter.
+    ("FINGERPRINT", r"@[0-9a-fA-F]{6}"),
+    ("NUMBER",      r"\d+(\.\d+)?"),
+    ("STRING",      r'"[^"]*"'),
+    ("NAME",        r"[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*"),
+    # `@` also appears in OP, as a fallback: a malformed fingerprint (wrong
+    # length, non-hex characters) then tokenizes as a lone '@' the parser
+    # can catch and name the fix for, rather than silently vanishing.
+    ("OP",          r"->|==|!=|<=|>=|[+\-*/=<>().,;:\[\]@]"),
+    ("WS",          r"[ \t]+"),
 ]
 TOKEN_RE = re.compile("|".join(f"(?P<{n}>{p})" for n, p in TOKEN_SPEC))
 
@@ -224,3 +232,9 @@ class Rule:
     target: Optional[str] = None # a specific destination, or None for any
     line: int = 0                # for the violation message
     supersedes: Optional[str] = None  # name of an earlier rule this replaces
+    # Appended rather than inserted earlier so every existing positional
+    # Rule(...) construction (four in test_rules.py alone) keeps working
+    # and defaults to the behavior that shipped before permits existed.
+    assertion: str = "forbid"    # "forbid" (may not) or "permit" (may)
+    supersedes_fingerprint: Optional[str] = None  # the @xxxxxx a supersedes
+                                                   # clause was written against
