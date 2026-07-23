@@ -227,7 +227,8 @@ def main(argv):
             return 0
 
         try:
-            results = check_rules(found, surface)
+            results = check_rules(found, surface,
+                                  declaring_file=os.path.abspath(path))
         except (RuleNotSupported, RuleConflict) as e:
             print(f"rule check error — {e}", file=sys.stderr)
             return 1

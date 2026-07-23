@@ -17,14 +17,17 @@ import hashlib
 
 
 class RuleNotSupported(Exception):
-    """A rule this slice's checker cannot evaluate.
+    """A rule this checker cannot evaluate.
 
-    Binding a named subject (anything other than the `anything` wildcard)
-    to the effects it actually produced requires a static derivation
-    graph, which this slice does not build — that machinery is the other,
-    unsupported half of §8's claim. Reporting such a rule as clean would be
-    the exact failure the two guarantees exist to prevent: a rule that
-    never ran, presented as a rule that passed.
+    A named subject (anything other than the `anything` wildcard) is
+    resolved against the static derivation graph shapes.py now retains
+    (Surface.origins_of), scoped to the file that declares the rule
+    (P-Q18): a rule may not reach across an import boundary to bind a name
+    it never saw declared. Raised when the subject cannot be resolved at
+    all, or resolves only in another file — never silently treated as a
+    match. Reporting such a rule as clean would be the exact failure the
+    two guarantees exist to prevent: a rule that never ran, presented as a
+    rule that passed.
     """
     pass
 
@@ -103,7 +106,7 @@ class Violation:
     """
 
     def __init__(self, rule, effect, uncertain=False, cleared_by=None,
-                narrowed_by=None):
+                narrowed_by=None, origins=None):
         self.rule = rule
         self.effect = effect
         # True when the effect's target is computed=True: the analyser
@@ -113,6 +116,9 @@ class Violation:
         self.uncertain = uncertain
         self.cleared_by = cleared_by
         self.narrowed_by = narrowed_by or []
+        # Every name/file this effect's target derives from (Surface.
+        # origins_of) — rendered as a derivation line when non-empty (§24).
+        self.origins = origins or []
 
     @property
     def is_violation(self):
@@ -137,6 +143,9 @@ class Violation:
             names = ", ".join(f"[{r.name}] (line {r.line})"
                               for r in self.narrowed_by)
             lines.append(f"  narrowed here by {names}")
+        if self.origins:
+            parts = sorted({f"{n} ({f})" if f else n for n, f in self.origins})
+            lines.append(f"  derived from: {', '.join(parts)}")
         return "\n".join(lines)
 
     def __str__(self):
@@ -177,6 +186,60 @@ def _target_matches(rule, effect):
     if effect.computed:
         return True, True
     return effect.target == rule.target, False
+
+
+def _resolve_subject(rule, surface, declaring_file):
+    """Validate a rule's named subject can be traced (P-Q16, P-Q18).
+
+    Scans every declared effect's origins (any kind — a subject may only
+    ever reach a boundary this rule doesn't name, and that is still a
+    resolvable, just non-matching, subject). Three outcomes:
+
+    - Found, in the file that declares this rule: resolved, return.
+    - Found, but only in another file: RuleNotSupported naming that file
+      — a rule cannot reach across an import boundary to a name it never
+      saw declared (P-Q18).
+    - Not found anywhere: RuleNotSupported naming the subject.
+
+    Every message names the fix (unbound v1.1 §22 item 1).
+    """
+    all_origins = []
+    for effect in surface.declared:
+        all_origins.extend(surface.origins_of(effect))
+
+    hits = [f for n, f in all_origins if n == rule.subject]
+    if declaring_file in hits:
+        return
+    if hits:
+        other = hits[0]
+        raise RuleNotSupported(
+            f"rule [{rule.name}] (line {rule.line}): subject "
+            f"'{rule.subject}' only resolves in {other}, not in the file "
+            f"that declares this rule — a rule cannot reach across an "
+            f"import boundary to a name it never saw declared\n"
+            f"  write the rule in {other} instead, or name a subject "
+            f"local to this file")
+    raise RuleNotSupported(
+        f"rule [{rule.name}] (line {rule.line}): subject "
+        f"'{rule.subject}' does not resolve to anything in the traced "
+        f"effect surface — checking it needs a value this file's "
+        f"derivation graph can reach\n"
+        f"  check the name is spelled as it appears in this file, or "
+        f"write the rule against 'anything' instead")
+
+
+def _subject_matches(rule, effect, surface, declaring_file):
+    """Does this effect's target provably derive from the rule's subject,
+    within the file that declares the rule?
+
+    'anything' always matches — the wildcard subject predates named-subject
+    resolution and every existing anything-rule must keep working exactly
+    as before.
+    """
+    if rule.subject == "anything":
+        return True
+    origins = surface.origins_of(effect)
+    return any(n == rule.subject and f == declaring_file for n, f in origins)
 
 
 def _resolve_active(rules):
@@ -332,7 +395,7 @@ def _check_conflicts(active):
                 f"reverse), or give one of them a target the other lacks")
 
 
-def check(rules, surface):
+def check(rules, surface, declaring_file=None):
     """Every violation of every rule, given a computed effect surface.
 
     A `forbid` rule matching an effect is a violation unless a related
@@ -343,20 +406,19 @@ def check(rules, surface):
     `any(v.is_violation for v in result)`, never on whether the result is
     non-empty.
 
+    `declaring_file` scopes named-subject resolution (P-Q18): defaults to
+    None, which matches every node's file when the surface came from
+    `analyse(src)` with no path (every node's file is None too) — so every
+    existing single-file caller keeps working unchanged. `shapes_cli.py`
+    passes the entry file's path.
+
     Reads only the public queries on Surface. If this function needs to
     reach into the analyser's internals, that is a finding about
     inception checkpoint §8 — report it rather than working around it.
     """
     for rule in rules:
         if rule.subject != "anything":
-            raise RuleNotSupported(
-                f"rule [{rule.name}] (line {rule.line}): a subject other "
-                f"than 'anything' is not yet supported — binding "
-                f"'{rule.subject}' to the effects it actually produces "
-                f"needs a static derivation graph this slice does not "
-                f"build\n"
-                f"  write the rule against 'anything' instead, or wait "
-                f"for the derivation-reaching half of the rule plane")
+            _resolve_subject(rule, surface, declaring_file)
 
     active = _resolve_active(rules)
     _check_permits_are_related(active)
@@ -373,6 +435,8 @@ def check(rules, surface):
             matched, uncertain = _target_matches(rule, effect)
             if not matched:
                 continue
+            if not _subject_matches(rule, effect, surface, declaring_file):
+                continue
 
             clearer = None
             for p in permits:
@@ -383,13 +447,15 @@ def check(rules, surface):
                 # safe for a prohibition (§34), but widening an EXCEPTION
                 # is not — an uncertain match might not be the effect the
                 # permit actually names.
-                if p_matched and not p_uncertain:
+                if (p_matched and not p_uncertain
+                        and _subject_matches(p, effect, surface, declaring_file)):
                     clearer = p
                     break
 
+            origins = surface.origins_of(effect)
             if clearer is not None:
                 results.append(Violation(rule, effect, uncertain=uncertain,
-                                         cleared_by=clearer))
+                                         cleared_by=clearer, origins=origins))
                 continue
 
             narrowers = [
@@ -398,6 +464,6 @@ def check(rules, surface):
                 and _target_matches(other, effect)[0]
             ]
             results.append(Violation(rule, effect, uncertain=uncertain,
-                                     narrowed_by=narrowers))
+                                     narrowed_by=narrowers, origins=origins))
 
     return results
