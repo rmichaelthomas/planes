@@ -96,23 +96,28 @@ class Parser:
         if self.at("FOREIGN"):
             return self.parse_foreign()
 
+        if self.at("RULE"):
+            return self.parse_rule()
+
         if self.at("TO") and self.peek(1).kind == "NAME":
             return self.parse_funcdef()
 
         if self.accept("GIVE"):
             return Give(self.parse_expr())
 
-        if self.accept("SHOW"):
-            return Show(self.parse_expr())
+        show_tok = self.accept("SHOW")
+        if show_tok:
+            return Show(self.parse_expr(), show_tok.line)
 
         if self.accept("WHY"):
             return Why(self.parse_expr())
 
-        if self.accept("WRITE"):
+        write_tok = self.accept("WRITE")
+        if write_tok:
             value = self.parse_or()
             self.expect("TO")
             dest = self.parse_or()
-            return self.trailing_or_fail(WriteTo(value, dest))
+            return self.trailing_or_fail(WriteTo(value, dest, write_tok.line))
 
         if self.accept("IF"):
             cond = self.parse_expr()
@@ -150,7 +155,7 @@ class Parser:
         unknown, not pure — a foreign function whose effects nobody stated
         must not disappear from the surface.
         """
-        self.expect("FOREIGN")
+        foreign_tok = self.expect("FOREIGN")
         parts = [self.expect("NAME").value]
         while self.at("NAME"):
             parts.append(self.next().value)
@@ -169,7 +174,7 @@ class Parser:
             while self.accept("OP", ","):
                 claims.append(self.read_claim(params))
             effects = tuple(c for c in claims if c[0] != "nothing")
-        return Foreign(name, params, target, effects, declared)
+        return Foreign(name, params, target, effects, declared, foreign_tok.line)
 
     def read_claim(self, params):
         """One entry in a `doing` clause: an effect kind and, optionally,
@@ -198,8 +203,9 @@ class Parser:
                 f"  parameters: {', '.join(params) or 'none'}")
         return (kind, None)
 
-    def read_effect_word(self):
-        """An effect name in a `doing` clause.
+    def read_effect_word(self, after="'doing'"):
+        """An effect name, after `doing` in a foreign claim or after `may
+        not` in a rule.
 
         Effect names double as ordinary words, so most arrive as NAME. A few
         (`read`, `write`, `show`, `ask`) may be builtins or reserved words;
@@ -210,8 +216,84 @@ class Parser:
             self.next()
             return t.value or "nothing"
         raise PlanesSyntaxError(
-            f"line {t.line}: expected an effect name after 'doing', "
+            f"line {t.line}: expected an effect name after {after}, "
             f"found '{t.value or 'end of line'}'")
+
+    def parse_rule(self):
+        """`rule [name] subject may not kind` or
+        `rule [name] subject may not kind to "target"`
+
+        A rule is a constraint the checker reads, never an action the
+        program takes (unbound v2.0 §33) — nothing here executes anything.
+        """
+        rule_tok = self.expect("RULE")
+
+        if not self.at("OP", "["):
+            g = self.peek()
+            raise PlanesSyntaxError(
+                f"line {g.line}: a rule needs a bracketed name, "
+                f"found '{g.value or 'end of line'}'\n"
+                f"  try: rule [name-here] subject may not effect-kind")
+        self.next()
+        if not self.at("NAME"):
+            g = self.peek()
+            raise PlanesSyntaxError(
+                f"line {g.line}: a rule's bracketed name must be a word, "
+                f"found '{g.value or 'end of line'}'\n"
+                f"  try: rule [name-here] subject may not effect-kind")
+        name = self.next().value
+        self.expect("OP", "]")
+
+        subject = self.expect("NAME").value
+
+        form = f"rule [{name}] {subject} may not effect-kind"
+        if not self.at("NAME", "may"):
+            g = self.peek()
+            raise PlanesSyntaxError(
+                f"line {g.line}: expected 'may not' after a rule's "
+                f"subject, found '{g.value or 'end of line'}'\n"
+                f"  try: {form}")
+        self.next()
+        if not self.at("NOT"):
+            g = self.peek()
+            raise PlanesSyntaxError(
+                f"line {g.line}: expected 'may not' after a rule's "
+                f"subject, found 'may {g.value or 'end of line'}'\n"
+                f"  try: {form}")
+        self.next()
+
+        kind_tok = self.peek()
+        kind = self.read_effect_word(after="'may not'")
+        if kind not in EFFECT_KINDS:
+            raise PlanesSyntaxError(
+                f"line {kind_tok.line}: '{kind}' is not an effect kind a "
+                f"rule can name\n"
+                f"  valid kinds: {', '.join(sorted(EFFECT_KINDS))}")
+
+        target = None
+        if self.accept("TO"):
+            target = self.expect("STRING").value[1:-1]
+
+        supersedes = None
+        if self.at("NAME", "supersedes"):
+            self.next()
+            if not self.at("OP", "["):
+                g = self.peek()
+                raise PlanesSyntaxError(
+                    f"line {g.line}: 'supersedes' needs a bracketed rule "
+                    f"name, found '{g.value or 'end of line'}'\n"
+                    f"  try: {form} supersedes [other-rule-name]")
+            self.next()
+            if not self.at("NAME"):
+                g = self.peek()
+                raise PlanesSyntaxError(
+                    f"line {g.line}: 'supersedes' needs a bracketed rule "
+                    f"name, found '{g.value or 'end of line'}'\n"
+                    f"  try: {form} supersedes [other-rule-name]")
+            supersedes = self.next().value
+            self.expect("OP", "]")
+
+        return Rule(name, subject, kind, target, rule_tok.line, supersedes)
 
     def parse_funcdef(self):
         self.expect("TO")
@@ -438,7 +520,7 @@ class Parser:
                 args = [self.parse_unary()]
                 while self.accept("OP", ","):
                     args.append(self.parse_unary())
-                return Call(name, args)
+                return Call(name, args, t.line)
             if self.at("OP", "("):
                 # `add(2, 3)` is an argument list. But `ask (api base) + "/"`
                 # is one argument that merely starts with a parenthesis, and
@@ -446,7 +528,7 @@ class Parser:
                 # what follows it: an operator means the parens were part of
                 # a larger expression, not the whole argument list.
                 if not self.paren_is_arglist():
-                    return Call(name, [self.parse_additive()])
+                    return Call(name, [self.parse_additive()], t.line)
                 self.next()
                 args = []
                 if not self.at("OP", ")"):
@@ -454,7 +536,7 @@ class Parser:
                     while self.accept("OP", ","):
                         args.append(self.parse_expr())
                 self.expect("OP", ")")
-                return Call(name, args)
+                return Call(name, args, t.line)
             # multi-word name, longest match against known functions.
             # Handles both `fetch stories` and `phone home of settings`.
             if self.at("NAME"):
@@ -472,8 +554,8 @@ class Parser:
                         args = [self.parse_unary()]
                         while self.accept("OP", ","):
                             args.append(self.parse_unary())
-                        return Call(best, args)
-                    return Call(best, [])
+                        return Call(best, args, t.line)
+                    return Call(best, [], t.line)
             if name in Parser.known_funcs:
                 # A known function may take one argument by juxtaposition:
                 # `ask "https://" + text of id` and `ask url` both read as
@@ -490,8 +572,8 @@ class Parser:
                     # by a statement would absorb it.
                     takes_arg = self.peek().value not in Parser.known_funcs
                 if takes_arg:
-                    return Call(name, [self.parse_additive()])
-                return Call(name, [])
+                    return Call(name, [self.parse_additive()], t.line)
+                return Call(name, [], t.line)
             return Var(name)
 
         raise PlanesSyntaxError(

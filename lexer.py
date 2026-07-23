@@ -45,6 +45,8 @@ KEYWORDS = {
     "true", "false", "nothing",
     # operations with distinctive syntax the parser must recognise
     "first", "round", "places",
+    # rule plane — a compile-time-only constraint, never executed
+    "rule",
 }
 
 
@@ -87,6 +89,24 @@ def tokenize(src):
         out.append(Token("END", "", lineno))
     out.append(Token("EOF", "", lineno + 1))
     return out
+
+
+# The closed vocabulary of effect kinds, grouped by boundary. Lives here,
+# rather than in shapes.py where it originated, because the parser also
+# needs it — to validate a rule's effect kind at parse time — and parser.py
+# cannot import shapes.py (shapes.py imports parser.py; the reverse would be
+# a cycle). Closed is the point: an open vocabulary cannot be searched or
+# diffed across packages, and duplicating it in two files would let the two
+# copies drift.
+EFFECT_KINDS = {
+    "ask":    "network",     # request-with-response
+    "read":   "file",
+    "write":  "file",
+    "show":   "console",
+    "clock":  "ambient",     # the current time
+    "random": "ambient",     # entropy
+    "env":    "ambient",     # environment variables, process arguments
+}
 
 
 # ================================================================ AST
@@ -136,10 +156,13 @@ class FuncDef:
 class Call:
     name: str
     args: list
+    line: int = 0
 @dataclass
 class Give:     expr: Any
 @dataclass
-class Show:     expr: Any
+class Show:
+    expr: Any
+    line: int = 0
 @dataclass
 class ForEach:
     var: str
@@ -177,11 +200,27 @@ class Foreign:
     #   None                                    not stated
     effects: tuple = ()
     declared: bool = False      # was `doing` written at all
+    line: int = 0                # for the violation message, when a rule
+                                  # matches an effect this declaration claims
 @dataclass
 class WriteTo:
     value: Any
     dest: Any
+    line: int = 0
 @dataclass
 class Round:
     value: Any
     places: Any
+@dataclass
+class Rule:
+    """A constraint on what the program may do.
+
+    Evaluated, never executed (unbound v2.0 §33). The checker reads it; the
+    interpreter must not.
+    """
+    name: str                    # bracketed label, brackets stripped
+    subject: str                 # what the rule applies to; "anything" is the wildcard
+    kind: str                    # an effect kind from EFFECT_KINDS
+    target: Optional[str] = None # a specific destination, or None for any
+    line: int = 0                # for the violation message
+    supersedes: Optional[str] = None  # name of an earlier rule this replaces

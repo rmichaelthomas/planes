@@ -73,7 +73,7 @@ def test_reserved_list_is_only_structural_words():
     """A word stays reserved only if the parser must see it to know the
     shape of a statement.
 
-    The ceiling is 29, and every rise is argued for in a report:
+    The ceiling is 30, and every rise is argued for in a report:
 
     - 25 after the vocabulary was cut from 32.
     - 26 with `with`, for rename-on-import: a consumer of two colliding
@@ -84,11 +84,17 @@ def test_reserved_list_is_only_structural_words():
       reusing an existing word: `as` already means rename, `with` already
       means rename-pairs, and overloading either would give one word two
       meanings in two statements.
+    - 30 with `rule`, for the effect-only rule-plane slice (REPORT_RULES.md).
+      No existing word could carry it without giving that word two meanings
+      in two statements. `may` and `not` were deliberately left unreserved:
+      `not` already carried logical negation and needed no new grant, and
+      `may` is read positionally inside `parse_rule` only, so a program that
+      never writes `rule` still has `may` free as an ordinary name.
 
     A rise is only legitimate when the word has no other spelling. If the
     argument is weaker than that, drop the feature instead.
     """
-    assert len(KEYWORDS) <= 29, f"reserved list has grown to {len(KEYWORDS)}"
+    assert len(KEYWORDS) <= 30, f"reserved list has grown to {len(KEYWORDS)}"
     for word in FORMER_KEYWORDS:
         assert word not in KEYWORDS, f"{word!r} should no longer be reserved"
 

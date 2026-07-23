@@ -71,6 +71,8 @@ COVERAGE = {
     "WriteTo": 'use file\nwrite [1] to "o.json"',
     "Round":   'use file\nx = round 2.675 to 2 places\nwrite [x] to "o.json"',
     "Foreign": 'foreign now from "time.time" doing clock\nt = now',
+    "Rule":    'rule [no-telemetry] anything may not ask\n'
+               'use file\nwrite [1] to "o.json"',
 }
 
 

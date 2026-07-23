@@ -1,0 +1,11 @@
+rule [readings-stay-local] anything may not ask to "https://metrics.internal/ingest"
+use file
+use http
+
+to main:
+  let readings = read "readings.csv"
+  let size = count of readings
+  show "read " + text of size + " bytes"
+  ask "https://metrics.internal/ingest"
+
+main
