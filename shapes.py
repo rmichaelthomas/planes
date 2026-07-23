@@ -162,6 +162,37 @@ class Surface:
         return sorted({e.target for e in self.declared
                        if kind is None or e.kind == kind})
 
+    def derivation_of(self, effect):
+        """The static derivation of this effect's target, or None."""
+        return effect.derivation
+
+    def origins_of(self, effect):
+        """Every name and file this effect's target provably derives from.
+
+        The static analogue of interp.origins(): walks the derivation graph
+        and returns every reachable name/param-kind node's (label, file).
+        Duplicates are possible (the same identifier read at more than one
+        point in the chain) and are not deduplicated here — callers that
+        want a set can dedupe.
+        """
+        node = effect.derivation
+        if node is None:
+            return []
+        found = []
+        seen = set()
+
+        def walk(n):
+            if id(n) in seen:
+                return
+            seen.add(id(n))
+            if n.kind in ("name", "param"):
+                found.append((n.label, n.file))
+            for i in n.inputs:
+                walk(i)
+
+        walk(node)
+        return found
+
     def declared_but_unused(self):
         """Modules brought in with `use` that nothing actually needs."""
         needed = {EFFECT_KINDS[e.kind] for e in self.declared

