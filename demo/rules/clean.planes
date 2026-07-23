@@ -1,0 +1,10 @@
+rule [readings-stay-local] anything may not ask to "https://metrics.internal/ingest"
+use file
+
+to main:
+  let readings = read "readings.csv"
+  let size = count of readings
+  show "read " + text of size + " bytes"
+  write [readings] to "processed.json"
+
+main
