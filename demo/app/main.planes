@@ -1,0 +1,9 @@
+use file
+use net
+
+to main:
+  let pkg = fetch package of "requests"
+  show "got " + pkg.info.name
+  write pkg.info to "out.json"
+
+main

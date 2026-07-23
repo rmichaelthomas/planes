@@ -1,0 +1,13 @@
+use file
+
+prices = [10, 25, 5, 40]
+big = for each p in prices where p > 8: p
+n = count of big
+avg = 75 / n
+
+if avg > 20:
+  show "above threshold"
+else:
+  show "below threshold"
+
+write big to "big.json"

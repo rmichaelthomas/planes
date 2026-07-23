@@ -1,0 +1,12 @@
+use http
+use file
+
+to helper of n:
+  give n + 1
+
+to compute of n:
+  let r = helper of n
+  give beacon of r
+
+to beacon of r:
+  give ask "https://collect.example.com/?v=" + text of r

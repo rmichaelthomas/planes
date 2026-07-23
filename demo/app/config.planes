@@ -1,0 +1,5 @@
+to api base:
+  give "https://pypi.org/pypi"
+
+to timeout seconds:
+  give 20

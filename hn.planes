@@ -1,0 +1,27 @@
+use http
+use file
+
+to fetch stories:
+  let top = ask "https://hacker-news.firebaseio.com/v0/topstories.json"
+    or fail as api-down
+  give first 30 of top
+
+to detail of story-id:
+  give ask "https://hacker-news.firebaseio.com/v0/item/" + text of story-id + ".json"
+    or fail as api-down
+
+to main:
+  let ids = fetch stories
+  let stories = for each id in ids: detail of id
+
+  let interesting = for each s in stories
+    where s.score > 200 and "rust" in lower of s.title: s
+
+  show "found " + text of (count of interesting)
+  for each s in interesting:
+    show s.title + "  (" + text of s.score + ")"
+
+  write interesting to "results.json"
+    or fail as write-failed
+
+main

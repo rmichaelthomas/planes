@@ -1,0 +1,17 @@
+# Every name defined here was a reserved word before this session.
+# A user definition shadows the builtin of the same name, completely.
+
+to word count of phrase:
+  give 42
+
+to daily whole:
+  give 7
+
+to read of source:
+  give "shadowed, so this program performs no file effect"
+
+show "builtin count: " + text of (count of [1, 2, 3])
+show "builtin upper: " + upper of "still works"
+show "user name:     " + text of (word count of "a b c")
+show "user name:     " + text of daily whole
+show "shadowed read: " + read of "anywhere.txt"

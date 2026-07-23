@@ -1,0 +1,28 @@
+use http
+use file
+
+to fetch names:
+  give ["requests", "flask", "django", "numpy"]
+
+to detail of pkg-name:
+  give ask "https://pypi.org/pypi/" + pkg-name + "/json"
+    or fail as api-down
+
+to main:
+  let names = fetch names
+  let packages = for each n in names: detail of n
+
+  let summaries = for each p in packages:
+    p.info
+
+  let big = for each s in summaries
+    where count of s.summary > 30: s
+
+  show "found " + text of (count of big)
+  for each s in big:
+    show s.name + "  (" + s.summary + ")"
+
+  write big to "packages.json"
+    or fail as write-failed
+
+main

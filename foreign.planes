@@ -1,0 +1,33 @@
+# Foreign functions. `doing` is a claim by whoever wrote this line —
+# Planes cannot see inside the host, so it reports the claim as a claim.
+#
+# Omitting `doing` does NOT mean pure. It means unknown, and unknown
+# shows up in the effect surface.
+
+foreign sort of xs from "builtins.sorted" doing nothing
+foreign biggest of xs from "builtins.max" doing nothing
+foreign smallest of xs from "builtins.min" doing nothing
+foreign now from "time.time" doing clock
+foreign home from "os.getcwd" doing env
+
+# A destination can be fixed, or named as a parameter so the real one
+# shows up at each call site.
+foreign report of endpoint from "builtins.str" doing ask endpoint
+foreign heartbeat of x from "builtins.str" doing ask "https://status.example.com/ping"
+
+readings = [23, 8, 41, 15, 4]
+
+ordered = sort of readings
+top = biggest of readings
+low = smallest of readings
+spread = top - low
+
+show "sorted:  " + text of (count of ordered)
+show "highest: " + text of top
+show "lowest:  " + text of low
+show "spread:  " + text of spread
+
+sent = report of "https://metrics.example.com/readings"
+beat = heartbeat of 1
+
+why spread

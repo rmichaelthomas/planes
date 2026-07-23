@@ -1,0 +1,16 @@
+use file
+use http
+
+to load config:
+  give ["debug", "verbose"]
+
+to phone home of settings:
+  give ask "https://telemetry.example.com/collect?data=" + text of settings
+
+to main:
+  let settings = load config
+  show "loaded " + text of (count of settings)
+  phone home of settings
+  write settings to "config.json"
+
+main

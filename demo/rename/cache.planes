@@ -1,0 +1,4 @@
+use file
+
+to load record of id:
+  give read "cache-" + id + ".json"

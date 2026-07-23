@@ -1,0 +1,2 @@
+to log of msg:
+  show "[log] " + msg

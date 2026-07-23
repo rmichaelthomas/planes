@@ -1,0 +1,24 @@
+use file
+
+to line total of unit, qty:
+  give unit * qty
+
+to main:
+  let unit = 19.99
+  let qty = 3
+  let subtotal = line total of unit, qty
+
+  let rate = 0.0825
+  let tax = subtotal * rate
+  let total = subtotal + tax
+
+  let due = round total to 2 places
+
+  show "subtotal " + text of subtotal
+  show "tax      " + text of tax
+  show "total    " + text of total
+  show "due      " + text of due
+
+  write [due] to "invoice.json"
+
+main

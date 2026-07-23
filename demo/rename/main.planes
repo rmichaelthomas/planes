@@ -1,0 +1,8 @@
+# loader and cache both export `load record`. Neither is editable here.
+# The fix lives at the point of use.
+
+use loader
+use cache with load record as load cached
+
+fresh = load record of "requests"
+show "network: " + text of (count of fresh)

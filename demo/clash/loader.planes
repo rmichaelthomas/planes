@@ -1,0 +1,4 @@
+use http
+
+to load record of id:
+  give ask "https://pypi.org/pypi/" + id + "/json"

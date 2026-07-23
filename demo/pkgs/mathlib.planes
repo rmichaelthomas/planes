@@ -1,0 +1,5 @@
+to square of n:
+  give n * n
+
+to sum all of xs:
+  give count of xs

@@ -429,4 +429,3 @@ label = REQUESTS
 
 Every boundary crossing is logged in order as the program runs. `--effects`
 prints it. This is the runtime half of Shapes; the static half is not built.
-# planes

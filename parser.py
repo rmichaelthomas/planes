@@ -1,0 +1,563 @@
+"""Planes parser — turns tokens into AST."""
+from lexer import *
+from planes_num import Number
+
+# Builtins are ordinary functions, not keywords. The parser only needs their
+# names so a bare `count of xs` is read as a call rather than a variable; it
+# does not need to know what they do. A user may define a function with the
+# same name, and theirs is the one that runs.
+BUILTIN_NAMES = {"count", "lower", "upper", "text", "whole", "ask", "read"}
+
+
+class PlanesSyntaxError(Exception):
+    pass
+
+
+class Parser:
+    known_funcs = set()
+
+    def __init__(self, tokens):
+        self.toks = tokens
+        self.i = 0
+
+    # ---- token helpers
+
+    def peek(self, k=0):
+        return self.toks[min(self.i + k, len(self.toks) - 1)]
+
+    def next(self):
+        t = self.toks[self.i]
+        self.i += 1
+        return t
+
+    def at(self, kind, value=None):
+        t = self.peek()
+        return t.kind == kind and (value is None or t.value == value)
+
+    def accept(self, kind, value=None):
+        return self.next() if self.at(kind, value) else None
+
+    def expect(self, kind, value=None):
+        t = self.accept(kind, value)
+        if t is None:
+            g = self.peek()
+            raise PlanesSyntaxError(
+                f"line {g.line}: expected {value or kind.lower()}, "
+                f"found '{g.value or 'end of line'}'")
+        return t
+
+    def skip_blank(self):
+        while self.accept("EOL") or self.accept("OP", ";"):
+            pass
+
+    # ---- structure
+
+    def parse_program(self):
+        stmts = []
+        self.skip_blank()
+        while not self.at("EOF"):
+            if self.accept("END"):
+                self.skip_blank()
+                continue
+            stmts.append(self.parse_statement())
+            self.skip_blank()
+        return stmts
+
+    def parse_block(self):
+        """Indented block after ':' — or a single inline statement."""
+        if self.accept("EOL"):
+            self.expect("BEGIN")
+            stmts = []
+            self.skip_blank()
+            while not self.at("END") and not self.at("EOF"):
+                stmts.append(self.parse_statement())
+                self.skip_blank()
+            self.accept("END")
+            return stmts
+        return [self.parse_statement()]
+
+    # ---- statements
+
+    def parse_statement(self):
+        if self.accept("USE"):
+            module = self.expect("NAME").value
+            renames = []
+            while self.accept("WITH"):
+                # `use cache with load record as load cached`
+                # Names are multi-word, so read until `as`, then to the end
+                # of the clause. `as` is reserved, so it cannot be part of
+                # either name.
+                old = self.read_name_until("AS")
+                self.expect("AS")
+                new = self.read_name_until("WITH")
+                renames.append((old, new))
+            return Use(module, tuple(renames))
+
+        if self.at("FOREIGN"):
+            return self.parse_foreign()
+
+        if self.at("TO") and self.peek(1).kind == "NAME":
+            return self.parse_funcdef()
+
+        if self.accept("GIVE"):
+            return Give(self.parse_expr())
+
+        if self.accept("SHOW"):
+            return Show(self.parse_expr())
+
+        if self.accept("WHY"):
+            return Why(self.parse_expr())
+
+        if self.accept("WRITE"):
+            value = self.parse_or()
+            self.expect("TO")
+            dest = self.parse_or()
+            return self.trailing_or_fail(WriteTo(value, dest))
+
+        if self.accept("IF"):
+            cond = self.parse_expr()
+            self.expect("OP", ":")
+            then = self.parse_block()
+            els = []
+            save = self.i
+            self.skip_blank()
+            if self.accept("ELSE"):
+                self.expect("OP", ":")
+                els = self.parse_block()
+            else:
+                self.i = save
+            return If(cond, then, els)
+
+        if self.at("FOR"):
+            return self.parse_foreach(as_expr=False)
+
+        if self.accept("LET"):
+            name = self.expect("NAME").value
+            self.expect("OP", "=")
+            return Assign(name, self.parse_expr())
+
+        if self.at("NAME") and self.peek(1).kind == "OP" and self.peek(1).value == "=":
+            name = self.next().value
+            self.next()
+            return Assign(name, self.parse_expr())
+
+        return self.parse_expr()
+
+    def parse_foreign(self):
+        """`foreign sort of xs from "builtins.sorted" doing nothing`
+
+        The `doing` clause is a claim, not a derived fact. Omitting it means
+        unknown, not pure — a foreign function whose effects nobody stated
+        must not disappear from the surface.
+        """
+        self.expect("FOREIGN")
+        parts = [self.expect("NAME").value]
+        while self.at("NAME"):
+            parts.append(self.next().value)
+        name = " ".join(parts)
+        params = []
+        if self.accept("OF"):
+            params.append(self.expect("NAME").value)
+            while self.accept("OP", ","):
+                params.append(self.expect("NAME").value)
+        self.expect("FROM")
+        target = self.expect("STRING").value[1:-1]
+        effects, declared = (), False
+        if self.accept("DOING"):
+            declared = True
+            claims = [self.read_claim(params)]
+            while self.accept("OP", ","):
+                claims.append(self.read_claim(params))
+            effects = tuple(c for c in claims if c[0] != "nothing")
+        return Foreign(name, params, target, effects, declared)
+
+    def read_claim(self, params):
+        """One entry in a `doing` clause: an effect kind and, optionally,
+        where it goes.
+
+            doing ask "https://api.example.com"    a fixed destination
+            doing ask url                          whatever the caller passes
+            doing ask                              not stated
+
+        The middle form is the valuable one: naming a parameter means a call
+        site with a known argument resolves to the real destination, so an
+        effect surface can name a host across a foreign boundary.
+        """
+        kind = self.read_effect_word()
+        if kind == "nothing":
+            return ("nothing", None)
+        if self.at("STRING"):
+            return (kind, ("literal", self.next().value[1:-1]))
+        if self.at("NAME") and self.peek().value in params:
+            return (kind, ("param", self.next().value))
+        if self.at("NAME"):
+            g = self.peek()
+            raise PlanesSyntaxError(
+                f"line {g.line}: '{g.value}' is not a parameter of this "
+                f"function, so it cannot be where '{kind}' goes\n"
+                f"  parameters: {', '.join(params) or 'none'}")
+        return (kind, None)
+
+    def read_effect_word(self):
+        """An effect name in a `doing` clause.
+
+        Effect names double as ordinary words, so most arrive as NAME. A few
+        (`read`, `write`, `show`, `ask`) may be builtins or reserved words;
+        accept whatever token carries the text.
+        """
+        t = self.peek()
+        if t.kind in ("NAME", "NOTHING", "SHOW", "WRITE"):
+            self.next()
+            return t.value or "nothing"
+        raise PlanesSyntaxError(
+            f"line {t.line}: expected an effect name after 'doing', "
+            f"found '{t.value or 'end of line'}'")
+
+    def parse_funcdef(self):
+        self.expect("TO")
+        parts = [self.expect("NAME").value]
+        while self.at("NAME"):
+            parts.append(self.next().value)
+        name = " ".join(parts)
+        params = []
+        if self.accept("OF"):
+            params.append(self.expect("NAME").value)
+            while self.accept("OP", ","):
+                params.append(self.expect("NAME").value)
+        self.expect("OP", ":")
+        return FuncDef(name, params, self.parse_block())
+
+    def parse_foreach(self, as_expr):
+        self.expect("FOR")
+        self.expect("EACH")
+        var = self.expect("NAME").value
+        self.expect("IN")
+        source = self.parse_or()
+        # header may wrap: `for each s in stories` \n `  where ...: s`
+        wrapped = False
+        if self.at("EOL") and self.peek(1).kind == "BEGIN" \
+                and self.peek(2).kind in ("WHERE", "OP"):
+            self.next(); self.next()
+            wrapped = True
+        where = None
+        if self.accept("WHERE"):
+            where = self.parse_or()
+        self.expect("OP", ":")
+        if wrapped:
+            body = [self.parse_expr()]
+            self.skip_blank()
+            self.accept("END")
+            return ForEach(var, source, where, body, is_expr=True)
+        if as_expr:
+            if self.accept("EOL"):
+                self.expect("BEGIN")
+                body = [self.parse_expr()]
+                self.skip_blank()
+                self.accept("END")
+            else:
+                body = [self.parse_expr()]
+            return ForEach(var, source, where, body, is_expr=True)
+        return ForEach(var, source, where, self.parse_block(), is_expr=False)
+
+    def trailing_or_fail(self, node):
+        """`or fail as tag` — same line, or indented continuation."""
+        save = self.i
+        if self.at("OR") and self.peek(1).kind == "FAIL":
+            self.next(); self.next(); self.expect("AS")
+            return OrFail(node, self.expect("NAME").value)
+        if self.at("EOL") and self.peek(1).kind == "BEGIN" \
+                and self.peek(2).kind == "OR" and self.peek(3).kind == "FAIL":
+            self.next(); self.next(); self.next(); self.next()
+            self.expect("AS")
+            tag = self.expect("NAME").value
+            self.skip_blank()
+            self.accept("END")
+            return OrFail(node, tag)
+        self.i = save
+        return node
+
+    # ---- expressions
+
+    def parse_expr(self):
+        return self.trailing_or_fail(self.parse_or())
+
+    def parse_or(self):
+        left = self.parse_and()
+        while self.at("OR") and self.peek(1).kind != "FAIL":
+            self.next()
+            left = BinOp("or", left, self.parse_and())
+        return left
+
+    def parse_and(self):
+        left = self.parse_not()
+        while self.accept("AND"):
+            left = BinOp("and", left, self.parse_not())
+        return left
+
+    def parse_not(self):
+        if self.accept("NOT"):
+            return Not(self.parse_not())
+        return self.parse_comparison()
+
+    def parse_comparison(self):
+        left = self.parse_additive()
+        while (self.at("OP") and self.peek().value in
+               ("<", ">", "<=", ">=", "==", "!=")) or self.at("IN"):
+            if self.accept("IN"):
+                left = BinOp("in", left, self.parse_additive())
+            else:
+                left = BinOp(self.next().value, left, self.parse_additive())
+        return left
+
+    def parse_additive(self):
+        left = self.parse_multiplicative()
+        while self.at("OP") and self.peek().value in ("+", "-"):
+            left = BinOp(self.next().value, left, self.parse_multiplicative())
+        return left
+
+    def parse_multiplicative(self):
+        left = self.parse_unary()
+        while self.at("OP") and self.peek().value in ("*", "/"):
+            left = BinOp(self.next().value, left, self.parse_unary())
+        return left
+
+    def parse_unary(self):
+        if self.at("OP", "-"):
+            self.next()
+            return BinOp("-", Num(0), self.parse_unary())
+        return self.parse_postfix()
+
+    def parse_postfix(self):
+        node = self.parse_primary()
+        while self.at("OP", ".") and self.peek(1).kind == "NAME":
+            self.next()
+            node = Field(node, self.next().value)
+        return node
+
+    def read_name_until(self, *stops):
+        """Read a multi-word name, stopping before a reserved terminator.
+
+        Names are several NAME tokens, so a clause like `load record as
+        load cached` needs a rule for where one name ends. The terminators
+        are reserved words, which is exactly why they can serve as the
+        boundary.
+        """
+        parts = []
+        while self.at("NAME"):
+            parts.append(self.next().value)
+        if not parts:
+            g = self.peek()
+            raise PlanesSyntaxError(
+                f"line {g.line}: expected a name, "
+                f"found '{g.value or 'end of line'}'")
+        return " ".join(parts)
+
+    def paren_is_arglist(self):
+        """Looking at `(`: is this an argument list, or a parenthesised
+        argument that continues into a larger expression?
+
+        Scan to the matching close paren. If an arithmetic or comparison
+        operator follows it, the parens were a sub-expression.
+        """
+        depth, k = 0, 0
+        while True:
+            t = self.peek(k)
+            if t.kind == "EOF":
+                return True
+            if t.kind == "OP" and t.value == "(":
+                depth += 1
+            elif t.kind == "OP" and t.value == ")":
+                depth -= 1
+                if depth == 0:
+                    nxt = self.peek(k + 1)
+                    if nxt.kind == "OP" and nxt.value in (
+                            "+", "-", "*", "/", "<", ">",
+                            "<=", ">=", "==", "!="):
+                        return False
+                    return True
+            k += 1
+
+    def parse_primary(self):
+        t = self.peek()
+
+        if t.kind == "FIRST":
+            self.next()
+            n = self.parse_unary()
+            self.expect("OF")
+            return BinOp("first", n, self.parse_unary())
+
+        if t.kind == "ROUND":
+            # `round total to 2 places` — rounding is an operation with a
+            # name, so it appears in the derivation like anything else.
+            self.next()
+            value = self.parse_unary()
+            self.expect("TO")
+            places = self.parse_unary()
+            self.accept("PLACES")
+            return Round(value, places)
+
+        if t.kind == "FOR":
+            return self.parse_foreach(as_expr=True)
+
+        if t.kind == "NUMBER":
+            self.next()
+            # Literals are exact: `0.1` is one tenth, not the nearest float.
+            return Num(Number.parse(t.value))
+
+        if t.kind == "STRING":
+            self.next()
+            return Str(t.value[1:-1])
+
+        if t.kind == "TRUE":
+            self.next(); return Bool(True)
+        if t.kind == "FALSE":
+            self.next(); return Bool(False)
+        if t.kind == "NOTHING":
+            self.next(); return Nothing()
+
+        if t.kind == "OP" and t.value == "[":
+            self.next()
+            items = []
+            if not self.at("OP", "]"):
+                items.append(self.parse_expr())
+                while self.accept("OP", ","):
+                    items.append(self.parse_expr())
+            self.expect("OP", "]")
+            return ListLit(items)
+
+        if t.kind == "OP" and t.value == "(":
+            self.next()
+            e = self.parse_expr()
+            self.expect("OP", ")")
+            return e
+
+        if t.kind == "NAME":
+            self.next()
+            name = t.value
+            if self.accept("OF"):
+                args = [self.parse_unary()]
+                while self.accept("OP", ","):
+                    args.append(self.parse_unary())
+                return Call(name, args)
+            if self.at("OP", "("):
+                # `add(2, 3)` is an argument list. But `ask (api base) + "/"`
+                # is one argument that merely starts with a parenthesis, and
+                # the two look identical up to the closing paren. Decide by
+                # what follows it: an operator means the parens were part of
+                # a larger expression, not the whole argument list.
+                if not self.paren_is_arglist():
+                    return Call(name, [self.parse_additive()])
+                self.next()
+                args = []
+                if not self.at("OP", ")"):
+                    args.append(self.parse_expr())
+                    while self.accept("OP", ","):
+                        args.append(self.parse_expr())
+                self.expect("OP", ")")
+                return Call(name, args)
+            # multi-word name, longest match against known functions.
+            # Handles both `fetch stories` and `phone home of settings`.
+            if self.at("NAME"):
+                probe, best, j = name, None, 0
+                k = 0
+                while self.peek(k).kind == "NAME":
+                    probe += " " + self.peek(k).value
+                    k += 1
+                    if probe in Parser.known_funcs:
+                        best, j = probe, k
+                if best:
+                    for _ in range(j):
+                        self.next()
+                    if self.accept("OF"):
+                        args = [self.parse_unary()]
+                        while self.accept("OP", ","):
+                            args.append(self.parse_unary())
+                        return Call(best, args)
+                    return Call(best, [])
+            if name in Parser.known_funcs:
+                # A known function may take one argument by juxtaposition:
+                # `ask "https://" + text of id` and `ask url` both read as
+                # one call on the whole following expression. This differs
+                # deliberately from `of`, which binds tightly so
+                # `detail of id + 1` is `(detail of id) + 1`.
+                # Juxtaposition reads as "apply this to what follows";
+                # `of` reads as "apply this to that one thing".
+                takes_arg = (self.at("STRING") or self.at("NUMBER")
+                             or self.at("OP", "(") or self.at("OP", "["))
+                if not takes_arg and self.at("NAME"):
+                    # A bare name only counts as an argument when it is not
+                    # itself the start of a call — otherwise `main` followed
+                    # by a statement would absorb it.
+                    takes_arg = self.peek().value not in Parser.known_funcs
+                if takes_arg:
+                    return Call(name, [self.parse_additive()])
+                return Call(name, [])
+            return Var(name)
+
+        raise PlanesSyntaxError(
+            f"line {t.line}: expected a value, found '{t.value or 'end of line'}'")
+
+
+def prescan_funcs(tokens):
+    """Function names, read before the real parse.
+
+    A multi-word call is several NAME tokens; only a name table can tell the
+    parser they are one call. So names have to be collected first.
+    """
+    names = set()
+    for i, t in enumerate(tokens):
+        if t.kind == "FOREIGN":
+            # A foreign declaration names a callable, same as `to`.
+            j, parts = i + 1, []
+            while tokens[j].kind == "NAME":
+                parts.append(tokens[j].value)
+                j += 1
+            if parts:
+                names.add(" ".join(parts))
+            continue
+        if t.kind != "TO":
+            continue
+        # `to` also appears inside `write x to "path"`. A definition is the
+        # one that starts a statement.
+        if i > 0 and tokens[i - 1].kind not in ("EOL", "BEGIN", "END"):
+            continue
+        j, parts = i + 1, []
+        while tokens[j].kind == "NAME":
+            parts.append(tokens[j].value)
+            j += 1
+        if not parts:
+            raise PlanesSyntaxError(
+                f"line {tokens[i + 1].line}: "
+                f"'{tokens[i + 1].value}' is a reserved word and cannot "
+                f"start a function name\n"
+                f"  reserved: {', '.join(sorted(KEYWORDS))}")
+        # A reserved word mid-name is the same problem, one token later:
+        # `to first thing` reads as the builtin `first`, not a name.
+        if tokens[j].kind not in ("OF", "OP", "EOL", "EOF"):
+            raise PlanesSyntaxError(
+                f"line {tokens[j].line}: "
+                f"'{tokens[j].value}' is a reserved word and cannot "
+                f"appear in the function name "
+                f"'{' '.join(parts)} {tokens[j].value}'\n"
+                f"  reserved: {', '.join(sorted(KEYWORDS))}")
+        names.add(" ".join(parts))
+    return names
+
+
+def parse(src, known=None):
+    """Parse a program.
+
+    `known` supplies function names defined elsewhere. Multi-word names must
+    be known before a call site can be parsed — `api base` is two NAME
+    tokens, and only a name table can say it is one call. Without this a
+    file could not call a multi-word function from a module it uses.
+    """
+    toks = tokenize(src)
+    Parser.known_funcs = (prescan_funcs(toks) | set(known or ())
+                          | BUILTIN_NAMES)
+    return Parser(toks).parse_program()
+
+
+def scan_names(src):
+    """Function names defined in a source file, without a full parse."""
+    return prescan_funcs(tokenize(src))

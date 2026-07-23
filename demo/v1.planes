@@ -1,0 +1,11 @@
+use file
+
+to load config:
+  give ["debug", "verbose"]
+
+to main:
+  let settings = load config
+  show "loaded " + text of (count of settings)
+  write settings to "config.json"
+
+main
