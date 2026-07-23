@@ -40,10 +40,12 @@ What this slice produces, running the actual demo file (`demo/rules/violation.pl
 ```
 [readings-stay-local] violated at line 9.
   ask https://metrics.internal/ingest
-  rule declared at line 1
+  rule declared at line 1: anything may not ask to "https://metrics.internal/ingest"
 ```
 
 Every line is real, produced by matching a parsed `Rule` against a computed `Surface` — nothing hand-typed to fit the target. The one line not produced is `readings derive from file "readings.csv" (line 5)`. That line asserts a *derivation* — that the value flowing into `ask` came from `readings.csv`. Nothing in this codebase computes that statically. `shapes.py` has no derivation graph; `Deriv`/`Traced` (`interp.py`) build one, but only at runtime, one execution at a time, and a rule must never execute anything (v2.0 §33; enforced in §7, tested in §8.12). Producing that line would mean either running the program to get a real derivation (violating §33) or inventing plausible-looking provenance from nothing — the second is explicitly the failure the two guarantees exist to prevent, and it was not done. The line is omitted, not faked.
+
+**One addition beyond the literal §24 target, made after §11.4's human read.** The original message left "rule declared at line 1" bare — to know *what* the rule actually forbids, a reader had to open the file and look. `rules.py::condition()` now echoes the rule's own condition on that line (`rule declared at line 1: anything may not ask to "https://metrics.internal/ingest"`), so the message is legible without leaving the terminal. This isn't a deviation from a locked constraint — §5 of the build prompt only forbids the *derivation* line specifically; it says nothing against enriching the rest. The reasoning is the same one behind `read_claim`'s error messages and the locked commitment in unbound v1.1 §22 item 1: an error should name the fix, not send the reader hunting for it. This is exactly the kind of thing meant to fall out of building the slice and getting a human to actually read the output, rather than being specified up front.
 
 ## 3. A Finding: `Effect.site` Existed but Was Dead
 

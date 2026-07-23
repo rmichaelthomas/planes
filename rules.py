@@ -49,6 +49,19 @@ class RuleConflict(Exception):
     pass
 
 
+def condition(rule):
+    """A rule's condition, exactly as written, for echoing into a message.
+
+    A violation should be readable without opening the file to look up
+    what the named rule actually says — the same reasoning behind "error
+    messages must name the fix" (locked, unbound v1.1 §22 item 1).
+    """
+    text = f"{rule.subject} may not {rule.kind}"
+    if rule.target is not None:
+        text += f' to "{rule.target}"'
+    return text
+
+
 class Violation:
     """One rule broken by one effect in the computed surface."""
 
@@ -68,7 +81,8 @@ class Violation:
             lines.append(
                 "  target could not be pinned down statically — this "
                 f"computed value may or may not be \"{self.rule.target}\"")
-        lines.append(f"  rule declared at line {self.rule.line}")
+        lines.append(f"  rule declared at line {self.rule.line}: "
+                     f"{condition(self.rule)}")
         return "\n".join(lines)
 
     def __str__(self):
