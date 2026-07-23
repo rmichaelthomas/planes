@@ -4,10 +4,12 @@ Tests inception checkpoint §8's claim that a rule is the same question
 Shapes and Why already answer, asked at compile time. shapes.py computes a
 program's effect surface; this module only consumes it, through the public
 `Surface` queries (`at`, `targets`, `touches`, `declared`, `kinds`,
-`boundaries`). If this file ever needs to reach inside `Analyser`, `Consts`,
-or `Effect` construction, that is a finding about §8 — report it, don't
-route around it. `hashlib`, for fingerprinting (§5), is the one import this
-file has ever needed — stdlib, not a `shapes` coupling.
+`boundaries`, and — since the static derivation graph build — `origins_of`,
+the one query named-subject resolution needs). If this file ever needs to
+reach inside `Analyser`, `Consts`, or `Effect` construction, that is a
+finding about §8 — report it, don't route around it. `hashlib`, for
+fingerprinting (§5), is the one import this file has ever needed — stdlib,
+not a `shapes` coupling.
 
 Matching is static and structural (unbound v2.0 §34): no execution. A rule
 is never triggered; it is only ever checked against a surface that was
