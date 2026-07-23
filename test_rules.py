@@ -10,7 +10,7 @@ import sys
 from lexer import Rule, EFFECT_KINDS
 from parser import parse, scan_names, PlanesSyntaxError
 from shapes import analyse
-from rules import check, narrows, RuleNotSupported, RuleConflict
+from rules import check, narrows, condition, fingerprint, RuleNotSupported, RuleConflict
 from interp import Interpreter
 
 
@@ -19,6 +19,18 @@ def rule_violations(src):
     found = [s for s in prog if isinstance(s, Rule)]
     surface = analyse(src)
     return check(found, surface)
+
+
+def expect_conflict(src):
+    """Run check() expecting a RuleConflict; return it for message checks."""
+    prog = parse(src)
+    found = [s for s in prog if isinstance(s, Rule)]
+    surface = analyse(src)
+    try:
+        check(found, surface)
+        assert False, "should raise RuleConflict"
+    except RuleConflict as e:
+        return e
 
 
 def interp_run(src, **kw):
@@ -39,6 +51,8 @@ def test_rule_parses_with_all_fields():
     assert r.kind == "ask"
     assert r.target is None
     assert r.line == 1
+    assert r.assertion == "forbid"
+    assert r.supersedes_fingerprint is None
 
 
 def test_rule_with_literal_target_parses():
@@ -78,6 +92,41 @@ def test_malformed_rule_missing_bracket_names_the_fix():
         msg = str(e)
         assert "bracketed name" in msg
         assert "rule [" in msg
+
+
+# ---- permits (§2)
+
+def test_permit_rule_parses_with_permit_assertion():
+    prog = parse('rule [audit-allowed] anything may ask to "https://audit.internal"')
+    r = prog[0]
+    assert r.assertion == "permit"
+    assert r.subject == "anything"
+    assert r.kind == "ask"
+    assert r.target == "https://audit.internal"
+
+
+def test_forbid_rule_still_parses_with_forbid_assertion():
+    prog = parse('rule [no-net] anything may not ask')
+    assert prog[0].assertion == "forbid"
+
+
+def test_may_error_names_both_forms():
+    try:
+        parse('rule [x] anything might ask')
+        assert False, "should raise"
+    except PlanesSyntaxError as e:
+        msg = str(e)
+        assert "may not" in msg
+        assert "(forbid)" in msg
+        assert "(permit)" in msg
+
+
+def test_condition_renders_forbid_and_permit_correctly():
+    forbid = Rule("f", "anything", "ask", "https://x.example.com", 1)
+    permit = Rule("p", "anything", "ask", "https://x.example.com", 2,
+                  assertion="permit")
+    assert condition(forbid) == 'anything may not ask to "https://x.example.com"'
+    assert condition(permit) == 'anything may ask to "https://x.example.com"'
 
 
 def test_rule_name_does_not_enter_known_funcs():
@@ -197,17 +246,33 @@ def test_different_kinds_do_not_narrow():
 def test_nested_rules_do_not_conflict():
     """The common nesting case v2.0 §30 exists to resolve: a broad rule and
     a more specific one over the same kind coexist without a compile
-    error."""
+    error.
+
+    Updated for §4 of the permit build: with permits in play, two
+    independent-looking failures for one effect are ambiguous — a reader
+    cannot tell whether one rule is the specific case of the other, or
+    whether a permit cleared one of them. Both rules are still real
+    violations (narrowing between two forbids clears nothing), but the
+    broader one now names the narrower rule that also matched, so the
+    relationship is visible rather than reported as two unrelated
+    failures. Originally asserted only `len(v) == 2`; that assertion
+    survives unchanged below, extended with the relationship check.
+    """
     src = ('use http\n'
            'rule [no-net] anything may not ask\n'
            'rule [no-telemetry] anything may not ask '
            'to "https://telemetry.example.com"\n'
            'x = ask "https://telemetry.example.com"\n')
     v = rule_violations(src)
-    # Both rules are equally violated by the same effect; that is not a
-    # conflict, since [no-telemetry] narrows [no-net].
     assert len(v) == 2
     assert {viol.rule.name for viol in v} == {"no-net", "no-telemetry"}
+    assert all(viol.is_violation for viol in v)
+
+    broad = next(viol for viol in v if viol.rule.name == "no-net")
+    narrow = next(viol for viol in v if viol.rule.name == "no-telemetry")
+    assert [r.name for r in broad.narrowed_by] == ["no-telemetry"]
+    assert narrow.narrowed_by == []
+    assert "narrowed here by [no-telemetry]" in broad.render()
 
 
 def test_supersedes_drops_the_superseded_rule():
@@ -267,6 +332,209 @@ def test_supersedes_resolves_what_would_otherwise_conflict():
     assert v[0].rule.name == "b"
 
 
+# ================================================================ exception resolution (§3)
+
+def test_permit_that_supersedes_a_forbid_clears_it():
+    src = ('use http\n'
+           'rule [no-external-sends] anything may not ask\n'
+           'rule [audit-allowed] anything may ask to '
+           '"https://audit.internal" supersedes [no-external-sends]\n'
+           'x = ask "https://audit.internal"\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].is_violation is False
+    assert v[0].cleared_by.name == "audit-allowed"
+
+
+def test_permit_that_narrows_a_forbid_clears_it_without_supersedes():
+    """narrows alone is sufficient (v2.0 §30) — no explicit supersedes
+    needed when the permit is strictly more specific."""
+    src = ('use http\n'
+           'rule [no-external-sends] anything may not ask\n'
+           'rule [audit-allowed] anything may ask to "https://audit.internal"\n'
+           'x = ask "https://audit.internal"\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].is_violation is False
+    assert v[0].cleared_by.name == "audit-allowed"
+
+
+def test_broad_forbid_still_applies_where_the_permit_does_not_reach():
+    """The forbid rule is not dropped — only the effect the permit covers
+    is cleared; every other effect of that kind is still forbidden."""
+    src = ('use http\n'
+           'rule [no-external-sends] anything may not ask\n'
+           'rule [audit-allowed] anything may ask to "https://audit.internal"\n'
+           'x = ask "https://elsewhere.example.com"\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].is_violation is True
+    assert v[0].cleared_by is None
+
+
+def test_permit_matching_a_different_target_does_not_clear():
+    src = ('use http\n'
+           'rule [no-external-sends] anything may not ask\n'
+           'rule [audit-allowed] anything may ask to "https://audit.internal"\n'
+           'x = ask "https://audit.internal"\n'
+           'y = ask "https://not-audit.example.com"\n')
+    v = rule_violations(src)
+    assert len(v) == 2
+    by_target = {viol.effect.target: viol for viol in v}
+    assert by_target["https://audit.internal"].is_violation is False
+    assert by_target["https://not-audit.example.com"].is_violation is True
+
+
+def test_unrelated_permit_raises_conflict():
+    """A permit that excepts no forbid rule of its kind is an authoring
+    error — it must not silently do nothing (§3, failure mode #2)."""
+    src = ('use http\n'
+           'rule [no-clock] anything may not clock\n'
+           'rule [audit-allowed] anything may ask to "https://audit.internal"\n')
+    e = expect_conflict(src)
+    assert "audit-allowed" in str(e)
+    assert "excepts no forbid rule" in str(e)
+
+
+def test_a_global_permit_grants_nothing_without_a_matching_forbid():
+    """A permit with no forbid of its kind at all is still unrelated, not
+    a harmless no-op — §3's "grants nothing on its own"."""
+    src = 'rule [x] anything may ask to "https://audit.internal"\n'
+    e = expect_conflict(src)
+    assert "x" in str(e)
+
+
+# ================================================================ opposite-assertion conflict (§3)
+
+def test_opposite_assertion_equal_specificity_is_a_conflict():
+    src = ('use http\n'
+           'rule [a] anything may not ask to "https://x.example.com"\n'
+           'rule [b] anything may ask to "https://x.example.com"\n'
+           'y = ask "https://x.example.com"\n')
+    e = expect_conflict(src)
+    msg = str(e)
+    assert "[a]" in msg and "[b]" in msg
+    assert "opposite things" in msg
+
+
+def test_opposite_assertion_conflict_message_differs_from_same_assertion():
+    same = expect_conflict(
+        'rule [a] anything may not ask to "https://x.example.com"\n'
+        'rule [b] anything may not ask to "https://x.example.com"\n')
+    opposite = expect_conflict(
+        'rule [a] anything may not ask to "https://x.example.com"\n'
+        'rule [b] anything may ask to "https://x.example.com"\n')
+    assert "opposite things" not in str(same)
+    assert "equally specific" in str(same)
+    assert "opposite things" in str(opposite)
+
+
+def test_supersedes_resolves_an_opposite_assertion_conflict():
+    src = ('use http\n'
+           'rule [a] anything may not ask to "https://x.example.com"\n'
+           'rule [b] anything may ask to "https://x.example.com" '
+           'supersedes [a]\n'
+           'y = ask "https://x.example.com"\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].is_violation is False
+    assert v[0].cleared_by.name == "b"
+
+
+# ================================================================ reporting (§4)
+
+def test_cleared_violation_renders_the_excepted_by_line():
+    src = ('use http\n'
+           'rule [no-external-sends] anything may not ask\n'
+           'rule [audit-allowed] anything may ask to '
+           '"https://audit.internal" supersedes [no-external-sends]\n'
+           'x = ask "https://audit.internal"\n')
+    v = rule_violations(src)
+    rendered = v[0].render()
+    assert rendered.startswith("[no-external-sends] would have been "
+                               "violated at line 4")
+    assert "excepted by [audit-allowed] (line 3)" in rendered
+
+
+def test_cleared_violations_do_not_count_toward_a_pass_fail_result():
+    src = ('use http\n'
+           'rule [no-external-sends] anything may not ask\n'
+           'rule [audit-allowed] anything may ask to '
+           '"https://audit.internal" supersedes [no-external-sends]\n'
+           'x = ask "https://audit.internal"\n')
+    v = rule_violations(src)
+    assert len(v) == 1              # still returned, so it's visible
+    assert not any(r.is_violation for r in v)   # but nothing failed
+
+
+# ================================================================ fingerprints (§5)
+
+def test_fingerprint_is_stable_across_runs():
+    r = Rule("x", "anything", "ask", "https://a.example.com", 1)
+    assert fingerprint(r) == fingerprint(r)
+    r2 = Rule("x", "anything", "ask", "https://a.example.com", 99)
+    assert fingerprint(r) == fingerprint(r2)
+
+
+def test_fingerprint_ignores_name_and_line():
+    a = Rule("alpha", "anything", "ask", "https://a.example.com", 1)
+    b = Rule("beta", "anything", "ask", "https://a.example.com", 42)
+    assert fingerprint(a) == fingerprint(b)
+
+
+def test_fingerprint_changes_with_the_target():
+    a = Rule("x", "anything", "ask", "https://a.example.com", 1)
+    b = Rule("x", "anything", "ask", "https://b.example.com", 1)
+    assert fingerprint(a) != fingerprint(b)
+
+
+def test_fingerprint_changes_with_the_assertion():
+    forbid = Rule("x", "anything", "ask", None, 1, assertion="forbid")
+    permit = Rule("x", "anything", "ask", None, 1, assertion="permit")
+    assert fingerprint(forbid) != fingerprint(permit)
+
+
+def test_fingerprint_syntax_parses_and_is_stripped_of_the_at_sign():
+    prog = parse('rule [new] anything may ask supersedes [old] @a3f9c2')
+    assert prog[0].supersedes_fingerprint == "a3f9c2"
+
+
+def test_matching_fingerprint_passes():
+    old_src = 'rule [old] anything may not ask to "https://x.example.com"'
+    old_rule = parse(old_src)[0]
+    fp = fingerprint(old_rule)
+    src = (f'use http\n{old_src}\n'
+          f'rule [new] anything may ask to "https://x.example.com" '
+          f'supersedes [old] @{fp}\n'
+          f'y = ask "https://x.example.com"\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].cleared_by.name == "new"
+
+
+def test_mismatched_fingerprint_raises_naming_both_rules():
+    src = ('rule [old] anything may not ask to "https://y.example.com"\n'
+           'rule [new] anything may ask to "https://x.example.com" '
+           'supersedes [old] @000000\n')
+    e = expect_conflict(src)
+    msg = str(e)
+    assert "[old]" in msg and "[new]" in msg
+    assert "@000000" in msg
+
+
+def test_absent_fingerprint_behaves_exactly_as_before():
+    """No fingerprint on a supersedes clause is unverified, not invalid —
+    today's behavior, and it must keep working unchanged."""
+    src = ('use http\n'
+           'rule [old] anything may not ask to "https://x.example.com"\n'
+           'rule [new] anything may ask to "https://x.example.com" '
+           'supersedes [old]\n'
+           'y = ask "https://x.example.com"\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].cleared_by.name == "new"
+
+
 # ================================================================ inertness
 
 def test_rule_presence_does_not_change_output_or_effects():
@@ -284,6 +552,28 @@ def test_rule_presence_does_not_change_output_or_effects():
 
     i1 = interp_run(without_rule, http=stub, fs={})
     i2 = interp_run(with_rule, http=stub, fs={})
+
+    assert i1.output == i2.output
+    assert i1.effects == i2.effects
+    assert i1.fs == i2.fs
+
+
+def test_permit_rule_presence_also_does_not_change_output_or_effects():
+    """The same inertness claim, for a permit — v2.0 §33's refusal of
+    `trigger` covers both assertions equally; neither is ever executed."""
+    def stub(url):
+        return json.dumps({"ok": 1})
+
+    without_rule = ('use http\nuse file\n'
+                     'x = ask "https://example.com/a.json"\n'
+                     'show "hi"\n'
+                     'write [1] to "o.json"\n')
+    with_permits = ('rule [no-external-sends] anything may not ask\n'
+                    'rule [audit-allowed] anything may ask '
+                    'to "https://example.com/a.json"\n' + without_rule)
+
+    i1 = interp_run(without_rule, http=stub, fs={})
+    i2 = interp_run(with_permits, http=stub, fs={})
 
     assert i1.output == i2.output
     assert i1.effects == i2.effects

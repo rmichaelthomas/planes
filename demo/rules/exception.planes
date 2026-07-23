@@ -1,0 +1,9 @@
+rule [no-external-sends] anything may not ask
+rule [audit-allowed] anything may ask to "https://audit.internal" supersedes [no-external-sends]
+use http
+
+to main:
+  show "sending audit event"
+  ask "https://audit.internal"
+
+main
