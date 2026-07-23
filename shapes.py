@@ -22,23 +22,17 @@ from parser import parse, BUILTIN_NAMES
 
 # ================================================================ effect kinds
 
-# The closed vocabulary, grouped by boundary. Closed is the point: an open
-# vocabulary cannot be searched or diffed across packages.
+# EFFECT_KINDS — the closed vocabulary, grouped by boundary — now lives in
+# lexer.py, because the parser also needs it (to validate a rule's effect
+# kind) and cannot import this module without a cycle. `from lexer import *`
+# below brings it into this namespace unchanged; `from shapes import
+# EFFECT_KINDS` elsewhere in the codebase still works.
 #
 # `clock` and `random` are effects because they make a function's result
 # depend on something outside the program. A function that reads the clock
 # is not pure, and a package index that called it pure would be wrong in a
 # way that matters — it is the difference between a value that can be
 # reproduced from its derivation and one that cannot.
-EFFECT_KINDS = {
-    "ask":    "network",     # request-with-response
-    "read":   "file",
-    "write":  "file",
-    "show":   "console",
-    "clock":  "ambient",     # the current time
-    "random": "ambient",     # entropy
-    "env":    "ambient",     # environment variables, process arguments
-}
 
 BOUNDARIES = ("network", "file", "console", "ambient", "foreign")
 
@@ -384,13 +378,13 @@ class Analyser:
             out |= self.walk(node.value, fn_effects, consts)
             out |= self.walk(node.dest, fn_effects, consts)
             target, computed = self.describe(node.dest, consts)
-            out.add(Effect("write", "file", target, computed))
+            out.add(Effect("write", "file", target, computed, site=node.line))
             return out
 
         if isinstance(node, Show):
             out |= self.walk(node.expr, fn_effects, consts)
             target, computed = self.describe(node.expr, consts)
-            out.add(Effect("show", "console", target, computed))
+            out.add(Effect("show", "console", target, computed, site=node.line))
             return out
 
         if isinstance(node, Call):
@@ -404,7 +398,7 @@ class Analyser:
                 arg = node.args[0] if node.args else None
                 target, computed = self.describe(arg, consts)
                 out.add(Effect(node.name, EFFECT_KINDS[node.name],
-                               target, computed))
+                               target, computed, site=node.line))
                 return out
             target = self.local.get(node.name, node.name)
             if target in self.foreigns:
@@ -504,12 +498,13 @@ class Analyser:
         """
         if not decl.declared:
             return {Effect("unknown", "foreign", decl.target,
-                           computed=True, claimed=True)}
+                           computed=True, site=decl.line, claimed=True)}
         out = set()
         for kind, where in decl.effects:
             boundary = EFFECT_KINDS.get(kind, "foreign")
             target, computed = self.claim_target(decl, where, args, consts)
-            out.add(Effect(kind, boundary, target, computed, claimed=True))
+            out.add(Effect(kind, boundary, target, computed,
+                           site=decl.line, claimed=True))
         return out
 
     def claim_target(self, decl, where, args, consts):

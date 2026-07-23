@@ -225,6 +225,13 @@ class Interpreter:
             self.foreigns[stmt.name] = stmt
             return None
 
+        if isinstance(stmt, Rule):
+            # A rule is a constraint the checker reads, never an action
+            # the program takes (unbound v2.0 §33's refusal of `trigger`,
+            # enforced here). Nothing about a rule's presence may change
+            # what a program does.
+            return None
+
         if isinstance(stmt, FuncDef):
             self.funcs[stmt.name] = Function(stmt.name, stmt.params, stmt.body, env)
             return None
