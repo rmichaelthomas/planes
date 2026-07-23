@@ -933,6 +933,82 @@ def test_json_reports_whether_the_surface_is_complete():
         import shutil; shutil.rmtree(d, ignore_errors=True)
 
 
+# ================================================================ derivation
+
+def test_derivation_reaches_a_literal():
+    s = analyse('use http\nlet u = "https://x"\nx = ask u')
+    e = s.at("network")[0]
+    assert e.derivation is not None
+    assert e.derivation.kind == "name"
+    assert e.derivation.label == "u"
+    literal = e.derivation.inputs[0]
+    assert literal.kind == "literal"
+
+
+def test_widening_produces_an_unknown_provenance_node():
+    src = ('use http\n'
+           'let u = "https://example.com/default.json"\n'
+           'if 1 > 0:\n'
+           '  let u = "https://example.com/other.json"\n'
+           'x = ask u')
+    s = analyse(src)
+    e = s.at("network")[0]
+
+    def has_unknown(n, seen=None):
+        seen = seen if seen is not None else set()
+        if id(n) in seen:
+            return False
+        seen.add(id(n))
+        if n.kind == "unknown":
+            return True
+        return any(has_unknown(i, seen) for i in n.inputs)
+
+    assert has_unknown(e.derivation)
+
+
+def test_target_from_ask_output_does_not_claim_provenance():
+    src = ('use http\n'
+           'to get of url:\n'
+           '  give ask url\n\n'
+           'xs = for each u in [1, 2]: get of u')
+    s = analyse(src)
+    e = s.at("network")[0]
+    assert e.derivation is not None
+    assert e.derivation.kind != "literal"
+
+
+def test_fixed_point_terminates_with_derivation_on_hn():
+    """Effect.derivation must not break the fixed point's growth check —
+    it is excluded from hash/equality via field(compare=False)."""
+    s = analyse_file("hn.planes")
+    assert s.touches("network")
+
+
+def test_fixed_point_terminates_on_mutual_recursion_with_derivation():
+    src = ('use http\n'
+           'to ping of n:\n'
+           '  if n > 0:\n'
+           '    give pong of (n - 1)\n'
+           '  give ask "https://example.com/a.json"\n\n'
+           'to pong of n:\n'
+           '  give ping of (n - 1)\n\n'
+           'r = ping of 3')
+    s = analyse(src)
+    assert s.touches("network")
+    assert s.functions["pong"]
+
+
+def test_effect_derivation_excluded_from_equality():
+    """Two structurally identical effects with different derivations must
+    still compare equal and hash the same, or the fixed point may not
+    terminate."""
+    from shapes import Effect, StaticDeriv
+    a = Effect("ask", "network", "https://x", derivation=StaticDeriv("literal", "a"))
+    b = Effect("ask", "network", "https://x", derivation=StaticDeriv("literal", "b"))
+    assert a == b
+    assert hash(a) == hash(b)
+
+
 # ================================================================ anti-drift
 
 def test_no_governance_vocabulary():

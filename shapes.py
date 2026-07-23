@@ -55,6 +55,10 @@ class Effect:
     computed: bool = False      # target is built at runtime, not a literal
     site: int = 0               # source line
     claimed: bool = False       # asserted by a foreign declaration, not derived
+    # Excluded from hash/equality: the fixed point compares effect sets for
+    # growth, and two structurally identical effects reached by different
+    # paths must remain one effect or it may not terminate.
+    derivation: Optional[Any] = field(default=None, compare=False)
 
     def __str__(self):
         if self.kind == "unknown":
@@ -221,14 +225,33 @@ class Unknown:
 UNKNOWN = Unknown()
 
 
+@dataclass(frozen=True)
+class StaticDeriv:
+    """One node in the static derivation graph. Mirrors interp.Deriv's shape
+    deliberately — same field names, same meanings — so a reader who knows
+    one knows the other, and the runtime and static graphs can eventually
+    be compared.
+
+    Frozen and tuple-typed because Effect is frozen and hashed into sets; a
+    mutable `inputs` list would break Effect's hashability, which the fixed
+    point depends on.
+    """
+    kind: str                    # literal|name|op|call|param|foreign|unknown
+    label: str
+    inputs: tuple = ()
+    origin: Optional[str] = None # where this entered the program
+    file: Optional[str] = None   # declaring file, for P-Q18 scoping
+
+
 class Consts:
     """Statically known values, scoped like the runtime environment.
 
-    Only tracks what can be known without running anything: string and
-    number literals, and concatenations of them. Anything touched by input,
-    a call with unknown arguments, or a comprehension variable becomes
-    UNKNOWN and stays that way. Widening to UNKNOWN is always sound — it
-    loses precision, never correctness.
+    Stores a (value, StaticDeriv) pair per name. Only tracks what can be
+    known without running anything: string and number literals, and
+    concatenations of them. Anything touched by input, a call with unknown
+    arguments, or a comprehension variable becomes UNKNOWN and stays that
+    way. Widening to UNKNOWN is always sound — it loses precision, never
+    correctness.
     """
 
     def __init__(self, parent=None):
@@ -240,10 +263,10 @@ class Consts:
             return self.vals[name]
         if self.parent is not None:
             return self.parent.get(name)
-        return UNKNOWN
+        return UNKNOWN, StaticDeriv("unknown", name)
 
-    def set(self, name, value):
-        self.vals[name] = value
+    def set(self, name, value, node):
+        self.vals[name] = (value, node)
 
     def child(self):
         return Consts(self)
@@ -260,12 +283,16 @@ class Analyser:
         self._rec_cache = {}     # name -> can it reach itself?
         self.local = {}          # original name -> exported name, for renames
         self.foreigns = {}       # name -> Foreign declaration
+        self.func_file = {}      # name -> file path that declared it
+        self.foreign_file = {}   # name -> file path that declared it
+        self.entry_file = None   # the file the surface is being computed for
+        self.current_file = None # file whose source is currently being walked
 
     # ---- entry point
 
     def analyse(self, src):
         prog = parse(src)
-        self.collect_declarations(prog)
+        self.collect_declarations(prog, file=self.entry_file)
         return self.analyse_prog(prog)
 
     def analyse_prog(self, prog):
@@ -289,8 +316,10 @@ class Analyser:
                 break
             for name, fn in self.funcs.items():
                 inner = Consts()
+                self.current_file = self.func_file.get(name, self.entry_file)
                 for p in fn.params:
-                    inner.set(p, UNKNOWN)
+                    inner.set(p, UNKNOWN,
+                             StaticDeriv("param", p, file=self.current_file))
                 found = set()
                 for stmt in fn.body:
                     found |= self.walk(stmt, fn_effects, inner)
@@ -302,6 +331,7 @@ class Analyser:
         # sites here may sharpen a callee's targets via specialisation.
         top = set()
         top_consts = Consts()
+        self.current_file = self.entry_file
         for stmt in prog:
             if isinstance(stmt, FuncDef):
                 continue
@@ -320,17 +350,22 @@ class Analyser:
         )
         return surface
 
-    def collect_declarations(self, prog, renames=None):
+    def collect_declarations(self, prog, renames=None, file=None):
         """Functions and modules, at any depth.
 
         A renamed function is registered under the name importers use, so
-        the surface is computed over the call graph as written.
+        the surface is computed over the call graph as written. `file` is
+        the path this program text came from — recorded per declaration so
+        a later named-subject rule can tell whether a binding is local to
+        the file that wrote the rule (P-Q18).
         """
         renames = renames or {}
 
         def scan(node):
             if isinstance(node, Foreign):
-                self.foreigns[renames.get(node.name, node.name)] = node
+                name = renames.get(node.name, node.name)
+                self.foreigns[name] = node
+                self.foreign_file[name] = file
                 if node.name in renames:
                     self.local[node.name] = renames[node.name]
                 return
@@ -342,6 +377,7 @@ class Analyser:
                 # via `self.local`.
                 exported = renames.get(node.name, node.name)
                 self.funcs[exported] = node
+                self.func_file[exported] = file
                 if exported != node.name:
                     self.local[node.name] = exported
                 for s in node.body:
@@ -369,22 +405,24 @@ class Analyser:
         if isinstance(node, Builtin):
             out |= self.walk(node.arg, fn_effects, consts)
             if node.name in ("ask", "read"):
-                target, computed = self.describe(node.arg, consts)
+                target, computed, deriv = self.describe(node.arg, consts)
                 out.add(Effect(node.name, EFFECT_KINDS[node.name],
-                               target, computed))
+                               target, computed, derivation=deriv))
             return out
 
         if isinstance(node, WriteTo):
             out |= self.walk(node.value, fn_effects, consts)
             out |= self.walk(node.dest, fn_effects, consts)
-            target, computed = self.describe(node.dest, consts)
-            out.add(Effect("write", "file", target, computed, site=node.line))
+            target, computed, deriv = self.describe(node.dest, consts)
+            out.add(Effect("write", "file", target, computed, site=node.line,
+                           derivation=deriv))
             return out
 
         if isinstance(node, Show):
             out |= self.walk(node.expr, fn_effects, consts)
-            target, computed = self.describe(node.expr, consts)
-            out.add(Effect("show", "console", target, computed, site=node.line))
+            target, computed, deriv = self.describe(node.expr, consts)
+            out.add(Effect("show", "console", target, computed, site=node.line,
+                           derivation=deriv))
             return out
 
         if isinstance(node, Call):
@@ -396,9 +434,9 @@ class Analyser:
             # when nothing else defines that name.
             if node.name in EFFECT_KINDS and node.name not in self.funcs:
                 arg = node.args[0] if node.args else None
-                target, computed = self.describe(arg, consts)
+                target, computed, deriv = self.describe(arg, consts)
                 out.add(Effect(node.name, EFFECT_KINDS[node.name],
-                               target, computed, site=node.line))
+                               target, computed, site=node.line, derivation=deriv))
                 return out
             target = self.local.get(node.name, node.name)
             if target in self.foreigns:
@@ -420,7 +458,8 @@ class Analyser:
 
         if isinstance(node, Assign):
             out |= self.walk(node.expr, fn_effects, consts)
-            consts.set(node.name, self.const(node.expr, consts))
+            value, node_ = self.const(node.expr, consts)
+            consts.set(node.name, value, node_)
             return out
 
         if isinstance(node, (Give, Why)):
@@ -451,14 +490,16 @@ class Analyser:
         if isinstance(node, ForEach):
             out |= self.walk(node.source, fn_effects, consts)
             inner = consts.child()
-            inner.set(node.var, UNKNOWN)     # loop variable is never constant
+            inner.set(node.var, UNKNOWN,        # loop variable is never constant
+                     StaticDeriv("unknown", node.var, file=self.current_file))
             out |= self.walk(node.where, fn_effects, inner)
             for s in node.body:
                 out |= self.walk(s, fn_effects, inner)
             # Same join reasoning as `if`: whether the body ran at all, and
             # how many times, are runtime facts.
             for name in self.assigned_in(node.body):
-                consts.set(name, UNKNOWN)
+                consts.set(name, UNKNOWN,
+                          StaticDeriv("unknown", name, file=self.current_file))
             return out
 
         if isinstance(node, If):
@@ -472,7 +513,8 @@ class Analyser:
             # the surface sound — without it, `if ...: let u = other` would
             # leave `u` reporting its pre-branch value.
             for name in self.assigned_in(node.then + node.els):
-                consts.set(name, UNKNOWN)
+                consts.set(name, UNKNOWN,
+                          StaticDeriv("unknown", name, file=self.current_file))
             return out
 
         if isinstance(node, FuncDef):
@@ -498,13 +540,15 @@ class Analyser:
         """
         if not decl.declared:
             return {Effect("unknown", "foreign", decl.target,
-                           computed=True, site=decl.line, claimed=True)}
+                           computed=True, site=decl.line, claimed=True,
+                           derivation=StaticDeriv("foreign", decl.target,
+                                                  file=self.current_file))}
         out = set()
         for kind, where in decl.effects:
             boundary = EFFECT_KINDS.get(kind, "foreign")
-            target, computed = self.claim_target(decl, where, args, consts)
+            target, computed, deriv = self.claim_target(decl, where, args, consts)
             out.add(Effect(kind, boundary, target, computed,
-                           site=decl.line, claimed=True))
+                           site=decl.line, claimed=True, derivation=deriv))
         return out
 
     def claim_target(self, decl, where, args, consts):
@@ -512,10 +556,13 @@ class Analyser:
         if where is None:
             # No destination stated. Naming the host function is honest —
             # it is what the reader has — but it is not a destination.
-            return f"{decl.target} (destination not stated)", True
+            return (f"{decl.target} (destination not stated)", True,
+                    StaticDeriv("foreign", decl.target, file=self.current_file,
+                               origin=f"foreign:{decl.target}"))
         kind, value = where
         if kind == "literal":
-            return value, False
+            return (value, False,
+                    StaticDeriv("literal", f'"{value}"', file=self.current_file))
         # A parameter. Resolve it from the call site if there is one.
         if args is not None and consts is not None:
             try:
@@ -523,11 +570,20 @@ class Analyser:
             except ValueError:
                 i = -1
             if 0 <= i < len(args):
-                v = self.const(args[i], consts)
+                v, n = self.const(args[i], consts)
                 if v is not UNKNOWN:
-                    return self.as_text(v), False
-                return self.pattern(args[i], consts), True
-        return "{...}", True
+                    return (self.as_text(v), False,
+                            StaticDeriv("foreign", decl.target, inputs=(n,),
+                                       file=self.current_file,
+                                       origin=f"foreign:{decl.target}"))
+                text, n2 = self.pattern(args[i], consts)
+                return (text, True,
+                        StaticDeriv("foreign", decl.target, inputs=(n2,),
+                                   file=self.current_file,
+                                   origin=f"foreign:{decl.target}"))
+        return ("{...}", True,
+                StaticDeriv("foreign", decl.target, file=self.current_file,
+                           origin=f"foreign:{decl.target}"))
 
     def specialise(self, node, fn_effects, consts):
         """Re-analyse a callee with its arguments' known values bound.
@@ -548,14 +604,17 @@ class Analyser:
             return generic
         if self.is_recursive(node.name):
             return generic
-        args = [self.const(a, consts) for a in node.args]
+        arg_pairs = [self.const(a, consts) for a in node.args]
+        args = [v for v, _ in arg_pairs]
         if len(args) != len(fn.params) or all(a is UNKNOWN for a in args):
             return generic
 
+        callee_file = self.func_file.get(node.name, self.current_file)
         inner = Consts()
-        for p, a in zip(fn.params, args):
-            inner.set(p, a)
+        for p, (v, n) in zip(fn.params, arg_pairs):
+            inner.set(p, v, StaticDeriv("param", p, inputs=(n,), file=callee_file))
 
+        prev_file, self.current_file = self.current_file, callee_file
         self.depth += 1
         try:
             special = set()
@@ -563,6 +622,7 @@ class Analyser:
                 special |= self.walk(s, fn_effects, inner)
         finally:
             self.depth -= 1
+            self.current_file = prev_file
 
         # Keep every generic effect whose target the specialised pass did not
         # sharpen. Never drop an effect kind that the generic pass found.
@@ -678,93 +738,136 @@ class Analyser:
     # ---- constant evaluation
 
     def const(self, node, consts):
-        """Best static approximation of a value. UNKNOWN when unknowable.
+        """Best static approximation of a value, paired with its derivation
+        node. UNKNOWN pairs with a StaticDeriv("unknown", ...) node rather
+        than None — an unknown value still has provenance worth reporting.
 
         Widening to UNKNOWN is always sound: it costs precision in the
         target description, never correctness of the effect set.
         """
         if node is None:
-            return UNKNOWN
+            return UNKNOWN, StaticDeriv("unknown", "nothing",
+                                        file=self.current_file)
 
         if isinstance(node, Str):
-            return node.value
+            return node.value, StaticDeriv("literal", f'"{node.value}"',
+                                           file=self.current_file)
         if isinstance(node, Num):
-            return node.value
+            return node.value, StaticDeriv("literal", str(node.value),
+                                           file=self.current_file)
         if isinstance(node, Bool):
-            return node.value
+            label = "true" if node.value else "false"
+            return node.value, StaticDeriv("literal", label,
+                                           file=self.current_file)
 
         if isinstance(node, Var):
-            return consts.get(node.name)
+            value, stored = consts.get(node.name)
+            return value, StaticDeriv("name", node.name, inputs=(stored,),
+                                      file=self.current_file)
 
         if isinstance(node, OrFail):
             return self.const(node.expr, consts)
 
         if isinstance(node, BinOp) and node.op == "+":
-            l = self.const(node.left, consts)
-            r = self.const(node.right, consts)
+            l, ln = self.const(node.left, consts)
+            r, rn = self.const(node.right, consts)
             if l is UNKNOWN or r is UNKNOWN:
-                return UNKNOWN
-            if isinstance(l, str) or isinstance(r, str):
-                return self.as_text(l) + self.as_text(r)
-            return l + r
+                return UNKNOWN, StaticDeriv("unknown", "+", inputs=(ln, rn),
+                                            file=self.current_file)
+            v = (self.as_text(l) + self.as_text(r)
+                 if (isinstance(l, str) or isinstance(r, str)) else l + r)
+            return v, StaticDeriv("op", "+", inputs=(ln, rn),
+                                  file=self.current_file)
 
         if isinstance(node, Builtin) and node.name == "text":
-            v = self.const(node.arg, consts)
-            return UNKNOWN if v is UNKNOWN else self.as_text(v)
+            v, vn = self.const(node.arg, consts)
+            if v is UNKNOWN:
+                return UNKNOWN, StaticDeriv("unknown", "text of",
+                                            inputs=(vn,), file=self.current_file)
+            return self.as_text(v), StaticDeriv("op", "text of", inputs=(vn,),
+                                                file=self.current_file)
 
         if isinstance(node, Builtin) and node.name in ("lower", "upper"):
-            v = self.const(node.arg, consts)
+            v, vn = self.const(node.arg, consts)
+            label = f"{node.name} of"
             if v is UNKNOWN:
-                return UNKNOWN
-            return str(v).lower() if node.name == "lower" else str(v).upper()
+                return UNKNOWN, StaticDeriv("unknown", label, inputs=(vn,),
+                                            file=self.current_file)
+            result = str(v).lower() if node.name == "lower" else str(v).upper()
+            return result, StaticDeriv("op", label, inputs=(vn,),
+                                       file=self.current_file)
 
         if isinstance(node, Call):
             if node.name in BUILTIN_NAMES and node.name not in self.funcs:
                 return self.const_builtin(node, consts)
             return self.const_call(node, consts)
 
-        return UNKNOWN
+        return UNKNOWN, StaticDeriv("unknown", "{...}", file=self.current_file)
 
     def const_builtin(self, node, consts):
         """Fold the pure builtins. Effect builtins are never constant."""
         if len(node.args) != 1 or node.name in EFFECT_KINDS:
-            return UNKNOWN
-        v = self.const(node.args[0], consts)
+            return UNKNOWN, StaticDeriv("unknown", node.name,
+                                        file=self.current_file)
+        v, n = self.const(node.args[0], consts)
+        label = f"{node.name} of"
         if v is UNKNOWN:
-            return UNKNOWN
+            return UNKNOWN, StaticDeriv("unknown", label, inputs=(n,),
+                                        file=self.current_file)
         if node.name == "text":
-            return self.as_text(v)
+            return self.as_text(v), StaticDeriv("op", label, inputs=(n,),
+                                                file=self.current_file)
         if node.name == "lower":
-            return str(v).lower()
+            return str(v).lower(), StaticDeriv("op", label, inputs=(n,),
+                                               file=self.current_file)
         if node.name == "upper":
-            return str(v).upper()
-        return UNKNOWN
+            return str(v).upper(), StaticDeriv("op", label, inputs=(n,),
+                                               file=self.current_file)
+        return UNKNOWN, StaticDeriv("unknown", label, inputs=(n,),
+                                    file=self.current_file)
 
     def const_call(self, node, consts):
         """Evaluate a call statically when its body is a single `give`.
 
         Bounded by depth: this is constant folding, not an interpreter, and
-        it must never loop on recursion.
+        it must never loop on recursion. The resulting "call" node's inputs
+        are the argument nodes only — the callee's internal derivation
+        chain is not inlined, so nested calls do not grow the graph
+        multiplicatively (P-Q10).
         """
         fn = self.funcs.get(node.name)
         if fn is None or self.depth > 6:
-            return UNKNOWN
+            return UNKNOWN, StaticDeriv("unknown", node.name,
+                                        file=self.current_file)
         if self.is_recursive(node.name):
-            return UNKNOWN
-        args = [self.const(a, consts) for a in node.args]
+            return UNKNOWN, StaticDeriv("unknown", node.name,
+                                        file=self.current_file)
+        arg_pairs = [self.const(a, consts) for a in node.args]
+        args = [v for v, _ in arg_pairs]
         if len(args) != len(fn.params):
-            return UNKNOWN
+            return UNKNOWN, StaticDeriv("unknown", node.name,
+                                        file=self.current_file)
         gives = [s for s in fn.body if isinstance(s, Give)]
         if len(gives) != 1 or len(fn.body) != 1:
-            return UNKNOWN
+            return UNKNOWN, StaticDeriv("unknown", node.name,
+                                        file=self.current_file)
+
+        callee_file = self.func_file.get(node.name, self.current_file)
         inner = Consts()
-        for p, a in zip(fn.params, args):
-            inner.set(p, a)
+        for p, (v, n) in zip(fn.params, arg_pairs):
+            inner.set(p, v, StaticDeriv("param", p, inputs=(n,), file=callee_file))
+
+        prev_file, self.current_file = self.current_file, callee_file
         self.depth += 1
         try:
-            return self.const(gives[0].expr, inner)
+            value, _ = self.const(gives[0].expr, inner)
         finally:
             self.depth -= 1
+            self.current_file = prev_file
+
+        arg_nodes = tuple(n for _, n in arg_pairs)
+        return value, StaticDeriv("call", node.name, inputs=arg_nodes,
+                                  file=self.current_file)
 
     @staticmethod
     def as_text(v):
@@ -777,35 +880,47 @@ class Analyser:
     # ---- target description
 
     def describe(self, node, consts):
-        """Static description of an effect's target.
+        """Static description of an effect's target, paired with its node.
 
         A fully known value gives the exact target. A partly known one keeps
         its literal parts so the host and shape stay visible:
         `"https://api/" + text of id + ".json"` becomes
         `https://api/{...}.json`.
         """
-        v = self.const(node, consts)
+        v, n = self.const(node, consts)
         if v is not UNKNOWN:
-            return self.as_text(v), False
-        return self.pattern(node, consts), True
+            return self.as_text(v), False, n
+        text, n2 = self.pattern(node, consts)
+        return text, True, n2
 
     def pattern(self, node, consts):
-        """Keep every statically known chunk, mark the rest."""
+        """Keep every statically known chunk, mark the rest.
+
+        The fallback branch returns the node `const()` already built for
+        this node, rather than a fresh disconnected unknown node — that
+        node may itself be a name wrapping an unknown value, and that
+        chain is exactly what a derivation query needs to preserve.
+        """
         if node is None:
-            return "{...}"
-        v = self.const(node, consts)
+            return "{...}", StaticDeriv("unknown", "{...}",
+                                        file=self.current_file)
+        v, n = self.const(node, consts)
         if v is not UNKNOWN:
-            return self.as_text(v)
+            return self.as_text(v), n
         if isinstance(node, OrFail):
             return self.pattern(node.expr, consts)
         if isinstance(node, BinOp) and node.op == "+":
-            return (self.pattern(node.left, consts)
-                    + self.pattern(node.right, consts))
-        return "{...}"
+            lt, ln = self.pattern(node.left, consts)
+            rt, rn = self.pattern(node.right, consts)
+            return lt + rt, StaticDeriv("op", "+", inputs=(ln, rn),
+                                        file=self.current_file)
+        return "{...}", n
 
 
-def analyse(src):
-    return Analyser().analyse(src)
+def analyse(src, file=None):
+    a = Analyser()
+    a.entry_file = file
+    return a.analyse(src)
 
 
 def analyse_file(path, follow=True):
@@ -816,7 +931,7 @@ def analyse_file(path, follow=True):
     is exactly the case Shapes has to see through.
     """
     if not follow:
-        return analyse(open(path).read())
+        return analyse(open(path).read(), file=path)
 
     from modules import (load_graph, names_in_graph, check_collisions,
                          rename_map)
@@ -825,10 +940,12 @@ def analyse_file(path, follow=True):
     known = names_in_graph(graph)
     renames = rename_map(graph)
     combined = Analyser()
+    combined.entry_file = os.path.abspath(path)
     entry_prog = None
     for p, src in graph:
         prog = parse(src, known)
-        combined.collect_declarations(prog, renames.get(p, {}))
+        combined.collect_declarations(prog, renames.get(p, {}),
+                                      file=os.path.abspath(p))
         if os.path.abspath(p) == os.path.abspath(path):
             entry_prog = prog
     return combined.analyse_prog(entry_prog)
