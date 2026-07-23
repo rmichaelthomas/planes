@@ -6,7 +6,8 @@
   python3 shapes_cli.py program.planes --json       # machine-readable
   python3 shapes_cli.py program.planes --check      # module declarations
   python3 shapes_cli.py program.planes --no-follow   # this file only
-  python3 shapes_cli.py program.planes --rules      # check its rules
+  python3 shapes_cli.py program.planes --rules        # check its rules
+  python3 shapes_cli.py program.planes --fingerprints # print rule fingerprints
   python3 shapes_cli.py --diff old.planes new.planes
   python3 shapes_cli.py --index demo/pkgs           # index a corpus
   python3 shapes_cli.py --search network demo/pkgs  # search by behaviour
@@ -23,7 +24,7 @@ from shapes import analyse_file, diff
 from parser import parse, PlanesSyntaxError
 from lexer import Rule
 from modules import ModuleError
-from rules import check as check_rules, RuleNotSupported, RuleConflict
+from rules import check as check_rules, RuleNotSupported, RuleConflict, fingerprint
 
 
 # Bumped when the meaning of a field changes. A consumer that does not
@@ -156,7 +157,7 @@ def main(argv):
         print(f"module error — {e}", file=sys.stderr)
         return 1
 
-    if "--rules" in args:
+    if "--rules" in args or "--fingerprints" in args:
         # Rules are collected from this file's own top-level statements,
         # the same file the surface above was computed for — parsing it a
         # second time is simplest and keeps this checker decoupled from
@@ -170,19 +171,27 @@ def main(argv):
         if not found:
             print(f"no rules in {os.path.basename(path)}")
             return 0
+
+        if "--fingerprints" in args:
+            for r in found:
+                print(f"[{r.name}] @{fingerprint(r)}")
+            return 0
+
         try:
-            violations = check_rules(found, surface)
+            results = check_rules(found, surface)
         except (RuleNotSupported, RuleConflict) as e:
             print(f"rule check error — {e}", file=sys.stderr)
             return 1
-        if not violations:
+        if not results:
             word = "rule" if len(found) == 1 else "rules"
             print(f"{len(found)} {word} checked, no violations")
             return 0
-        for v in violations:
+        for v in results:
             print(v.render())
             print()
-        return 1
+        # A cleared prohibition is returned (so the exception is visible)
+        # but must not fail the build — only a genuine violation does.
+        return 1 if any(v.is_violation for v in results) else 0
 
     if "--json" in args:
         print(json.dumps(as_json(surface, path), indent=2))

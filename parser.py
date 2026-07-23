@@ -220,8 +220,10 @@ class Parser:
             f"found '{t.value or 'end of line'}'")
 
     def parse_rule(self):
-        """`rule [name] subject may not kind` or
-        `rule [name] subject may not kind to "target"`
+        """`rule [name] subject may not kind` (forbid) or
+        `rule [name] subject may kind` (permit), each optionally with
+        `to "target"` and a `supersedes [other-name]` clause, which may
+        itself carry a fingerprint (`@xxxxxx`) of the rule it overrides.
 
         A rule is a constraint the checker reads, never an action the
         program takes (unbound v2.0 §33) — nothing here executes anything.
@@ -246,24 +248,25 @@ class Parser:
 
         subject = self.expect("NAME").value
 
-        form = f"rule [{name}] {subject} may not effect-kind"
         if not self.at("NAME", "may"):
             g = self.peek()
             raise PlanesSyntaxError(
-                f"line {g.line}: expected 'may not' after a rule's "
-                f"subject, found '{g.value or 'end of line'}'\n"
-                f"  try: {form}")
+                f"line {g.line}: expected 'may not' or 'may' after a "
+                f"rule's subject, found '{g.value or 'end of line'}'\n"
+                f"  try: rule [{name}] {subject} may not effect-kind  "
+                f"(forbid)\n"
+                f"    or: rule [{name}] {subject} may effect-kind  "
+                f"(permit)")
         self.next()
-        if not self.at("NOT"):
-            g = self.peek()
-            raise PlanesSyntaxError(
-                f"line {g.line}: expected 'may not' after a rule's "
-                f"subject, found 'may {g.value or 'end of line'}'\n"
-                f"  try: {form}")
-        self.next()
+        # `not` present -> forbid; absent -> permit. Neither `may` nor
+        # `not` is reserved for this — `not` was already NOT from logical
+        # negation, and `may` is read positionally, right here, only.
+        assertion = "forbid" if self.accept("NOT") else "permit"
+        verb = "may not" if assertion == "forbid" else "may"
+        form = f"rule [{name}] {subject} {verb} effect-kind"
 
         kind_tok = self.peek()
-        kind = self.read_effect_word(after="'may not'")
+        kind = self.read_effect_word(after=f"'{verb}'")
         if kind not in EFFECT_KINDS:
             raise PlanesSyntaxError(
                 f"line {kind_tok.line}: '{kind}' is not an effect kind a "
@@ -275,6 +278,7 @@ class Parser:
             target = self.expect("STRING").value[1:-1]
 
         supersedes = None
+        supersedes_fingerprint = None
         if self.at("NAME", "supersedes"):
             self.next()
             if not self.at("OP", "["):
@@ -293,7 +297,20 @@ class Parser:
             supersedes = self.next().value
             self.expect("OP", "]")
 
-        return Rule(name, subject, kind, target, rule_tok.line, supersedes)
+            if self.at("FINGERPRINT"):
+                supersedes_fingerprint = self.next().value[1:]
+            elif self.at("OP", "@"):
+                at_tok = self.next()
+                bad = self.peek()
+                raise PlanesSyntaxError(
+                    f"line {at_tok.line}: a fingerprint must be exactly "
+                    f"six hex characters after '@', found "
+                    f"'{bad.value or 'end of line'}'\n"
+                    f"  try: {form} supersedes [{supersedes}] @abcdef "
+                    f"— or omit it for an unverified override")
+
+        return Rule(name, subject, kind, target, rule_tok.line, supersedes,
+                   assertion, supersedes_fingerprint)
 
     def parse_funcdef(self):
         self.expect("TO")
