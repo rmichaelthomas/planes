@@ -9,6 +9,7 @@
   python3 shapes_cli.py program.planes --rules        # check its rules
   python3 shapes_cli.py program.planes --fingerprints # print rule fingerprints
   python3 shapes_cli.py program.planes --derivation-stats  # P-Q10 node/depth measurement
+  python3 shapes_cli.py program.planes --render       # canonical source, with rule markers
   python3 shapes_cli.py --diff old.planes new.planes
   python3 shapes_cli.py --index demo/pkgs           # index a corpus
   python3 shapes_cli.py --search network demo/pkgs  # search by behaviour
@@ -28,9 +29,10 @@ import sys
 from lexer import Rule
 from modules import ModuleError
 from parser import PlanesSyntaxError, parse
+from render import render
 from rules import RuleConflict, RuleNotSupported, fingerprint
 from rules import check as check_rules
-from shapes import analyse_file, diff
+from shapes import analyse, analyse_file, diff
 
 # Bumped when the meaning of a field changes. A consumer that does not
 # recognise the version should refuse the document rather than guess.
@@ -218,6 +220,28 @@ def main(argv):
         print(f"  max nodes per effect:      {stats['max_nodes']}")
         print(f"  mean nodes per effect:     {stats['mean_nodes']}")
         print(f"  max graph depth:           {stats['max_depth']}")
+        return 0
+
+    if "--render" in args:
+        # Its own parse and surface, single-file and unfollowed, so a
+        # rule's subject resolves the same way render()'s internal
+        # `check(rules, surface, declaring_file=None)` expects: every
+        # node's file is None on both sides (rules.py's own documented
+        # default-matching rule).
+        try:
+            src = open(path).read()
+            prog = parse(src)
+        except PlanesSyntaxError as e:
+            print(f"syntax error — {e}", file=sys.stderr)
+            return 1
+        found = [s for s in prog if isinstance(s, Rule)]
+        try:
+            text = (render(prog, rules=found, surface=analyse(src))
+                    if found else render(prog))
+        except (RuleNotSupported, RuleConflict) as e:
+            print(f"rule check error — {e}", file=sys.stderr)
+            return 1
+        print(text, end="")
         return 0
 
     if "--rules" in args or "--fingerprints" in args:
