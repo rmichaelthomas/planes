@@ -20,10 +20,15 @@ i = Interpreter(http=stub)
 src = open('hn.planes').read()
 try:
     out = i.run(src)
-    print('OUTPUT:');  [print(' ', l) for l in out]
-    print('\nEFFECTS:'); [print(' ', e) for e in i.effects]
+    print('OUTPUT:')
+    for line in out:
+        print(' ', line)
+    print('\nEFFECTS:')
+    for eff in i.effects:
+        print(' ', eff)
     print('\nFILES:', list(i.fs.keys()))
 except (PlanesError, PlanesSyntaxError) as e:
     print('ERROR:', e)
 except Exception:
-    import traceback; traceback.print_exc()
+    import traceback
+    traceback.print_exc()

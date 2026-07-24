@@ -469,20 +469,20 @@ class Interpreter:
 
     def eval_binop(self, node, env):
         if node.op == "and":
-            l = self.eval(node.left, env)
-            if not condition(l.value):
-                return Traced(False, Deriv("op", "and", False, [l.node]))
-            r = self.eval(node.right, env)
-            v = condition(r.value)
-            return Traced(v, Deriv("op", "and", v, [l.node, r.node]))
+            left = self.eval(node.left, env)
+            if not condition(left.value):
+                return Traced(False, Deriv("op", "and", False, [left.node]))
+            right = self.eval(node.right, env)
+            v = condition(right.value)
+            return Traced(v, Deriv("op", "and", v, [left.node, right.node]))
 
         if node.op == "or":
-            l = self.eval(node.left, env)
-            if condition(l.value):
-                return Traced(True, Deriv("op", "or", True, [l.node]))
-            r = self.eval(node.right, env)
-            v = condition(r.value)
-            return Traced(v, Deriv("op", "or", v, [l.node, r.node]))
+            left = self.eval(node.left, env)
+            if condition(left.value):
+                return Traced(True, Deriv("op", "or", True, [left.node]))
+            right = self.eval(node.right, env)
+            v = condition(right.value)
+            return Traced(v, Deriv("op", "or", v, [left.node, right.node]))
 
         if node.op == "first":
             n = self.eval(node.left, env)
@@ -490,10 +490,10 @@ class Interpreter:
             v = list(src.value)[: int(n.value)]
             return Traced(v, Deriv("op", f"first {int(n.value)} of", v, [src.node]))
 
-        l = self.eval(node.left, env)
-        r = self.eval(node.right, env)
-        v = apply_op(node.op, l.value, r.value)
-        return Traced(v, Deriv("op", node.op, v, [l.node, r.node]))
+        left = self.eval(node.left, env)
+        right = self.eval(node.right, env)
+        v = apply_op(node.op, left.value, right.value)
+        return Traced(v, Deriv("op", node.op, v, [left.node, right.node]))
 
     def eval_builtin(self, node, env):
         return self.builtin(node.name, self.eval(node.arg, env))

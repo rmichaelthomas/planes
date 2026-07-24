@@ -737,7 +737,8 @@ class Analyser:
             elif isinstance(n, Assign):
                 scan(n.expr)
             elif isinstance(n, BinOp):
-                scan(n.left); scan(n.right)
+                scan(n.left)
+                scan(n.right)
             elif isinstance(n, Field):
                 scan(n.obj)
             elif isinstance(n, Builtin):
@@ -745,12 +746,14 @@ class Analyser:
             elif isinstance(n, OrFail):
                 scan(n.expr)
             elif isinstance(n, WriteTo):
-                scan(n.value); scan(n.dest)
+                scan(n.value)
+                scan(n.dest)
             elif isinstance(n, ListLit):
                 for i in n.items:
                     scan(i)
             elif isinstance(n, ForEach):
-                scan(n.source); scan(n.where)
+                scan(n.source)
+                scan(n.where)
                 for s in n.body:
                     scan(s)
             elif isinstance(n, If):
@@ -799,14 +802,14 @@ class Analyser:
             return self.const(node.expr, consts)
 
         if isinstance(node, BinOp) and node.op == "+":
-            l, ln = self.const(node.left, consts)
-            r, rn = self.const(node.right, consts)
-            if l is UNKNOWN or r is UNKNOWN:
-                return UNKNOWN, StaticDeriv("unknown", "+", inputs=(ln, rn),
+            left, left_n = self.const(node.left, consts)
+            right, right_n = self.const(node.right, consts)
+            if left is UNKNOWN or right is UNKNOWN:
+                return UNKNOWN, StaticDeriv("unknown", "+", inputs=(left_n, right_n),
                                             file=self.current_file)
-            v = (self.as_text(l) + self.as_text(r)
-                 if (isinstance(l, str) or isinstance(r, str)) else l + r)
-            return v, StaticDeriv("op", "+", inputs=(ln, rn),
+            v = (self.as_text(left) + self.as_text(right)
+                 if (isinstance(left, str) or isinstance(right, str)) else left + right)
+            return v, StaticDeriv("op", "+", inputs=(left_n, right_n),
                                   file=self.current_file)
 
         if isinstance(node, Builtin) and node.name == "text":

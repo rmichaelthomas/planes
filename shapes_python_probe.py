@@ -36,7 +36,8 @@ def surface(src):
                     elif nm in fx:
                         found |= fx[nm]
             if not found <= fx[name]:
-                fx[name] |= found; changed = True
+                fx[name] |= found
+                changed = True
     return fx
 
 SAMPLE = '''

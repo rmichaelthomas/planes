@@ -130,10 +130,10 @@ def _resolve_string(node, assigns):
     if isinstance(node, ast.Name) and node.id in assigns:
         return assigns[node.id]
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        l = _resolve_string(node.left, assigns)
-        r = _resolve_string(node.right, assigns)
-        if l is not None and r is not None:
-            return l + r
+        left = _resolve_string(node.left, assigns)
+        right = _resolve_string(node.right, assigns)
+        if left is not None and right is not None:
+            return left + right
     return None
 
 

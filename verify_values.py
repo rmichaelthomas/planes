@@ -201,7 +201,10 @@ def section_e():
         if ok_count != n:
             failed.append((f, last))
 
-    record("E", f"regression: full suite total ({total}) >= baseline ({ACTUAL_PRE_BUILD}) net of {INTENTIONAL_ASSERTION_CHANGES} intentional assertion changes",
+    record("E",
+           f"regression: full suite total ({total}) >= baseline "
+           f"({ACTUAL_PRE_BUILD}) net of {INTENTIONAL_ASSERTION_CHANGES} "
+           f"intentional assertion changes",
            total >= ACTUAL_PRE_BUILD and not failed,
            f"failed suites: {[f for f, _ in failed]}" if failed else "")
 
@@ -254,7 +257,8 @@ def main():
         lines.append("|---|---|---|")
         for name, passed, detail in by_section.get(section, []):
             mark = "PASS" if passed else "FAIL"
-            print(f"{section:<3} {mark:<6} {name}" + (f"  -- {detail}" if detail and not passed else ""))
+            tail = f"  -- {detail}" if detail and not passed else ""
+            print(f"{section:<3} {mark:<6} {name}" + tail)
             cell = detail.replace("\n", "<br>").replace("|", "\\|")
             lines.append(f"| {mark} | {name} | {cell} |")
             if not passed:

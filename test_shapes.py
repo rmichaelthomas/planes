@@ -933,7 +933,8 @@ def test_json_reports_whether_the_surface_is_complete():
         assert doc["complete"] is False, \
             "a surface with an undeclared foreign is not complete"
     finally:
-        import shutil; shutil.rmtree(d, ignore_errors=True)
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
 
 
 # ================================================================ derivation
