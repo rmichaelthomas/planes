@@ -6,12 +6,12 @@
   python3 planes.py program.planes --effects   # print the effect surface
   python3 planes.py program.planes --why NAME  # print a full derivation tree
 """
-import sys
 import os
+import sys
 
-from interp import Interpreter, PlanesError, why_tree, origins
-from parser import PlanesSyntaxError
+from interp import Interpreter, PlanesError, origins, why_tree
 from modules import ModuleError
+from parser import PlanesSyntaxError
 
 
 def main(argv):

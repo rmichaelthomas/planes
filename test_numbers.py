@@ -7,9 +7,8 @@ makes `why` answer a question about the answer, not about the program.
 import json
 import sys
 
-from planes_num import Number, Inexact, MAX_DENOMINATOR
 from interp import Interpreter, PlanesError, why_tree
-from parser import PlanesSyntaxError
+from planes_num import MAX_DENOMINATOR, Inexact, Number
 
 
 def run(src, **kw):

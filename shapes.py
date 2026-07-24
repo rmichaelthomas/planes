@@ -17,8 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from lexer import *
-from parser import parse, BUILTIN_NAMES
-
+from parser import BUILTIN_NAMES, parse
 
 # ================================================================ effect kinds
 
@@ -964,8 +963,7 @@ def analyse_file(path, follow=True):
     if not follow:
         return analyse(open(path).read(), file=path)
 
-    from modules import (load_graph, names_in_graph, check_collisions,
-                         rename_map)
+    from modules import check_collisions, load_graph, names_in_graph, rename_map
     graph = load_graph(path)
     check_collisions(graph)
     known = names_in_graph(graph)

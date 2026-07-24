@@ -7,9 +7,9 @@ reach for, and a language that silently refuses them is hostile.
 """
 import sys
 
-from lexer import KEYWORDS
-from parser import BUILTIN_NAMES, PlanesSyntaxError
 from interp import Interpreter, PlanesError
+from lexer import KEYWORDS
+from parser import BUILTIN_NAMES
 
 
 def run(src, **kw):

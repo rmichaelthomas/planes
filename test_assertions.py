@@ -20,20 +20,19 @@ alone catches only one:
   (REPORT_AUDIT.md §0).
 """
 import ast
+import contextlib
 import io
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
-import contextlib
 
-from parser import parse
-from lexer import Rule
-from shapes import analyse
-from rules import check, RuleNotSupported, RuleResults
 import planes as planes_mod
-
+from lexer import Rule
+from parser import parse
+from rules import RuleNotSupported, RuleResults, check
+from shapes import analyse
 
 # ================================================================ 4.1 registry
 

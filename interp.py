@@ -5,11 +5,10 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from host import HostError, PythonHost, TestHost
 from lexer import *
-from parser import parse, PlanesSyntaxError
-from planes_num import Number, Inexact
-from host import PythonHost, TestHost, HostError
-from parser import BUILTIN_NAMES
+from parser import BUILTIN_NAMES, parse
+from planes_num import Inexact, Number
 
 
 class _BuiltinName:
@@ -204,6 +203,7 @@ class Interpreter:
         self.modules = set()
         self.output = []
         self.effects = []            # ordered record of what the program did
+        self.annotations = {}        # name -> latest `because` text, display-only
 
         # Every effect goes through a host. `http=` and `fs=` are the older,
         # narrower way to say the same thing and still work; they build a
@@ -227,6 +227,8 @@ class Interpreter:
         prog = parse(src)
         self.hoist(prog, self.env)
         for stmt in prog:
+            if isinstance(stmt, Note):
+                continue     # never dispatched -- see exec_stmt's Note case
             self.exec_stmt(stmt, self.env)
         return self.output
 
@@ -237,8 +239,7 @@ class Interpreter:
         hoisted into the same scope. Only the entry file's top-level
         statements execute — importing a module must not run it.
         """
-        from modules import (load_graph, names_in_graph, check_collisions,
-                             rename_map)
+        from modules import check_collisions, load_graph, names_in_graph, rename_map
         graph = load_graph(path)
         check_collisions(graph)
         known = names_in_graph(graph)
@@ -254,6 +255,8 @@ class Interpreter:
                     if isinstance(stmt, Use):
                         self.exec_stmt(stmt, self.env)
         for stmt in entry:
+            if isinstance(stmt, Note):
+                continue
             self.exec_stmt(stmt, self.env)
         return self.output
 
@@ -284,6 +287,8 @@ class Interpreter:
     def exec_block(self, stmts, env):
         result = None
         for s in stmts:
+            if isinstance(s, Note):
+                continue
             result = self.exec_stmt(s, env)
         return result
 
@@ -303,6 +308,20 @@ class Interpreter:
             # what a program does.
             return None
 
+        if isinstance(stmt, Note):
+            # A normal run never reaches this: run(), run_file(), and
+            # exec_block() all skip Note before ever calling exec_stmt.
+            # This case is the structural half of that guarantee, not the
+            # mechanism — a promise kept by structure, not by every
+            # present and future statement-list loop remembering to
+            # filter (unbound v1.0 §4 item 3, §218). If this ever fires,
+            # a call site stopped filtering; that is a bug in Planes, not
+            # in the program that wrote a `note:` block.
+            raise PlanesError(
+                "annotation-executed",
+                "an annotation reached the evaluator",
+                "this is a bug in Planes, not in your program — please report it")
+
         if isinstance(stmt, FuncDef):
             self.funcs[stmt.name] = Function(stmt.name, stmt.params, stmt.body, env)
             return None
@@ -314,6 +333,13 @@ class Interpreter:
                 env.bind_local(stmt.name, named)
             else:
                 env.set(stmt.name, named)
+            # `because` is a rationale for `why` to show beside the
+            # derivation, never an input to it — the Deriv graph above
+            # never sees stmt.annotation, only stmt.expr.
+            if stmt.annotation is not None:
+                self.annotations[stmt.name] = stmt.annotation.text
+            else:
+                self.annotations.pop(stmt.name, None)
             return named
 
         if isinstance(stmt, Give):
@@ -329,7 +355,9 @@ class Interpreter:
 
         if isinstance(stmt, Why):
             v = self.eval(stmt.expr, env)
-            self.output.append(explain(v))
+            because = self.annotations.get(stmt.expr.name) \
+                if isinstance(stmt.expr, Var) else None
+            self.output.append(explain(v, because))
             return v
 
         if isinstance(stmt, If):
@@ -775,10 +803,15 @@ def from_foreign(x):
 
 # ================================================================ why
 
-def explain(traced):
+def explain(traced, because=None):
+    """`why`'s one-line derivation. `because`, when given, is display
+    text beside it — never an input the derivation graph carries."""
     n = traced.node
     inner = n.inputs[0] if n.kind == "name" and n.inputs else n
-    return f"{fmt(traced.value)} from {render(inner)}"
+    text = f"{fmt(traced.value)} from {render(inner)}"
+    if because:
+        text += f'\n  because "{because}"'
+    return text
 
 
 def render(node):
@@ -812,12 +845,15 @@ def render(node):
     return fmt(node.value)
 
 
-def why_tree(traced, max_depth=14):
+def why_tree(traced, max_depth=14, because=None):
     """Full transitive derivation, back to where each value entered.
 
     The graph is a DAG, not a tree: one source list feeds every item of a
     comprehension. Shared subgraphs are printed once and referred to after,
     so the output stays the size of the derivation, not of the data.
+
+    `because`, when given, is display text for the root beside the
+    derivation — never an input the graph itself carries.
     """
     lines = []
     seen = {}
@@ -833,6 +869,8 @@ def why_tree(traced, max_depth=14):
             return
         seen[id(n)] = True
         lines.append("  " * depth + f"{n.label} = {fmt(n.value)}{tail}")
+        if depth == 0 and because:
+            lines.append("  " * (depth + 1) + f'because "{because}"')
         for i in n.inputs:
             walk(i, depth + 1)
 

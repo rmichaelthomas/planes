@@ -14,15 +14,12 @@ So this file tests the test. It walks every AST node type the language can
 produce and requires that an oracle run exercises each one. A feature added
 without a corresponding oracle case fails here rather than in production.
 """
-import io
-import contextlib
 import os
 import sys
 
 import lexer
 from parser import parse
 from test_foreign import check_oracle
-
 
 # Every node type a program can contain. Derived from the module rather than
 # listed by hand, so a new node is covered the moment it is defined.
@@ -75,6 +72,17 @@ COVERAGE = {
     "Foreign": 'foreign now from "time.time" doing clock\nt = now',
     "Rule":    'rule [no-telemetry] anything may not ask\n'
                'use file\nwrite [1] to "o.json"',
+    # `Because` is inert by omission: never evaluated, so a program
+    # carrying one runs exactly as it would without it.
+    "Because": 'use file\ncap = 200 because "board policy"\n'
+               'write [cap] to "o.json"',
+    # `Note` is inert by filtering: run()/run_file()/exec_block() skip it
+    # before ever calling exec_stmt, so a program carrying one also runs
+    # exactly as it would without it. (exec_stmt still raises if a Note
+    # somehow reaches it directly — see test_annotation.py's
+    # test_note_reaching_the_evaluator_raises for that safety net.)
+    "Note": 'note:\n  from "GDPR Article 17"\n  derives-from [refund-cap]\n'
+            'use file\nwrite [1] to "o.json"',
 }
 
 
