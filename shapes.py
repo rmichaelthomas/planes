@@ -1034,10 +1034,20 @@ def diff(before: Surface, after: Surface) -> SurfaceDiff:
     """What changed between two versions of a program.
 
     This is the upgrade-diff use case: tell me this package now performs
-    network sends it did not before.
+    network sends it did not before — including a library whose new
+    network call lives in a function nothing calls at load time. `added`/
+    `removed` compare `.declared`, not `.effects`, so `is_empty()` (and the
+    "no change" render() takes when it's true) agrees with
+    `new_boundaries`/`dropped_boundaries`, which were already computed from
+    `.declared` via `.boundaries()`. Comparing `.effects` here (audit
+    finding, unearned-assertion sweep) let `is_empty()` say "no change"
+    for a library that gained a whole new boundary in an uncalled
+    function — exactly the "reported pure because nothing runs at load"
+    lie this project exists to prevent, reproduced inside its own diff
+    tool.
     """
-    b = {(e.kind, e.target, e.computed): e for e in before.effects}
-    a = {(e.kind, e.target, e.computed): e for e in after.effects}
+    b = {(e.kind, e.target, e.computed): e for e in before.declared}
+    a = {(e.kind, e.target, e.computed): e for e in after.declared}
     added = [a[k] for k in a if k not in b]
     removed = [b[k] for k in b if k not in a]
     return SurfaceDiff(
