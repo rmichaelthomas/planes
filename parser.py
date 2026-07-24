@@ -351,7 +351,8 @@ class Parser:
         wrapped = False
         if self.at("EOL") and self.peek(1).kind == "BEGIN" \
                 and self.peek(2).kind in ("WHERE", "OP"):
-            self.next(); self.next()
+            self.next()
+            self.next()
             wrapped = True
         where = None
         if self.accept("WHERE"):
@@ -377,11 +378,16 @@ class Parser:
         """`or fail as tag` — same line, or indented continuation."""
         save = self.i
         if self.at("OR") and self.peek(1).kind == "FAIL":
-            self.next(); self.next(); self.expect("AS")
+            self.next()
+            self.next()
+            self.expect("AS")
             return OrFail(node, self.expect("NAME").value)
         if self.at("EOL") and self.peek(1).kind == "BEGIN" \
                 and self.peek(2).kind == "OR" and self.peek(3).kind == "FAIL":
-            self.next(); self.next(); self.next(); self.next()
+            self.next()
+            self.next()
+            self.next()
+            self.next()
             self.expect("AS")
             tag = self.expect("NAME").value
             self.skip_blank()
@@ -403,7 +409,9 @@ class Parser:
             return self.finish_because(attach)
         if self.at("EOL") and self.peek(1).kind == "BEGIN" \
                 and self.peek(2).kind == "NAME" and self.peek(2).value == "because":
-            self.next(); self.next(); self.next()
+            self.next()
+            self.next()
+            self.next()
             node = self.finish_because(attach)
             self.skip_blank()
             self.accept("END")
@@ -639,11 +647,14 @@ class Parser:
             return Str(t.value[1:-1])
 
         if t.kind == "TRUE":
-            self.next(); return Bool(True)
+            self.next()
+            return Bool(True)
         if t.kind == "FALSE":
-            self.next(); return Bool(False)
+            self.next()
+            return Bool(False)
         if t.kind == "NOTHING":
-            self.next(); return Nothing()
+            self.next()
+            return Nothing()
 
         if t.kind == "OP" and t.value == "{":
             self.next()

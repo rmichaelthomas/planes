@@ -179,8 +179,8 @@ def main(argv):
             if s.touches(boundary):
                 hits += 1
                 name = os.path.basename(p).replace(".planes", "")
-                for e in s.at(boundary):
-                    print(f"{name:16} {e}")
+                for eff in s.at(boundary):
+                    print(f"{name:16} {eff}")
         if not hits:
             note = (f" ({skipped} file(s) could not be parsed and were "
                     f"not searched)" if skipped else "")
@@ -314,8 +314,8 @@ def main(argv):
         for name in sorted(surface.functions):
             es = surface.functions[name]
             if es:
-                for e in es:
-                    print(f"  {name:16} {e.boundary:8} {e}")
+                for eff in es:
+                    print(f"  {name:16} {eff.boundary:8} {eff}")
             else:
                 print(f"  {name:16} pure")
 
@@ -327,9 +327,9 @@ def main(argv):
             print("module declarations match the effect surface")
         for m in unused:
             print(f"  declared but unused: use {m}")
-        for e in undeclared:
-            mod = "http" if e.boundary == "network" else e.boundary
-            print(f"  performs {e.kind} without `use {mod}`")
+        for eff in undeclared:
+            mod = "http" if eff.boundary == "network" else eff.boundary
+            print(f"  performs {eff.kind} without `use {mod}`")
         return 1 if undeclared else 0
 
     return 0

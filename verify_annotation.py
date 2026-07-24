@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Verification gate for the annotation plane and canonical renderer build.
-Runs A-E from the build prompt's §10.2 and writes annotation-verification.md.
+"""Verification gate for the annotation plane and canonical renderer build,
+extended for the Tier 0 follow-on (closing the gaps §7 of that build's own
+report named). Runs A1/A2/B/C/D/E/F/G and writes annotation-verification.md.
 No input from a human is required.
 
-Exit 0 if A, B, and E all pass (the blocking set, per §10.2's "Blocking:
-any failure in A, B, or E stops the PR"). C and D are reported but do not
-block, though in practice every row here must hold for the build to be done.
+A is split into A1 (files that actually carry annotations -- the guarantee)
+and A2 (files that don't, where stripping is a no-op -- a regression net,
+not evidence for the guarantee itself): the prior single "A" section let 35
+PASS rows read as broader coverage than the 8 that were doing real work.
+
+Exit 0 if A1, B, E, F, and G all pass (the blocking set, per this build's
+§10.2). C and D are reported but do not block, though in practice every row
+here must hold for the build to be done.
 """
-import glob
-import json
 import subprocess
 import sys
 
@@ -17,6 +21,13 @@ from lexer import KEYWORDS, Because, Rule
 from parser import parse
 from render import ast_equal, render, strip_annotations
 from shapes import analyse
+from test_annotation import (
+    FIXTURE_KWARGS,
+    STANDALONE_PLANES_FILES,
+    all_planes_files,
+    annotation_nesting_kinds,
+    has_annotations,
+)
 
 RESULTS: list = []   # (section, name, passed, detail)
 
@@ -26,90 +37,72 @@ def record(section, name, passed, detail=""):
     return passed
 
 
-# ================================================================ fixtures
-
-STORIES = {
-    1: {"title": "Rust 2.0 released",       "score": 450},
-    2: {"title": "Why Go is fine",          "score": 300},
-    3: {"title": "Rewriting grep in Rust",  "score": 210},
-    4: {"title": "A rust postmortem",       "score": 150},
-}
-
-
-def stub_http(url):
-    if "topstories" in url:
-        return json.dumps(list(STORIES.keys()))
-    if "pypi.org" in url:
-        name = url.split("/pypi/")[1].split("/json")[0]
-        return json.dumps({"info": {
-            "name": name,
-            "summary": f"{name} does something useful and interesting"}})
-    sid = int(url.split("/item/")[1].split(".json")[0])
-    return json.dumps(STORIES[sid])
-
-
-FIXTURE_KWARGS = {"hn.planes": {"http": stub_http}, "pypi.planes": {"http": stub_http}}
-NOT_STANDALONE_PARSEABLE = {"demo/app/net.planes"}
-
-
-def standalone_files():
-    return sorted(glob.glob("*.planes"))
-
-
-def every_planes_file():
-    paths = sorted(glob.glob("*.planes")) + \
-        sorted(glob.glob("demo/**/*.planes", recursive=True))
-    return [p for p in paths if p not in NOT_STANDALONE_PARSEABLE]
-
-
 def run_and_capture(src, **kw):
     kw.setdefault("fs", {})
     i = Interpreter(**kw)
-    output = i.run(src)
+    full_output = i.run(src)
     surface = analyse(src)
-    return list(output), list(i.effects), [str(e) for e in surface.declared]
+    show_output = [e[1] for e in i.effects if e[0] == "show"]
+    return show_output, list(i.effects), [str(e) for e in surface.declared], full_output
 
 
-# ================================================================ A. inertness
+def three_way(src, **kw):
+    """(ok, detail, a_full, b_full) -- show-output/effects/surface compared;
+    full output (which includes why) returned for a caller that wants it,
+    not compared here (§ the why boundary, docs/annotation-scope.md)."""
+    prog = parse(src)
+    stripped_src = render(strip_annotations(prog))
+    a_show, a_eff, a_surf, a_full = run_and_capture(src, **kw)
+    b_show, b_eff, b_surf, b_full = run_and_capture(stripped_src, **kw)
+    ok = a_show == b_show and a_eff == b_eff and a_surf == b_surf
+    detail = "" if ok else (
+        f"show-output {a_show!r} vs {b_show!r}; "
+        f"effects {a_eff!r} vs {b_eff!r}; "
+        f"surface {a_surf!r} vs {b_surf!r}")
+    return ok, detail, a_full, b_full
+
+
+# ================================================================ A1/A2. inertness
 
 def section_a():
-    for path in standalone_files():
+    for path in STANDALONE_PLANES_FILES:
         src = open(path).read()
         kw = FIXTURE_KWARGS.get(path, {})
-        name = f"{path}: annotated vs stripped are three-way identical"
         try:
-            prog = parse(src)
-            stripped_src = render(strip_annotations(prog))
-            a_out, a_eff, a_surf = run_and_capture(src, **kw)
-            b_out, b_eff, b_surf = run_and_capture(stripped_src, **kw)
-            ok = a_out == b_out and a_eff == b_eff and a_surf == b_surf
-            detail = "" if ok else (
-                f"output {a_out!r} vs {b_out!r}; "
-                f"effects {a_eff!r} vs {b_eff!r}; "
-                f"surface {a_surf!r} vs {b_surf!r}")
-            record("A", name, ok, detail)
+            ok, detail, _, _ = three_way(src, **kw)
+            section = "A1" if has_annotations(parse(src)) else "A2"
+            label = ("annotated vs stripped are three-way identical"
+                      if section == "A1" else
+                      "strip is a no-op (no annotations to begin with), "
+                      "run-based regression net")
+            record(section, f"{path}: {label}", ok, detail)
         except Exception as e:
-            record("A", name, False, f"{type(e).__name__}: {e}")
+            record("A1", f"{path}: annotated vs stripped are three-way identical",
+                   False, f"{type(e).__name__}: {e}")
 
-    # structural strip-is-a-no-op check, across every file including demo/
-    for path in every_planes_file():
-        if path == "annotated.planes":
+    # structural strip-is-a-no-op check for files that can't run standalone
+    # (demo/'s multi-file fixtures) -- A2 only; a file WITH annotations is
+    # proven by the run-based A1 check above, not claimed here too.
+    for path in all_planes_files():
+        if path in STANDALONE_PLANES_FILES:
             continue
         name = f"{path}: strip is structurally a no-op (no annotations to begin with)"
         try:
             prog = parse(open(path).read())
+            if has_annotations(prog):
+                continue
             stripped = strip_annotations(prog)
             ok = len(prog) == len(stripped) and all(
                 ast_equal(a, b) for a, b in zip(prog, stripped))
-            record("A", name, ok)
+            record("A2", name, ok)
         except Exception as e:
-            record("A", name, False, f"{type(e).__name__}: {e}")
+            record("A2", name, False, f"{type(e).__name__}: {e}")
 
 
 # ================================================================ B. round-trip
 
 def section_b():
-    for path in every_planes_file():
+    for path in all_planes_files():
         name = f"{path}: render(parse(src)) parses to an equal AST"
         try:
             prog = parse(open(path).read())
@@ -157,8 +150,7 @@ def section_c():
     record("C", "a cleared match still shows the marker",
            "~ [no-write] applies here" in cout)
 
-    leaked = [p for p in every_planes_file() + ["annotated.planes"]
-              if "applies here" in open(p).read()]
+    leaked = [p for p in all_planes_files() if "applies here" in open(p).read()]
     record("C", "no marker text appears in any .planes file in the repo",
            not leaked, str(leaked))
 
@@ -191,7 +183,7 @@ def section_d():
 
 # ================================================================ E. regression + anti-drift
 
-BASELINE = 333  # confirmed this session against main at 8ce0e2e
+BASELINE = 333  # confirmed against main at 8ce0e2e, the Tier 0 build's start point
 
 SUITES = ["test_planes.py", "test_numbers.py", "test_shapes.py", "test_names.py",
           "test_rules.py", "test_foreign.py", "test_host.py", "test_coverage.py",
@@ -230,10 +222,38 @@ def section_e():
            f"len(KEYWORDS)={len(KEYWORDS)}")
 
     # anti-drift: no marker text in any committed .planes file
-    leaked = [p for p in every_planes_file() + ["annotated.planes"]
-              if "applies here" in open(p).read()]
+    leaked = [p for p in all_planes_files() if "applies here" in open(p).read()]
     record("E", "no marker text committed to any .planes source file",
            not leaked, str(leaked))
+
+
+# ================================================================ F. the widened sample
+
+def section_f():
+    annotated = [p for p in all_planes_files() if has_annotations(parse(open(p).read()))]
+    record("F", f"at least 4 files carry annotations (found {len(annotated)}: "
+                f"{', '.join(annotated)})",
+           len(annotated) >= 4)
+
+    found_kinds = set()
+    for path in all_planes_files():
+        found_kinds |= annotation_nesting_kinds(parse(open(path).read()))
+    for kind in ("FuncDef", "If", "ForEach"):
+        record("F", f"nesting inside {kind} is exercised somewhere in the repo",
+               kind in found_kinds, f"found: {sorted(found_kinds)}")
+
+
+# ================================================================ G. the why boundary
+
+def section_g():
+    src = 'cap = 200 because "board policy"\nshow text of cap\nwhy cap\n'
+    ok, detail, a_full, b_full = three_way(src, fs={})
+    record("G", "show-output/effects/surface identical stripped vs not, "
+                "on a program where why also runs", ok, detail)
+    record("G", "why's output is allowed to differ, and here does",
+           a_full != b_full and 'because "board policy"' in a_full[1]
+           and "because" not in b_full[1],
+           f"annotated: {a_full!r}  stripped: {b_full!r}")
 
 
 def main():
@@ -242,20 +262,38 @@ def main():
     section_c()
     section_d()
     section_e()
+    section_f()
+    section_g()
 
     lines = ["# annotation-verification.md", "",
              "Verification gate for the annotation plane and canonical "
-             "renderer build. Generated by `verify_annotation.py`.", ""]
+             "renderer build, extended for the Tier 0 follow-on. Generated "
+             "by `verify_annotation.py`.", ""]
     by_section = {}
     for section, name, passed, detail in RESULTS:
         by_section.setdefault(section, []).append((name, passed, detail))
 
     all_pass = True
-    titles = {"A": "A. Inertness", "B": "B. Round-trip", "C": "C. Marker",
-              "D": "D. Non-execution", "E": "E. Regression"}
+    titles = {
+        "A1": "A1. Inertness — files carrying annotations (the guarantee)",
+        "A2": "A2. Strip is a no-op — files with no annotations (regression net)",
+        "B": "B. Round-trip", "C": "C. Marker", "D": "D. Non-execution",
+        "E": "E. Regression", "F": "F. The widened sample", "G": "G. The why boundary",
+    }
+    order = ["A1", "A2", "B", "C", "D", "E", "F", "G"]
+    n1, n2 = len(by_section.get("A1", [])), len(by_section.get("A2", []))
+    print(f"A1: {n1} files with annotations, all three-way identical.")
+    print(f"A2: {n2} files without, strip verified structurally or as a "
+          f"trivial run-based no-op.")
+    print()
     print(f"{'section':<3} {'result':<6} name")
-    for section in "ABCDE":
+    for section in order:
         lines.append(f"## {titles[section]}\n")
+        if section == "A1":
+            lines.append(f"**{n1} files with annotations, all three-way identical.**\n")
+        if section == "A2":
+            lines.append(f"**{n2} files without, strip verified structurally "
+                          f"or as a trivial run-based no-op.**\n")
         lines.append("| Result | Check | Detail |")
         lines.append("|---|---|---|")
         for name, passed, detail in by_section.get(section, []):
@@ -268,15 +306,15 @@ def main():
                 all_pass = False
         lines.append("")
 
-    blocking_ok = all(p for s, n, p, d in RESULTS if s in ("A", "B", "E"))
-    lines.append(f"**Blocking sections (A, B, E): {'PASS' if blocking_ok else 'FAIL'}**")
+    blocking_ok = all(p for s, n, p, d in RESULTS if s in ("A1", "B", "E", "F", "G"))
+    lines.append(f"**Blocking sections (A1, B, E, F, G): {'PASS' if blocking_ok else 'FAIL'}**")
     lines.append(f"**All sections: {'PASS' if all_pass else 'FAIL'}**")
 
     with open("annotation-verification.md", "w") as f:
         f.write("\n".join(lines) + "\n")
 
     print()
-    print("Blocking sections (A, B, E):", "PASS" if blocking_ok else "FAIL")
+    print("Blocking sections (A1, B, E, F, G):", "PASS" if blocking_ok else "FAIL")
     print("All sections:", "PASS" if all_pass else "FAIL")
     print("Wrote annotation-verification.md")
 

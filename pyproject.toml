@@ -14,6 +14,30 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 
+# Every ignore below is a deliberate pattern, not an unreviewed exception --
+# each is named and reasoned about in REPORT_ANNOTATION_GAPS.md's ruff
+# triage. Configured here, in one place, rather than scattered `# noqa`
+# comments through the source (Tier 0 follow-on, gap 5).
+[tool.ruff.lint.per-file-ignores]
+# `from lexer import *` in shapes.py/parser.py/interp.py is a deliberate
+# cycle-break (each file carries its own explanatory comment at the import
+# site): lexer.py owns EFFECT_KINDS and every AST node, and parser.py
+# cannot import shapes.py without creating an import cycle. F403/F405 exist
+# to catch an accidental star-import; this one is intentional and load-
+# bearing, not an oversight.
+"shapes.py" = ["F403", "F405"]
+"parser.py" = ["F403", "F405"]
+"interp.py" = ["F403", "F405", "E701"]
+# lexer.py's AST node declarations are deliberately compact -- one line per
+# node (`class Num: value: Any`), so the whole AST is scannable as a table
+# rather than thirty multi-line class bodies. interp.py's apply_op/arith/
+# compare are the same pattern for operator dispatch (`if op == "<": return
+# compare(op, a, b)`) -- splitting either onto multiple lines each would
+# trade a scannable table for the same information spread over 3x the
+# lines, which is the readability loss E701 exists to prevent, applied
+# backwards.
+"lexer.py" = ["E701"]
+
 [tool.mypy]
 python_version = "3.10"
 ignore_missing_imports = true
@@ -27,8 +51,12 @@ warn_unused_ignores = false
 
 [tool.coverage.run]
 branch = true
+parallel = true
 source = ["."]
-omit = ["test_*.py", ".venv/*", "verify_*.py"]
+omit = ["test_*.py", ".venv/*", "verify_*.py", "sitecustomize.py"]
+
+[tool.coverage.paths]
+source = ["."]
 
 [tool.coverage.report]
 skip_empty = true

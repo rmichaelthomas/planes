@@ -19,7 +19,8 @@ to main:
 
   show "found " + text of (count of interesting)
   for each s in interesting:
-    show s.title + "  (" + text of s.score + ")"
+    let line = s.title + "  (" + text of s.score + ")" because "printed here for a human; results.json keeps the raw record, not this formatted line"
+    show line
 
   write interesting to "results.json"
     or fail as write-failed
