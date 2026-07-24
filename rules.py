@@ -91,11 +91,12 @@ def condition(rule):
 
 
 class Violation:
-    """One forbid rule matched against one effect.
+    """One forbid rule matched against one effect — or, for the vacuous
+    shape below, matched against nothing at all.
 
-    Three shapes, told apart by `cleared_by` / `narrowed_by`:
+    Four shapes, told apart by `cleared_by` / `narrowed_by` / `vacuous`:
 
-    - A real violation: neither set.
+    - A real violation: none set.
     - A violation narrowed by a more specific sibling forbid rule that
       also matched: `narrowed_by` names it. Still a real violation — two
       forbid rules matching the same effect are not in conflict, and both
@@ -105,10 +106,15 @@ class Violation:
       exit code — but it is still returned and rendered, so the exception
       is visible where a reader actually meets it (v2.0 §31's
       generated-marker reasoning, applied to output).
+    - A named-subject rule whose subject resolved but never matched a
+      single effect (P-Q19): `vacuous=True`, `effect=None` — there is no
+      effect, that is the point. `is_violation` is False for the same
+      reason `cleared_by` makes it False: this is not a violation, it is a
+      fact about the check the reader needs, not a failure of the program.
     """
 
     def __init__(self, rule, effect, uncertain=False, cleared_by=None,
-                narrowed_by=None, origins=None):
+                narrowed_by=None, origins=None, vacuous=False):
         self.rule = rule
         self.effect = effect
         # True when the effect's target is computed=True: the analyser
@@ -121,12 +127,23 @@ class Violation:
         # Every name/file this effect's target derives from (Surface.
         # origins_of) — rendered as a derivation line when non-empty (§24).
         self.origins = origins or []
+        self.vacuous = vacuous
+        # Which of §2's three situations produced this vacuous entry — set
+        # by check() after construction, not a constructor argument, since
+        # only the vacuous shape needs it. 1 = no effect of the rule's kind
+        # at all; 2 = effects of the kind exist but none derive from the
+        # subject; 3 = the subject derives an effect of the kind, but the
+        # rule's target excludes every one.
+        self.vacuous_situation = None
 
     @property
     def is_violation(self):
-        return self.cleared_by is None
+        return self.cleared_by is None and not self.vacuous
 
     def render(self):
+        if self.vacuous:
+            return self._render_vacuous()
+
         if self.cleared_by is not None:
             return (f"[{self.rule.name}] would have been violated at "
                     f"line {self.effect.site} — excepted by "
@@ -149,6 +166,41 @@ class Violation:
             parts = sorted({f"{n} ({f})" if f else n for n, f in self.origins})
             lines.append(f"  derived from: {', '.join(parts)}")
         return "\n".join(lines)
+
+    def _render_vacuous(self):
+        """§2's three situations, one message each — never the word
+        "violated": this is not one (§3.1)."""
+        rule = self.rule
+        situation = self.vacuous_situation
+
+        if situation == 1:
+            header = (f"[{rule.name}] (line {rule.line}) checked nothing "
+                      f"— subject '{rule.subject}' resolves in this file, "
+                      f"but the program performs no '{rule.kind}' effect "
+                      f"at all")
+            reason = "the rule is inert against this program as written"
+            fix = ("check the program still performs the effect you "
+                  "expect, or remove the rule if it no longer applies")
+        elif situation == 3:
+            header = (f"[{rule.name}] (line {rule.line}) checked nothing "
+                      f"— subject '{rule.subject}' derives a "
+                      f"'{rule.kind}' effect, but the rule's target "
+                      f"excludes every one")
+            reason = (f"'{rule.subject}' reaches this effect kind, but "
+                      f"never at \"{rule.target}\"")
+            fix = (f"check the target matches where '{rule.subject}' "
+                  f"actually goes, or remove the target to check every "
+                  f"'{rule.kind}' effect '{rule.subject}' reaches")
+        else:
+            header = (f"[{rule.name}] (line {rule.line}) checked nothing "
+                      f"— subject '{rule.subject}' resolves in this file, "
+                      f"but no '{rule.kind}' effect derives from it")
+            reason = (f"the program performs '{rule.kind}', but to a "
+                      f"target that does not derive from '{rule.subject}'")
+            fix = ("check the subject names the value you meant, or "
+                  "write the rule against 'anything'")
+
+        return "\n".join([header, f"  {reason}", f"  {fix}"])
 
     def __str__(self):
         return self.render()
@@ -412,11 +464,25 @@ def check(rules, surface, declaring_file=None):
     None, which matches every node's file when the surface came from
     `analyse(src)` with no path (every node's file is None too) — so every
     existing single-file caller keeps working unchanged. `shapes_cli.py`
-    passes the entry file's path.
+    passes the entry file's path. A caller that passes a real
+    `declaring_file` against a surface built with no `file=` gets a silent
+    total mismatch — every node's file is None, so nothing ever resolves
+    in the given file. Match the two deliberately, as `shapes_cli.py` does.
+
+    A named-subject `forbid` rule whose subject resolves (P-Q18) but never
+    matches a single effect is reported as a fourth, vacuous `Violation`
+    shape rather than silently as "no violations" (P-Q19) — a rule that
+    never did any work must not look like a rule that passed.
 
     Reads only the public queries on Surface. If this function needs to
     reach into the analyser's internals, that is a finding about
     inception checkpoint §8 — report it rather than working around it.
+
+    Cost note: `_resolve_subject` and the per-effect `_subject_matches`
+    calls below both walk `surface.origins_of()` per named-subject rule —
+    O(rules × effects × nodes), duplicates undeduplicated by design.
+    Irrelevant at the node counts P-Q10 measured; would first matter on a
+    program with many named-subject rules over a very large effect surface.
     """
     for rule in rules:
         if rule.subject != "anything":
@@ -431,14 +497,26 @@ def check(rules, surface, declaring_file=None):
 
     results = []
     for rule in forbids:
+        # Three counters distinguish §2's three vacuous situations without
+        # a second pass over surface.declared: how many effects share this
+        # rule's kind at all, and how many of those derive from the
+        # subject (regardless of target). matched_any tracks whether any
+        # effect passed both gates — the pre-existing violation condition,
+        # unchanged.
+        n_kind = 0
+        n_kind_subject = 0
+        matched_any = False
         for effect in surface.declared:
             if effect.kind != rule.kind:
                 continue
+            n_kind += 1
             matched, uncertain = _target_matches(rule, effect)
-            if not matched:
+            subject_ok = _subject_matches(rule, effect, surface, declaring_file)
+            if subject_ok:
+                n_kind_subject += 1
+            if not matched or not subject_ok:
                 continue
-            if not _subject_matches(rule, effect, surface, declaring_file):
-                continue
+            matched_any = True
 
             clearer = None
             for p in permits:
@@ -467,5 +545,15 @@ def check(rules, surface, declaring_file=None):
             ]
             results.append(Violation(rule, effect, uncertain=uncertain,
                                      narrowed_by=narrowers, origins=origins))
+
+        if rule.subject != "anything" and not matched_any:
+            vacuous = Violation(rule, None, vacuous=True)
+            if n_kind == 0:
+                vacuous.vacuous_situation = 1
+            elif n_kind_subject == 0:
+                vacuous.vacuous_situation = 2
+            else:
+                vacuous.vacuous_situation = 3
+            results.append(vacuous)
 
     return results

