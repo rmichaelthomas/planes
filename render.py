@@ -38,9 +38,33 @@ bare `name` for zero arguments.
 import dataclasses
 
 from lexer import (
-    Assign, BinOp, Bool, Builtin, Call, Field, Foreign, ForEach, FuncDef,
-    Give, If, IsNothing, ListLit, Not, Nothing, Num, OrFail, RecordLit,
-    Round, Rule, Show, Str, Use, Var, Why, WriteTo, Note,
+    Assign,
+    BinOp,
+    Bool,
+    Builtin,
+    Call,
+    Field,
+    ForEach,
+    Foreign,
+    FuncDef,
+    Give,
+    If,
+    IsNothing,
+    ListLit,
+    Not,
+    Note,
+    Nothing,
+    Num,
+    OrFail,
+    RecordLit,
+    Round,
+    Rule,
+    Show,
+    Str,
+    Use,
+    Var,
+    Why,
+    WriteTo,
 )
 from rules import check
 
