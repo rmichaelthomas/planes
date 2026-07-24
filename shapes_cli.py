@@ -161,10 +161,18 @@ def main(argv):
             paths.extend(sorted(glob.glob(os.path.join(pat, "*.planes")
                                           if os.path.isdir(pat) else pat)))
         hits = 0
+        skipped = 0
         for p in paths:
             try:
                 s = analyse_file(p)
-            except PlanesSyntaxError:
+            except PlanesSyntaxError as e:
+                # Reported, not silently dropped (matches --index's
+                # handling of the same failure mode): "nothing touches
+                # X" below must not claim more than what was actually
+                # searched — a skipped file's real answer is unknown, not
+                # "no" (unearned-assertion sweep finding).
+                print(f"{p}: syntax error — {e}", file=sys.stderr)
+                skipped += 1
                 continue
             if s.touches(boundary):
                 hits += 1
@@ -172,7 +180,9 @@ def main(argv):
                 for e in s.at(boundary):
                     print(f"{name:16} {e}")
         if not hits:
-            print(f"nothing touches {boundary}")
+            note = (f" ({skipped} file(s) could not be parsed and were "
+                    f"not searched)" if skipped else "")
+            print(f"nothing touches {boundary} among the files searched{note}")
         return 0
 
     if args[0] == "--diff":
@@ -222,7 +232,7 @@ def main(argv):
             return 1
         found = [s for s in prog if isinstance(s, Rule)]
         if not found:
-            print(f"no rules in {os.path.basename(path)}")
+            print(f"no rules found in {os.path.basename(path)}")
             return 0
 
         if "--fingerprints" in args:
@@ -239,14 +249,16 @@ def main(argv):
         if not results:
             word = "rule" if len(found) == 1 else "rules"
             summary = f"{len(found)} {word} checked"
-            # Every named subject in `found` already resolved successfully
-            # by this point — _resolve_subject would have raised above
-            # otherwise — so this count is a true statement about all of
-            # them, not just the ones that matched something.
-            named = [r for r in found if r.subject != "anything"]
-            if named:
-                subj_word = "subject" if len(named) == 1 else "subjects"
-                summary += f" ({len(named)} named {subj_word} resolved)"
+            # Read back from check()'s own record of what it resolved
+            # (RuleResults.resolved_subjects), not re-derived from `found`
+            # by assuming _resolve_subject would have raised otherwise
+            # (P-Q20) — the claim comes from what check() did, not from
+            # this module's guess about it.
+            resolved = results.resolved_subjects
+            if resolved:
+                n = len(resolved)
+                subj_word = "subject" if n == 1 else "subjects"
+                summary += f" ({n} named {subj_word} resolved)"
             print(f"{summary}, no violations")
             return 0
         for v in results:

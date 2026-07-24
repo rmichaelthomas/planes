@@ -206,6 +206,27 @@ class Violation:
         return self.render()
 
 
+class RuleResults(list):
+    """`check()`'s return value — every `Violation`, plus what it resolved.
+
+    A `list` subclass so every existing caller — `if not results`,
+    iteration, `any(v.is_violation for v in results)`, `len()`, indexing —
+    keeps working exactly as before; `check()`'s return type does not
+    change.
+
+    `resolved_subjects` is the readback a caller needs to report how many
+    named subjects were resolved without re-deriving that count from its
+    own input and assuming it agrees with what `check()` actually did
+    (P-Q20, unearned-assertion audit item 2). It accumulates inside
+    `check()` only after `_resolve_subject` returns without raising —
+    surviving resolution is what puts a name in the list, and that
+    ordering is the mechanism, not a comment promising it.
+    """
+    def __init__(self, items=(), resolved_subjects=()):
+        super().__init__(items)
+        self.resolved_subjects = list(resolved_subjects)
+
+
 def narrows(b, a):
     """Does rule `b` cover a strict subset of what rule `a` ranges over?
 
@@ -483,10 +504,17 @@ def check(rules, surface, declaring_file=None):
     O(rules × effects × nodes), duplicates undeduplicated by design.
     Irrelevant at the node counts P-Q10 measured; would first matter on a
     program with many named-subject rules over a very large effect surface.
+
+    Returns a `RuleResults` (a `list` subclass) rather than a bare list:
+    `resolved_subjects` records every subject that survived
+    `_resolve_subject`, in order, for a caller to read back rather than
+    re-derive (P-Q20).
     """
+    resolved_subjects = []
     for rule in rules:
         if rule.subject != "anything":
             _resolve_subject(rule, surface, declaring_file)
+            resolved_subjects.append(rule.subject)
 
     active = _resolve_active(rules)
     _check_permits_are_related(active)
@@ -556,4 +584,4 @@ def check(rules, surface, declaring_file=None):
                 vacuous.vacuous_situation = 3
             results.append(vacuous)
 
-    return results
+    return RuleResults(results, resolved_subjects=resolved_subjects)
