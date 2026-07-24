@@ -13,7 +13,7 @@ language, something here fails.
 import json
 import sys
 
-from host import Host, PythonHost, TestHost, HostError
+from host import Host, PythonHost, TestHost
 from interp import Interpreter, PlanesError
 
 

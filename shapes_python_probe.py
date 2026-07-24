@@ -10,7 +10,7 @@ It does not depend on Planes. `compute` below inherits network reach from
 This matters because the wedge argument in the inception checkpoint assumes
 Planes code exists to index, and none does. See REPORT_WEDGE.md §3.
 """
-import ast, sys
+import ast
 
 EFFECTS = {
     'open':'file', 'urlopen':'network', 'get':'network', 'post':'network',

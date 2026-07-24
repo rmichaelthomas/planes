@@ -1,5 +1,6 @@
-import json, sys
-from interp import Interpreter, PlanesError, why_tree, origins
+import json
+
+from interp import Interpreter, PlanesError
 from parser import PlanesSyntaxError
 
 STORIES = {

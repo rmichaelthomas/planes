@@ -7,11 +7,11 @@ computes, never executed, and never changes what the program does.
 import json
 import sys
 
-from lexer import Rule, EFFECT_KINDS
-from parser import parse, scan_names, PlanesSyntaxError
-from shapes import analyse
-from rules import check, narrows, condition, fingerprint, RuleNotSupported, RuleConflict
 from interp import Interpreter
+from lexer import EFFECT_KINDS, Rule
+from parser import PlanesSyntaxError, parse, scan_names
+from rules import RuleConflict, RuleNotSupported, check, condition, fingerprint, narrows
+from shapes import analyse
 
 
 def rule_violations(src):
@@ -253,8 +253,9 @@ def test_named_subject_in_an_imported_file_is_not_supported():
     """The parameter 'payload' is bound in lib.planes, not in main.planes
     where the rule is written — a rule cannot reach across an import
     boundary to a name it never saw declared (P-Q18)."""
-    from shapes import analyse_file as af
     import os
+
+    from shapes import analyse_file as af
 
     d = "demo/_deriv_subject"
     os.makedirs(d, exist_ok=True)
@@ -785,7 +786,9 @@ def test_permits_are_never_reported_vacuous():
 
 
 def test_cli_exit_code_2_for_a_vacuous_rule():
-    import subprocess, tempfile, os
+    import os
+    import subprocess
+    import tempfile
     src = ('use http\n'
            'use file\n\n'
            'let endpoint = "https://api.example.com/data"\n'
@@ -808,7 +811,9 @@ def test_cli_exit_code_2_for_a_vacuous_rule():
 
 
 def test_cli_exit_code_0_for_anything_with_no_match():
-    import subprocess, tempfile, os
+    import os
+    import subprocess
+    import tempfile
     src = 'use file\nrule [no-net] anything may not ask\nshow "hi"\n'
     d = tempfile.mkdtemp()
     p = os.path.join(d, "m.planes")

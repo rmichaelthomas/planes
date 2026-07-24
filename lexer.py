@@ -6,11 +6,8 @@ comprehensions, and the effects the HN scraper needs.
 Gate: does this help run `x = 5; y = 3; z = x + y; why z`?
 """
 import re
-import json
-import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
-
 
 # ================================================================ tokens
 

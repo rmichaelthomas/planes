@@ -51,8 +51,6 @@ def load_graph(path, _seen=None, _stack=None, _names=None):
     importers — so a consumer can process them in one pass. Cycles raise
     rather than hang.
     """
-    from parser import parse, scan_names
-    from lexer import Use
 
     _seen = {} if _seen is None else _seen
     _stack = [] if _stack is None else _stack
@@ -165,8 +163,9 @@ def effective_names(graph):
     A rename is declared by the file doing the importing, so it is applied
     when working out what name a definition ends up under.
     """
-    from parser import scan_names
     import os
+
+    from parser import scan_names
 
     # module basename -> renames applied to it by anyone importing it
     applied = {}

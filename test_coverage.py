@@ -14,15 +14,12 @@ So this file tests the test. It walks every AST node type the language can
 produce and requires that an oracle run exercises each one. A feature added
 without a corresponding oracle case fails here rather than in production.
 """
-import io
-import contextlib
 import os
 import sys
 
 import lexer
 from parser import parse
 from test_foreign import check_oracle
-
 
 # Every node type a program can contain. Derived from the module rather than
 # listed by hand, so a new node is covered the moment it is defined.

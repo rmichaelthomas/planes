@@ -16,7 +16,7 @@ import sys
 
 from interp import Interpreter, PlanesError
 from parser import PlanesSyntaxError, parse
-from shapes import analyse, EFFECT_KINDS
+from shapes import EFFECT_KINDS, analyse
 
 
 def run(src, **kw):
@@ -65,7 +65,7 @@ def test_multiword_foreign_name():
 
 def test_foreign_result_is_traceable():
     """A foreign boundary is a place values enter, like the network."""
-    from interp import why_tree, origins
+    from interp import origins, why_tree
     src = ('foreign biggest of xs from "builtins.max" doing nothing\n'
            'top = biggest of [1, 9, 4]\n'
            'plus = top + 1')

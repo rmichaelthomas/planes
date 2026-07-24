@@ -22,15 +22,15 @@ appear in --json's output — a --json consumer cannot see rule results at
 all today, vacuous or otherwise.
 """
 import json
-import sys
 import os
+import sys
 
-from shapes import analyse_file, diff
-from parser import parse, PlanesSyntaxError
 from lexer import Rule
 from modules import ModuleError
-from rules import check as check_rules, RuleNotSupported, RuleConflict, fingerprint
-
+from parser import PlanesSyntaxError, parse
+from rules import RuleConflict, RuleNotSupported, fingerprint
+from rules import check as check_rules
+from shapes import analyse_file, diff
 
 # Bumped when the meaning of a field changes. A consumer that does not
 # recognise the version should refuse the document rather than guess.

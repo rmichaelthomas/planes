@@ -14,7 +14,7 @@ class PlanesSyntaxError(Exception):
 
 
 class Parser:
-    known_funcs = set()
+    known_funcs: set = set()
 
     def __init__(self, tokens):
         self.toks = tokens

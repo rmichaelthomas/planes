@@ -9,9 +9,8 @@ when it is not.
 import json
 import sys
 
-from interp import Interpreter, PlanesError
-from shapes import analyse, analyse_file, diff, Surface, Effect
-
+from interp import Interpreter
+from shapes import Effect, analyse, analyse_file, diff
 
 STORIES = {
     1: {"title": "Rust 2.0 released",       "score": 450},
@@ -473,8 +472,9 @@ def check_oracle_file(path, **kw):
 
 
 def test_module_graph_loads_in_dependency_order():
-    from modules import load_graph
     import os
+
+    from modules import load_graph
     graph = load_graph("demo/app/main.planes")
     names = [os.path.basename(p) for p, _ in graph]
     assert names.index("config.planes") < names.index("net.planes")
@@ -507,7 +507,8 @@ def test_constant_crosses_file_boundaries():
 
 def test_module_cycle_is_an_error_not_a_hang():
     import os
-    from modules import load_graph, ModuleError
+
+    from modules import ModuleError, load_graph
     os.makedirs("demo/cycle", exist_ok=True)
     open("demo/cycle/a.planes", "w").write("use b\nto a thing:\n  give 1\n")
     open("demo/cycle/b.planes", "w").write("use a\nto b thing:\n  give 2\n")
@@ -523,7 +524,8 @@ def test_module_cycle_is_an_error_not_a_hang():
 
 def test_missing_module_names_the_fix():
     import os
-    from modules import load_graph, ModuleError
+
+    from modules import ModuleError, load_graph
     os.makedirs("demo/broken", exist_ok=True)
     open("demo/broken/m.planes", "w").write("use nowhere\nx = 1\n")
     try:
@@ -560,7 +562,7 @@ def _clean(dirname):
 def test_two_modules_defining_one_name_is_an_error():
     """Silently letting load order decide would make the same program
     behave differently depending on the order of its `use` lines."""
-    from modules import load_graph, check_collisions, ModuleError
+    from modules import ModuleError, check_collisions, load_graph
     _write("demo/_clash", {
         "a.planes": 'to greet:\n  give "a"\n',
         "b.planes": 'to greet:\n  give "b"\n',
@@ -578,7 +580,7 @@ def test_two_modules_defining_one_name_is_an_error():
 
 
 def test_shadowing_an_imported_name_is_an_error():
-    from modules import load_graph, check_collisions, ModuleError
+    from modules import ModuleError, check_collisions, load_graph
     _write("demo/_shadow", {
         "lib.planes": 'to helper:\n  give "lib"\n',
         "main.planes": 'use lib\n\nto helper:\n  give "main"\n\nshow helper\n',
@@ -610,8 +612,8 @@ def test_collision_stops_the_interpreter():
 
 def test_collision_stops_the_analyser():
     """A surface for a program with an ambiguous call graph would be a guess."""
-    from shapes import analyse_file as af
     from modules import ModuleError
+    from shapes import analyse_file as af
     _write("demo/_clash3", {
         "a.planes": 'use http\nto grab:\n  give ask "https://a.example.com/x"\n',
         "b.planes": 'use http\nto grab:\n  give ask "https://b.example.com/x"\n',
@@ -722,7 +724,6 @@ def test_analyser_sees_both_surfaces_after_a_rename():
 
 def test_rename_replaces_rather_than_aliases():
     """Registering both names would put the collision straight back."""
-    from modules import load_graph, ModuleError
     _write("demo/_ren3", {
         "a.planes": 'to greet:\n  give "a"\n',
         "b.planes": 'to greet:\n  give "b"\n',
@@ -769,7 +770,7 @@ def test_several_renames_from_one_module():
 
 def test_renaming_into_an_existing_name_still_collides():
     """A rename can create a collision as easily as it resolves one."""
-    from modules import load_graph, check_collisions, ModuleError
+    from modules import ModuleError, check_collisions, load_graph
     _write("demo/_ren6", {
         "a.planes": 'to greet:\n  give "a"\n',
         "b.planes": 'to hello:\n  give "b"\n',
@@ -785,7 +786,7 @@ def test_renaming_into_an_existing_name_still_collides():
 
 
 def test_collision_error_suggests_a_rename():
-    from modules import load_graph, check_collisions, ModuleError
+    from modules import ModuleError, check_collisions, load_graph
     _write("demo/_ren7", {
         "a.planes": 'to greet:\n  give "a"\n',
         "b.planes": 'to greet:\n  give "b"\n',
@@ -880,8 +881,9 @@ def test_json_and_human_views_agree():
     parsing `effects` would have concluded the package does nothing.
     """
     import glob
-    from shapes_cli import as_json
+
     from shapes import analyse_file as af
+    from shapes_cli import as_json
 
     for path in sorted(glob.glob("demo/pkgs/*.planes")):
         s = af(path)
@@ -900,8 +902,8 @@ def test_json_and_human_views_agree():
 def test_json_declares_its_format_version():
     """A consumer that does not recognise the version should refuse the
     document rather than guess at field meanings."""
-    from shapes_cli import as_json, FORMAT_VERSION
     from shapes import analyse_file as af
+    from shapes_cli import FORMAT_VERSION, as_json
     doc = as_json(af("demo/pkgs/sneaky.planes"), "demo/pkgs/sneaky.planes")
     assert doc["format"] == FORMAT_VERSION
 
@@ -909,8 +911,8 @@ def test_json_declares_its_format_version():
 def test_json_separates_what_runs_on_load_from_what_is_offered():
     """Both facts matter and they are different: a library offers network
     reach without performing it at load."""
-    from shapes_cli import as_json
     from shapes import analyse_file as af
+    from shapes_cli import as_json
     doc = as_json(af("demo/pkgs/sneaky.planes"), "demo/pkgs/sneaky.planes")
     assert doc["kind"] == "library"
     assert doc["effects"], "it offers a network call"
@@ -918,9 +920,10 @@ def test_json_separates_what_runs_on_load_from_what_is_offered():
 
 
 def test_json_reports_whether_the_surface_is_complete():
+    import os
+    import tempfile
+
     from shapes_cli import as_json
-    from shapes import analyse
-    import tempfile, os
     d = tempfile.mkdtemp()
     p = os.path.join(d, "m.planes")
     open(p, "w").write('foreign x of a from "m.f"\nr = x of 1')
@@ -1026,7 +1029,7 @@ def test_effect_derivation_excluded_from_equality():
     """Two structurally identical effects with different derivations must
     still compare equal and hash the same, or the fixed point may not
     terminate."""
-    from shapes import Effect, StaticDeriv
+    from shapes import StaticDeriv
     a = Effect("ask", "network", "https://x", derivation=StaticDeriv("literal", "a"))
     b = Effect("ask", "network", "https://x", derivation=StaticDeriv("literal", "b"))
     assert a == b

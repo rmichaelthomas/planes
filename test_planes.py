@@ -2,9 +2,8 @@
 import json
 import sys
 
-from interp import Interpreter, PlanesError, why_tree, origins
+from interp import Interpreter, PlanesError, origins, why_tree
 from parser import PlanesSyntaxError
-
 
 STORIES = {
     1: {"title": "Rust 2.0 released",       "score": 450},

@@ -5,11 +5,10 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from host import HostError, PythonHost, TestHost
 from lexer import *
-from parser import parse, PlanesSyntaxError
-from planes_num import Number, Inexact
-from host import PythonHost, TestHost, HostError
-from parser import BUILTIN_NAMES
+from parser import BUILTIN_NAMES, parse
+from planes_num import Inexact, Number
 
 
 class _BuiltinName:
@@ -237,8 +236,7 @@ class Interpreter:
         hoisted into the same scope. Only the entry file's top-level
         statements execute — importing a module must not run it.
         """
-        from modules import (load_graph, names_in_graph, check_collisions,
-                             rename_map)
+        from modules import check_collisions, load_graph, names_in_graph, rename_map
         graph = load_graph(path)
         check_collisions(graph)
         known = names_in_graph(graph)

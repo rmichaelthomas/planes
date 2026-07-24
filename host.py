@@ -19,7 +19,6 @@ work with a known size, rather than a rewrite, and the *language* stops
 quietly accumulating assumptions about the machine underneath it.
 """
 import json
-import os
 import urllib.request
 
 

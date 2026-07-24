@@ -7,16 +7,14 @@ Exit 0 if A, B, and E all pass (the blocking set). C and D are reported
 but do not block, matching §9.2's stated blocking scope — though in
 practice every row here must hold for the build to be done.
 """
-import io
 import json
 import subprocess
 import sys
-from contextlib import redirect_stdout
 
 from interp import Interpreter, PlanesError, why_tree
 from parser import PlanesSyntaxError
 
-RESULTS = []   # (section, name, passed, detail)
+RESULTS: list = []   # (section, name, passed, detail)
 
 
 def record(section, name, passed, detail=""):

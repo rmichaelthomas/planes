@@ -1,0 +1,34 @@
+[project]
+name = "planes"
+version = "0.1.0"
+description = "The planes language"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+dev = ["ruff", "mypy", "coverage"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+disable_error_code = ["import-untyped"]
+# Permissive baseline (planes v3.0 section 53a) -- this codebase predates
+# annotations. Tighten incrementally rather than demanding a clean run now.
+check_untyped_defs = false
+disallow_untyped_defs = false
+warn_return_any = false
+warn_unused_ignores = false
+
+[tool.coverage.run]
+branch = true
+source = ["."]
+omit = ["test_*.py", ".venv/*", "verify_*.py"]
+
+[tool.coverage.report]
+skip_empty = true
