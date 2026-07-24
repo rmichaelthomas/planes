@@ -1,0 +1,20 @@
+rule [refund-cap] anything may not write to "refunds.json"
+  because "finance owns this file"
+
+note:
+  from "GDPR Article 17"
+  derives-from [refund-cap]
+
+use file
+
+cap = 200 because "board policy, ratified March"
+
+customer = { name: "Ada", refund: 150 }
+
+approved = customer.refund <= cap
+
+show "refund " + text of customer.refund + " approved: " + text of approved
+
+results = { customer: customer.name, refund: customer.refund, cap: cap }
+
+write results to "refunds.json"

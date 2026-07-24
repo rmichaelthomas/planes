@@ -227,6 +227,8 @@ class Interpreter:
         prog = parse(src)
         self.hoist(prog, self.env)
         for stmt in prog:
+            if isinstance(stmt, Note):
+                continue     # never dispatched -- see exec_stmt's Note case
             self.exec_stmt(stmt, self.env)
         return self.output
 
@@ -253,6 +255,8 @@ class Interpreter:
                     if isinstance(stmt, Use):
                         self.exec_stmt(stmt, self.env)
         for stmt in entry:
+            if isinstance(stmt, Note):
+                continue
             self.exec_stmt(stmt, self.env)
         return self.output
 
@@ -283,6 +287,8 @@ class Interpreter:
     def exec_block(self, stmts, env):
         result = None
         for s in stmts:
+            if isinstance(s, Note):
+                continue
             result = self.exec_stmt(s, env)
         return result
 
@@ -303,10 +309,14 @@ class Interpreter:
             return None
 
         if isinstance(stmt, Note):
-            # The annotation plane is inert by structure, not discipline
-            # (unbound v1.0 §4 item 3, §218): there is no case for this
-            # node to fall through to, only this raise. A `Note` reaching
-            # the evaluator is a bug in Planes, not in the program.
+            # A normal run never reaches this: run(), run_file(), and
+            # exec_block() all skip Note before ever calling exec_stmt.
+            # This case is the structural half of that guarantee, not the
+            # mechanism — a promise kept by structure, not by every
+            # present and future statement-list loop remembering to
+            # filter (unbound v1.0 §4 item 3, §218). If this ever fires,
+            # a call site stopped filtering; that is a bug in Planes, not
+            # in the program that wrote a `note:` block.
             raise PlanesError(
                 "annotation-executed",
                 "an annotation reached the evaluator",

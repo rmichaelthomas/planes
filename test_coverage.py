@@ -29,21 +29,6 @@ ALL_NODES = {
 }
 
 
-class ExpectedToRaise:
-    """A coverage case whose node parses fine but whose execution is
-    designed to raise — the annotation plane's inertness guarantee is
-    enforced by a raise, not a no-op (§4.1.4), so `Note` cannot go through
-    the run-and-check oracle the way every executable node does. Exempt
-    from `test_the_oracle_holds_for_every_node_type`'s run-based check;
-    still checked structurally by `test_every_coverage_case_actually_
-    contains_its_node`, and NOT `None` — the parser really does build this
-    node, so marking it unreachable would fail
-    `test_unreachable_nodes_are_actually_unreachable`, correctly."""
-    def __init__(self, src, tag):
-        self.src = src
-        self.tag = tag
-
-
 # One oracle-checkable program per node type. Each must both run and be
 # analysable, so every case ends with an effect the surface can be compared
 # against — an oracle run with no effects proves nothing.
@@ -87,18 +72,17 @@ COVERAGE = {
     "Foreign": 'foreign now from "time.time" doing clock\nt = now',
     "Rule":    'rule [no-telemetry] anything may not ask\n'
                'use file\nwrite [1] to "o.json"',
-    # `Because` is inert by omission: it is never evaluated, so a program
-    # carrying one runs exactly as it would without it — a normal oracle
-    # case, not a special one.
+    # `Because` is inert by omission: never evaluated, so a program
+    # carrying one runs exactly as it would without it.
     "Because": 'use file\ncap = 200 because "board policy"\n'
                'write [cap] to "o.json"',
-    # `Note` is inert by structure: exec_stmt raises the moment one is
-    # reached (§4.1.4), so running this case is expected to raise, not to
-    # produce effects the oracle can compare against.
-    "Note": ExpectedToRaise(
-        'note:\n  from "GDPR Article 17"\n  derives-from [refund-cap]\n'
-        'use file\nwrite [1] to "o.json"',
-        "annotation-executed"),
+    # `Note` is inert by filtering: run()/run_file()/exec_block() skip it
+    # before ever calling exec_stmt, so a program carrying one also runs
+    # exactly as it would without it. (exec_stmt still raises if a Note
+    # somehow reaches it directly — see test_annotation.py's
+    # test_note_reaching_the_evaluator_raises for that safety net.)
+    "Note": 'note:\n  from "GDPR Article 17"\n  derives-from [refund-cap]\n'
+            'use file\nwrite [1] to "o.json"',
 }
 
 
@@ -140,10 +124,7 @@ def test_every_coverage_case_actually_contains_its_node():
     for node, src in sorted(COVERAGE.items()):
         if src is None:
             continue
-        if isinstance(src, ExpectedToRaise):
-            src = src.src
-        else:
-            src = src[0] if isinstance(src, tuple) else src
+        src = src[0] if isinstance(src, tuple) else src
         try:
             if node not in nodes_in(src):
                 wrong.append(f"{node}: its case does not produce a {node}")
@@ -154,23 +135,9 @@ def test_every_coverage_case_actually_contains_its_node():
 
 def test_the_oracle_holds_for_every_node_type():
     """The point of the file: run the oracle over the whole language."""
-    from interp import Interpreter, PlanesError
     failures = []
     for node, src in sorted(COVERAGE.items()):
         if src is None:
-            continue
-        if isinstance(src, ExpectedToRaise):
-            try:
-                Interpreter(fs={}).run(src.src)
-            except PlanesError as e:
-                if e.tag != src.tag:
-                    failures.append(
-                        f"{node}: expected to raise '{src.tag}', "
-                        f"raised '{e.tag}' instead")
-            else:
-                failures.append(
-                    f"{node}: expected to raise '{src.tag}' but ran "
-                    f"without error")
             continue
         src, kw = src if isinstance(src, tuple) else (src, {})
         kw.setdefault("fs", {})      # never touch the real disk
@@ -195,8 +162,6 @@ def test_runtime_effect_kinds_are_always_strings():
     for node, src in sorted(COVERAGE.items()):
         if src is None:
             continue
-        if isinstance(src, ExpectedToRaise):
-            continue      # execution is designed to raise; nothing to check
         src, kw = src if isinstance(src, tuple) else (src, {})
         kw.setdefault("fs", {})
         i = Interpreter(**kw)
