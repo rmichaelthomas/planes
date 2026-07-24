@@ -805,7 +805,7 @@ def test_collision_error_suggests_a_rename():
 ADVERSARIAL = {
     "effect in a where-clause": '''use http
 to probe of n:
-  give ask "https://example.com/a.json"
+  give count of (ask "https://example.com/a.json") > 0
 
 xs = for each i in [1, 2] where probe of i: i''',
 
@@ -829,7 +829,7 @@ r = outer''',
 
     "effect in an if-condition": '''use http
 to check:
-  give ask "https://example.com/flag.json"
+  give count of (ask "https://example.com/flag.json") > 0
 
 if check:
   show "yes"''',

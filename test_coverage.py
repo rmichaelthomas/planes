@@ -44,8 +44,10 @@ COVERAGE = {
     "Nothing": 'use file\nn = nothing\nwrite [1] to "o.json"',
     "Var":     'use file\nx = 1\ny = x\nwrite [y] to "o.json"',
     "ListLit": 'use file\nxs = [1, 2]\nwrite xs to "o.json"',
+    "RecordLit": 'use file\nr = { a: 1 }\nwrite [r] to "o.json"',
     "BinOp":   'use file\nx = 1 + 2\nwrite [x] to "o.json"',
     "Not":     'use file\nb = not false\nwrite [b] to "o.json"',
+    "IsNothing": 'use file\nn = nothing\nb = n is nothing\nwrite [b] to "o.json"',
     "Field":   ('use http\nr = ask "https://example.com/a.json"\n'
                 'show text of r.name',
                 {"http": lambda u: '{"name": "x"}'}),
