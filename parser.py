@@ -50,6 +50,18 @@ class Parser:
         while self.accept("EOL") or self.accept("OP", ";"):
             pass
 
+    def skip_bracket_ws(self):
+        """Blank tokens inside `[...]` / `{...}`.
+
+        The tokenizer tracks indentation per physical line, oblivious to
+        bracket nesting — a literal spanning indented lines picks up BEGIN
+        and END tokens that mean nothing here (brackets already carry the
+        structure). Consume them along with EOL/`;` so a literal can wrap
+        across lines the way a person writing one down would."""
+        while self.accept("EOL") or self.accept("OP", ";") \
+                or self.accept("BEGIN") or self.accept("END"):
+            pass
+
     # ---- structure
 
     def parse_program(self):
@@ -139,7 +151,7 @@ class Parser:
         if self.accept("LET"):
             name = self.expect("NAME").value
             self.expect("OP", "=")
-            return Assign(name, self.parse_expr())
+            return Assign(name, self.parse_expr(), is_let=True)
 
         if self.at("NAME") and self.peek(1).kind == "OP" and self.peek(1).value == "=":
             name = self.next().value
@@ -401,7 +413,16 @@ class Parser:
     def parse_comparison(self):
         left = self.parse_additive()
         while (self.at("OP") and self.peek().value in
-               ("<", ">", "<=", ">=", "==", "!=")) or self.at("IN"):
+               ("<", ">", "<=", ">=", "==", "!=")) or self.at("IN") \
+                or self.at("NAME", "is"):
+            # `is` is read positionally, right here, only — like `may` in
+            # parse_rule — so a program that never writes `is nothing`
+            # still has `is` free as an ordinary name (test_names.py's
+            # reserved-word ceiling).
+            if self.accept("NAME", "is"):
+                self.expect("NOTHING")
+                left = IsNothing(left)
+                continue
             if self.accept("IN"):
                 left = BinOp("in", left, self.parse_additive())
             else:
@@ -428,7 +449,12 @@ class Parser:
 
     def parse_postfix(self):
         node = self.parse_primary()
-        while self.at("OP", ".") and self.peek(1).kind == "NAME":
+        while self.at("OP", ".") and (self.peek(1).kind == "NAME"
+                                       or self.peek(1).value in KEYWORDS):
+            # A field name is not a position where a reserved word can be
+            # structural — records nest arbitrarily (v2.0 §35) and a field
+            # may be named `first`, `to`, or any other ordinary word that
+            # happens to double as a keyword elsewhere.
             self.next()
             node = Field(node, self.next().value)
         return node
@@ -476,6 +502,25 @@ class Parser:
                     return True
             k += 1
 
+    def parse_record_field(self):
+        """`name: expr`. The key is a bare word, never an expression."""
+        self.skip_bracket_ws()
+        t = self.peek()
+        if t.kind == "NAME":
+            key = self.next().value
+        elif t.kind in ("SHOW", "WRITE", "FIRST", "ROUND", "TO", "IN",
+                        "WHERE", "FROM", "AS", "OF", "USE", "WHY", "GIVE"):
+            # A field name is not a position where a keyword can be
+            # structural. `{ to: "x", from: "y" }` must work.
+            key = self.next().value
+        else:
+            raise PlanesSyntaxError(
+                f"line {t.line}: expected a field name, "
+                f"found '{t.value or 'end of line'}'\n"
+                f"  try: {{ name: value }}")
+        self.expect("OP", ":")
+        return (key, self.parse_expr())
+
     def parse_primary(self):
         t = self.peek()
 
@@ -514,13 +559,39 @@ class Parser:
         if t.kind == "NOTHING":
             self.next(); return Nothing()
 
+        if t.kind == "OP" and t.value == "{":
+            self.next()
+            fields = []
+            self.skip_bracket_ws()
+            if not self.at("OP", "}"):
+                fields.append(self.parse_record_field())
+                while self.accept("OP", ","):
+                    self.skip_bracket_ws()
+                    if self.at("OP", "}"):
+                        break          # trailing comma
+                    fields.append(self.parse_record_field())
+            self.skip_bracket_ws()
+            self.expect("OP", "}")
+            seen = set()
+            for k, _ in fields:
+                if k in seen:
+                    raise PlanesSyntaxError(
+                        f"line {t.line}: field '{k}' appears twice in this record")
+                seen.add(k)
+            return RecordLit(fields)
+
         if t.kind == "OP" and t.value == "[":
             self.next()
             items = []
+            self.skip_bracket_ws()
             if not self.at("OP", "]"):
                 items.append(self.parse_expr())
                 while self.accept("OP", ","):
+                    self.skip_bracket_ws()
+                    if self.at("OP", "]"):
+                        break          # trailing comma
                     items.append(self.parse_expr())
+            self.skip_bracket_ws()
             self.expect("OP", "]")
             return ListLit(items)
 
