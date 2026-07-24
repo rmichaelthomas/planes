@@ -109,7 +109,10 @@ class Parser:
             return self.parse_foreign()
 
         if self.at("RULE"):
-            return self.parse_rule()
+            return self.parse_because(self.parse_rule())
+
+        if self.at("NAME", "note") and self.peek(1).kind == "OP" and self.peek(1).value == ":":
+            return self.parse_note()
 
         if self.at("TO") and self.peek(1).kind == "NAME":
             return self.parse_funcdef()
@@ -151,12 +154,12 @@ class Parser:
         if self.accept("LET"):
             name = self.expect("NAME").value
             self.expect("OP", "=")
-            return Assign(name, self.parse_expr(), is_let=True)
+            return self.parse_because(Assign(name, self.parse_expr(), is_let=True))
 
         if self.at("NAME") and self.peek(1).kind == "OP" and self.peek(1).value == "=":
             name = self.next().value
             self.next()
-            return Assign(name, self.parse_expr())
+            return self.parse_because(Assign(name, self.parse_expr()))
 
         return self.parse_expr()
 
@@ -386,6 +389,89 @@ class Parser:
             return OrFail(node, tag)
         self.i = save
         return node
+
+    def parse_because(self, attach):
+        """A trailing `because "..."` on an Assign or Rule — same line, or
+        an indented continuation (matching `trailing_or_fail`'s wrapped
+        form). `because` is read positionally, right here, only — like
+        `may` and `is` — so it stays free as an ordinary name everywhere
+        else (test_names.py's reserved-word ceiling).
+        """
+        save = self.i
+        if self.at("NAME", "because"):
+            self.next()
+            return self.finish_because(attach)
+        if self.at("EOL") and self.peek(1).kind == "BEGIN" \
+                and self.peek(2).kind == "NAME" and self.peek(2).value == "because":
+            self.next(); self.next(); self.next()
+            node = self.finish_because(attach)
+            self.skip_blank()
+            self.accept("END")
+            return node
+        self.i = save
+        return attach
+
+    def finish_because(self, attach):
+        g = self.peek()
+        if not self.at("STRING"):
+            raise PlanesSyntaxError(
+                f"line {g.line}: 'because' needs a quoted reason\n"
+                f'  try: cap = 200 because "the reason"')
+        text = self.next().value[1:-1]
+        attach.annotation = Because(text, g.line)
+        return attach
+
+    def parse_note(self):
+        """`note:` followed by an indented block of `from "..."` and
+        `derives-from [rule-name]` entries — or a single inline entry.
+        Never executes; the interpreter raises if one reaches it.
+        """
+        note_tok = self.next()   # 'note'
+        self.expect("OP", ":")
+        entries = []
+        if self.accept("EOL"):
+            self.expect("BEGIN")
+            self.skip_blank()
+            while not self.at("END") and not self.at("EOF"):
+                entries.append(self.parse_note_entry())
+                self.skip_blank()
+            self.accept("END")
+        else:
+            entries.append(self.parse_note_entry())
+        return Note(entries, note_tok.line)
+
+    def parse_note_entry(self):
+        if self.at("FROM"):
+            self.next()
+            if not self.at("STRING"):
+                g = self.peek()
+                raise PlanesSyntaxError(
+                    f"line {g.line}: 'from' in a note needs a quoted source\n"
+                    f'  try: from "the source"')
+            return ("from", self.next().value[1:-1])
+        if self.at("NAME", "derives-from"):
+            self.next()
+            if not self.at("OP", "["):
+                g = self.peek()
+                raise PlanesSyntaxError(
+                    f"line {g.line}: 'derives-from' needs a bracketed rule "
+                    f"name, found '{g.value or 'end of line'}'\n"
+                    f"  try: derives-from [rule-name]")
+            self.next()
+            if not self.at("NAME"):
+                g = self.peek()
+                raise PlanesSyntaxError(
+                    f"line {g.line}: 'derives-from' needs a bracketed rule "
+                    f"name, found '{g.value or 'end of line'}'\n"
+                    f"  try: derives-from [rule-name]")
+            name = self.next().value
+            self.expect("OP", "]")
+            return ("derives-from", name)
+        g = self.peek()
+        raise PlanesSyntaxError(
+            f"line {g.line}: unrecognised entry in a note, "
+            f"found '{g.value or 'end of line'}'\n"
+            f'  try: from "source"  or  derives-from [rule-name]')
 
     # ---- expressions
 

@@ -149,6 +149,7 @@ class Assign:
     name: str
     expr: Any
     is_let: bool = False
+    annotation: Any = None       # a Because, or None — the rationale, never evaluated
 @dataclass
 class Why:      expr: Any
 @dataclass
@@ -241,3 +242,16 @@ class Rule:
     assertion: str = "forbid"    # "forbid" (may not) or "permit" (may)
     supersedes_fingerprint: Optional[str] = None  # the @xxxxxx a supersedes
                                                    # clause was written against
+    annotation: Any = None       # a Because, or None — the rationale, never evaluated
+
+
+@dataclass
+class Because:
+    """Rationale attached to a statement. Never executes."""
+    text: str
+    line: int = 0
+@dataclass
+class Note:
+    """A standalone annotation block. Never executes."""
+    entries: list   # list of (kind, value): ("from", "..."), ("derives-from", "rule-name")
+    line: int = 0
