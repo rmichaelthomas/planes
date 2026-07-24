@@ -74,7 +74,9 @@ def main(argv):
     if show_effects:
         print("\neffect surface:")
         if not i.effects:
-            print("  (none — this program touches nothing outside itself)")
+            print("  (nothing — this run performed no effects; run "
+                 "`shapes_cli.py <file>` for what the program can do on "
+                 "any run)")
         for e in i.effects:
             kind, target = e[0], e[1]
             print(f"  {kind:6} {target}")
