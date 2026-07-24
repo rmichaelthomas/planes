@@ -27,8 +27,12 @@ warn_unused_ignores = false
 
 [tool.coverage.run]
 branch = true
+parallel = true
 source = ["."]
-omit = ["test_*.py", ".venv/*", "verify_*.py"]
+omit = ["test_*.py", ".venv/*", "verify_*.py", "sitecustomize.py"]
+
+[tool.coverage.paths]
+source = ["."]
 
 [tool.coverage.report]
 skip_empty = true
