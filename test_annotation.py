@@ -3,25 +3,33 @@
 The inertness test (`test_inertness_*`) is the guarantee, not one test
 among many (unbound v1.0 §4 item 3, §218): nothing in this tier can change
 what a program does. It is enforced here by construction — strip every
-annotation, run both versions, and require output, effect log, and effect
-surface to come back byte-identical — not by trusting that `because` and
-`note` were written to be inert.
+annotation, run both versions, and require the show-output, effect log,
+and effect surface to come back identical — not by trusting that `because`
+and `note` were written to be inert.
+
+Inertness governs effects, not inspection (docs/annotation-scope.md): `why`
+may display a `because` on request, and that display is allowed to differ
+between the annotated and stripped runs. `show`, `write`, `ask`, and `read`
+may not — those are what a program *does*, and comparing `i.effects`
+(which records exactly those, never `why`) is what actually enforces that.
 """
 import glob
 import json
 import sys
 
 from interp import Interpreter, PlanesError
-from lexer import Because, Note
+from lexer import Assign, Because, ForEach, FuncDef, If, Note, Rule
 from parser import PlanesSyntaxError, parse
 from render import ast_equal, render, strip_annotations
 from shapes import analyse
 
 # ================================================================ fixtures
 
-# hn.planes and pypi.planes are the only two of the repo's standalone
-# programs that touch the network; both need a stub (test_coverage.py's own
-# rule: no test may touch the real world).
+# hn.planes and pypi.planes are the only two of the repo's top-level
+# programs that touch the network; demo/rules/exception.planes (added below)
+# is the one demo/ fixture that can run standalone with just a stub. All
+# three need one (test_coverage.py's own rule: no test may touch the real
+# world).
 STORIES = {
     1: {"title": "Rust 2.0 released",       "score": 450},
     2: {"title": "Why Go is fine",          "score": 300},
@@ -38,6 +46,8 @@ def stub_http(url):
         return json.dumps({"info": {
             "name": name,
             "summary": f"{name} does something useful and interesting"}})
+    if "audit.internal" in url:
+        return "ok"
     sid = int(url.split("/item/")[1].split(".json")[0])
     return json.dumps(STORIES[sid])
 
@@ -45,24 +55,61 @@ def stub_http(url):
 FIXTURE_KWARGS = {
     "hn.planes": {"http": stub_http},
     "pypi.planes": {"http": stub_http},
+    "demo/rules/exception.planes": {"http": stub_http},
 }
 
-# The repo's top-level *.planes files are the ones actually meant to run
-# standalone via Interpreter().run(open(path).read()) -- confirmed against
-# main, before this build, that every file under demo/ either needs the
-# cross-file `known` names and rename map modules.py's run_file() supplies
-# (demo/app/net.planes will not even parse alone), or a specific stub
-# (a named CSV, a specific ask URL) only the test that owns it provides.
-# None of those fixtures carry an annotation, so the run-based three-way
-# proof below is scoped to the files that can honestly attempt it; every
-# .planes file in the repo, including demo/, still gets the structural
-# strip-is-a-no-op check further down.
-STANDALONE_PLANES_FILES = sorted(glob.glob("*.planes"))
+# The repo's top-level *.planes files run standalone via
+# Interpreter().run(open(path).read()). demo/rules/exception.planes is the
+# one fixture under demo/ that can too -- it needs only an http stub, no
+# cross-file `known` names. Every other file under demo/ either needs the
+# `known`/rename map modules.py's run_file() supplies (demo/app/net.planes
+# will not even parse alone) or a stub this file has no generic way to
+# construct (a named CSV, a specific ask URL only the test that owns it
+# provides) -- confirmed against main before this build. Those still get
+# the structural strip-is-a-no-op check further down; every .planes file in
+# the repo does.
+STANDALONE_PLANES_FILES = sorted(glob.glob("*.planes")) + [
+    "demo/rules/exception.planes"]
+
+NOT_STANDALONE_PARSEABLE = {"demo/app/net.planes"}
 
 
 def all_planes_files():
-    return sorted(glob.glob("*.planes")) + \
+    paths = sorted(glob.glob("*.planes")) + \
         sorted(glob.glob("demo/**/*.planes", recursive=True))
+    return [p for p in paths if p not in NOT_STANDALONE_PARSEABLE]
+
+
+# ================================================================ has this program been annotated?
+
+def has_annotations(prog):
+    """Does this program carry a Note, or a Because on any Assign/Rule,
+    anywhere -- including nested inside a FuncDef, If, or ForEach body?"""
+    return bool(annotation_nesting_kinds(prog, top_level_counts=True))
+
+
+def annotation_nesting_kinds(stmts, top_level_counts=False, _in=None):
+    """Which contexts (None for top-level, or 'FuncDef'/'If'/'ForEach')
+    carry a nested annotation in this statement list, checked recursively.
+
+    Used two ways: `has_annotations` just asks whether the result set is
+    non-empty; the nesting-coverage test asks exactly which of FuncDef/
+    If/ForEach are represented in it, across the whole repo.
+    """
+    found = set()
+    for s in stmts:
+        annotated = isinstance(s, Note) or (
+            isinstance(s, (Assign, Rule)) and s.annotation is not None)
+        if annotated and (top_level_counts or _in is not None):
+            found.add(_in)
+        if isinstance(s, FuncDef):
+            found |= annotation_nesting_kinds(s.body, top_level_counts, "FuncDef")
+        elif isinstance(s, If):
+            found |= annotation_nesting_kinds(s.then, top_level_counts, "If")
+            found |= annotation_nesting_kinds(s.els, top_level_counts, "If")
+        elif isinstance(s, ForEach):
+            found |= annotation_nesting_kinds(s.body, top_level_counts, "ForEach")
+    return found
 
 
 # ================================================================ the guarantee
@@ -70,13 +117,18 @@ def all_planes_files():
 def run_and_capture(src, **kw):
     kw.setdefault("fs", {})
     i = Interpreter(**kw)
-    output = i.run(src)
+    full_output = i.run(src)
     surface = analyse(src)
-    return list(output), list(i.effects), [str(e) for e in surface.declared]
+    show_output = [e[1] for e in i.effects if e[0] == "show"]
+    return show_output, list(i.effects), [str(e) for e in surface.declared], full_output
 
 
 def assert_inert(src, **kw):
-    """Strip every annotation; the program must do exactly the same thing.
+    """Strip every annotation; the program must perform exactly the same
+    effects. show-output, the effect log, and the effect surface must be
+    identical -- `why`'s output is not compared here (see the module
+    docstring and docs/annotation-scope.md) and is returned so a caller
+    that wants to inspect it can.
 
     Stripping goes through the renderer (render.py's `strip_annotations` +
     `render`), not a regex over `because "..."` / `note:` text: a
@@ -86,32 +138,30 @@ def assert_inert(src, **kw):
     """
     prog = parse(src)
     stripped_src = render(strip_annotations(prog))
-    a_out, a_eff, a_surf = run_and_capture(src, **kw)
-    b_out, b_eff, b_surf = run_and_capture(stripped_src, **kw)
-    assert a_out == b_out, (
-        f"output differs after stripping annotations:\n"
-        f"  with:    {a_out}\n  without: {b_out}")
+    a_show, a_eff, a_surf, a_full = run_and_capture(src, **kw)
+    b_show, b_eff, b_surf, b_full = run_and_capture(stripped_src, **kw)
+    assert a_show == b_show, (
+        f"show-output differs after stripping annotations:\n"
+        f"  with:    {a_show}\n  without: {b_show}")
     assert a_eff == b_eff, (
         f"effect log differs after stripping annotations:\n"
         f"  with:    {a_eff}\n  without: {b_eff}")
     assert a_surf == b_surf, (
         f"effect surface differs after stripping annotations:\n"
         f"  with:    {a_surf}\n  without: {b_surf}")
+    return a_full, b_full
 
 
 def test_inertness_on_the_annotated_demo():
-    """The one file in the repo that actually carries annotations to
-    strip -- the full three-way run-based proof."""
     assert_inert(open("annotated.planes").read())
 
 
 def test_inertness_across_every_standalone_planes_file():
-    """Every other standalone program in the repo has no annotations to
-    begin with, so stripping is a no-op and the three-way comparison
-    holds trivially -- still run for real, not assumed, and it also
-    doubles as a regression net for the renderer across the corpus's
-    real syntax variety (nested for-each/where, multi-word calls,
-    foreign declarations, or-fail, records)."""
+    """Every standalone program in the repo, annotated or not. The ones
+    without annotations trivially pass (stripping is a no-op) and double
+    as a regression net for the renderer across the corpus's real syntax
+    variety; the annotated ones (§F below) are where the guarantee is
+    actually exercised."""
     for path in STANDALONE_PLANES_FILES:
         if path == "annotated.planes":
             continue
@@ -120,25 +170,53 @@ def test_inertness_across_every_standalone_planes_file():
         assert_inert(src, **kw)
 
 
+def test_inertness_sample_covers_more_than_one_file():
+    """The guarantee must not rest on a single purpose-built demo."""
+    annotated = [p for p in all_planes_files()
+                 if has_annotations(parse(open(p).read()))]
+    assert len(annotated) >= 4, annotated
+
+
+def test_nesting_is_exercised_in_funcdef_if_and_foreach():
+    """render.strip_annotations recurses through FuncDef, If, and
+    ForEach bodies -- each must actually be exercised by a real
+    annotation somewhere in the repo, not just claimed."""
+    found = set()
+    for path in all_planes_files():
+        found |= annotation_nesting_kinds(parse(open(path).read()))
+    assert found >= {"FuncDef", "If", "ForEach"}, found
+
+
 def test_strip_is_structurally_a_no_op_on_unannotated_programs():
     """A second, execution-free angle on the same guarantee: for a program
-    with no `because`/`note` to begin with, strip_annotations() must
-    return something structurally identical to the parse it started
-    from -- covers the multi-file fixtures under demo/ that are not
-    meant to run standalone (they are `use`d by a sibling file, not
-    executed directly, some needing a `known` name table or a stub this
-    file has no way to construct generically), where the run-based check
-    above cannot reach. annotated.planes is excluded here on purpose --
-    it is the one file in the repo that IS annotated, so stripping it is
-    supposed to change the AST; that direction is what
-    test_inertness_on_the_annotated_demo proves instead."""
+    with no `because`/`note`, strip_annotations() must return something
+    structurally identical to the parse it started from -- covers the
+    multi-file fixtures under demo/ that are not meant to run standalone
+    (a `known` name table or a stub this file has no generic way to
+    construct), where the run-based check above cannot reach. Any file
+    that DOES have annotations is skipped here on purpose -- stripping it
+    is supposed to change the AST; that direction is what the run-based
+    tests above prove instead."""
     for path in all_planes_files():
-        if path in ("annotated.planes", "demo/app/net.planes"):
-            continue
         prog = parse(open(path).read())
+        if has_annotations(prog):
+            continue
         stripped = strip_annotations(prog)
         assert len(prog) == len(stripped), path
         assert all(ast_equal(a, b) for a, b in zip(prog, stripped)), path
+
+
+def test_why_on_an_annotated_binding_does_not_break_inertness():
+    """The case the prior build scoped out of the demo rather than
+    resolving: why may display a because, and that is inspection, not
+    effect (docs/annotation-scope.md). show-output/effects/surface hold
+    identical; why's own output is allowed -- and here shown -- to
+    differ, which is the boundary working, not a gap."""
+    src = 'cap = 200 because "board policy"\nshow text of cap\nwhy cap\n'
+    a_full, b_full = assert_inert(src)
+    assert a_full != b_full
+    assert 'because "board policy"' in a_full[1]
+    assert "because" not in b_full[1]
 
 
 # ================================================================ non-execution

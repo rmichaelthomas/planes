@@ -24,7 +24,8 @@ show "total " + text of due
 show "each " + text of share
 
 if due == 185.42:
-  show "matches expected"
+  let confirmation = "matches expected" because "185.42 is the audited total from March's reconciliation, the regression guard this branch exists to catch"
+  show confirmation
 else:
   show "does not match"
 

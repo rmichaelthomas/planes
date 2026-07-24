@@ -8,6 +8,7 @@ note:
 use file
 
 cap = 200 because "board policy, ratified March"
+why cap
 
 customer = { name: "Ada", refund: 150 }
 

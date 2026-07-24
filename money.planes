@@ -8,11 +8,11 @@ to main:
   let qty = 3
   let subtotal = line total of unit, qty
 
-  let rate = 0.0825
+  let rate = 0.0825 because "current sales tax rate for this jurisdiction"
   let tax = subtotal * rate
   let total = subtotal + tax
 
-  let due = round total to 2 places
+  let due = round total to 2 places because "invoices are quoted to the cent, per finance policy"
 
   show "subtotal " + text of subtotal
   show "tax      " + text of tax
