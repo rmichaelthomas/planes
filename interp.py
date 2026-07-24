@@ -62,8 +62,68 @@ def fmt(v):
     return str(v)
 
 
-def truthy(v):
-    return not (v is None or v is False or v == 0 or v == "" or v == [])
+def equal(a, b):
+    """Sameness, guarded. Cross-type comparison is an error, not `false`.
+
+    A `false` from `5 == "5"` is true about the computation and useless
+    about the mistake — and it enters a derivation as a fact. The number
+    model refuses rather than rounds silently; equality refuses rather
+    than answers.
+    """
+    if a is None or b is None:
+        raise PlanesError(
+            "cannot-compare",
+            "nothing cannot be compared with ==",
+            "test for absence with `is nothing`")
+
+    if is_num(a) and is_num(b):
+        return Number.of(a) == Number.of(b)
+
+    if isinstance(a, bool) != isinstance(b, bool):
+        raise PlanesError(
+            "cannot-compare",
+            f"cannot compare {fmt(a)} with {fmt(b)}",
+            "compare a yes/no value with a yes/no value")
+    if isinstance(a, bool):
+        return a is b
+
+    if type(a) is not type(b):
+        raise PlanesError(
+            "cannot-compare",
+            f"cannot compare {fmt(a)} with {fmt(b)}",
+            "compare numbers with numbers, or text with text")
+
+    if isinstance(a, str):
+        return a == b
+
+    if isinstance(a, list):
+        if len(a) != len(b):
+            return False
+        for x, y in zip(a, b):
+            if not equal(x, y):     # raises, with the position, on type mismatch
+                return False
+        return True
+
+    if isinstance(a, dict):
+        if set(a) != set(b):
+            raise PlanesError(
+                "cannot-compare",
+                f"records have different fields: "
+                f"{sorted(set(a) ^ set(b))}",
+                "compare records with the same fields")
+        return all(equal(a[k], b[k]) for k in a)
+
+    return a == b
+
+
+def condition(v):
+    """What `if` and `where` accept. A yes/no value, and nothing else."""
+    if isinstance(v, bool):
+        return v
+    raise PlanesError(
+        "not-a-yes-no",
+        f"a condition needs a yes/no value, found {fmt(v)}",
+        "compare it: `if count of items > 0:`")
 
 
 # ================================================================ errors
@@ -102,6 +162,17 @@ class Env:
                           f"define it first: let {name} = ...")
 
     def set(self, name, val):
+        """Rebind where the name lives; bind locally if it is new."""
+        scope = self
+        while scope is not None:
+            if name in scope.vars:
+                scope.vars[name] = val
+                return
+            scope = scope.parent
+        self.vars[name] = val
+
+    def bind_local(self, name, val):
+        """Always a new binding in this scope. What `let` means."""
         self.vars[name] = val
 
     def has(self, name):
@@ -239,7 +310,10 @@ class Interpreter:
         if isinstance(stmt, Assign):
             val = self.eval(stmt.expr, env)
             named = Traced(val.value, Deriv("name", stmt.name, val.value, [val.node]))
-            env.set(stmt.name, named)
+            if stmt.is_let:
+                env.bind_local(stmt.name, named)
+            else:
+                env.set(stmt.name, named)
             return named
 
         if isinstance(stmt, Give):
@@ -260,7 +334,7 @@ class Interpreter:
 
         if isinstance(stmt, If):
             c = self.eval(stmt.cond, env)
-            return self.exec_block(stmt.then if truthy(c.value) else stmt.els, env)
+            return self.exec_block(stmt.then if condition(c.value) else stmt.els, env)
 
         return self.eval(stmt, env)
 
@@ -281,6 +355,12 @@ class Interpreter:
                 return self.call(node.name, [], env)
             return env.get(node.name)
 
+        if isinstance(node, RecordLit):
+            parts = [(k, self.eval(v, env)) for k, v in node.fields]
+            val = {k: t.value for k, t in parts}
+            return Traced(val, Deriv("record", "{record}", val,
+                                     [t.node for _, t in parts]))
+
         if isinstance(node, ListLit):
             items = [self.eval(i, env) for i in node.items]
             vals = [i.value for i in items]
@@ -289,8 +369,13 @@ class Interpreter:
 
         if isinstance(node, Not):
             v = self.eval(node.expr, env)
-            r = not truthy(v.value)
+            r = not condition(v.value)
             return Traced(r, Deriv("op", "not", r, [v.node]))
+
+        if isinstance(node, IsNothing):
+            v = self.eval(node.expr, env)
+            r = v.value is None
+            return Traced(r, Deriv("op", "is nothing", r, [v.node]))
 
         if isinstance(node, BinOp):
             return self.eval_binop(node, env)
@@ -350,25 +435,25 @@ class Interpreter:
 
         if isinstance(node, If):
             c = self.eval(node.cond, env)
-            return self.exec_block(node.then if truthy(c.value) else node.els, env)
+            return self.exec_block(node.then if condition(c.value) else node.els, env)
 
         raise PlanesError("cannot-evaluate", type(node).__name__)
 
     def eval_binop(self, node, env):
         if node.op == "and":
             l = self.eval(node.left, env)
-            if not truthy(l.value):
+            if not condition(l.value):
                 return Traced(False, Deriv("op", "and", False, [l.node]))
             r = self.eval(node.right, env)
-            v = truthy(r.value)
+            v = condition(r.value)
             return Traced(v, Deriv("op", "and", v, [l.node, r.node]))
 
         if node.op == "or":
             l = self.eval(node.left, env)
-            if truthy(l.value):
+            if condition(l.value):
                 return Traced(True, Deriv("op", "or", True, [l.node]))
             r = self.eval(node.right, env)
-            v = truthy(r.value)
+            v = condition(r.value)
             return Traced(v, Deriv("op", "or", v, [l.node, r.node]))
 
         if node.op == "first":
@@ -454,9 +539,9 @@ class Interpreter:
         for idx, item in enumerate(source.value):
             inner = Env(env)
             item_t = Traced(item, Deriv("item", node.var, item, [source.node]))
-            inner.set(node.var, item_t)
+            inner.bind_local(node.var, item_t)
             if node.where is not None:
-                if not truthy(self.eval(node.where, inner).value):
+                if not condition(self.eval(node.where, inner).value):
                     continue
             r = self.eval(node.body[0], inner) if node.is_expr \
                 else self.exec_block(node.body, inner)
@@ -563,7 +648,7 @@ class Interpreter:
         arg_vals = [a if isinstance(a, Traced) else self.eval(a, env) for a in args]
         inner = Env(fn.env)
         for p, a in zip(fn.params, arg_vals):
-            inner.set(p, Traced(a.value, Deriv("name", p, a.value, [a.node])))
+            inner.bind_local(p, Traced(a.value, Deriv("name", p, a.value, [a.node])))
         try:
             self.exec_block(fn.body, inner)
             return Traced(None, Deriv("call", name, None,
@@ -592,8 +677,8 @@ def apply_op(op, a, b):
     if op == ">":  return compare(op, a, b)
     if op == "<=": return compare(op, a, b)
     if op == ">=": return compare(op, a, b)
-    if op == "==": return a == b
-    if op == "!=": return a != b
+    if op == "==": return equal(a, b)
+    if op == "!=": return not equal(a, b)
     if op == "in": return a in b
     raise PlanesError("unknown-operator", op)
 
@@ -717,6 +802,8 @@ def render(node):
         src = render(node.inputs[0]) if node.inputs else "?"
         return f"{node.label} over {src}"
     if k == "list":
+        return node.label
+    if k == "record":
         return node.label
     if k == "op":
         if node.label.endswith(" of") or node.label == "not":

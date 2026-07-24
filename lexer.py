@@ -27,7 +27,7 @@ TOKEN_SPEC = [
     # `@` also appears in OP, as a fallback: a malformed fingerprint (wrong
     # length, non-hex characters) then tokenizes as a lone '@' the parser
     # can catch and name the fix for, rather than silently vanishing.
-    ("OP",          r"->|==|!=|<=|>=|[+\-*/=<>().,;:\[\]@]"),
+    ("OP",          r"->|==|!=|<=|>=|[+\-*/=<>().,;:\[\]{}@]"),
     ("WS",          r"[ \t]+"),
 ]
 TOKEN_RE = re.compile("|".join(f"(?P<{n}>{p})" for n, p in TOKEN_SPEC))
@@ -132,12 +132,17 @@ class Var:      name: str
 @dataclass
 class ListLit:  items: list
 @dataclass
+class RecordLit:
+    fields: list   # list of (name, expr) pairs, source order preserved
+@dataclass
 class BinOp:
     op: str
     left: Any
     right: Any
 @dataclass
 class Not:      expr: Any
+@dataclass
+class IsNothing: expr: Any
 @dataclass
 class Field:
     obj: Any
@@ -146,6 +151,7 @@ class Field:
 class Assign:
     name: str
     expr: Any
+    is_let: bool = False
 @dataclass
 class Why:      expr: Any
 @dataclass

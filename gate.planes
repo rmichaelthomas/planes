@@ -1,0 +1,33 @@
+to full name of person:
+  give person.first + " " + person.last
+
+people = [
+  { first: "Ada", last: "Lovelace", owed: 120.50 },
+  { first: "Alan", last: "Turing", owed: 0 },
+  { first: "Grace", last: "Hopper", owed: 64.917525 }
+]
+
+owing = for each p in people where p.owed > 0: p
+
+show "names:"
+for each p in owing:
+  show full name of p
+
+total = 0
+for each p in owing:
+  total = total + p.owed
+
+due = round total to 2 places
+share = due / count of owing
+
+show "total " + text of due
+show "each " + text of share
+
+if due == 185.42:
+  show "matches expected"
+else:
+  show "does not match"
+
+label = lower of "PAID"
+if label == "paid":
+  show "flag set"
