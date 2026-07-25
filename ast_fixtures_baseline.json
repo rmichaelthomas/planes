@@ -1,0 +1,2239 @@
+{
+ "annotated": [
+  {
+   "__type__": "Rule",
+   "name": "'refund-cap'",
+   "subject": "'anything'",
+   "kind": "'write'",
+   "target": "'refunds.json'",
+   "line": "1",
+   "supersedes": "None",
+   "assertion": "'forbid'",
+   "supersedes_fingerprint": "None",
+   "annotation": {
+    "__type__": "Because",
+    "text": "'finance owns this file'",
+    "line": "2"
+   }
+  },
+  {
+   "__type__": "Note",
+   "entries": [
+    [
+     "'from'",
+     "'GDPR Article 17'"
+    ],
+    [
+     "'derives-from'",
+     "'refund-cap'"
+    ]
+   ],
+   "line": "4"
+  },
+  {
+   "__type__": "Use",
+   "module": "'file'",
+   "renames": []
+  },
+  {
+   "__type__": "Assign",
+   "name": "'cap'",
+   "expr": {
+    "__type__": "Num",
+    "value": "200"
+   },
+   "is_let": "False",
+   "annotation": {
+    "__type__": "Because",
+    "text": "'board policy, ratified March'",
+    "line": "10"
+   }
+  },
+  {
+   "__type__": "Why",
+   "expr": {
+    "__type__": "Var",
+    "name": "'cap'"
+   }
+  },
+  {
+   "__type__": "Assign",
+   "name": "'customer'",
+   "expr": {
+    "__type__": "RecordLit",
+    "fields": [
+     [
+      "'name'",
+      {
+       "__type__": "Str",
+       "value": "'Ada'"
+      }
+     ],
+     [
+      "'refund'",
+      {
+       "__type__": "Num",
+       "value": "150"
+      }
+     ]
+    ]
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'approved'",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'<='",
+    "left": {
+     "__type__": "Field",
+     "obj": {
+      "__type__": "Var",
+      "name": "'customer'"
+     },
+     "name": "'refund'"
+    },
+    "right": {
+     "__type__": "Var",
+     "name": "'cap'"
+    }
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Show",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'+'",
+    "left": {
+     "__type__": "BinOp",
+     "op": "'+'",
+     "left": {
+      "__type__": "BinOp",
+      "op": "'+'",
+      "left": {
+       "__type__": "Str",
+       "value": "'refund '"
+      },
+      "right": {
+       "__type__": "Call",
+       "name": "'text'",
+       "args": [
+        {
+         "__type__": "Field",
+         "obj": {
+          "__type__": "Var",
+          "name": "'customer'"
+         },
+         "name": "'refund'"
+        }
+       ],
+       "line": "17"
+      }
+     },
+     "right": {
+      "__type__": "Str",
+      "value": "' approved: '"
+     }
+    },
+    "right": {
+     "__type__": "Call",
+     "name": "'text'",
+     "args": [
+      {
+       "__type__": "Var",
+       "name": "'approved'"
+      }
+     ],
+     "line": "17"
+    }
+   },
+   "line": "17"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'results'",
+   "expr": {
+    "__type__": "RecordLit",
+    "fields": [
+     [
+      "'customer'",
+      {
+       "__type__": "Field",
+       "obj": {
+        "__type__": "Var",
+        "name": "'customer'"
+       },
+       "name": "'name'"
+      }
+     ],
+     [
+      "'refund'",
+      {
+       "__type__": "Field",
+       "obj": {
+        "__type__": "Var",
+        "name": "'customer'"
+       },
+       "name": "'refund'"
+      }
+     ],
+     [
+      "'cap'",
+      {
+       "__type__": "Var",
+       "name": "'cap'"
+      }
+     ]
+    ]
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "WriteTo",
+   "value": {
+    "__type__": "Var",
+    "name": "'results'"
+   },
+   "dest": {
+    "__type__": "Str",
+    "value": "'refunds.json'"
+   },
+   "line": "21"
+  }
+ ],
+ "foreign": [
+  {
+   "__type__": "Foreign",
+   "name": "'sort'",
+   "params": [
+    "'xs'"
+   ],
+   "target": "'builtins.sorted'",
+   "effects": [],
+   "declared": "True",
+   "line": "7"
+  },
+  {
+   "__type__": "Foreign",
+   "name": "'biggest'",
+   "params": [
+    "'xs'"
+   ],
+   "target": "'builtins.max'",
+   "effects": [],
+   "declared": "True",
+   "line": "8"
+  },
+  {
+   "__type__": "Foreign",
+   "name": "'smallest'",
+   "params": [
+    "'xs'"
+   ],
+   "target": "'builtins.min'",
+   "effects": [],
+   "declared": "True",
+   "line": "9"
+  },
+  {
+   "__type__": "Foreign",
+   "name": "'now'",
+   "params": [],
+   "target": "'time.time'",
+   "effects": [
+    [
+     "'clock'",
+     "None"
+    ]
+   ],
+   "declared": "True",
+   "line": "10"
+  },
+  {
+   "__type__": "Foreign",
+   "name": "'home'",
+   "params": [],
+   "target": "'os.getcwd'",
+   "effects": [
+    [
+     "'env'",
+     "None"
+    ]
+   ],
+   "declared": "True",
+   "line": "11"
+  },
+  {
+   "__type__": "Foreign",
+   "name": "'report'",
+   "params": [
+    "'endpoint'"
+   ],
+   "target": "'builtins.str'",
+   "effects": [
+    [
+     "'ask'",
+     [
+      "'param'",
+      "'endpoint'"
+     ]
+    ]
+   ],
+   "declared": "True",
+   "line": "15"
+  },
+  {
+   "__type__": "Foreign",
+   "name": "'heartbeat'",
+   "params": [
+    "'x'"
+   ],
+   "target": "'builtins.str'",
+   "effects": [
+    [
+     "'ask'",
+     [
+      "'literal'",
+      "'https://status.example.com/ping'"
+     ]
+    ]
+   ],
+   "declared": "True",
+   "line": "16"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'readings'",
+   "expr": {
+    "__type__": "ListLit",
+    "items": [
+     {
+      "__type__": "Num",
+      "value": "23"
+     },
+     {
+      "__type__": "Num",
+      "value": "8"
+     },
+     {
+      "__type__": "Num",
+      "value": "41"
+     },
+     {
+      "__type__": "Num",
+      "value": "15"
+     },
+     {
+      "__type__": "Num",
+      "value": "4"
+     }
+    ]
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'ordered'",
+   "expr": {
+    "__type__": "Call",
+    "name": "'sort'",
+    "args": [
+     {
+      "__type__": "Var",
+      "name": "'readings'"
+     }
+    ],
+    "line": "20"
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'top'",
+   "expr": {
+    "__type__": "Call",
+    "name": "'biggest'",
+    "args": [
+     {
+      "__type__": "Var",
+      "name": "'readings'"
+     }
+    ],
+    "line": "21"
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'low'",
+   "expr": {
+    "__type__": "Call",
+    "name": "'smallest'",
+    "args": [
+     {
+      "__type__": "Var",
+      "name": "'readings'"
+     }
+    ],
+    "line": "22"
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'spread'",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'-'",
+    "left": {
+     "__type__": "Var",
+     "name": "'top'"
+    },
+    "right": {
+     "__type__": "Var",
+     "name": "'low'"
+    }
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Show",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'+'",
+    "left": {
+     "__type__": "Str",
+     "value": "'sorted:  '"
+    },
+    "right": {
+     "__type__": "Call",
+     "name": "'text'",
+     "args": [
+      {
+       "__type__": "Call",
+       "name": "'count'",
+       "args": [
+        {
+         "__type__": "Var",
+         "name": "'ordered'"
+        }
+       ],
+       "line": "25"
+      }
+     ],
+     "line": "25"
+    }
+   },
+   "line": "25"
+  },
+  {
+   "__type__": "Show",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'+'",
+    "left": {
+     "__type__": "Str",
+     "value": "'highest: '"
+    },
+    "right": {
+     "__type__": "Call",
+     "name": "'text'",
+     "args": [
+      {
+       "__type__": "Var",
+       "name": "'top'"
+      }
+     ],
+     "line": "26"
+    }
+   },
+   "line": "26"
+  },
+  {
+   "__type__": "Show",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'+'",
+    "left": {
+     "__type__": "Str",
+     "value": "'lowest:  '"
+    },
+    "right": {
+     "__type__": "Call",
+     "name": "'text'",
+     "args": [
+      {
+       "__type__": "Var",
+       "name": "'low'"
+      }
+     ],
+     "line": "27"
+    }
+   },
+   "line": "27"
+  },
+  {
+   "__type__": "Show",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'+'",
+    "left": {
+     "__type__": "Str",
+     "value": "'spread:  '"
+    },
+    "right": {
+     "__type__": "Call",
+     "name": "'text'",
+     "args": [
+      {
+       "__type__": "Var",
+       "name": "'spread'"
+      }
+     ],
+     "line": "28"
+    }
+   },
+   "line": "28"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'sent'",
+   "expr": {
+    "__type__": "Call",
+    "name": "'report'",
+    "args": [
+     {
+      "__type__": "Str",
+      "value": "'https://metrics.example.com/readings'"
+     }
+    ],
+    "line": "30"
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'beat'",
+   "expr": {
+    "__type__": "Call",
+    "name": "'heartbeat'",
+    "args": [
+     {
+      "__type__": "Num",
+      "value": "1"
+     }
+    ],
+    "line": "31"
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Why",
+   "expr": {
+    "__type__": "Var",
+    "name": "'spread'"
+   }
+  }
+ ],
+ "gate": [
+  {
+   "__type__": "FuncDef",
+   "name": "'full name'",
+   "params": [
+    "'person'"
+   ],
+   "body": [
+    {
+     "__type__": "Give",
+     "expr": {
+      "__type__": "BinOp",
+      "op": "'+'",
+      "left": {
+       "__type__": "BinOp",
+       "op": "'+'",
+       "left": {
+        "__type__": "Field",
+        "obj": {
+         "__type__": "Var",
+         "name": "'person'"
+        },
+        "name": "'first'"
+       },
+       "right": {
+        "__type__": "Str",
+        "value": "' '"
+       }
+      },
+      "right": {
+       "__type__": "Field",
+       "obj": {
+        "__type__": "Var",
+        "name": "'person'"
+       },
+       "name": "'last'"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "__type__": "Assign",
+   "name": "'people'",
+   "expr": {
+    "__type__": "ListLit",
+    "items": [
+     {
+      "__type__": "RecordLit",
+      "fields": [
+       [
+        "'first'",
+        {
+         "__type__": "Str",
+         "value": "'Ada'"
+        }
+       ],
+       [
+        "'last'",
+        {
+         "__type__": "Str",
+         "value": "'Lovelace'"
+        }
+       ],
+       [
+        "'owed'",
+        {
+         "__type__": "Num",
+         "value": "120.5"
+        }
+       ]
+      ]
+     },
+     {
+      "__type__": "RecordLit",
+      "fields": [
+       [
+        "'first'",
+        {
+         "__type__": "Str",
+         "value": "'Alan'"
+        }
+       ],
+       [
+        "'last'",
+        {
+         "__type__": "Str",
+         "value": "'Turing'"
+        }
+       ],
+       [
+        "'owed'",
+        {
+         "__type__": "Num",
+         "value": "0"
+        }
+       ]
+      ]
+     },
+     {
+      "__type__": "RecordLit",
+      "fields": [
+       [
+        "'first'",
+        {
+         "__type__": "Str",
+         "value": "'Grace'"
+        }
+       ],
+       [
+        "'last'",
+        {
+         "__type__": "Str",
+         "value": "'Hopper'"
+        }
+       ],
+       [
+        "'owed'",
+        {
+         "__type__": "Num",
+         "value": "64.917525"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'owing'",
+   "expr": {
+    "__type__": "ForEach",
+    "var": "'p'",
+    "source": {
+     "__type__": "Var",
+     "name": "'people'"
+    },
+    "where": {
+     "__type__": "BinOp",
+     "op": "'>'",
+     "left": {
+      "__type__": "Field",
+      "obj": {
+       "__type__": "Var",
+       "name": "'p'"
+      },
+      "name": "'owed'"
+     },
+     "right": {
+      "__type__": "Num",
+      "value": "0"
+     }
+    },
+    "body": [
+     {
+      "__type__": "Var",
+      "name": "'p'"
+     }
+    ],
+    "is_expr": "True"
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Show",
+   "expr": {
+    "__type__": "Str",
+    "value": "'names:'"
+   },
+   "line": "12"
+  },
+  {
+   "__type__": "ForEach",
+   "var": "'p'",
+   "source": {
+    "__type__": "Var",
+    "name": "'owing'"
+   },
+   "where": "None",
+   "body": [
+    {
+     "__type__": "Show",
+     "expr": {
+      "__type__": "Call",
+      "name": "'full name'",
+      "args": [
+       {
+        "__type__": "Var",
+        "name": "'p'"
+       }
+      ],
+      "line": "14"
+     },
+     "line": "14"
+    }
+   ],
+   "is_expr": "False"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'total'",
+   "expr": {
+    "__type__": "Num",
+    "value": "0"
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "ForEach",
+   "var": "'p'",
+   "source": {
+    "__type__": "Var",
+    "name": "'owing'"
+   },
+   "where": "None",
+   "body": [
+    {
+     "__type__": "Assign",
+     "name": "'total'",
+     "expr": {
+      "__type__": "BinOp",
+      "op": "'+'",
+      "left": {
+       "__type__": "Var",
+       "name": "'total'"
+      },
+      "right": {
+       "__type__": "Field",
+       "obj": {
+        "__type__": "Var",
+        "name": "'p'"
+       },
+       "name": "'owed'"
+      }
+     },
+     "is_let": "False",
+     "annotation": "None"
+    }
+   ],
+   "is_expr": "False"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'due'",
+   "expr": {
+    "__type__": "Round",
+    "value": {
+     "__type__": "Var",
+     "name": "'total'"
+    },
+    "places": {
+     "__type__": "Num",
+     "value": "2"
+    }
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'share'",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'/'",
+    "left": {
+     "__type__": "Var",
+     "name": "'due'"
+    },
+    "right": {
+     "__type__": "Call",
+     "name": "'count'",
+     "args": [
+      {
+       "__type__": "Var",
+       "name": "'owing'"
+      }
+     ],
+     "line": "21"
+    }
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Show",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'+'",
+    "left": {
+     "__type__": "Str",
+     "value": "'total '"
+    },
+    "right": {
+     "__type__": "Call",
+     "name": "'text'",
+     "args": [
+      {
+       "__type__": "Var",
+       "name": "'due'"
+      }
+     ],
+     "line": "23"
+    }
+   },
+   "line": "23"
+  },
+  {
+   "__type__": "Show",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'+'",
+    "left": {
+     "__type__": "Str",
+     "value": "'each '"
+    },
+    "right": {
+     "__type__": "Call",
+     "name": "'text'",
+     "args": [
+      {
+       "__type__": "Var",
+       "name": "'share'"
+      }
+     ],
+     "line": "24"
+    }
+   },
+   "line": "24"
+  },
+  {
+   "__type__": "If",
+   "cond": {
+    "__type__": "BinOp",
+    "op": "'=='",
+    "left": {
+     "__type__": "Var",
+     "name": "'due'"
+    },
+    "right": {
+     "__type__": "Num",
+     "value": "185.42"
+    }
+   },
+   "then": [
+    {
+     "__type__": "Assign",
+     "name": "'confirmation'",
+     "expr": {
+      "__type__": "Str",
+      "value": "'matches expected'"
+     },
+     "is_let": "True",
+     "annotation": {
+      "__type__": "Because",
+      "text": "\"185.42 is the audited total from March's reconciliation, the regression guard this branch exists to catch\"",
+      "line": "27"
+     }
+    },
+    {
+     "__type__": "Show",
+     "expr": {
+      "__type__": "Var",
+      "name": "'confirmation'"
+     },
+     "line": "28"
+    }
+   ],
+   "els": [
+    {
+     "__type__": "Show",
+     "expr": {
+      "__type__": "Str",
+      "value": "'does not match'"
+     },
+     "line": "30"
+    }
+   ]
+  },
+  {
+   "__type__": "Assign",
+   "name": "'label'",
+   "expr": {
+    "__type__": "Call",
+    "name": "'lower'",
+    "args": [
+     {
+      "__type__": "Str",
+      "value": "'PAID'"
+     }
+    ],
+    "line": "32"
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "If",
+   "cond": {
+    "__type__": "BinOp",
+    "op": "'=='",
+    "left": {
+     "__type__": "Var",
+     "name": "'label'"
+    },
+    "right": {
+     "__type__": "Str",
+     "value": "'paid'"
+    }
+   },
+   "then": [
+    {
+     "__type__": "Show",
+     "expr": {
+      "__type__": "Str",
+      "value": "'flag set'"
+     },
+     "line": "34"
+    }
+   ],
+   "els": []
+  }
+ ],
+ "hn": [
+  {
+   "__type__": "Use",
+   "module": "'http'",
+   "renames": []
+  },
+  {
+   "__type__": "Use",
+   "module": "'file'",
+   "renames": []
+  },
+  {
+   "__type__": "FuncDef",
+   "name": "'fetch stories'",
+   "params": [],
+   "body": [
+    {
+     "__type__": "Assign",
+     "name": "'top'",
+     "expr": {
+      "__type__": "OrFail",
+      "expr": {
+       "__type__": "Call",
+       "name": "'ask'",
+       "args": [
+        {
+         "__type__": "Str",
+         "value": "'https://hacker-news.firebaseio.com/v0/topstories.json'"
+        }
+       ],
+       "line": "5"
+      },
+      "tag": "'api-down'",
+      "handler": "None"
+     },
+     "is_let": "True",
+     "annotation": "None"
+    },
+    {
+     "__type__": "Give",
+     "expr": {
+      "__type__": "BinOp",
+      "op": "'first'",
+      "left": {
+       "__type__": "Num",
+       "value": "30"
+      },
+      "right": {
+       "__type__": "Var",
+       "name": "'top'"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "__type__": "FuncDef",
+   "name": "'detail'",
+   "params": [
+    "'story-id'"
+   ],
+   "body": [
+    {
+     "__type__": "Give",
+     "expr": {
+      "__type__": "OrFail",
+      "expr": {
+       "__type__": "Call",
+       "name": "'ask'",
+       "args": [
+        {
+         "__type__": "BinOp",
+         "op": "'+'",
+         "left": {
+          "__type__": "BinOp",
+          "op": "'+'",
+          "left": {
+           "__type__": "Str",
+           "value": "'https://hacker-news.firebaseio.com/v0/item/'"
+          },
+          "right": {
+           "__type__": "Call",
+           "name": "'text'",
+           "args": [
+            {
+             "__type__": "Var",
+             "name": "'story-id'"
+            }
+           ],
+           "line": "10"
+          }
+         },
+         "right": {
+          "__type__": "Str",
+          "value": "'.json'"
+         }
+        }
+       ],
+       "line": "10"
+      },
+      "tag": "'api-down'",
+      "handler": "None"
+     }
+    }
+   ]
+  },
+  {
+   "__type__": "FuncDef",
+   "name": "'main'",
+   "params": [],
+   "body": [
+    {
+     "__type__": "Assign",
+     "name": "'ids'",
+     "expr": {
+      "__type__": "Call",
+      "name": "'fetch stories'",
+      "args": [],
+      "line": "14"
+     },
+     "is_let": "True",
+     "annotation": "None"
+    },
+    {
+     "__type__": "Assign",
+     "name": "'stories'",
+     "expr": {
+      "__type__": "ForEach",
+      "var": "'id'",
+      "source": {
+       "__type__": "Var",
+       "name": "'ids'"
+      },
+      "where": "None",
+      "body": [
+       {
+        "__type__": "Call",
+        "name": "'detail'",
+        "args": [
+         {
+          "__type__": "Var",
+          "name": "'id'"
+         }
+        ],
+        "line": "15"
+       }
+      ],
+      "is_expr": "True"
+     },
+     "is_let": "True",
+     "annotation": "None"
+    },
+    {
+     "__type__": "Assign",
+     "name": "'interesting'",
+     "expr": {
+      "__type__": "ForEach",
+      "var": "'s'",
+      "source": {
+       "__type__": "Var",
+       "name": "'stories'"
+      },
+      "where": {
+       "__type__": "BinOp",
+       "op": "'and'",
+       "left": {
+        "__type__": "BinOp",
+        "op": "'>'",
+        "left": {
+         "__type__": "Field",
+         "obj": {
+          "__type__": "Var",
+          "name": "'s'"
+         },
+         "name": "'score'"
+        },
+        "right": {
+         "__type__": "Num",
+         "value": "200"
+        }
+       },
+       "right": {
+        "__type__": "BinOp",
+        "op": "'in'",
+        "left": {
+         "__type__": "Str",
+         "value": "'rust'"
+        },
+        "right": {
+         "__type__": "Call",
+         "name": "'lower'",
+         "args": [
+          {
+           "__type__": "Field",
+           "obj": {
+            "__type__": "Var",
+            "name": "'s'"
+           },
+           "name": "'title'"
+          }
+         ],
+         "line": "18"
+        }
+       }
+      },
+      "body": [
+       {
+        "__type__": "Var",
+        "name": "'s'"
+       }
+      ],
+      "is_expr": "True"
+     },
+     "is_let": "True",
+     "annotation": "None"
+    },
+    {
+     "__type__": "Show",
+     "expr": {
+      "__type__": "BinOp",
+      "op": "'+'",
+      "left": {
+       "__type__": "Str",
+       "value": "'found '"
+      },
+      "right": {
+       "__type__": "Call",
+       "name": "'text'",
+       "args": [
+        {
+         "__type__": "Call",
+         "name": "'count'",
+         "args": [
+          {
+           "__type__": "Var",
+           "name": "'interesting'"
+          }
+         ],
+         "line": "20"
+        }
+       ],
+       "line": "20"
+      }
+     },
+     "line": "20"
+    },
+    {
+     "__type__": "ForEach",
+     "var": "'s'",
+     "source": {
+      "__type__": "Var",
+      "name": "'interesting'"
+     },
+     "where": "None",
+     "body": [
+      {
+       "__type__": "Assign",
+       "name": "'line'",
+       "expr": {
+        "__type__": "BinOp",
+        "op": "'+'",
+        "left": {
+         "__type__": "BinOp",
+         "op": "'+'",
+         "left": {
+          "__type__": "BinOp",
+          "op": "'+'",
+          "left": {
+           "__type__": "Field",
+           "obj": {
+            "__type__": "Var",
+            "name": "'s'"
+           },
+           "name": "'title'"
+          },
+          "right": {
+           "__type__": "Str",
+           "value": "'  ('"
+          }
+         },
+         "right": {
+          "__type__": "Call",
+          "name": "'text'",
+          "args": [
+           {
+            "__type__": "Field",
+            "obj": {
+             "__type__": "Var",
+             "name": "'s'"
+            },
+            "name": "'score'"
+           }
+          ],
+          "line": "22"
+         }
+        },
+        "right": {
+         "__type__": "Str",
+         "value": "')'"
+        }
+       },
+       "is_let": "True",
+       "annotation": {
+        "__type__": "Because",
+        "text": "'printed here for a human; results.json keeps the raw record, not this formatted line'",
+        "line": "22"
+       }
+      },
+      {
+       "__type__": "Show",
+       "expr": {
+        "__type__": "Var",
+        "name": "'line'"
+       },
+       "line": "23"
+      }
+     ],
+     "is_expr": "False"
+    },
+    {
+     "__type__": "OrFail",
+     "expr": {
+      "__type__": "WriteTo",
+      "value": {
+       "__type__": "Var",
+       "name": "'interesting'"
+      },
+      "dest": {
+       "__type__": "Str",
+       "value": "'results.json'"
+      },
+      "line": "25"
+     },
+     "tag": "'write-failed'",
+     "handler": "None"
+    }
+   ]
+  },
+  {
+   "__type__": "Call",
+   "name": "'main'",
+   "args": [],
+   "line": "28"
+  }
+ ],
+ "money": [
+  {
+   "__type__": "Use",
+   "module": "'file'",
+   "renames": []
+  },
+  {
+   "__type__": "FuncDef",
+   "name": "'line total'",
+   "params": [
+    "'unit'",
+    "'qty'"
+   ],
+   "body": [
+    {
+     "__type__": "Give",
+     "expr": {
+      "__type__": "BinOp",
+      "op": "'*'",
+      "left": {
+       "__type__": "Var",
+       "name": "'unit'"
+      },
+      "right": {
+       "__type__": "Var",
+       "name": "'qty'"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "__type__": "FuncDef",
+   "name": "'main'",
+   "params": [],
+   "body": [
+    {
+     "__type__": "Assign",
+     "name": "'unit'",
+     "expr": {
+      "__type__": "Num",
+      "value": "19.99"
+     },
+     "is_let": "True",
+     "annotation": "None"
+    },
+    {
+     "__type__": "Assign",
+     "name": "'qty'",
+     "expr": {
+      "__type__": "Num",
+      "value": "3"
+     },
+     "is_let": "True",
+     "annotation": "None"
+    },
+    {
+     "__type__": "Assign",
+     "name": "'subtotal'",
+     "expr": {
+      "__type__": "Call",
+      "name": "'line total'",
+      "args": [
+       {
+        "__type__": "Var",
+        "name": "'unit'"
+       },
+       {
+        "__type__": "Var",
+        "name": "'qty'"
+       }
+      ],
+      "line": "9"
+     },
+     "is_let": "True",
+     "annotation": "None"
+    },
+    {
+     "__type__": "Assign",
+     "name": "'rate'",
+     "expr": {
+      "__type__": "Num",
+      "value": "0.0825"
+     },
+     "is_let": "True",
+     "annotation": {
+      "__type__": "Because",
+      "text": "'current sales tax rate for this jurisdiction'",
+      "line": "11"
+     }
+    },
+    {
+     "__type__": "Assign",
+     "name": "'tax'",
+     "expr": {
+      "__type__": "BinOp",
+      "op": "'*'",
+      "left": {
+       "__type__": "Var",
+       "name": "'subtotal'"
+      },
+      "right": {
+       "__type__": "Var",
+       "name": "'rate'"
+      }
+     },
+     "is_let": "True",
+     "annotation": "None"
+    },
+    {
+     "__type__": "Assign",
+     "name": "'total'",
+     "expr": {
+      "__type__": "BinOp",
+      "op": "'+'",
+      "left": {
+       "__type__": "Var",
+       "name": "'subtotal'"
+      },
+      "right": {
+       "__type__": "Var",
+       "name": "'tax'"
+      }
+     },
+     "is_let": "True",
+     "annotation": "None"
+    },
+    {
+     "__type__": "Assign",
+     "name": "'due'",
+     "expr": {
+      "__type__": "Round",
+      "value": {
+       "__type__": "Var",
+       "name": "'total'"
+      },
+      "places": {
+       "__type__": "Num",
+       "value": "2"
+      }
+     },
+     "is_let": "True",
+     "annotation": {
+      "__type__": "Because",
+      "text": "'invoices are quoted to the cent, per finance policy'",
+      "line": "15"
+     }
+    },
+    {
+     "__type__": "Show",
+     "expr": {
+      "__type__": "BinOp",
+      "op": "'+'",
+      "left": {
+       "__type__": "Str",
+       "value": "'subtotal '"
+      },
+      "right": {
+       "__type__": "Call",
+       "name": "'text'",
+       "args": [
+        {
+         "__type__": "Var",
+         "name": "'subtotal'"
+        }
+       ],
+       "line": "17"
+      }
+     },
+     "line": "17"
+    },
+    {
+     "__type__": "Show",
+     "expr": {
+      "__type__": "BinOp",
+      "op": "'+'",
+      "left": {
+       "__type__": "Str",
+       "value": "'tax      '"
+      },
+      "right": {
+       "__type__": "Call",
+       "name": "'text'",
+       "args": [
+        {
+         "__type__": "Var",
+         "name": "'tax'"
+        }
+       ],
+       "line": "18"
+      }
+     },
+     "line": "18"
+    },
+    {
+     "__type__": "Show",
+     "expr": {
+      "__type__": "BinOp",
+      "op": "'+'",
+      "left": {
+       "__type__": "Str",
+       "value": "'total    '"
+      },
+      "right": {
+       "__type__": "Call",
+       "name": "'text'",
+       "args": [
+        {
+         "__type__": "Var",
+         "name": "'total'"
+        }
+       ],
+       "line": "19"
+      }
+     },
+     "line": "19"
+    },
+    {
+     "__type__": "Show",
+     "expr": {
+      "__type__": "BinOp",
+      "op": "'+'",
+      "left": {
+       "__type__": "Str",
+       "value": "'due      '"
+      },
+      "right": {
+       "__type__": "Call",
+       "name": "'text'",
+       "args": [
+        {
+         "__type__": "Var",
+         "name": "'due'"
+        }
+       ],
+       "line": "20"
+      }
+     },
+     "line": "20"
+    },
+    {
+     "__type__": "WriteTo",
+     "value": {
+      "__type__": "ListLit",
+      "items": [
+       {
+        "__type__": "Var",
+        "name": "'due'"
+       }
+      ]
+     },
+     "dest": {
+      "__type__": "Str",
+      "value": "'invoice.json'"
+     },
+     "line": "22"
+    }
+   ]
+  },
+  {
+   "__type__": "Call",
+   "name": "'main'",
+   "args": [],
+   "line": "24"
+  }
+ ],
+ "names": [
+  {
+   "__type__": "FuncDef",
+   "name": "'word count'",
+   "params": [
+    "'phrase'"
+   ],
+   "body": [
+    {
+     "__type__": "Give",
+     "expr": {
+      "__type__": "Num",
+      "value": "42"
+     }
+    }
+   ]
+  },
+  {
+   "__type__": "FuncDef",
+   "name": "'daily whole'",
+   "params": [],
+   "body": [
+    {
+     "__type__": "Give",
+     "expr": {
+      "__type__": "Num",
+      "value": "7"
+     }
+    }
+   ]
+  },
+  {
+   "__type__": "FuncDef",
+   "name": "'read'",
+   "params": [
+    "'source'"
+   ],
+   "body": [
+    {
+     "__type__": "Give",
+     "expr": {
+      "__type__": "Str",
+      "value": "'shadowed, so this program performs no file effect'"
+     }
+    }
+   ]
+  },
+  {
+   "__type__": "Show",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'+'",
+    "left": {
+     "__type__": "Str",
+     "value": "'builtin count: '"
+    },
+    "right": {
+     "__type__": "Call",
+     "name": "'text'",
+     "args": [
+      {
+       "__type__": "Call",
+       "name": "'count'",
+       "args": [
+        {
+         "__type__": "ListLit",
+         "items": [
+          {
+           "__type__": "Num",
+           "value": "1"
+          },
+          {
+           "__type__": "Num",
+           "value": "2"
+          },
+          {
+           "__type__": "Num",
+           "value": "3"
+          }
+         ]
+        }
+       ],
+       "line": "13"
+      }
+     ],
+     "line": "13"
+    }
+   },
+   "line": "13"
+  },
+  {
+   "__type__": "Show",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'+'",
+    "left": {
+     "__type__": "Str",
+     "value": "'builtin upper: '"
+    },
+    "right": {
+     "__type__": "Call",
+     "name": "'upper'",
+     "args": [
+      {
+       "__type__": "Str",
+       "value": "'still works'"
+      }
+     ],
+     "line": "14"
+    }
+   },
+   "line": "14"
+  },
+  {
+   "__type__": "Show",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'+'",
+    "left": {
+     "__type__": "Str",
+     "value": "'user name:     '"
+    },
+    "right": {
+     "__type__": "Call",
+     "name": "'text'",
+     "args": [
+      {
+       "__type__": "Call",
+       "name": "'word count'",
+       "args": [
+        {
+         "__type__": "Str",
+         "value": "'a b c'"
+        }
+       ],
+       "line": "15"
+      }
+     ],
+     "line": "15"
+    }
+   },
+   "line": "15"
+  },
+  {
+   "__type__": "Show",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'+'",
+    "left": {
+     "__type__": "Str",
+     "value": "'user name:     '"
+    },
+    "right": {
+     "__type__": "Call",
+     "name": "'text'",
+     "args": [
+      {
+       "__type__": "Call",
+       "name": "'daily whole'",
+       "args": [],
+       "line": "16"
+      }
+     ],
+     "line": "16"
+    }
+   },
+   "line": "16"
+  },
+  {
+   "__type__": "Show",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'+'",
+    "left": {
+     "__type__": "Str",
+     "value": "'shadowed read: '"
+    },
+    "right": {
+     "__type__": "Call",
+     "name": "'read'",
+     "args": [
+      {
+       "__type__": "Str",
+       "value": "'anywhere.txt'"
+      }
+     ],
+     "line": "17"
+    }
+   },
+   "line": "17"
+  }
+ ],
+ "ordinary": [
+  {
+   "__type__": "Use",
+   "module": "'file'",
+   "renames": []
+  },
+  {
+   "__type__": "Assign",
+   "name": "'prices'",
+   "expr": {
+    "__type__": "ListLit",
+    "items": [
+     {
+      "__type__": "Num",
+      "value": "10"
+     },
+     {
+      "__type__": "Num",
+      "value": "25"
+     },
+     {
+      "__type__": "Num",
+      "value": "5"
+     },
+     {
+      "__type__": "Num",
+      "value": "40"
+     }
+    ]
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'big'",
+   "expr": {
+    "__type__": "ForEach",
+    "var": "'p'",
+    "source": {
+     "__type__": "Var",
+     "name": "'prices'"
+    },
+    "where": {
+     "__type__": "BinOp",
+     "op": "'>'",
+     "left": {
+      "__type__": "Var",
+      "name": "'p'"
+     },
+     "right": {
+      "__type__": "Num",
+      "value": "8"
+     }
+    },
+    "body": [
+     {
+      "__type__": "Var",
+      "name": "'p'"
+     }
+    ],
+    "is_expr": "True"
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'n'",
+   "expr": {
+    "__type__": "Call",
+    "name": "'count'",
+    "args": [
+     {
+      "__type__": "Var",
+      "name": "'big'"
+     }
+    ],
+    "line": "5"
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "Assign",
+   "name": "'avg'",
+   "expr": {
+    "__type__": "BinOp",
+    "op": "'/'",
+    "left": {
+     "__type__": "Num",
+     "value": "75"
+    },
+    "right": {
+     "__type__": "Var",
+     "name": "'n'"
+    }
+   },
+   "is_let": "False",
+   "annotation": "None"
+  },
+  {
+   "__type__": "If",
+   "cond": {
+    "__type__": "BinOp",
+    "op": "'>'",
+    "left": {
+     "__type__": "Var",
+     "name": "'avg'"
+    },
+    "right": {
+     "__type__": "Num",
+     "value": "20"
+    }
+   },
+   "then": [
+    {
+     "__type__": "Show",
+     "expr": {
+      "__type__": "Str",
+      "value": "'above threshold'"
+     },
+     "line": "9"
+    }
+   ],
+   "els": [
+    {
+     "__type__": "Show",
+     "expr": {
+      "__type__": "Str",
+      "value": "'below threshold'"
+     },
+     "line": "11"
+    }
+   ]
+  },
+  {
+   "__type__": "WriteTo",
+   "value": {
+    "__type__": "Var",
+    "name": "'big'"
+   },
+   "dest": {
+    "__type__": "Str",
+    "value": "'big.json'"
+   },
+   "line": "13"
+  }
+ ],
+ "pypi": [
+  {
+   "__type__": "Use",
+   "module": "'http'",
+   "renames": []
+  },
+  {
+   "__type__": "Use",
+   "module": "'file'",
+   "renames": []
+  },
+  {
+   "__type__": "FuncDef",
+   "name": "'fetch names'",
+   "params": [],
+   "body": [
+    {
+     "__type__": "Give",
+     "expr": {
+      "__type__": "ListLit",
+      "items": [
+       {
+        "__type__": "Str",
+        "value": "'requests'"
+       },
+       {
+        "__type__": "Str",
+        "value": "'flask'"
+       },
+       {
+        "__type__": "Str",
+        "value": "'django'"
+       },
+       {
+        "__type__": "Str",
+        "value": "'numpy'"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "__type__": "FuncDef",
+   "name": "'detail'",
+   "params": [
+    "'pkg-name'"
+   ],
+   "body": [
+    {
+     "__type__": "Give",
+     "expr": {
+      "__type__": "OrFail",
+      "expr": {
+       "__type__": "Call",
+       "name": "'ask'",
+       "args": [
+        {
+         "__type__": "BinOp",
+         "op": "'+'",
+         "left": {
+          "__type__": "BinOp",
+          "op": "'+'",
+          "left": {
+           "__type__": "Str",
+           "value": "'https://pypi.org/pypi/'"
+          },
+          "right": {
+           "__type__": "Var",
+           "name": "'pkg-name'"
+          }
+         },
+         "right": {
+          "__type__": "Str",
+          "value": "'/json'"
+         }
+        }
+       ],
+       "line": "8"
+      },
+      "tag": "'api-down'",
+      "handler": "None"
+     }
+    }
+   ]
+  },
+  {
+   "__type__": "FuncDef",
+   "name": "'main'",
+   "params": [],
+   "body": [
+    {
+     "__type__": "Assign",
+     "name": "'names'",
+     "expr": {
+      "__type__": "Call",
+      "name": "'fetch names'",
+      "args": [],
+      "line": "12"
+     },
+     "is_let": "True",
+     "annotation": "None"
+    },
+    {
+     "__type__": "Assign",
+     "name": "'packages'",
+     "expr": {
+      "__type__": "ForEach",
+      "var": "'n'",
+      "source": {
+       "__type__": "Var",
+       "name": "'names'"
+      },
+      "where": "None",
+      "body": [
+       {
+        "__type__": "Call",
+        "name": "'detail'",
+        "args": [
+         {
+          "__type__": "Var",
+          "name": "'n'"
+         }
+        ],
+        "line": "13"
+       }
+      ],
+      "is_expr": "True"
+     },
+     "is_let": "True",
+     "annotation": "None"
+    },
+    {
+     "__type__": "Assign",
+     "name": "'summaries'",
+     "expr": {
+      "__type__": "ForEach",
+      "var": "'p'",
+      "source": {
+       "__type__": "Var",
+       "name": "'packages'"
+      },
+      "where": "None",
+      "body": [
+       {
+        "__type__": "Field",
+        "obj": {
+         "__type__": "Var",
+         "name": "'p'"
+        },
+        "name": "'info'"
+       }
+      ],
+      "is_expr": "True"
+     },
+     "is_let": "True",
+     "annotation": "None"
+    },
+    {
+     "__type__": "Assign",
+     "name": "'big'",
+     "expr": {
+      "__type__": "ForEach",
+      "var": "'s'",
+      "source": {
+       "__type__": "Var",
+       "name": "'summaries'"
+      },
+      "where": {
+       "__type__": "BinOp",
+       "op": "'>'",
+       "left": {
+        "__type__": "Call",
+        "name": "'count'",
+        "args": [
+         {
+          "__type__": "Field",
+          "obj": {
+           "__type__": "Var",
+           "name": "'s'"
+          },
+          "name": "'summary'"
+         }
+        ],
+        "line": "19"
+       },
+       "right": {
+        "__type__": "Num",
+        "value": "30"
+       }
+      },
+      "body": [
+       {
+        "__type__": "Var",
+        "name": "'s'"
+       }
+      ],
+      "is_expr": "True"
+     },
+     "is_let": "True",
+     "annotation": "None"
+    },
+    {
+     "__type__": "Show",
+     "expr": {
+      "__type__": "BinOp",
+      "op": "'+'",
+      "left": {
+       "__type__": "Str",
+       "value": "'found '"
+      },
+      "right": {
+       "__type__": "Call",
+       "name": "'text'",
+       "args": [
+        {
+         "__type__": "Call",
+         "name": "'count'",
+         "args": [
+          {
+           "__type__": "Var",
+           "name": "'big'"
+          }
+         ],
+         "line": "21"
+        }
+       ],
+       "line": "21"
+      }
+     },
+     "line": "21"
+    },
+    {
+     "__type__": "ForEach",
+     "var": "'s'",
+     "source": {
+      "__type__": "Var",
+      "name": "'big'"
+     },
+     "where": "None",
+     "body": [
+      {
+       "__type__": "Show",
+       "expr": {
+        "__type__": "BinOp",
+        "op": "'+'",
+        "left": {
+         "__type__": "BinOp",
+         "op": "'+'",
+         "left": {
+          "__type__": "BinOp",
+          "op": "'+'",
+          "left": {
+           "__type__": "Field",
+           "obj": {
+            "__type__": "Var",
+            "name": "'s'"
+           },
+           "name": "'name'"
+          },
+          "right": {
+           "__type__": "Str",
+           "value": "'  ('"
+          }
+         },
+         "right": {
+          "__type__": "Field",
+          "obj": {
+           "__type__": "Var",
+           "name": "'s'"
+          },
+          "name": "'summary'"
+         }
+        },
+        "right": {
+         "__type__": "Str",
+         "value": "')'"
+        }
+       },
+       "line": "23"
+      }
+     ],
+     "is_expr": "False"
+    },
+    {
+     "__type__": "OrFail",
+     "expr": {
+      "__type__": "WriteTo",
+      "value": {
+       "__type__": "Var",
+       "name": "'big'"
+      },
+      "dest": {
+       "__type__": "Str",
+       "value": "'packages.json'"
+      },
+      "line": "25"
+     },
+     "tag": "'write-failed'",
+     "handler": "None"
+    }
+   ]
+  },
+  {
+   "__type__": "Call",
+   "name": "'main'",
+   "args": [],
+   "line": "28"
+  }
+ ]
+}
