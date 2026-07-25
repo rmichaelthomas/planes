@@ -1,0 +1,7 @@
+to load:
+  give 1
+
+to load record:
+  give 2
+
+use cache with load record as fresh

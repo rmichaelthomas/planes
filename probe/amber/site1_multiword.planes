@@ -1,0 +1,7 @@
+to a:
+  give 1
+
+to a b:
+  give 2
+
+x = a b

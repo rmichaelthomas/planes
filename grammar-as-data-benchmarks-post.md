@@ -1,13 +1,13 @@
 ## Post-Build Benchmarks — feat/grammar-as-data-and-scoped-amber
-**Commit:** b2e5973
+**Commit:** 7b3c02d
 
 | File | Tokens | Parse (ms, mean of 20) | Pre-build | Delta |
 |---|---|---|---|---|
-| annotated.planes | 102 | 0.2034 | 0.1803 | +12.8% |
-| foreign.planes | 147 | 0.2903 | 0.2602 | +11.6% |
-| gate.planes | 201 | 0.4203 | 0.3729 | +12.7% |
-| hn.planes | 167 | 0.3074 | 0.2698 | +13.9% |
-| money.planes | 115 | 0.2401 | 0.2149 | +11.7% |
-| names.planes | 85 | 0.1765 | 0.1515 | +16.5% |
-| ordinary.planes | 66 | 0.1564 | 0.1442 | +8.5% |
-| pypi.planes | 158 | 0.2790 | 0.2604 | +7.1% |
+| annotated.planes | 102 | 0.2081 | 0.1803 | +15.4% |
+| foreign.planes | 147 | 0.3236 | 0.2602 | +24.4% |
+| gate.planes | 201 | 0.4373 | 0.3729 | +17.3% |
+| hn.planes | 167 | 0.3148 | 0.2698 | +16.7% |
+| money.planes | 115 | 0.2465 | 0.2149 | +14.7% |
+| names.planes | 85 | 0.1814 | 0.1515 | +19.7% |
+| ordinary.planes | 66 | 0.1524 | 0.1442 | +5.7% |
+| pypi.planes | 158 | 0.2866 | 0.2604 | +10.0% |
