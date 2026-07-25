@@ -84,8 +84,11 @@ def first_divergence(got, want):
 
 # ================================================================ sanity: the corpus split itself
 
-def test_corpus_is_the_29_files_report_grammar_amber_counts():
-    assert len(CORPUS) == 29, f"expected 29 corpus files, found {len(CORPUS)}"
+def test_corpus_is_the_30_files_report_grammar_amber_counts():
+    """29 at REPORT_GRAMMAR_AMBER.md §4; 30 since demo/association.planes
+    entered the corpus (fix/recursion-leak-and-fifth-amber-site Phase 3,
+    P-Q15's corpus half)."""
+    assert len(CORPUS) == 30, f"expected 30 corpus files, found {len(CORPUS)}"
 
 
 def test_exactly_two_corpus_files_have_no_string_literal():
@@ -98,7 +101,7 @@ def test_exactly_two_corpus_files_have_no_string_literal():
 # ================================================================ agreement (full, not partial)
 
 def test_every_corpus_file_matches_lexer_py_exactly():
-    """29 PASS, 0 PARTIAL: every corpus file's token stream is now
+    """30 PASS, 0 PARTIAL: every corpus file's token stream is now
     byte-identical between lexer.planes and lexer.py, string-bearing or
     not -- the STRING gap that used to cut every string-bearing file's
     agreement short is closed."""

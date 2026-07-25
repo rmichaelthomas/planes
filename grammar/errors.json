@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generated_by": "grammar_gen.py",
-  "count": 88,
+  "count": 89,
   "entries": [
     {
       "id": "interp.not-a-yes-no",
@@ -19,7 +19,7 @@
       "id": "interp.unknown-operator-1",
       "class": "PlanesError",
       "tag": "unknown-operator",
-      "source": "interp.py:955",
+      "source": "interp.py:972",
       "raised_in": "apply_op",
       "template": null,
       "slots": [],
@@ -30,7 +30,7 @@
       "id": "interp.unknown-operator-2",
       "class": "PlanesError",
       "tag": "unknown-operator",
-      "source": "interp.py:980",
+      "source": "interp.py:997",
       "raised_in": "arith",
       "template": null,
       "slots": [],
@@ -124,7 +124,7 @@
       "id": "interp.cannot-combine",
       "class": "PlanesError",
       "tag": "cannot-combine",
-      "source": "interp.py:937",
+      "source": "interp.py:954",
       "raised_in": "apply_op",
       "template": "cannot combine {fmt(a)} with {fmt(b)} using +",
       "slots": [
@@ -234,7 +234,7 @@
       "id": "interp.divided-by-zero",
       "class": "PlanesError",
       "tag": "divided-by-zero",
-      "source": "interp.py:945",
+      "source": "interp.py:962",
       "raised_in": "apply_op",
       "template": "the right side of / was 0",
       "slots": [],
@@ -244,7 +244,7 @@
       "id": "interp.not-a-number-1",
       "class": "PlanesError",
       "tag": "not-a-number",
-      "source": "interp.py:966",
+      "source": "interp.py:983",
       "raised_in": "arith",
       "template": "cannot use '{op}' on {fmt(v)}",
       "slots": [
@@ -257,7 +257,7 @@
       "id": "interp.needs-rounding",
       "class": "PlanesError",
       "tag": "needs-rounding",
-      "source": "interp.py:977",
+      "source": "interp.py:994",
       "raised_in": "arith",
       "template": null,
       "slots": [],
@@ -269,7 +269,7 @@
       "id": "interp.cannot-compare-5",
       "class": "PlanesError",
       "tag": "cannot-compare",
-      "source": "interp.py:988",
+      "source": "interp.py:1005",
       "raised_in": "compare",
       "template": "cannot compare {fmt(a)} with {fmt(b)}",
       "slots": [
@@ -418,6 +418,18 @@
         "e"
       ],
       "fix": "wrap the call with `or fail as ...` to name the failure"
+    },
+    {
+      "id": "interp.recursion-too-deep",
+      "class": "PlanesError",
+      "tag": "recursion-too-deep",
+      "source": "interp.py:937",
+      "raised_in": "invoke",
+      "template": "'{name}' recursed past the depth this interpreter can follow",
+      "slots": [
+        "name"
+      ],
+      "fix": "replace per-item recursion with one `for each` pass over the whole collection, threading a state record forward; for nested structure, track depth with a cons-list stack sized to nesting depth, not item count"
     },
     {
       "id": "interp.planeserror-site-2",
@@ -1079,15 +1091,15 @@
       "interp.py:134"
     ],
     "unknown-operator": [
-      "interp.py:955",
-      "interp.py:980"
+      "interp.py:972",
+      "interp.py:997"
     ],
     "cannot-compare": [
       "interp.py:81",
       "interp.py:91",
       "interp.py:100",
       "interp.py:119",
-      "interp.py:988"
+      "interp.py:1005"
     ],
     "unrecognized-record-format": [
       "interp.py:225"
@@ -1102,7 +1114,7 @@
       "interp.py:776"
     ],
     "cannot-combine": [
-      "interp.py:937"
+      "interp.py:954"
     ],
     "annotation-executed": [
       "interp.py:447"
@@ -1127,15 +1139,15 @@
       "interp.py:819"
     ],
     "divided-by-zero": [
-      "interp.py:945"
+      "interp.py:962"
     ],
     "not-a-number": [
-      "interp.py:966",
+      "interp.py:983",
       "interp.py:637",
       "interp.py:764"
     ],
     "needs-rounding": [
-      "interp.py:977"
+      "interp.py:994"
     ],
     "fail-message-not-text": [
       "interp.py:501"
@@ -1153,6 +1165,9 @@
     ],
     "foreign-failed": [
       "interp.py:898"
+    ],
+    "recursion-too-deep": [
+      "interp.py:937"
     ],
     "interp.planeserror-site-2": [
       "interp.py:667"

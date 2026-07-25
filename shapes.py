@@ -1039,12 +1039,21 @@ class Analyser:
                                         file=self.current_file)
         arg_pairs = [self.const(a, consts) for a in node.args]
         args = [v for v, _ in arg_pairs]
+        arg_nodes = tuple(n for _, n in arg_pairs)
         if len(args) != len(fn.params):
-            return UNKNOWN, StaticDeriv("unknown", node.name,
+            return UNKNOWN, StaticDeriv("unknown", node.name, inputs=arg_nodes,
                                         file=self.current_file)
         gives = [s for s in fn.body if isinstance(s, Give)]
         if len(gives) != 1 or len(fn.body) != 1:
-            return UNKNOWN, StaticDeriv("unknown", node.name,
+            # Can't inline a multi-statement body (association-idiom
+            # functions like a `for each ... where` scan are the common
+            # case), so the value stays UNKNOWN -- but the arguments were
+            # already computed above, and the call genuinely does derive
+            # from them, so keeping them as inputs here is strictly more
+            # information, not a change to what value is reported.
+            # origins_of relies on this: a value fetched through such a
+            # function still traces back to the names passed into it.
+            return UNKNOWN, StaticDeriv("unknown", node.name, inputs=arg_nodes,
                                         file=self.current_file)
 
         callee_file = self.func_file.get(node.name, self.current_file)
@@ -1060,7 +1069,6 @@ class Analyser:
             self.depth -= 1
             self.current_file = prev_file
 
-        arg_nodes = tuple(n for _, n in arg_pairs)
         return value, StaticDeriv("call", node.name, inputs=arg_nodes,
                                   file=self.current_file)
 

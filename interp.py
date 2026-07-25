@@ -924,6 +924,23 @@ class Interpreter:
             return Traced(g.value.value,
                           Deriv("call", name, g.value.value,
                                 [g.value.node] + [a.node for a in arg_vals]))
+        except RecursionError:
+            # Caught here, not counted with a Planes-level depth counter: the
+            # host's own signal costs nothing until it fires, and the
+            # observable behaviour (a clean, catchable failure past the
+            # depth this interpreter can follow) is identical either way
+            # (unbound v3.0 §42 — the cheaper implementation wins). Narrow
+            # on purpose: only around the recursive re-entry through this
+            # function's own body, not the whole call machinery, so a
+            # RecursionError genuinely raised inside a host method for
+            # unrelated reasons is never mistaken for depth exhaustion here.
+            raise PlanesError(
+                "recursion-too-deep",
+                f"'{name}' recursed past the depth this interpreter can follow",
+                "replace per-item recursion with one `for each` pass over "
+                "the whole collection, threading a state record forward; "
+                "for nested structure, track depth with a cons-list stack "
+                "sized to nesting depth, not item count")
 
 
 def apply_op(op, a, b):
