@@ -1,0 +1,34 @@
+# The Phase 2 primitive (fail "message" as tag), exercised from a `to`
+# function nested a few calls deep -- does it propagate all the way to
+# the top, the way a real parser's parse_primary raising through
+# parse_postfix, parse_unary, ..., parse_expr, parse_statement,
+# parse_program needs it to?
+
+to parse-primary of tok:
+  fail "unexpected token" as parse-error
+
+to parse-postfix of tok:
+  give parse-primary of tok
+
+to parse-unary of tok:
+  give parse-postfix of tok
+
+to parse-multiplicative of tok:
+  give parse-unary of tok
+
+to parse-additive of tok:
+  give parse-multiplicative of tok
+
+to parse-comparison of tok:
+  give parse-additive of tok
+
+to parse-expr of tok:
+  give parse-comparison of tok
+
+to parse-statement of tok:
+  give parse-expr of tok
+
+to parse-program of tok:
+  give parse-statement of tok
+
+parse-program of "bad-token"

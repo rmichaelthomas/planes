@@ -1,0 +1,47 @@
+# cursor_idiom.planes proved the cons-list-of-records cursor is correct
+# at small scale, but building it via recursive unreverse/drain (one
+# Planes-level function call per token) hits the ~140-deep recursion
+# ceiling recursion_depth.planes found -- well within a real file's
+# token count (lexer.planes self-tokenizes to 3835 tokens). This probes
+# the alternative: a single `for each` pass over the whole token list
+# (a host-language loop, not Planes-level recursion, so it does not
+# consume the ~140-deep budget at all) threading a state record that
+# carries a shallow cons-list STACK for nested structure -- the exact
+# shape lexer.planes's own indent stack already uses. The stack is
+# pushed and popped one element at a time (O(1) field construction),
+# never walked in full, so its own depth is not bounded by the same
+# ceiling either. 200 tokens here (well past 140); REPORT_FAIL_AND_
+# PARSER_PROBE.md additionally verified this scales to 20,000 tokens
+# directly against the interpreter, not committed here as a literal.
+
+to push of stack, value:
+  give { top: value, rest: stack }
+
+to pop of stack:
+  give stack.rest
+
+# tok 1 opens one level of nesting, tok 0 closes it -- alternating
+# 1,0,1,0,... never lets the stack grow past depth 1, so this also
+# doubles as evidence the stack behaves correctly, not just that it
+# survives at scale.
+to step of state, tok:
+  if tok == 0:
+    new-stack = pop of state.stack
+    give { stack: new-stack, depth: (state.depth - 1), max-depth: state.max-depth, count: (state.count + 1) }
+  else:
+    new-depth = state.depth + 1
+    new-max = state.max-depth
+    if new-depth > new-max:
+      new-max = new-depth
+    new-stack = push of state.stack, tok
+    give { stack: new-stack, depth: new-depth, max-depth: new-max, count: (state.count + 1) }
+
+tokens = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
+initial = { stack: nothing, depth: 0, max-depth: 0, count: 0 }
+final = initial
+for each t in tokens:
+  final = step of final, t
+
+show final.count
+show final.max-depth
+show final.depth

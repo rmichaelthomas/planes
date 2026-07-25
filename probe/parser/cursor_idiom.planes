@@ -1,0 +1,66 @@
+# Can a Planes list be walked with an explicit stop-early, resume-later
+# cursor -- the shape a recursive-descent parser needs (consume some
+# prefix, return what's left) -- or only with for each's single,
+# uninterruptible full pass? No `rest`/`drop`/index exists for lists
+# (declined at #11, vindicated for the lexer's fold design). The
+# candidate idiom: convert the list to a cons-list of records once
+# (`{ head: x, rest: <cons-list-or-nothing> }`), since RECORD field
+# access has no such limit -- `.rest` is plain field access, not
+# indexing, and lexer.planes's own indent stack already proves this
+# shape works for a stack. Does it work for a forward-walking cursor too?
+
+to to-cons of items:
+  give reverse-into of items, nothing
+
+# for each only ever walks forward, wrapping the previous state at each
+# step, so this builds the cons-list in REVERSE (the last item seen is
+# the outermost cell) -- built with for each and plus's already-proven
+# shape, not the cursor idiom this file is establishing.
+to reverse-into of items, acc:
+  result = acc
+  for each x in items:
+    result = { head: x, rest: result }
+  give unreverse of result, nothing
+
+# Un-reverse by walking the reversed cons-list itself via ordinary
+# recursion on .rest (not for each -- a cons-list is not a Planes list,
+# for each cannot walk it), rebuilding head-first.
+to unreverse of node, acc:
+  if node is nothing:
+    give acc
+  else:
+    give unreverse of node.rest, { head: node.head, rest: acc }
+
+# The cursor operations a parser needs: look at the current item without
+# consuming it, and consume-and-advance -- both ordinary field access,
+# no indexing.
+to current of cursor:
+  give cursor.head
+
+to advance of cursor:
+  give cursor.rest
+
+to at-end of cursor:
+  give cursor is nothing
+
+# A tiny "parser": consume every item, building a new plain Planes list
+# via plus (proving the cons-list interoperates with the list type the
+# rest of the language uses) -- while stopping and resuming one item at
+# a time, the exact shape parse_expr/parse_statement need.
+to drain of cursor, acc:
+  if at-end of cursor:
+    give acc
+  else:
+    item = current of cursor
+    give drain of (advance of cursor), (acc plus item)
+
+items = [10, 20, 30, 40]
+c = to-cons of items
+show current of c
+c2 = advance of c
+show current of c2
+show at-end of c2
+
+drained = drain of c, []
+show drained
+show count of drained

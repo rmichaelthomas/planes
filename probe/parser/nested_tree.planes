@@ -1,0 +1,25 @@
+# Records containing lists containing records, several levels deep --
+# the shape a parsed AST needs (a BinOp node whose left/right are
+# themselves nodes, a block whose statements are each nodes, ...).
+# `first n of` always returns a LIST, even for n=1 (test_text.py), so
+# reading one specific element back out uses `for each`, the same
+# proven idiom as everywhere else -- not an index, which does not exist
+# for lists any more than for strings (#11).
+
+leaf-a = { kind: "num", value: 1 }
+leaf-b = { kind: "num", value: 2 }
+inner = { kind: "binop", op: "+", left: leaf-a, right: leaf-b }
+block = { kind: "block", statements: [inner, leaf-a] }
+program = { kind: "program", body: [block, { kind: "num", value: 99 }] }
+
+# Read a leaf back out through every level: program -> body (list) ->
+# first item (block, a record) -> statements (list) -> first item
+# (inner, a record) -> left (a record) -> value (a number).
+for each top-item in program.body where top-item.kind == "block":
+  the-block = top-item
+  show the-block.kind
+  for each stmt in the-block.statements where stmt.kind == "binop":
+    show stmt.kind
+    show stmt.op
+    show stmt.left.value
+    show stmt.right.value

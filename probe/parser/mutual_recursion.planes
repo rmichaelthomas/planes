@@ -1,0 +1,14 @@
+to is-even of n:
+  if n == 0:
+    give true
+  else:
+    give is-odd of (n - 1)
+
+to is-odd of n:
+  if n == 0:
+    give false
+  else:
+    give is-even of (n - 1)
+
+show is-even of 10
+show is-odd of 10

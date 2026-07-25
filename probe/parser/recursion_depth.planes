@@ -1,0 +1,7 @@
+to countdown of n:
+  if n <= 0:
+    show "done"
+  else:
+    countdown of (n - 1)
+
+countdown of 5
