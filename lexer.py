@@ -191,6 +191,13 @@ class If:
 class OrFail:
     expr: Any
     tag: str
+    # An optional handler block, opened by `:` right after the tag. When
+    # present, a failure does not propagate: `tag` binds to the error as an
+    # ordinary record ({tag, detail}, plus path when the error is a
+    # comparison mismatch) and the block runs, discriminated with the
+    # existing if/field-access machinery — no new dispatch mechanism.
+    # None keeps the original rename-and-reraise behavior.
+    handler: Any = None
 @dataclass
 class Builtin:
     name: str

@@ -1,6 +1,7 @@
 """Planes evaluator — values, provenance, effects."""
 import json
 import os
+import unicodedata
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -61,19 +62,26 @@ def fmt(v):
     return str(v)
 
 
-def equal(a, b):
+def equal(a, b, path=None):
     """Sameness, guarded. Cross-type comparison is an error, not `false`.
 
     A `false` from `5 == "5"` is true about the computation and useless
     about the mistake — and it enters a derivation as a fact. The number
     model refuses rather than rounds silently; equality refuses rather
     than answers.
+
+    `path` accumulates the list-index/record-field steps from the root to
+    a nested mismatch, so a mismatch buried inside a list of records names
+    exactly where it is, not just what it is.
     """
+    path = path if path is not None else []
+
     if a is None or b is None:
         raise PlanesError(
             "cannot-compare",
             "nothing cannot be compared with ==",
-            "test for absence with `is nothing`")
+            "test for absence with `is nothing`",
+            path=path)
 
     if is_num(a) and is_num(b):
         return Number.of(a) == Number.of(b)
@@ -82,7 +90,8 @@ def equal(a, b):
         raise PlanesError(
             "cannot-compare",
             f"cannot compare {fmt(a)} with {fmt(b)}",
-            "compare a yes/no value with a yes/no value")
+            "compare a yes/no value with a yes/no value",
+            path=path)
     if isinstance(a, bool):
         return a is b
 
@@ -90,7 +99,8 @@ def equal(a, b):
         raise PlanesError(
             "cannot-compare",
             f"cannot compare {fmt(a)} with {fmt(b)}",
-            "compare numbers with numbers, or text with text")
+            "compare numbers with numbers, or text with text",
+            path=path)
 
     if isinstance(a, str):
         return a == b
@@ -98,8 +108,8 @@ def equal(a, b):
     if isinstance(a, list):
         if len(a) != len(b):
             return False
-        for x, y in zip(a, b):
-            if not equal(x, y):     # raises, with the position, on type mismatch
+        for i, (x, y) in enumerate(zip(a, b)):
+            if not equal(x, y, path + [i]):    # raises, with the path, on type mismatch
                 return False
         return True
 
@@ -109,8 +119,9 @@ def equal(a, b):
                 "cannot-compare",
                 f"records have different fields: "
                 f"{sorted(set(a) ^ set(b))}",
-                "compare records with the same fields")
-        return all(equal(a[k], b[k]) for k in a)
+                "compare records with the same fields",
+                path=path)
+        return all(equal(a[k], b[k], path + [k]) for k in a)
 
     return a == b
 
@@ -128,10 +139,12 @@ def condition(v):
 # ================================================================ errors
 
 class PlanesError(Exception):
-    def __init__(self, tag, detail="", fix=""):
+    def __init__(self, tag, detail="", fix="", path=None):
         self.tag = tag
         self.detail = detail
         self.fix = fix
+        self.path = path      # list-index/record-field steps to a comparison
+                              # mismatch, or None when not applicable (§109)
         msg = tag
         if detail:
             msg += f": {detail}"
@@ -143,6 +156,17 @@ class PlanesError(Exception):
 class _Give(Exception):
     def __init__(self, value):
         self.value = value
+
+
+def error_record(e):
+    """A caught error, as an ordinary record — discriminated by shape
+    (§74), never by type. `path` (A.4) is present only when the error
+    carries one; a path step is a Planes number (list index) or the field
+    name itself (already a string)."""
+    rec = {"tag": e.tag, "detail": e.detail}
+    if e.path is not None:
+        rec["path"] = [Number.of(p) if isinstance(p, int) else p for p in e.path]
+    return rec
 
 
 # ================================================================ env
@@ -454,8 +478,13 @@ class Interpreter:
             except _Give:
                 raise
             except PlanesError as e:
-                raise PlanesError(node.tag, e.detail or e.tag)
+                if node.handler is not None:
+                    return self.run_or_fail_handler(node, e, env)
+                raise PlanesError(node.tag, e.detail or e.tag, path=e.path)
             except Exception as e:
+                if node.handler is not None:
+                    return self.run_or_fail_handler(
+                        node, PlanesError(node.tag, str(e)), env)
                 raise PlanesError(node.tag, str(e))
 
         if isinstance(node, ForEach):
@@ -487,7 +516,7 @@ class Interpreter:
         if node.op == "first":
             n = self.eval(node.left, env)
             src = self.eval(node.right, env)
-            v = list(src.value)[: int(n.value)]
+            v = src.value[: int(n.value)]
             return Traced(v, Deriv("op", f"first {int(n.value)} of", v, [src.node]))
 
         left = self.eval(node.left, env)
@@ -554,8 +583,23 @@ class Interpreter:
         if node.name == "text":
             v = fmt(arg.value)
             return Traced(v, Deriv("op", "text of", v, [arg.node]))
+        if node.name == "normalize":
+            v = unicodedata.normalize("NFC", str(arg.value))
+            return Traced(v, Deriv("op", "normalize of", v, [arg.node]))
 
         raise PlanesError("unknown-builtin", node.name)
+
+    def run_or_fail_handler(self, node, error, env):
+        """Bind `node.tag` to `error`, as a record, and run the handler.
+
+        No child scope: an `or fail as` handler runs in the same env an
+        `if`/`else` body does (exec_stmt's If case), so a name the handler
+        assigns is visible afterward exactly the way an if-branch's is.
+        """
+        rec = error_record(error)
+        bound = Traced(rec, Deriv("record", "{record}", rec, []))
+        env.bind_local(node.tag, bound)
+        return self.exec_block(node.handler, env)
 
     def eval_foreach(self, node, env):
         source = self.eval(node.source, env)
@@ -689,11 +733,16 @@ class Interpreter:
 
 def apply_op(op, a, b):
     if op == "+":
-        if isinstance(a, str) or isinstance(b, str):
-            return fmt(a) + fmt(b)
+        if isinstance(a, str) and isinstance(b, str):
+            return a + b
         if isinstance(a, list) and isinstance(b, list):
             return a + b
-        return arith("+", a, b)
+        if is_num(a) and is_num(b):
+            return arith("+", a, b)
+        raise PlanesError(
+            "cannot-combine",
+            f"cannot combine {fmt(a)} with {fmt(b)} using +",
+            "convert first — e.g. \"total: \" + text of n")
     if op == "-": return arith("-", a, b)
     if op == "*": return arith("*", a, b)
     if op == "/":

@@ -6,7 +6,7 @@ from planes_num import Number
 # names so a bare `count of xs` is read as a call rather than a variable; it
 # does not need to know what they do. A user may define a function with the
 # same name, and theirs is the one that runs.
-BUILTIN_NAMES = {"count", "lower", "upper", "text", "whole", "ask", "read"}
+BUILTIN_NAMES = {"count", "lower", "upper", "text", "whole", "ask", "read", "normalize"}
 
 
 class PlanesSyntaxError(Exception):
@@ -375,13 +375,24 @@ class Parser:
         return ForEach(var, source, where, self.parse_block(), is_expr=False)
 
     def trailing_or_fail(self, node):
-        """`or fail as tag` — same line, or indented continuation."""
+        """`or fail as tag` — same line, or indented continuation.
+
+        `as tag` may be followed by `:` and a block (indented, or a single
+        inline statement, same as `if`/`to`/`for each`) — the handler that
+        runs on failure, with `tag` bound to the error record. Without it,
+        the tag only renames the re-raised failure, as before.
+        """
         save = self.i
         if self.at("OR") and self.peek(1).kind == "FAIL":
             self.next()
             self.next()
             self.expect("AS")
-            return OrFail(node, self.expect("NAME").value)
+            tag = self.expect("NAME").value
+            handler = None
+            if self.at("OP", ":"):
+                self.next()
+                handler = self.parse_block()
+            return OrFail(node, tag, handler)
         if self.at("EOL") and self.peek(1).kind == "BEGIN" \
                 and self.peek(2).kind == "OR" and self.peek(3).kind == "FAIL":
             self.next()
@@ -390,9 +401,13 @@ class Parser:
             self.next()
             self.expect("AS")
             tag = self.expect("NAME").value
+            handler = None
+            if self.at("OP", ":"):
+                self.next()
+                handler = self.parse_block()
             self.skip_blank()
             self.accept("END")
-            return OrFail(node, tag)
+            return OrFail(node, tag, handler)
         self.i = save
         return node
 

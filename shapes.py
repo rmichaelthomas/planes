@@ -13,6 +13,7 @@ can be mutually recursive. So this is a fixed-point computation over the
 call graph, not a tree walk.
 """
 import os
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -515,7 +516,20 @@ class Analyser:
             return out
 
         if isinstance(node, OrFail):
-            return self.walk(node.expr, fn_effects, consts)
+            out |= self.walk(node.expr, fn_effects, consts)
+            if node.handler is not None:
+                # A static surface is what the program CAN do, so a handler
+                # block's effects belong in it whether or not this run took
+                # the failure path — same reasoning as If's both branches.
+                inner = consts.child()
+                inner.set(node.tag, UNKNOWN,
+                         StaticDeriv("unknown", node.tag, file=self.current_file))
+                for s in node.handler:
+                    out |= self.walk(s, fn_effects, inner)
+                for name in self.assigned_in(node.handler):
+                    consts.set(name, UNKNOWN,
+                              StaticDeriv("unknown", name, file=self.current_file))
+            return out
 
         if isinstance(node, ForEach):
             out |= self.walk(node.source, fn_effects, consts)
@@ -713,6 +727,10 @@ class Analyser:
             elif isinstance(n, FuncDef):
                 for s in n.body:
                     scan(s)
+            elif isinstance(n, OrFail):
+                scan(n.expr)
+                for s in n.handler or ():
+                    scan(s)
 
         for s in stmts:
             scan(s)
@@ -745,6 +763,8 @@ class Analyser:
                 scan(n.arg)
             elif isinstance(n, OrFail):
                 scan(n.expr)
+                for s in n.handler or ():
+                    scan(s)
             elif isinstance(n, WriteTo):
                 scan(n.value)
                 scan(n.dest)
@@ -799,6 +819,14 @@ class Analyser:
                                       file=self.current_file)
 
         if isinstance(node, OrFail):
+            if node.handler is not None:
+                # The value may come from the handler branch instead —
+                # unknowable statically which one ran, so this widens
+                # rather than assumes success (same soundness reasoning
+                # as the walk() join above).
+                _, expr_n = self.const(node.expr, consts)
+                return UNKNOWN, StaticDeriv("unknown", "or fail as",
+                                            inputs=(expr_n,), file=self.current_file)
             return self.const(node.expr, consts)
 
         if isinstance(node, BinOp) and node.op == "+":
@@ -807,8 +835,17 @@ class Analyser:
             if left is UNKNOWN or right is UNKNOWN:
                 return UNKNOWN, StaticDeriv("unknown", "+", inputs=(left_n, right_n),
                                             file=self.current_file)
-            v = (self.as_text(left) + self.as_text(right)
-                 if (isinstance(left, str) or isinstance(right, str)) else left + right)
+            # Mismatched types widen to UNKNOWN here, mirroring the runtime's
+            # cannot-combine raise (interp.py apply_op) without raising: the
+            # analyser never executes and must stay total (v9.0 A.1).
+            same_type = (
+                (isinstance(left, str) and isinstance(right, str))
+                or (isinstance(left, (int, float)) and not isinstance(left, bool)
+                    and isinstance(right, (int, float)) and not isinstance(right, bool)))
+            if not same_type:
+                return UNKNOWN, StaticDeriv("unknown", "+", inputs=(left_n, right_n),
+                                            file=self.current_file)
+            v = left + right
             return v, StaticDeriv("op", "+", inputs=(left_n, right_n),
                                   file=self.current_file)
 
@@ -856,6 +893,9 @@ class Analyser:
         if node.name == "upper":
             return str(v).upper(), StaticDeriv("op", label, inputs=(n,),
                                                file=self.current_file)
+        if node.name == "normalize":
+            return (unicodedata.normalize("NFC", str(v)),
+                    StaticDeriv("op", label, inputs=(n,), file=self.current_file))
         return UNKNOWN, StaticDeriv("unknown", label, inputs=(n,),
                                     file=self.current_file)
 
