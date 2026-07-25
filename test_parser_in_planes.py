@@ -39,6 +39,7 @@ from lexer import (
     Not,
     Nothing,
     Num,
+    RecordLit,
     Round,
     Show,
     Str,
@@ -57,6 +58,7 @@ from planes_text import escape_string_literal
 AST_NODE_TYPES = (
     Num, Str, Bool, Nothing, Var, ListLit, ListPlus, BinOp, Not, IsNothing,
     Field, Assign, FuncDef, Call, Give, Show, If, Round, Builtin, ForEach, Use,
+    RecordLit,
 )
 
 
@@ -433,6 +435,22 @@ USE_PROGRAMS = [
 
 def test_use_statements_agree():
     for src in USE_PROGRAMS:
+        assert_program_agrees(src)
+
+
+LITERAL_COLLECTION_PROGRAMS = [
+    "xs = [1, 2, 3]\n",
+    "xs = []\n",
+    'r = { name: "widget", value: 12 }\n',
+    "r = {}\n",
+    'prices = [{ name: "widget", value: 12 }, { name: "gadget", value: 30 }]\n',
+    "let x = 5\n",
+    'let name = "widget"\n',
+]
+
+
+def test_list_and_record_literals_and_let_agree():
+    for src in LITERAL_COLLECTION_PROGRAMS:
         assert_program_agrees(src)
 
 

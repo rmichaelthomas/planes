@@ -268,6 +268,33 @@ to canonical-of-use of node, indent:
   renames-part = canonical-of-renames of node.renames, indent
   give header + "\n" + renames-part
 
+to canonical-of-listlit of node, indent:
+  header = indent + "ListLit"
+  give header + "\n" + (canonical-of-field-list of "items", node.items, indent)
+
+# RecordLit.fields is a list of (name, expr) pairs on parser.py's side --
+# each one a plain { key, value } record here (no tuple syntax, #11,
+# same as Use.renames), rendered to match the Python side's own
+# (str, node)-pair item shape: `- "key":` then the value node indented
+# one more level, not canonical-of-node-list's bare `-` (that shape is
+# for plain node items, with no key to print).
+to canonical-of-record-fields of fields, indent:
+  n = count of fields
+  header = indent + "  fields: [" + (text of n) + "]"
+  if n > 0:
+    item-indent = indent + "    "
+    lines = []
+    for each f in fields:
+      key-line = item-indent + "- " + (render-string of f.key) + ":"
+      value-part = canonical-of-node of f.value, (item-indent + "  ")
+      lines = lines plus (key-line + "\n" + value-part)
+    give header + "\n" + (join-with-newlines of lines)
+  else:
+    give header
+
+to canonical-of-recordlit of node, indent:
+  give indent + "RecordLit\n" + (canonical-of-record-fields of node.fields, indent)
+
 to canonical-of-node of node, indent:
   when node is { kind: "Num" }:
     give indent + "Num\n" + indent + "  value: " + text of node.value
@@ -347,7 +374,13 @@ to canonical-of-node of node, indent:
                                       when node is { kind: "Use" }:
                                         give canonical-of-use of node, indent
                                       else:
-                                        fail "no canonical form for node kind '" + node.kind + "'" as unknown-node-kind
+                                        when node is { kind: "ListLit" }:
+                                          give canonical-of-listlit of node, indent
+                                        else:
+                                          when node is { kind: "RecordLit" }:
+                                            give canonical-of-recordlit of node, indent
+                                          else:
+                                            fail "no canonical form for node kind '" + node.kind + "'" as unknown-node-kind
 
 # ================================================================ the cursor
 #
@@ -529,6 +562,74 @@ to parse-name-real-arglist of name, line, cursor:
     closed = expect-op of args.cursor, ")"
     give { node: { kind: "Call", name: name, args: args.nodes, line: line }, cursor: closed.cursor }
 
+# `[` / `{` primaries: list and record literals. skip-bracket-ws mirrors
+# parser.py's own (EOL/`;`/BEGIN/END all transparent inside brackets --
+# a literal spanning indented lines picks up indentation tokens that
+# mean nothing here, since the brackets already carry the structure);
+# bounded by how many blank/dedent tokens sit between two literal
+# elements, not file size.
+
+to skip-bracket-ws of cursor:
+  t = current of cursor
+  is-blank-here = t.kind == "EOL" or t.kind == "BEGIN" or t.kind == "END" or (t.kind == "OP" and t.text == ";")
+  if is-blank-here:
+    give skip-bracket-ws of (advance of cursor)
+  else:
+    give cursor
+
+to collect-list-items of cursor, acc:
+  after-ws = skip-bracket-ws of cursor
+  comma = try-accept-value of after-ws, "OP", ","
+  if comma.matched:
+    after-comma-ws = skip-bracket-ws of comma.cursor
+    if tok-at-value of after-comma-ws, "OP", "]":
+      give { items: acc, cursor: after-comma-ws }
+    else:
+      next-result = parse-or of after-comma-ws
+      give collect-list-items of next-result.cursor, (acc plus next-result.node)
+  else:
+    give { items: acc, cursor: after-ws }
+
+to parse-list-literal of cursor:
+  after-open = skip-bracket-ws of (advance of cursor)
+  if tok-at-value of after-open, "OP", "]":
+    give { node: { kind: "ListLit", items: [] }, cursor: (advance of after-open) }
+  else:
+    first-result = parse-or of after-open
+    rest = collect-list-items of first-result.cursor, [first-result.node]
+    closed = expect-op of rest.cursor, "]"
+    give { node: { kind: "ListLit", items: rest.items }, cursor: closed.cursor }
+
+to parse-record-field of cursor:
+  after-ws = skip-bracket-ws of cursor
+  key-expect = expect-kind of after-ws, "NAME"
+  colon-expect = expect-op of key-expect.cursor, ":"
+  value-result = parse-or of colon-expect.cursor
+  give { key: key-expect.token.text, value: value-result.node, cursor: value-result.cursor }
+
+to collect-record-fields of cursor, acc:
+  after-ws = skip-bracket-ws of cursor
+  comma = try-accept-value of after-ws, "OP", ","
+  if comma.matched:
+    after-comma-ws = skip-bracket-ws of comma.cursor
+    if tok-at-value of after-comma-ws, "OP", "}":
+      give { fields: acc, cursor: after-comma-ws }
+    else:
+      next = parse-record-field of after-comma-ws
+      give collect-record-fields of next.cursor, (acc plus { key: next.key, value: next.value })
+  else:
+    give { fields: acc, cursor: after-ws }
+
+to parse-record-literal of cursor:
+  after-open = skip-bracket-ws of (advance of cursor)
+  if tok-at-value of after-open, "OP", "}":
+    give { node: { kind: "RecordLit", fields: [] }, cursor: (advance of after-open) }
+  else:
+    first-field = parse-record-field of after-open
+    rest = collect-record-fields of first-field.cursor, [{ key: first-field.key, value: first-field.value }]
+    closed = expect-op of rest.cursor, "}"
+    give { node: { kind: "RecordLit", fields: rest.fields }, cursor: closed.cursor }
+
 to parse-primary of cursor:
   t = current of cursor
   when t is { kind: "FIRST" }:
@@ -565,16 +666,24 @@ to parse-primary of cursor:
               when t is { kind: "NOTHING" }:
                 give { node: { kind: "Nothing" }, cursor: (advance of cursor) }
               else:
-                is-open-paren = t.kind == "OP" and t.text == "("
-                if is-open-paren:
-                  inner = parse-or of (advance of cursor)
-                  closed = expect-op of inner.cursor, ")"
-                  give { node: inner.node, cursor: closed.cursor }
+                is-open-brace = t.kind == "OP" and t.text == "{"
+                if is-open-brace:
+                  give parse-record-literal of cursor
                 else:
-                  if t.kind == "NAME":
-                    give parse-name-primary of t, cursor
+                  is-open-bracket = t.kind == "OP" and t.text == "["
+                  if is-open-bracket:
+                    give parse-list-literal of cursor
                   else:
-                    fail "line " + (text of t.line) + ": expected a value, found '" + t.text + "'" as parse-error
+                    is-open-paren = t.kind == "OP" and t.text == "("
+                    if is-open-paren:
+                      inner = parse-or of (advance of cursor)
+                      closed = expect-op of inner.cursor, ")"
+                      give { node: inner.node, cursor: closed.cursor }
+                    else:
+                      if t.kind == "NAME":
+                        give parse-name-primary of t, cursor
+                      else:
+                        fail "line " + (text of t.line) + ": expected a value, found '" + t.text + "'" as parse-error
 
 to continue-postfix of node, cursor:
   t = current of cursor
@@ -905,8 +1014,11 @@ to parse-statement of cursor, tokens:
               if t.kind == "USE":
                 give parse-use of cursor
               else:
-                msg = "line " + (text of t.line) + ": unsupported statement (Phase 3 ladder not yet reached), found '" + t.text + "'"
-                fail msg as parse-error
+                if t.kind == "LET":
+                  give parse-let of cursor
+                else:
+                  msg = "line " + (text of t.line) + ": unsupported statement (Phase 3 ladder not yet reached), found '" + t.text + "'"
+                  fail msg as parse-error
 
 to parse-give of cursor:
   result = parse-or of (advance of cursor)
@@ -970,6 +1082,13 @@ to parse-assign of name, cursor:
   after-eq = advance of (advance of cursor)
   result = parse-or of after-eq
   node = { kind: "Assign", name: name, expr: result.node, is-let: false }
+  give { node: node, cursor: result.cursor }
+
+to parse-let of cursor:
+  name-expect = expect-kind of (advance of cursor), "NAME"
+  eq-expect = expect-op of name-expect.cursor, "="
+  result = parse-or of eq-expect.cursor
+  node = { kind: "Assign", name: name-expect.token.text, expr: result.node, is-let: true }
   give { node: node, cursor: result.cursor }
 
 to parse-show of line, cursor:
