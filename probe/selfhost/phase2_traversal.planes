@@ -1,0 +1,47 @@
+# Phase 2 (PROBE_SELFHOST.md) — generic structural traversal.
+#
+# Question 1: can a Planes function do anything useful with an arbitrary
+# record without knowing its fields? Answer, established separately in
+# transcripts/phase2_absence.txt: no. `for each f in record` raises
+# not-a-collection, and every `.field` access needs a literal name known
+# when the source is written (demo/association.planes's comment). There is
+# no `fields of`, no `keys of`, no computed `.[k]`. Field enumeration is
+# genuinely absent from the language.
+#
+# Question 2: can `when subject is { ... }` shape dispatch substitute?
+# This program is the transcript. It dispatches on AST-node-shaped records
+# the way interp.py's eval() dispatches with isinstance, but by matching the
+# discriminating field(s) of each shape and binding the rest.
+
+# A tiny expression AST, as records. `kind` is the discriminator, exactly
+# the role isinstance plays in interp.py's eval().
+num  = { kind: "Num", value: 7 }
+op   = { kind: "BinOp", operator: "+", left: 2, right: 3 }
+var  = { kind: "Var", name: "x" }
+
+# One dispatcher, hand-written arm per node kind — the Planes mirror of
+# eval()'s isinstance chain. `when ... is { kind: "Num" }` matches, and the
+# `value` binding lands in scope, the same way `field_val` does in interp.py.
+to describe of node:
+  result = "unknown"
+  when node is { kind: "Num", value }:
+    result = "a number: " + text of value
+  else:
+    when node is { kind: "BinOp", operator }:
+      result = "an operator: " + operator
+    else:
+      when node is { kind: "Var", name }:
+        result = "a variable: " + name
+      else:
+        result = "unhandled kind"
+  give result
+
+show describe of num
+show describe of op
+show describe of var
+
+# The exhaustive-dispatch discipline (#13's standing instruction): the final
+# `else` is where a new, unhandled node kind lands. It is a visible, single
+# site — not a silent fallthrough scattered across the tree.
+mystery = { kind: "Lambda", params: [] }
+show describe of mystery

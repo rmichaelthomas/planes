@@ -1,0 +1,39 @@
+# Phase 1 — environment lookup at interpreter scale
+# machine: macOS-26.5.1-arm64-arm-64bit-Mach-O
+# python:  3.14.6 (cpython)
+# timer:   time.perf_counter, host-side, median of N calls
+
+## (1) flat association lookup — seconds per lookup
+ entries   reps   median_s/lookup       min_s       max_s
+      10    400        0.00003171  0.00002983  0.00010471
+      50    400        0.00013446  0.00012942  0.00028638
+     200    400        0.00051831  0.00050183  0.00066112
+     500    400        0.00130277  0.00124950  0.00148617
+
+## (2) nested-scope lookup — a miss walks outward through every frame
+ frames  per_frame   total   reps   median_s/lookup
+      3         20      60    400        0.00016633
+      5         20     100    400        0.00027279
+     10         20     200    400        0.00054296
+
+## (3) rebinding cost — immutable copy operations at env scale
+    op    size   reps     median_s/op
+  plus      10    400      0.00000317
+  plus      50    400      0.00000313
+  plus     200    400      0.00000333
+  plus     500    400      0.00000371
+  with      10    400      0.00000325
+  with      50    400      0.00000354
+  with     200    400      0.00000388
+  with     500    400      0.00000458
+
+## projection — interpreting a lexer.planes-sized program
+# 564 lines; ~3835 tokens (REPORT_STRING_ESCAPES.md, carried not re-measured).
+# Each Var evaluation = one env lookup. Cost = lookups * seconds/lookup.
+env_entries    500_refs   2000_refs   8000_refs
+         10      0.0159      0.0634      0.2537
+         50      0.0672      0.2689      1.0757
+        200      0.2592      1.0366      4.1465
+        500      0.6514      2.6055     10.4222
+# columns are total seconds of pure name-resolution, at that env size.
+

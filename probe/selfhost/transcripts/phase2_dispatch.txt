@@ -1,0 +1,10 @@
+# Phase 2 — when...is shape dispatch (verbatim output of phase2_traversal.planes)
+# describe of num / op / var / mystery:
+a number: 7
+an operator: +
+a variable: x
+unhandled kind
+a number: 7
+an operator: +
+a variable: x
+unhandled kind

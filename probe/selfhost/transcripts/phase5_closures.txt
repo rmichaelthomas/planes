@@ -1,0 +1,11 @@
+# Phase 5 — closures as inert data (verbatim output)
+add5 applied to 10 (via a record field):
+15
+add5 to 100, then add20 to 3 — distinct captured n:
+105
+23
+add5 applied to 10 (via a record field):
+15
+add5 to 100, then add20 to 3 — distinct captured n:
+105
+23

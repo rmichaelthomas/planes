@@ -1,0 +1,71 @@
+# Phase 5 (PROBE_SELFHOST.md) — function representation.
+#
+# Established separately (transcripts/phase5_absence.txt): functions are NOT
+# first-class values. `r = { f: double }` raises wrong-arity because a bare
+# function name is a zero-arg CALL, not a reference; `r.f of 3` is a syntax
+# error because a call names a literal function, never an expression. A
+# function cannot be stored in a record, passed as a value, or called
+# indirectly.
+#
+# The real answer, and how interp.py already works (its Function dataclass is
+# params + body + captured env): represent a user function as INERT DATA — a
+# record carrying a parameter name, a body AST, and a captured environment —
+# and APPLY it by interpretation, never by host-calling. This program is that
+# representation, in Planes, end to end. It proves the three things the phase
+# asks for: a closure can be stored in a record and retrieved; it closes over
+# its defining scope; and it is applied by walking its body.
+
+# env is the association idiom from Phase 1: a list of { name, value }.
+to lookup of env, key:
+  result = nothing
+  for each entry in env where entry.name == key:
+    result = entry.value
+  give result
+
+# eval one expression-AST node under an env. Recursive over sub-expressions,
+# dispatched by shape (Phase 2). This is the interpreter core, in miniature.
+to eval-expr of node, env:
+  result = nothing
+  when node is { kind: "lit", value }:
+    result = value
+  else:
+    when node is { kind: "var", name }:
+      result = lookup of env, name
+    else:
+      when node is { kind: "add", left, right }:
+        result = (eval-expr of left, env) + (eval-expr of right, env)
+      else:
+        result = nothing
+  give result
+
+# Apply a closure (inert data) to an argument: bind the parameter on top of
+# the CAPTURED environment, then interpret the body. No host call anywhere.
+to apply-closure of closure, arg:
+  call-env = closure.env plus { name: closure.param, value: arg }
+  give eval-expr of closure.body, call-env
+
+# make-adder returns a closure that adds a captured n to its argument x.
+# The body is `x + n` as AST; the captured env carries n. Two calls with
+# different n must produce two closures that remember different n's.
+to make-adder of n:
+  xref = { kind: "var", name: "x" }
+  nref = { kind: "var", name: "n" }
+  body = { kind: "add", left: xref, right: nref }
+  captured = [{ name: "n", value: n }]
+  give { param: "x", body: body, env: captured }
+
+add5 = make-adder of 5
+
+# Store the closure in a record, retrieve it, apply it — proving a closure
+# survives being stored and retrieved (question 2), which the direct
+# function-value path forbids.
+holder = { fn: add5 }
+retrieved = holder.fn
+show "add5 applied to 10 (via a record field):"
+show apply-closure of retrieved, 10
+
+# Distinct captures prove it closes over its defining scope (question 2).
+add20 = make-adder of 20
+show "add5 to 100, then add20 to 3 — distinct captured n:"
+show apply-closure of add5, 100
+show apply-closure of add20, 3

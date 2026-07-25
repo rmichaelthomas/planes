@@ -1,0 +1,56 @@
+# Phase 4 (PROBE_SELFHOST.md) — can a fixed point be expressed at all today?
+#
+# shapes.py analyse_prog (lines 337-360) computes effect surfaces by a
+# monotone fixpoint: `while changed: ... if found is not a subset, grow and
+# set changed = True`. It terminates because effect sets only grow and the
+# vocabulary is finite (7 kinds). The iteration count is data-dependent — how
+# many rounds until convergence — which is NOT a collection `for each` can
+# walk. Planes has no `while`, no `repeat until`, and no range (confirmed by
+# search: the 32 keywords are for/each/in/where and nothing else).
+#
+# This program shows the fixpoint IS expressible today, by RECURSION: one
+# round is a `for each` over the collection you do have (the edges / the
+# functions), and the outer "repeat until stable" is a self-call that stops
+# when a round changes nothing. The catch is the ~140 recursion ceiling: the
+# recursion depth equals the number of ROUNDS to converge, so this works only
+# while a program converges in under ~140 rounds. For shapes.py's fixpoint
+# the round count is bounded by the number of functions, so small and medium
+# programs are fine; a very large one is not.
+
+to member of xs, x:
+  found = false
+  for each y in xs:
+    if y == x:
+      found = true
+  give found
+
+# One monotone growth step: for every edge a -> b, if a is reached and b is
+# not, add b. Pure `for each`, no missing construct — this is the round.
+to grow-once of reached, edges:
+  result = reached
+  for each e in edges:
+    if (member of result, e.from):
+      if not (member of result, e.to):
+        result = result plus e.to
+  give result
+
+# The fixpoint: recurse until a round adds nothing (the set size is stable).
+# This self-call is Planes' only "repeat until"; its depth is the round count.
+to close of reached, edges:
+  grown = grow-once of reached, edges
+  if (count of grown) == (count of reached):
+    give reached
+  else:
+    give close of grown, edges
+
+edges = [{ from: "a", to: "b" },
+         { from: "b", to: "c" },
+         { from: "c", to: "d" },
+         { from: "d", to: "e" }]
+
+start = ["a"]
+result = close of start, edges
+show "reachable count:"
+show count of result
+for each n in result:
+  show n

@@ -1,0 +1,5 @@
+# Phase 5 — functions are not first-class values (verbatim)
+## r = { f: double } — a bare function name is a zero-arg call:
+error — wrong-arity: 'double' takes 1 value, given 0
+## r.f of 3 — a call names a literal function, not an expression:
+syntax error — line 4: expected a value, found 'of'

@@ -1,0 +1,63 @@
+# Phase 6 — inventory of grammar/lexer.planes + grammar/parser.planes
+# tokenized with lexer.tokenize; counts are token occurrences
+
+## KEYWORDS (32) — combined usage across both files
+    577  of
+    304  give
+    166  else
+    150  to
+    126  if
+     51  or
+     44  when
+     38  plus
+     28  and
+     25  false
+     19  in
+     18  for
+     18  each
+     17  true
+     10  as
+     10  fail
+      6  nothing
+      4  first
+      3  where
+      3  not
+      2  use
+      2  from
+
+  UNUSED keywords (10): ['let', 'show', 'write', 'why', 'with', 'foreign', 'doing', 'round', 'places', 'rule']
+
+## BUILTINS (8) — combined usage
+     13  count
+      0  lower   <-- UNUSED
+      1  upper
+    116  text
+      0  whole   <-- UNUSED
+      0  ask   <-- UNUSED
+      0  read   <-- UNUSED
+      0  normalize   <-- UNUSED
+
+## EFFECT KINDS (7) — combined usage (foreign doing-clauses / ask,read)
+      0  ask   <-- UNUSED
+      0  read   <-- UNUSED
+      0  write   <-- UNUSED
+      0  show   <-- UNUSED
+      0  clock   <-- UNUSED
+      0  random   <-- UNUSED
+      0  env   <-- UNUSED
+
+## POSITIONAL WORDS (6, outside the 32) — combined usage
+      0  may   <-- UNUSED
+     46  is
+      0  because   <-- UNUSED
+      0  supersedes   <-- UNUSED
+      2  note
+      0  derives-from   <-- UNUSED
+
+## BRACKET CONSTRUCTS (no keyword)
+    270  record/when-pattern literals  { ... }
+     26  list literals                 [ ... ]
+
+## per-file keyword usage (for cross-checking)
+  grammar/lexer.planes: ['of', 'give', 'to', 'else', 'if', 'or', 'plus', 'when', 'false', 'in', 'and', 'true', 'for', 'each', 'first', 'as', 'fail', 'use', 'not', 'from', 'nothing']
+  grammar/parser.planes: ['of', 'give', 'else', 'to', 'if', 'when', 'and', 'or', 'false', 'plus', 'for', 'each', 'in', 'true', 'as', 'fail', 'nothing', 'where', 'not', 'use', 'from']

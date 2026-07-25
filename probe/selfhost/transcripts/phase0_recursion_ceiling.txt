@@ -1,0 +1,10 @@
+# Recursion ceiling — measured directly
+# python: 3.14.6, default sys.recursionlimit = 1000
+# largest self-call depth that succeeds: 140
+# first depth that raises recursion-too-deep: 141
+
+# what this means for a self-hosted interpreter:
+# a Planes `eval` calling itself on sub-expressions spends one
+# Planes-level frame per AST level PLUS the frames for statement
+# and call nesting, so the usable AST/round depth is well under
+# 140, not equal to it.
