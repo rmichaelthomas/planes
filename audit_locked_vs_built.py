@@ -184,16 +184,18 @@ def evaluate(kind, arg):
     if kind == "record_update_with":
         # §72's `with` is a RECORD-UPDATE operator, distinct from the
         # module-rename `with` (use x with a as b) and the foreign `with`.
-        # Evidence would be an interpreter branch that builds a new record
-        # from an old one plus overrides — look for a dedicated node or a
-        # `with` handling path that is NOT the Use-rename. There is no such
-        # node in the AST list, so this looks for one and reports honestly.
-        node = check_ast_node("With") or check_ast_node("RecordUpdate")
-        if node:
-            return node
-        # A record-update `with` handled inside eval would show here:
-        ln = find_line(INTERP, r"record.*update|update.*record|\bwith\b.*override")
-        return f"interp.py:{ln}" if ln else None
+        # Require BOTH an AST node AND an interpreter branch — parsing
+        # without evaluating is not "built" (this two-part evidence matches
+        # what `when` gets; the earlier one-sided version could pass on the
+        # AST node alone, a weaker 0 than it looked).
+        node = check_ast_node("RecordUpdate") or check_ast_node("With")
+        if not node:
+            return None
+        branch = (check_interp_branch("RecordUpdate")
+                  or check_interp_branch("With"))
+        if not branch:
+            return None
+        return f"{node} + {branch}"
 
     if kind == "first_operator":
         # `first n of xs` is handled in eval_binop as node.op == "first",
@@ -206,14 +208,23 @@ def evaluate(kind, arg):
         return f"interp.py:{ln}" if ln else None
 
     if kind == "plus_operator":
-        # §72's `plus` for lists. Evidence: `plus` as a keyword/operator OR
-        # an apply_op branch for "plus". (`+` concatenating lists is NOT
-        # `plus` — the corpus names a distinct operator.)
+        # §72's `plus` for lists. Require BOTH the keyword/node AND an
+        # interpreter branch that evaluates it — two-part evidence matching
+        # `when`. (`+` concatenating lists is NOT `plus` — the corpus names
+        # a distinct operator.) The build added a ListPlus node.
+        node = check_ast_node("ListPlus")
         kw = check_keyword("plus")
-        if kw:
-            return kw
-        ln = find_line(INTERP, r'op == "plus"')
-        return f"interp.py:{ln}" if ln else None
+        surface = node or kw
+        if not surface:
+            return None
+        branch = check_interp_branch("ListPlus")
+        if not branch:
+            # fall back to an apply_op / eval_binop "plus" branch
+            ln = find_line(INTERP, r'op == "plus"')
+            branch = f"interp.py:{ln} (op == \"plus\")" if ln else None
+        if not branch:
+            return None
+        return f"{surface} + {branch}"
 
     return None
 
