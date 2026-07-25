@@ -29,6 +29,8 @@ import json
 import os
 import sys
 
+from planes_text import STRING_ESCAPES
+
 REPO = os.path.dirname(os.path.abspath(__file__))
 RULES_PATH = os.path.join(REPO, "grammar", "rules.json")
 ERRORS_PATH = os.path.join(REPO, "grammar", "errors.json")
@@ -46,6 +48,46 @@ TARGET_EXCEPTIONS = ("PlanesError", "PlanesSyntaxError", "PlanesAmbiguity",
 # from arbitrary code is not what a form inventory can honestly claim to do
 # (the same honesty D.3 states outright for rules.json).
 ASSEMBLED_MESSAGE_SITES = [("rules.py", "render"), ("rules.py", "_render_vacuous")]
+
+
+# ================================================================ escape-table drift guard
+
+def _missing_escapes_in_note(note):
+    """Which of `planes_text.STRING_ESCAPES`'s keys are not mentioned (as
+    `\\<key>`) in `note` -- the pure comparison, isolated from file I/O so
+    it's directly testable against a crafted note, not only the real
+    committed one."""
+    return [k for k in sorted(STRING_ESCAPES) if f"\\{k}" not in note]
+
+
+def check_escape_table_matches_vocabulary_note():
+    """`planes_text.STRING_ESCAPES` and `grammar/vocabulary.json`'s STRING
+    note describe the same four escapes in two places (feat/fail-primitive-
+    and-parser-probe, Ruling 1's drift guard) — and unlike every other
+    piece of grammar data this file governs, there is no single generated
+    artifact one source produces the other from: the STRING regex itself
+    (`"(?:\\.|[^"\\])*"`) is escape-character-agnostic by design, matching
+    any character after a backslash, so it cannot drift from a specific
+    four-character list because it never encodes one. Only two places
+    enumerate the four, at all: this dict, in code, and the note, in
+    prose. Checked here because D2 (one authored copy, everywhere else
+    that ruling applies) is exactly the drift this function exists to
+    catch — a human can edit either without the other.
+
+    Exits the process with a message naming the mismatch on failure,
+    the same refuse-don't-guess contract `main()`'s other checks keep;
+    called unconditionally, before `--check` is even inspected, since
+    generating from disagreeing sources would not be a fix.
+    """
+    with open(VOCAB_JSON_PATH, encoding="utf-8") as f:
+        vocab = json.load(f)
+    note = next(tc["note"] for tc in vocab["token_classes"] if tc["name"] == "STRING")
+    missing = _missing_escapes_in_note(note)
+    if missing:
+        print(f"grammar_gen.py: STRING's vocabulary.json note does not "
+              f"mention escape(s) {missing} that planes_text.STRING_ESCAPES "
+              f"defines -- update the note, or planes_text.py, so they agree")
+        sys.exit(1)
 
 
 def repo_py_files():
@@ -479,6 +521,7 @@ def _read_existing(path):
 
 
 def main():
+    check_escape_table_matches_vocabulary_note()
     check = "--check" in sys.argv
     rules_doc = generate_rules()
     errors_doc = generate_errors()

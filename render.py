@@ -65,8 +65,8 @@ from lexer import (
     Var,
     Why,
     WriteTo,
-    escape_string_literal,
 )
+from planes_text import escape_string_literal
 from rules import check
 
 INDENT = "  "

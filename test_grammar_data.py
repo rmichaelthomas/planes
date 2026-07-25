@@ -236,6 +236,61 @@ def test_no_hardcoded_vocabulary_literal_survives_anywhere():
                           "\n  ".join(offenders)
 
 
+# ================================================================ escape-table drift guard
+
+def test_committed_string_note_mentions_every_planes_text_escape():
+    """The real, committed vocabulary.json against the real, committed
+    planes_text.py -- the actual invariant grammar_gen.py's
+    check_escape_table_matches_vocabulary_note() enforces at every run."""
+    import grammar_gen
+    doc = load_vocab_doc()
+    note = next(tc["note"] for tc in doc["token_classes"] if tc["name"] == "STRING")
+    assert grammar_gen._missing_escapes_in_note(note) == []
+
+
+def test_missing_escapes_in_note_names_what_is_missing():
+    import grammar_gen
+    note_missing_tab = 'recognizes \\" \\\\ \\n only'
+    assert grammar_gen._missing_escapes_in_note(note_missing_tab) == ["t"]
+
+
+def test_missing_escapes_in_note_finds_nothing_when_all_four_present():
+    import grammar_gen
+    note_complete = 'recognizes \\" \\\\ \\n \\t, no others'
+    assert grammar_gen._missing_escapes_in_note(note_complete) == []
+
+
+def test_check_escape_table_exits_nonzero_when_the_note_is_missing_one():
+    """The full check() function, against a deliberately broken copy of
+    the real vocabulary.json -- not the real file, so this cannot leave
+    the working tree dirty or race a concurrent test run."""
+    import json
+    import os
+    import tempfile
+
+    import grammar_gen
+
+    doc = load_vocab_doc()
+    for tc in doc["token_classes"]:
+        if tc["name"] == "STRING":
+            assert "\\t" in tc["note"]
+            tc["note"] = tc["note"].replace("\\t", "")
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        json.dump(doc, f)
+        broken_path = f.name
+
+    original_path = grammar_gen.VOCAB_JSON_PATH
+    grammar_gen.VOCAB_JSON_PATH = broken_path
+    try:
+        grammar_gen.check_escape_table_matches_vocabulary_note()
+        assert False, "should have called sys.exit"
+    except SystemExit as e:
+        assert e.code != 0
+    finally:
+        grammar_gen.VOCAB_JSON_PATH = original_path
+        os.unlink(broken_path)
+
+
 if __name__ == "__main__":
     fails = []
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]

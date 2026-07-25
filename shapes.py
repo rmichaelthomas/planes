@@ -19,6 +19,7 @@ from typing import Any, Optional
 
 from lexer import *
 from parser import BUILTIN_NAMES, parse
+from planes_text import escape_string_literal
 
 # ================================================================ effect kinds
 

@@ -10,6 +10,7 @@ from host import HostError, PythonHost, TestHost
 from lexer import *
 from parser import BUILTIN_NAMES, parse
 from planes_num import Inexact, Number
+from planes_text import escape_string_literal
 
 
 class _BuiltinName:
