@@ -396,13 +396,18 @@ _OP_SINGLE = list("+-*/=<>().,;:[]{}@")
 
 
 def _planes_string(s):
-    """A Planes STRING literal for s. STRING has no escape sequences
-    (grammar/vocabulary.json's own note on the STRING token class), so
-    this only works for text with no double quote in it -- true of every
-    word and operator spelling this emitter ever projects."""
+    """A Planes STRING literal for s. STRING can express any text since
+    fix/string-escapes-and-bootstrap, but this emitter still refuses a
+    quote rather than escaping it: every word and operator spelling it
+    ever projects is vocabulary.json's own keyword/builtin/operator
+    text, never arbitrary user data, so a quote appearing here would be
+    a vocabulary entry this generator does not expect, not ordinary
+    text needing \\" -- refuse, don't guess, same as elsewhere in this
+    file."""
     if '"' in s:
         raise ValueError(f"{s!r} cannot be written as a Planes string literal "
-                         f"(STRING has no escape sequences)")
+                         f"(contains a quote character, unexpected in vocabulary "
+                         f"data)")
     return f'"{s}"'
 
 
