@@ -14,10 +14,6 @@ from planes_num import Number
 BUILTIN_NAMES = {b["name"] for b in _VOCAB["builtins"]}
 
 
-class PlanesSyntaxError(Exception):
-    pass
-
-
 class PlanesAmbiguity(PlanesSyntaxError):
     """Two or more readings of the same source, and nothing says which.
 

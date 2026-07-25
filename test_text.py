@@ -1,4 +1,7 @@
-"""Tests for the Tier 2 text laws (planes v9.0 A.1-A.3).
+"""Tests for the Tier 2 text laws (planes v9.0 A.1-A.3), plus A.5's string
+escapes (fix/string-escapes-and-bootstrap, v9.0 §105: text is a sequence of
+Unicode code points, and the literal syntax must be able to denote any such
+sequence).
 
 `+` requires type homogeneity, `first n of` a string stays a string, and
 `normalize of` is an explicit pure builtin — equality never normalizes.
@@ -6,6 +9,7 @@
 import sys
 
 from interp import Interpreter, PlanesError, why_tree
+from lexer import PlanesSyntaxError
 from shapes import analyse
 
 
@@ -203,6 +207,78 @@ def test_not_a_collection_fix_text_names_strings_as_acceptable():
         assert False, "should raise"
     except PlanesError as e:
         assert "string" in e.fix
+
+
+# ================================================================ A.5 -- string escapes
+
+def test_escaped_quote_resolves():
+    v = val(r'x = "a\"b"', "x").value
+    assert v == 'a"b'
+    assert len(v) == 3
+
+
+def test_escaped_backslash_resolves():
+    v = val(r'x = "a\\b"', "x").value
+    assert v == "a\\b"
+    assert len(v) == 3
+
+
+def test_escaped_newline_resolves():
+    v = val(r'x = "a\nb"', "x").value
+    assert v == "a\nb"
+    assert len(v) == 3
+
+
+def test_escaped_tab_resolves():
+    v = val(r'x = "a\tb"', "x").value
+    assert v == "a\tb"
+    assert len(v) == 3
+
+
+def test_count_of_counts_resolved_code_points_not_source_characters():
+    # Source spells 4 characters between the quotes (a, \, n, b); the
+    # resolved value is 3 code points (a, newline, b) -- count of must
+    # see the resolved text, not the raw source.
+    assert val(r'x = count of "a\nb"', "x").value == 3
+
+
+def test_unknown_escape_raises_naming_the_four_that_exist():
+    try:
+        run(r'x = "a\zb"')
+        assert False, "should raise"
+    except PlanesSyntaxError as e:
+        msg = str(e)
+        for legal in ('\\"', "\\\\", "\\n", "\\t"):
+            assert legal in msg, f"{legal!r} not named in: {msg}"
+
+
+def test_trailing_backslash_before_closing_quote_raises():
+    """`"a\"` -- the backslash escapes the quote (\") instead of ending
+    the string, so the string is unterminated; this must be a clear
+    syntax error, not a silently-dropped or silently-truncated token
+    (the failure mode finditer's default skip-ahead would otherwise
+    produce)."""
+    try:
+        run('x = "a\\"')
+        assert False, "should raise"
+    except PlanesSyntaxError:
+        pass
+
+
+def test_escaped_quote_string_equals_the_same_text_built_another_way():
+    # Two different source spellings of the same 3-code-point value: the
+    # quote escaped inline, versus the quote as its own escaped literal
+    # concatenated in -- both must resolve to identical text.
+    inline = val(r'x = "a\"b"', "x").value
+    concatenated = val(r'x = "a" + "\"" + "b"', "x").value
+    assert inline == concatenated == 'a"b'
+
+
+def test_double_backslash_yields_exactly_one_backslash():
+    v = val(r'x = "\\"', "x").value
+    assert v == "\\"
+    assert len(v) == 1
+    assert list(v) == ["\\"]
 
 
 if __name__ == "__main__":
