@@ -117,6 +117,128 @@ def test_rendered_escaped_string_reparses_to_the_same_value():
     assert prog2[0].expr.value == 'a"b'
 
 
+# ================================================== exhaustive per-node-kind round-trip (A.5)
+#
+# render.py must have a real case for every AST node kind, checked by a
+# round-trip per kind (parse -> render -> reparse -> ast_equal), and no
+# safe fallback (an unhandled kind raises, naming it). Builtin is dead (the
+# parser never builds it) and Because appears only as an annotation field,
+# never a standalone node; both are exercised at their real sites below.
+
+NODE_KIND_SNIPPETS = {
+    "Num": "x = 42\n",
+    "Str": 'x = "hi"\n',
+    "Bool": "x = true\n",
+    "Nothing": "x = nothing\n",
+    "Var": "y = x\n",
+    "ListLit": "x = [1, 2, 3]\n",
+    "RecordLit": "x = { a: 1, b: 2 }\n",
+    "RecordUpdate": "y = p with a: 1, b: 2\n",
+    "ListPlus": "y = xs plus 1\n",
+    "BinOp": "x = 1 + 2\n",
+    "Not": "x = not true\n",
+    "IsNothing": "x = y is nothing\n",
+    "Field": "x = r.a.b\n",
+    "Assign": "x = 1\n",
+    "Because": 'x = 1 because "reason"\n',
+    "Why": "why x\n",
+    "Use": "use file\n",
+    "FuncDef": "to f of n:\n  give n\n",
+    "Call": "y = f of 1\n",
+    "Give": "to f:\n  give 1\n",
+    "Show": 'show "hi"\n',
+    "ForEach": "y = for each p in xs where p > 0: p\n",
+    "If": "if x:\n  show 1\nelse:\n  show 2\n",
+    "When": "when r is { a: 1, b }:\n  show b\nelse:\n  show 0\n",
+    "OrFail": "y = f of 1 or fail as e\n",
+    "Fail": 'fail "boom" as oops\n',
+    "Foreign": 'foreign sort of xs from "builtins.sorted" doing ask xs\n',
+    "WriteTo": 'write [1] to "f.json"\n',
+    "Round": "y = round x to 2 places\n",
+    "Rule": 'rule [r] anything may not ask to "u" because "reason"\n',
+    "Note": 'note:\n  from "src"\n  derives-from [rule-x]\n',
+}
+
+
+def _kinds_in(prog):
+    """Every AST node class name in a parsed program, at any nesting depth,
+    recursing through dataclass fields and list/tuple structure alike."""
+    seen = set()
+
+    def walk(v):
+        if hasattr(v, "__dataclass_fields__"):
+            seen.add(type(v).__name__)
+            for f in v.__dataclass_fields__:
+                walk(getattr(v, f))
+        elif isinstance(v, (list, tuple)):
+            for x in v:
+                walk(x)
+
+    for s in prog:
+        walk(s)
+    return seen
+
+
+def test_every_ast_node_kind_has_a_round_trip():
+    import dataclasses
+    import inspect
+
+    import lexer
+    all_kinds = {
+        n for n, o in vars(lexer).items()
+        if inspect.isclass(o) and dataclasses.is_dataclass(o)
+        and o.__module__ == "lexer" and n != "Token"}
+    covered = set()
+    for kind, src in NODE_KIND_SNIPPETS.items():
+        prog = parse(src)
+        kinds = _kinds_in(prog)
+        assert kind in kinds, f"{kind}: snippet did not actually produce it (got {sorted(kinds)})"
+        out = render(prog)
+        prog2 = parse(out)
+        assert len(prog) == len(prog2) and all(
+            ast_equal(a, b) for a, b in zip(prog, prog2)), (
+            f"{kind}: render round-trip failed\n--- rendered ---\n{out}")
+        covered |= kinds
+    covered.add("Builtin")   # dead node; test_builtin_render_raises covers it
+    missing = all_kinds - covered
+    assert not missing, f"AST node kinds with no round-trip coverage: {sorted(missing)}"
+
+
+def test_record_update_round_trips_including_chains():
+    """RecordUpdate (`with`) was absent from render.py entirely before this
+    build (A.5). A chain nests left to right and must round-trip."""
+    for src in ("y = p with a: 1\n",
+                "y = p with a: 1, b: 2\n",
+                "y = p with a: 1 with b: 2\n",
+                "y = p with a: 1 + 2\n"):
+        assert _round_trips(src), src
+
+
+def test_builtin_render_raises_named():
+    """Builtin is unreachable by the parser; render_expr raises a named
+    error rather than a silent fall-through (A.5, no safe fallback)."""
+    import render as r
+    from lexer import Builtin
+    try:
+        r.render_expr(Builtin("count", None))
+        assert False, "expected a raise"
+    except ValueError as e:
+        assert "Builtin" in str(e), str(e)
+
+
+def test_render_stmt_raises_on_a_node_it_cannot_render():
+    """A node that is neither a known statement nor a renderable expression
+    raises from render_stmt, naming the kind -- not routed silently through
+    render_expr (A.5, failure mode 6)."""
+    import render as r
+    from lexer import Because
+    try:
+        r.render_stmt(Because("x", 1), "", {})
+        assert False, "expected a raise"
+    except ValueError as e:
+        assert "Because" in str(e), str(e)
+
+
 # ================================================================ the generated marker
 
 RULE_SRC = (

@@ -9,7 +9,7 @@ import sys
 
 from interp import Interpreter, PlanesError
 from lexer import KEYWORDS
-from parser import BUILTIN_NAMES
+from parser import BUILTIN_NAMES, parse
 
 
 def run(src, **kw):
@@ -69,9 +69,73 @@ def test_every_builtin_name_works_inside_a_multiword_name():
     assert not failures, "\n  ".join(failures)
 
 
+def test_effective_reserved_surface_is_42():
+    """The effective reserved surface is 42: the 32 structural keywords plus
+    the 10 builtins, which spend from the same name budget (S3a A.4).
+
+    A builtin name is not a keyword — `count`, `text`, `read` can each still
+    NAME a function (`to count of x:` shadows the builtin, the names
+    mandate). But a builtin name cannot be a bare VARIABLE: `count of x` is a
+    grammar shape, so `count` cannot also stand for a plain value the way an
+    ordinary name can (grammar/parser.planes hit exactly this when it used
+    `rest` as a local — S2). So a builtin name is reserved in the budget
+    sense, even though it is not structural, and the prior framing that the
+    ceiling guarded keywords but not builtins was a distinction with no
+    difference to anyone writing Planes — it let `join` and `rest` look free
+    when they spent from the same 42-name budget."""
+    assert len(KEYWORDS) == 32, f"keyword count is {len(KEYWORDS)}, expected 32"
+    assert len(BUILTIN_NAMES) == 10, f"builtin count is {len(BUILTIN_NAMES)}, expected 10"
+    assert len(KEYWORDS | BUILTIN_NAMES) == 42, "keywords and builtins must be disjoint at 42"
+    # the two sets are disjoint -- no word is both a keyword and a builtin
+    assert not (KEYWORDS & BUILTIN_NAMES)
+
+
+BINDING_POSITIONS = [
+    ("assigned to", "{b} = 5\n"),
+    ("bound by `let`", "let {b} = 5\n"),
+    ("a parameter", "to f of {b}:\n  give 1\n"),
+    ("a `for each` loop variable", "for each {b} in [1]:\n  show {b}\n"),
+    ("an `or fail` tag", "x = risky of 1 or fail as {b}\n"),
+    ("a `when` field binding", "when r is {{ {b} }}:\n  show 1\n"),
+]
+
+
+def test_a_builtin_name_cannot_be_a_variable_binding():
+    """A.4: assignment, `to` parameter, `for each` binding, and every other
+    binding position rejects a builtin name, naming the collision -- instead
+    of the confusing downstream failure S2 hit."""
+    from parser import PlanesSyntaxError
+    failures = []
+    for what, template in BINDING_POSITIONS:
+        for b in sorted(BUILTIN_NAMES):
+            src = template.format(b=b)
+            try:
+                parse(src)
+                failures.append(f"{what}: '{b}' was accepted as a binding")
+            except PlanesSyntaxError as e:
+                if b not in str(e) or "builtin" not in str(e):
+                    failures.append(f"{what}: '{b}' error does not name the collision: {e}")
+    assert not failures, "\n  ".join([""] + failures)
+
+
+def test_a_function_may_still_be_named_after_a_builtin():
+    """The binding rejection does not touch a function definition -- the
+    names mandate stands: `to count of x:` shadows the builtin, and its call
+    site uses the user's definition."""
+    from parser import PlanesSyntaxError
+    for b in sorted(BUILTIN_NAMES):
+        for src in (f"to {b} of x:\n  give 1\n", f"to {b}:\n  give 1\n",
+                    f"to daily {b}:\n  give 1\n"):
+            try:
+                parse(src)
+            except PlanesSyntaxError as e:
+                assert False, f"a function named after builtin '{b}' was rejected: {e}"
+
+
 def test_reserved_list_is_only_structural_words():
-    """A word stays reserved only if the parser must see it to know the
-    shape of a statement.
+    """A word stays a KEYWORD only if the parser must see it to know the
+    shape of a statement (builtins are reserved too, but as names, not as
+    structure -- see test_effective_reserved_surface_is_42).
 
     The ceiling is 32, and every rise is argued for in a report:
 

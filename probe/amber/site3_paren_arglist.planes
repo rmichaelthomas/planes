@@ -1,0 +1,4 @@
+to scale of x:
+  give x
+
+z = scale(a) + b

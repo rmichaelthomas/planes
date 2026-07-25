@@ -1,0 +1,7 @@
+to greet of x:
+  give x
+
+to home:
+  give 1
+
+y = greet home

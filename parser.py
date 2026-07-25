@@ -112,6 +112,24 @@ class Parser:
                 f"found '{g.value or 'end of line'}'")
         return t
 
+    def check_binding_name(self, name, line, what):
+        """A builtin name is reserved: it cannot be bound as an ordinary
+        variable. `<name> of x` (and the other builtin forms) is a grammar
+        shape, so a builtin name cannot also stand for a plain value — the
+        collision grammar/parser.planes hit when it used `rest` as a local
+        (S2). Builtins spend from the same 42-name budget as keywords
+        (32 + 10); the error names the collision here rather than letting it
+        become a confusing downstream failure. A function definition is the
+        one exception — `to count of x:` shadows the builtin deliberately
+        (the names mandate) — so this guards binding positions only, never a
+        funcdef or foreign NAME."""
+        if name in BUILTIN_NAMES:
+            raise PlanesSyntaxError(
+                f"line {line}: '{name}' is a builtin, so it cannot be {what}\n"
+                f"  builtin names are reserved like keywords; pick another "
+                f"name (a function definition may still shadow it with "
+                f"`to {name} ...:`)")
+
     def skip_blank(self):
         # Common path first, unchanged and hot: skip blank separators. Then,
         # only when a multi-line bracket literal has left an END owed (rare —
@@ -255,14 +273,16 @@ class Parser:
             return self.parse_foreach(as_expr=False)
 
         if self.accept("LET"):
-            name = self.expect("NAME").value
+            tok = self.expect("NAME")
+            self.check_binding_name(tok.value, tok.line, "bound by `let`")
             self.expect("OP", "=")
-            return self.parse_because(Assign(name, self.parse_expr(), is_let=True))
+            return self.parse_because(Assign(tok.value, self.parse_expr(), is_let=True))
 
         if self.at("NAME") and self.peek(1).kind == "OP" and self.peek(1).value == "=":
-            name = self.next().value
+            tok = self.next()
+            self.check_binding_name(tok.value, tok.line, "assigned to")
             self.next()
-            return self.parse_because(Assign(name, self.parse_expr()))
+            return self.parse_because(Assign(tok.value, self.parse_expr()))
 
         fail_tok = self.accept("FAIL")
         if fail_tok:
@@ -287,9 +307,9 @@ class Parser:
         name = " ".join(parts)
         params = []
         if self.accept("OF"):
-            params.append(self.expect("NAME").value)
+            params.append(self.read_param())
             while self.accept("OP", ","):
-                params.append(self.expect("NAME").value)
+                params.append(self.read_param())
         self.expect("FROM")
         target = self.expect("STRING").value[1:-1]
         effects, declared = (), False
@@ -445,16 +465,34 @@ class Parser:
         name = " ".join(parts)
         params = []
         if self.accept("OF"):
-            params.append(self.expect("NAME").value)
+            params.append(self.read_param())
             while self.accept("OP", ","):
-                params.append(self.expect("NAME").value)
+                params.append(self.read_param())
         self.expect("OP", ":")
         return FuncDef(name, params, self.parse_block())
+
+    def read_param(self):
+        """One parameter name — a binding position, so a builtin name is
+        rejected (a function may be named after a builtin, but its
+        parameters name ordinary values and cannot be)."""
+        tok = self.expect("NAME")
+        self.check_binding_name(tok.value, tok.line, "a parameter")
+        return tok.value
+
+    def read_tag(self):
+        """An `or fail as tag` tag — a binding position when a handler
+        follows, since `tag` then binds the error record (a `fail … as tag`
+        statement's tag is a plain label, not a binding, and is not checked)."""
+        tok = self.expect("NAME")
+        self.check_binding_name(tok.value, tok.line, "an `or fail` tag")
+        return tok.value
 
     def parse_foreach(self, as_expr):
         self.expect("FOR")
         self.expect("EACH")
-        var = self.expect("NAME").value
+        var_tok = self.expect("NAME")
+        self.check_binding_name(var_tok.value, var_tok.line, "a `for each` loop variable")
+        var = var_tok.value
         self.expect("IN")
         source = self.parse_or()
         # header may wrap: `for each s in stories` \n `  where ...: s`
@@ -497,7 +535,7 @@ class Parser:
             self.next()
             self.next()
             self.expect("AS")
-            tag = self.expect("NAME").value
+            tag = self.read_tag()
             handler = None
             if self.at("OP", ":"):
                 self.next()
@@ -510,7 +548,7 @@ class Parser:
             self.next()
             self.next()
             self.expect("AS")
-            tag = self.expect("NAME").value
+            tag = self.read_tag()
             handler = None
             if self.at("OP", ":"):
                 self.next()
@@ -1035,6 +1073,11 @@ class Parser:
         if self.at("OP", ":"):
             self.next()
             return (name, ("match", self.parse_expr()))
+        # A bare `{ name }` binds the field's value into the branch as a
+        # local variable, so a builtin name is rejected here just as in any
+        # other binding position (a match constraint `{ name: expr }` above
+        # only reads the field and is unaffected).
+        self.check_binding_name(name, t.line, "a `when` field binding")
         return (name, ("bind", name))
 
     def parse_primary(self):

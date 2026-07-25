@@ -59,6 +59,7 @@ from lexer import (
     Num,
     OrFail,
     RecordLit,
+    RecordUpdate,
     Round,
     Rule,
     Show,
@@ -77,6 +78,15 @@ INDENT = "  "
 # Sub-expressions that need parens wherever they are not the outermost
 # expression of their statement (see module docstring).
 _COMPOUND = (BinOp, Not, IsNothing)
+
+# Expression node kinds that may stand alone as a statement (parse_statement's
+# final `return self.parse_expr()`). Listed explicitly so render_stmt raises
+# on a node that is neither a known statement nor a renderable expression,
+# rather than routing an unknown node blindly through render_expr (A.5: no
+# safe fallback -- every dispatch is a real case).
+_EXPR_STMT = (Num, Str, Bool, Nothing, Var, ListLit, RecordLit, RecordUpdate,
+              ListPlus, BinOp, Not, IsNothing, Field, Call, Round, ForEach,
+              OrFail)
 
 
 # ================================================================ expressions
@@ -107,6 +117,13 @@ def render_expr(node):
     if isinstance(node, RecordLit):
         fields = ", ".join(f"{k}: {render_expr(v)}" for k, v in node.fields)
         return "{ " + fields + " }" if fields else "{}"
+    if isinstance(node, RecordUpdate):
+        # `base with name: expr, ...` (v5.0 §72). The base is an operand
+        # (parenthesised if compound); each field value re-renders as a full
+        # expression. Chains render left to right, since a RecordUpdate base
+        # is itself rendered here -- `p with a: 1 with b: 2` round-trips.
+        fields = ", ".join(f"{k}: {render_expr(v)}" for k, v in node.fields)
+        return f"{render_operand(node.base)} with {fields}"
     if isinstance(node, BinOp):
         if node.op == "first":
             return f"first {render_operand(node.left)} of {render_operand(node.right)}"
@@ -292,8 +309,14 @@ def render_stmt(node, indent, markers):
         return render_if(node, indent, markers)
     if isinstance(node, ForEach):
         return render_foreach_stmt(node, indent, markers)
-    # A bare expression statement (parse_statement's fallback).
-    return indent + render_expr(node)
+    # A bare expression statement (parse_statement's fallthrough to
+    # parse_expr). Every expression node kind is dispatched explicitly by
+    # render_expr; a node that is neither a statement above nor a renderable
+    # expression raises here, naming the kind, rather than being rendered by
+    # a happens-to-be-safe fallback (A.5).
+    if isinstance(node, _EXPR_STMT):
+        return indent + render_expr(node)
+    raise ValueError(f"render_stmt: unhandled node type {type(node).__name__}")
 
 
 # ================================================================ the generated marker
