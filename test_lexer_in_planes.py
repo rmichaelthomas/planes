@@ -5,26 +5,26 @@ agreement with lexer.py's own tokenize() -- lexer.py's output is the
 specification (fix/text-iteration-and-the-lexer's Phase 6).
 
 PROBE_LEXER.md's original build found string-walking MISSING and stopped.
-This branch closed that gap (for each over a string, PROBE_LEXER.md
-Phase 1), but a *second*, independent gap surfaced while writing the
-lexer itself: there is no way to write a Planes string literal containing
-a double quote (grammar/vocabulary.json's STRING pattern has no escape
-sequences), and no builtin converts a code point to or from its numeric
-value -- so lexer.planes has no way to test "is this character a quote"
-and cannot tokenize STRING. Documented at length in grammar/lexer.planes
-itself, at the point the gap is hit.
+That branch closed it (for each over a string, PROBE_LEXER.md Phase 1),
+but a *second*, independent gap surfaced while writing the lexer itself:
+there was no way to write a Planes string literal containing a double
+quote (grammar/vocabulary.json's STRING pattern had no escape sequences),
+so lexer.planes had no way to test "is this character a quote" and could
+not tokenize STRING -- every corpus file that reached for a string
+diverged from lexer.py's stream at exactly that token, and nowhere else.
 
-That gap has one precise, checkable consequence: the two token streams
-must agree on every token up to the first STRING literal a file
-contains, and disagree from there (a quoted string's contents come out
-as whatever they tokenize into on their own terms -- names, numbers,
-operators -- instead of one STRING token). That is exactly what these
-tests assert, file by file, rather than asserting blanket equality and
-leaving 27 of 29 corpus files failing for a reason already understood
-and written down.
+fix/string-escapes-and-bootstrap closes that gap: STRING literals admit
+four escapes (\\" \\\\ \\n \\t), one of which -- \\" -- is precisely the
+value lexer.planes needed and never had. grammar/lexer.planes's STRING
+section (added there, not routed around) now tokenizes every corpus
+file's *entire* stream identically to lexer.py, not just up to the first
+STRING literal. These tests assert exactly that: full equality, file by
+file, including lexer.planes's own source and grammar/vocabulary.planes
+(the bootstrap assertion -- a lexer for Planes, written in Planes,
+correctly tokenizing itself).
 
-lexer-in-planes-verification.md carries the full per-file table this
-file's assertions are drawn from.
+lexer-in-planes-verification.md carries the full per-file table these
+assertions are drawn from.
 """
 import glob
 import sys
@@ -39,9 +39,10 @@ DEMO_CORPUS = sorted(f for f in glob.glob("demo/**/*.planes", recursive=True)
 CORPUS = ROOT_CORPUS + DEMO_CORPUS
 
 # The two files with no string literal at all -- established once, here,
-# by scanning the real corpus, not asserted as a hardcoded belief.
+# by scanning the real corpus, not asserted as a hardcoded belief. Kept
+# as a standalone sanity check on corpus composition even though full
+# agreement no longer needs to special-case them.
 NO_STRING_FILES = [f for f in CORPUS if '"' not in open(f).read()]
-STRING_FILES = [f for f in CORPUS if f not in NO_STRING_FILES]
 
 _interp = Interpreter()
 _interp.run_file("grammar/lexer.planes")
@@ -84,59 +85,43 @@ def test_exactly_two_corpus_files_have_no_string_literal():
         NO_STRING_FILES
 
 
-# ================================================================ agreement
+# ================================================================ agreement (full, not partial)
 
-def test_files_with_no_string_literal_match_lexer_py_exactly():
-    for fpath in NO_STRING_FILES:
-        src = open(fpath).read()
-        want = python_tokenize(src)
-        got = planes_tokenize(src)
-        assert got == want, f"{fpath}: expected an exact match, first " \
-                            f"divergence at {first_divergence(got, want)}"
-
-
-def test_string_bearing_files_agree_up_to_their_first_string_literal():
-    for fpath in STRING_FILES:
+def test_every_corpus_file_matches_lexer_py_exactly():
+    """29 PASS, 0 PARTIAL: every corpus file's token stream is now
+    byte-identical between lexer.planes and lexer.py, string-bearing or
+    not -- the STRING gap that used to cut every string-bearing file's
+    agreement short is closed."""
+    for fpath in CORPUS:
         src = open(fpath).read()
         want = python_tokenize(src)
         got = planes_tokenize(src)
         idx = first_divergence(got, want)
-        assert idx < len(want), \
-            f"{fpath}: planes stream never diverges from a shorter-or-equal " \
-            f"python stream -- expected a STRING literal to cause one"
-        assert want[idx][0] == "STRING", \
-            f"{fpath}: unexpected divergence at token {idx} -- " \
-            f"got {got[idx] if idx < len(got) else None!r}, want {want[idx]!r}"
-        assert got[:idx] == want[:idx], \
-            f"{fpath}: streams differ before the first STRING literal " \
-            f"(at token {idx}), which should be impossible if " \
-            f"first_divergence found idx correctly"
+        assert got == want, f"{fpath}: expected a byte-identical token " \
+                            f"stream, first divergence at {idx}"
 
 
-# ================================================================ self-tokenization (Phase 7)
+# ================================================================ self-tokenization (bootstrap)
 
-def test_lexer_planes_tokenizes_itself_up_to_its_own_first_string_literal():
+def test_lexer_planes_tokenizes_itself_exactly():
+    """The first closed bootstrap assertion in this domain's history:
+    grammar/lexer.planes -- a lexer for Planes, written in Planes --
+    tokenizes its own source to the exact same stream lexer.py produces,
+    with no divergence anywhere, including the STRING literals its own
+    doc comments and pending-state records use throughout."""
     src = open("grammar/lexer.planes").read()
     want = python_tokenize(src)
     got = planes_tokenize(src)
-    idx = first_divergence(got, want)
-    assert idx < len(want), "expected lexer.planes's own STRING literals to diverge"
-    assert want[idx][0] == "STRING", \
-        f"unexpected self-tokenization divergence at token {idx}: " \
-        f"got {got[idx] if idx < len(got) else None!r}, want {want[idx]!r}"
-    assert got[:idx] == want[:idx]
+    assert got == want, f"expected byte-identical self-tokenization, " \
+                        f"first divergence at {first_divergence(got, want)}"
 
 
-def test_lexer_planes_tokenizes_vocabulary_planes_up_to_first_string_literal():
+def test_lexer_planes_tokenizes_vocabulary_planes_exactly():
     src = open("grammar/vocabulary.planes").read()
     want = python_tokenize(src)
     got = planes_tokenize(src)
-    idx = first_divergence(got, want)
-    assert idx < len(want), "expected vocabulary.planes's own STRING literal(s) to diverge"
-    assert want[idx][0] == "STRING", \
-        f"unexpected self-tokenization divergence at token {idx}: " \
-        f"got {got[idx] if idx < len(got) else None!r}, want {want[idx]!r}"
-    assert got[:idx] == want[:idx]
+    assert got == want, f"expected byte-identical self-tokenization, " \
+                        f"first divergence at {first_divergence(got, want)}"
 
 
 if __name__ == "__main__":
