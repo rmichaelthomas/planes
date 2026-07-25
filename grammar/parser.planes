@@ -1,0 +1,80 @@
+note: from "parser.py, written in Planes -- Route B stage two. Turns grammar/lexer.planes's token stream into an AST that agrees with parser.py's, checked by test_parser_in_planes.py's canonical-AST-text comparison harness. Amber (the four disambiguation sites) is explicitly out of scope -- Build 5."
+
+use lexer
+
+# ================================================================ string escaping, for the canonical form
+#
+# planes_text.escape_string_literal's Planes twin: a string value,
+# re-escaped as the content of a Planes STRING literal (quote, backslash,
+# newline, tab) so a leaf value survives round-trip through the
+# canonical text form the same way it would through re-parsed source.
+# Character-by-character via for each -- a host-language loop, so this
+# costs zero Planes-level recursion regardless of string length, the
+# same shape lexer.planes's own step functions already use.
+
+to escape-char of c:
+  if c == "\"":
+    give "\\\""
+  else:
+    if c == "\\":
+      give "\\\\"
+    else:
+      if c == "\n":
+        give "\\n"
+      else:
+        if c == "\t":
+          give "\\t"
+        else:
+          give c
+
+to escape-string-literal of s:
+  result = ""
+  for each c in s:
+    result = result + escape-char of c
+  give result
+
+to render-string of s:
+  give "\"" + (escape-string-literal of s) + "\""
+
+to render-bool of b:
+  if b:
+    give "true"
+  else:
+    give "false"
+
+# ================================================================ the canonical form
+#
+# One node per line, indentation for depth, node kind then its fields in
+# parser.py's own dataclass declaration order -- test_parser_in_planes.py
+# renders the Python side the same way, generically, by introspecting
+# lexer.py's dataclasses; this side is hand-written per node kind because
+# Planes has no way to enumerate a record's fields (no builtin for it,
+# and none is being added -- section 7 invariant 1). `indent` is threaded
+# as a literal string, grown by "  " per recursive level, rather than a
+# depth number -- one fewer arithmetic op per level, and it is what the
+# recursive call sites read directly.
+
+to canonical-of-node of node, indent:
+  when node is { kind: "Num" }:
+    give indent + "Num\n" + indent + "  value: " + text of node.value
+  else:
+    when node is { kind: "Str" }:
+      give indent + "Str\n" + indent + "  value: " + render-string of node.value
+    else:
+      when node is { kind: "Bool" }:
+        give indent + "Bool\n" + indent + "  value: " + render-bool of node.value
+      else:
+        when node is { kind: "Nothing" }:
+          give indent + "Nothing"
+        else:
+          when node is { kind: "Var" }:
+            give indent + "Var\n" + indent + "  name: " + render-string of node.name
+          else:
+            when node is { kind: "BinOp" }:
+              left-part = canonical-of-node of node.left, (indent + "    ")
+              right-part = canonical-of-node of node.right, (indent + "    ")
+              header = indent + "BinOp\n" + indent + "  op: " + render-string of node.op
+              with-left = header + "\n" + indent + "  left:\n" + left-part
+              give with-left + "\n" + indent + "  right:\n" + right-part
+            else:
+              fail "no canonical form for node kind '" + node.kind + "'" as unknown-node-kind
