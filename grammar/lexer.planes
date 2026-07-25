@@ -1,0 +1,475 @@
+note: from "lexer.py, written in Planes -- Route B stage one. Reads grammar/vocabulary.planes for its keyword/builtin/operator tables via `use vocabulary`, which is why this file lives here rather than at the repo root: `use` resolves strictly same-directory (modules.py:resolve), and vocabulary.planes has to stay at its Phase-5 path."
+
+use vocabulary
+
+# ================================================================ character classification
+#
+# No regex. Every class below is code-point comparison, per PROBE_LEXER.md's
+# confirmed capabilities: `==`, `>=`, `<=` order code points; `for each`
+# walks a string one code point at a time (fix/text-iteration-and-the-lexer).
+
+to is-digit of c:
+  give c >= "0" and c <= "9"
+
+to is-hex-digit of c:
+  is-lower-hex = c >= "a" and c <= "f"
+  is-upper-hex = c >= "A" and c <= "F"
+  give is-digit of c or is-lower-hex or is-upper-hex
+
+to is-alpha of c:
+  is-lower = c >= "a" and c <= "z"
+  is-upper = c >= "A" and c <= "Z"
+  give is-lower or is-upper
+
+to is-name-start of c:
+  give is-alpha of c or c == "_"
+
+to is-name-continue of c:
+  give is-name-start of c or is-digit of c
+
+# Planes STRING literals have no escape sequences (grammar/vocabulary.json's
+# own note on the STRING token class) -- "\t" in a Planes source file is
+# the two characters backslash and t, not a tab. A literal tab, carriage
+# return, vertical tab, or form feed can only be written as the raw byte
+# itself inside the quotes, which is unrepresentable cleanly in a hand-
+# authored, readable source file. This is a bounded, verified gap, not a
+# silent one: grep -rlP '\t|\x0b|\x0c|\r' across every root and demo/
+# .planes file in the repo (the corpus this build's agreement test
+# covers) finds none -- every file's indentation and inline spacing uses
+# the plain space character only. is-strippable below covers exactly
+# that verified case. A file that introduced a tab would need this
+# extended; none does today.
+to is-strippable of c:
+  give c == " "
+
+# A newline cannot be written as a Planes string literal either -- the
+# same unwritable-control-character problem STRING runs into below --
+# but unlike a quote, a newline never needs to be told apart from
+# arbitrary string content: `<`/`>` order code points (capability 3),
+# and every character this lexer cares about outside of STRING content
+# (digits, name characters, the operator set, space, # and @) sits at or
+# above the space character (code point 32); a newline (10) is the only
+# one below it that a well-formed source file ever contains (no other
+# C0 control character appears anywhere in the corpus -- the same grep
+# that justified is-strippable's space-only scope covers this too).
+# Verified directly against the interpreter's own compare(), not assumed:
+# "\n" < " " is true, '"' < " " is false, every other corpus character
+# is false.
+to is-newline of c:
+  give c < " "
+
+# ================================================================ single-line tokenizer
+#
+# A streaming fold over one line's characters (run-chars/step), carrying a
+# `pending` record for whatever token is mid-flight. Lookahead beyond the
+# current character is never indexed -- capability 2 (PROBE_LEXER.md) is
+# still MISSING and this build does not add it. Every multi-character
+# spelling (a name's internal hyphen, ->/==/!=/<=/>=) is instead resolved
+# by DEFERRING commitment by exactly one character: seeing "-" does not
+# yet decide anything, it opens a pending state that the *next* character
+# resolves. When a pending state fails to extend, whatever it was
+# buffering was never truly consumed, so it is reprocessed -- from a
+# clean `pending: none` -- through the very same step function, via
+# run-chars. This is the one recursive idiom this whole file leans on.
+
+to run-chars of state, s:
+  result = state
+  for each ch in s:
+    result = step of result, ch
+  give result
+
+to finish-name of word-text, line-no:
+  is-kw = word-text in keywords
+  kind = "NAME"
+  if is-kw:
+    kind = upper of word-text
+  give { kind: kind, text: word-text, line: line-no }
+
+to step of state, c:
+  when state.pending is { kind: "comment" }:
+    give state
+  else:
+    when state.pending is { kind: "name" }:
+      give step-name of state, c
+    else:
+      when state.pending is { kind: "name-hyphen" }:
+        give step-name-hyphen of state, c
+      else:
+        when state.pending is { kind: "number" }:
+          give step-number of state, c
+        else:
+          when state.pending is { kind: "number-maybe-dot" }:
+            give step-number-maybe-dot of state, c
+          else:
+            when state.pending is { kind: "fingerprint" }:
+              give step-fingerprint of state, c
+            else:
+              when state.pending is { kind: "op-lookahead" }:
+                give step-op-lookahead of state, c
+              else:
+                give step-fresh of state, c
+
+to step-fresh of state, c:
+  if c == " ":
+    give state
+  else:
+    if c == "#":
+      give { out: state.out, pending: { kind: "comment" }, line: state.line }
+    else:
+      give step-fresh-nonspace of state, c
+
+to step-fresh-nonspace of state, c:
+  if c == "@":
+    give { out: state.out, pending: { kind: "fingerprint", collected: "" }, line: state.line }
+  else:
+    give step-fresh-not-fingerprint of state, c
+
+to step-fresh-not-fingerprint of state, c:
+  if is-digit of c:
+    new-pending = { kind: "number", text: c, seen-dot: false }
+    give { out: state.out, pending: new-pending, line: state.line }
+  else:
+    if is-name-start of c:
+      give { out: state.out, pending: { kind: "name", text: c }, line: state.line }
+    else:
+      give step-fresh-op of state, c
+
+to is-lookahead-op of c:
+  give c == "-" or c == "=" or c == "!" or c == "<" or c == ">"
+
+to is-simple-op of c:
+  group-a = c == "+" or c == "*" or c == "/" or c == "(" or c == ")"
+  group-b = c == "." or c == "," or c == ";" or c == ":"
+  group-c = c == "[" or c == "]" or c == "{" or c == "}"
+  give group-a or group-b or group-c
+
+to step-fresh-op of state, c:
+  if is-lookahead-op of c:
+    give { out: state.out, pending: { kind: "op-lookahead", first: c }, line: state.line }
+  else:
+    if is-simple-op of c:
+      new-tok = { kind: "OP", text: c, line: state.line }
+      give { out: state.out plus new-tok, pending: { kind: "none" }, line: state.line }
+    else:
+      give state
+
+to step-name of state, c:
+  if is-name-continue of c:
+    new-pending = { kind: "name", text: state.pending.text + c }
+    give { out: state.out, pending: new-pending, line: state.line }
+  else:
+    if c == "-":
+      new-pending = { kind: "name-hyphen", text: state.pending.text }
+      give { out: state.out, pending: new-pending, line: state.line }
+    else:
+      tok = finish-name of state.pending.text, state.line
+      flushed = { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+      give step of flushed, c
+
+to step-name-hyphen of state, c:
+  if is-name-continue of c:
+    new-pending = { kind: "name", text: state.pending.text + "-" + c }
+    give { out: state.out, pending: new-pending, line: state.line }
+  else:
+    tok = finish-name of state.pending.text, state.line
+    flushed = { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+    leftover = "-" + c
+    give run-chars of flushed, leftover
+
+to step-number of state, c:
+  if is-digit of c:
+    new-pending = { kind: "number", text: state.pending.text + c, seen-dot: state.pending.seen-dot }
+    give { out: state.out, pending: new-pending, line: state.line }
+  else:
+    if c == "." and not state.pending.seen-dot:
+      new-pending = { kind: "number-maybe-dot", text: state.pending.text }
+      give { out: state.out, pending: new-pending, line: state.line }
+    else:
+      tok = { kind: "NUMBER", text: state.pending.text, line: state.line }
+      flushed = { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+      give step of flushed, c
+
+to step-number-maybe-dot of state, c:
+  if is-digit of c:
+    new-text = state.pending.text + "." + c
+    new-pending = { kind: "number", text: new-text, seen-dot: true }
+    give { out: state.out, pending: new-pending, line: state.line }
+  else:
+    tok = { kind: "NUMBER", text: state.pending.text, line: state.line }
+    flushed = { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+    leftover = "." + c
+    give run-chars of flushed, leftover
+
+to step-fingerprint of state, c:
+  if is-hex-digit of c:
+    new-collected = state.pending.collected + c
+    give step-fingerprint-collected of state, new-collected
+  else:
+    give fail-fingerprint of state, c
+
+to step-fingerprint-collected of state, new-collected:
+  n = count of new-collected
+  if n == 6:
+    fp-text = "@" + new-collected
+    tok = { kind: "FINGERPRINT", text: fp-text, line: state.line }
+    give { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+  else:
+    new-pending = { kind: "fingerprint", collected: new-collected }
+    give { out: state.out, pending: new-pending, line: state.line }
+
+to fail-fingerprint of state, c:
+  at-tok = { kind: "OP", text: "@", line: state.line }
+  flushed = { out: state.out plus at-tok, pending: { kind: "none" }, line: state.line }
+  leftover = state.pending.collected + c
+  give run-chars of flushed, leftover
+
+to is-standalone-op of c:
+  give c == "-" or c == "=" or c == "<" or c == ">"
+
+to is-two-char-op of combined:
+  group-a = combined == "->" or combined == "==" or combined == "!="
+  group-b = combined == "<=" or combined == ">="
+  give group-a or group-b
+
+to step-op-lookahead of state, c:
+  combined = state.pending.first + c
+  if is-two-char-op of combined:
+    new-tok = { kind: "OP", text: combined, line: state.line }
+    give { out: state.out plus new-tok, pending: { kind: "none" }, line: state.line }
+  else:
+    first-char = state.pending.first
+    with-first = { out: state.out, pending: { kind: "none" }, line: state.line }
+    if is-standalone-op of first-char:
+      first-tok = { kind: "OP", text: first-char, line: state.line }
+      with-first = { out: state.out plus first-tok, pending: { kind: "none" }, line: state.line }
+    give step of with-first, c
+
+to flush-pending of state:
+  when state.pending is { kind: "name" }:
+    tok = finish-name of state.pending.text, state.line
+    give { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+  else:
+    when state.pending is { kind: "name-hyphen" }:
+      tok = finish-name of state.pending.text, state.line
+      with-name = state.out plus tok
+      dash-tok = { kind: "OP", text: "-", line: state.line }
+      give { out: with-name plus dash-tok, pending: { kind: "none" }, line: state.line }
+    else:
+      when state.pending is { kind: "number" }:
+        tok = { kind: "NUMBER", text: state.pending.text, line: state.line }
+        give { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+      else:
+        when state.pending is { kind: "number-maybe-dot" }:
+          tok = { kind: "NUMBER", text: state.pending.text, line: state.line }
+          with-number = state.out plus tok
+          dot-tok = { kind: "OP", text: ".", line: state.line }
+          give { out: with-number plus dot-tok, pending: { kind: "none" }, line: state.line }
+        else:
+          when state.pending is { kind: "fingerprint" }:
+            at-tok = { kind: "OP", text: "@", line: state.line }
+            with-at = state.out plus at-tok
+            reprocessed = run-chars of { out: with-at, pending: { kind: "none" }, line: state.line }, state.pending.collected
+            give flush-pending of reprocessed
+          else:
+            when state.pending is { kind: "op-lookahead" }:
+              give flush-op-lookahead of state
+            else:
+              give state
+
+to flush-op-lookahead of state:
+  first-char = state.pending.first
+  if is-standalone-op of first-char:
+    tok = { kind: "OP", text: first-char, line: state.line }
+    give { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+  else:
+    give { out: state.out, pending: { kind: "none" }, line: state.line }
+
+# ================================================================ STRING: verified not expressible
+#
+# This lexer does not tokenize STRING. Not "not yet" -- checked, and there
+# is no way to write it in the language as it stands. STRING detection
+# needs exactly one thing: a way to test whether a code point is a double
+# quote. There is no way to produce that value:
+#
+#   - A Planes STRING literal cannot contain a `"` -- vocabulary.json's
+#     own STRING pattern is `"[^\"]*"`, no escape sequences, so the
+#     character class inside the quotes explicitly excludes a quote.
+#     Verified directly, not assumed: parsing `x = """` gives
+#     Assign(x, Str("")) -- the first two quotes close an EMPTY string --
+#     with the third quote silently unmatched, and `x = """"` (four
+#     quotes) gives two separate empty-string statements. No sequence of
+#     quote characters ever produces one *containing* a quote.
+#   - No builtin converts a number (e.g. 34, the code point) to a
+#     character, or vice versa -- count/lower/upper/text/whole/ask/read/
+#     normalize, the entire closed set, does none of this.
+#   - A `read` or `ask` effect could fetch a quote from outside the
+#     program, but that reintroduces exactly the effect Phase 5 exists to
+#     avoid (grammar_gen.py's docstring), and this build's invariants
+#     forbid a new host method or effect kind to work around it besides.
+#   - An exclusion-based approximation -- "not a digit, not a name
+#     character, not an operator, not #, not @, not space, so it must be
+#     a quote" -- is unsound, not just inelegant: gate.planes's own
+#     `because "...March's reconciliation..."` contains an apostrophe,
+#     which is none of those things either, and would end the string
+#     early. Checked against the actual corpus, not a hypothetical.
+#
+# So: no workaround is written here, per this build's own rule that a
+# language gap is reported, not routed around. Every `"..."` literal in
+# a tokenized line surfaces as whatever its *contents* tokenize into on
+# their own terms (comments, names, numbers, operators) rather than one
+# STRING token -- the corpus agreement test (test_lexer_in_planes.py)
+# reports every line this touches as a disagreement traced to this gap,
+# not a silent pass.
+
+to tokenize-line of stripped, line-no:
+  initial = { out: [], pending: { kind: "none" }, line: line-no }
+  mid = run-chars of initial, stripped
+  final = flush-pending of mid
+  give final.out
+
+# ================================================================ lines and indentation
+#
+# lexer.py splits on "\n" before anything else and only then applies
+# TOKEN_RE to each line. Matched here the same way: split-lines first,
+# so tokenize-line above always receives one physical line and never
+# has to reason about BEGIN/END/EOL itself.
+#
+# Leading whitespace is measured on the RAW line (not tokenize-line's
+# input) because tokenize-line already discards leading/trailing spaces
+# on its own -- step-fresh's `c == " "` case is a no-op, the same as
+# WS being filtered out of TOKEN_RE's matches -- so there is no need to
+# separately trim before tokenizing. Passing the raw line straight
+# through and measuring indent independently is simpler than building a
+# strip() this file has no way to write anyway (is-strippable only
+# tests one character at a time; producing the *trimmed substring*
+# would need a suffix/drop operation this build's capability 2 still
+# lacks -- unneeded here only because tokenize-line's own whitespace
+# handling already makes it redundant).
+
+to split-lines of s:
+  initial = { lines: [], current: "" }
+  final = run-split-lines of initial, s
+  give final.lines plus final.current
+
+to run-split-lines of state, s:
+  result = state
+  for each c in s:
+    result = split-lines-step of result, c
+  give result
+
+to split-lines-step of state, c:
+  if is-newline of c:
+    give { lines: state.lines plus state.current, current: "" }
+  else:
+    give { lines: state.lines, current: state.current + c }
+
+to leading-whitespace-count of raw-line:
+  initial = { done: false, count: 0 }
+  final = run-leading-whitespace of initial, raw-line
+  give final.count
+
+to run-leading-whitespace of state, raw-line:
+  result = state
+  for each c in raw-line:
+    result = leading-whitespace-step of result, c
+  give result
+
+to leading-whitespace-step of state, c:
+  if state.done:
+    give state
+  else:
+    if is-strippable of c:
+      give { done: false, count: state.count + 1 }
+    else:
+      give { done: true, count: state.count }
+
+# "blank" (nothing but whitespace), "comment" (whitespace then #), or
+# "code" -- lexer.py's `if not stripped or stripped.startswith("#"):
+# continue` decides this on the fully-stripped line; this walks the raw
+# line instead and stops at the first non-whitespace character, which
+# answers the same question without needing a stripped substring.
+to line-content-kind of raw-line:
+  initial = { done: false, kind: "blank" }
+  final = run-line-content-kind of initial, raw-line
+  give final.kind
+
+to run-line-content-kind of state, raw-line:
+  result = state
+  for each c in raw-line:
+    result = line-content-kind-step of result, c
+  give result
+
+to line-content-kind-step of state, c:
+  if state.done:
+    give state
+  else:
+    if is-strippable of c:
+      give state
+    else:
+      if c == "#":
+        give { done: true, kind: "comment" }
+      else:
+        give { done: true, kind: "code" }
+
+# The indent stack, as a cons-list of records rather than a Planes list:
+# `{ level: N, rest: <previous-stack-or-nothing> }`. A Planes list only
+# ever gives a prefix (first n of) or an append (plus) -- no way to read
+# or drop its *last* element, which is exactly what a stack's top and
+# pop need. Record field access has no such limit: .level and .rest are
+# both O(1), so this is the shape that actually works, not a stylistic
+# choice.
+
+to maybe-begin of stack, indent, line-no, tokens:
+  if indent > stack.level:
+    new-stack = { level: indent, rest: stack }
+    begin-tok = { kind: "BEGIN", text: "", line: line-no }
+    give { stack: new-stack, tokens: tokens plus begin-tok }
+  else:
+    give { stack: stack, tokens: tokens }
+
+# Recursive, not a loop -- `while` is not in this language (v3.0's
+# reserved-word ceiling never added one), and a single line transition
+# can dedent through more than one level at once.
+to pop-dedents of stack, target, line-no, tokens:
+  if stack.level > target:
+    end-tok = { kind: "END", text: "", line: line-no }
+    new-tokens = tokens plus end-tok
+    give pop-dedents of stack.rest, target, line-no, new-tokens
+  else:
+    give { stack: stack, tokens: tokens }
+
+to process-code-line of state, raw-line, line-no:
+  indent = leading-whitespace-count of raw-line
+  after-begin = maybe-begin of state.stack, indent, line-no, state.tokens
+  popped = pop-dedents of after-begin.stack, indent, line-no, after-begin.tokens
+  line-tokens = tokenize-line of raw-line, line-no
+  eol-tok = { kind: "EOL", text: "", line: line-no }
+  with-line-tokens = popped.tokens + line-tokens
+  final-tokens = with-line-tokens plus eol-tok
+  give { tokens: final-tokens, stack: popped.stack, line-no: line-no }
+
+to process-line of state, raw-line:
+  new-line-no = state.line-no + 1
+  kind = line-content-kind of raw-line
+  is-skippable = kind == "blank" or kind == "comment"
+  if is-skippable:
+    give { tokens: state.tokens, stack: state.stack, line-no: new-line-no }
+  else:
+    give process-code-line of state, raw-line, new-line-no
+
+to tokenize-lines of state, lines:
+  result = state
+  for each raw-line in lines:
+    result = process-line of result, raw-line
+  give result
+
+to tokenize of src:
+  lines = split-lines of src
+  initial-stack = { level: 0, rest: nothing }
+  initial-state = { tokens: [], stack: initial-stack, line-no: 0 }
+  after-lines = tokenize-lines of initial-state, lines
+  final-popped = pop-dedents of after-lines.stack, 0, after-lines.line-no, after-lines.tokens
+  eof-line = after-lines.line-no + 1
+  eof-tok = { kind: "EOF", text: "", line: eof-line }
+  final-tokens = final-popped.tokens plus eof-tok
+  give final-tokens

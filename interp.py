@@ -778,10 +778,10 @@ class Interpreter:
 
     def eval_foreach(self, node, env):
         source = self.eval(node.source, env)
-        if not isinstance(source.value, (list, tuple)):
+        if not isinstance(source.value, (list, tuple, str)):
             raise PlanesError("not-a-collection",
                               f"cannot loop over {fmt(source.value)}",
-                              "for each needs a list")
+                              "for each needs a list, or a string to walk its code points")
         results, nodes = [], []
         for idx, item in enumerate(source.value):
             inner = Env(env)

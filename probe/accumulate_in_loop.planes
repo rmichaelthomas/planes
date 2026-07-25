@@ -1,0 +1,4 @@
+acc = []
+for each c in "abc":
+  acc = acc plus c
+show count of acc
