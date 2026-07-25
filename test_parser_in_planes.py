@@ -379,6 +379,33 @@ def test_if_else_statements_agree():
         assert_program_agrees(src)
 
 
+FUNCDEF_PROGRAMS = [
+    "to main:\n  give 1\n",
+    "to square of n:\n  give n * n\n",
+    "to add of a, b:\n  give a + b\n",
+    "to fetch stories:\n  give 1\n",
+    'to classify of n:\n  if n < 0:\n    give "negative"\n  else:\n    give "non-negative"\n',
+    "to square of n: give n * n\n",
+    "to outer of x:\n  y = x + 1\n  give y\n\nto main:\n  show outer of 5\n",
+]
+
+
+def test_funcdef_statements_agree():
+    for src in FUNCDEF_PROGRAMS:
+        assert_program_agrees(src)
+
+
+GIVE_PROGRAMS = [
+    "to f:\n  give 5\n",
+    "to f of x:\n  give x + 1\n",
+]
+
+
+def test_give_statements_agree():
+    for src in GIVE_PROGRAMS:
+        assert_program_agrees(src)
+
+
 if __name__ == "__main__":
     fails = []
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
