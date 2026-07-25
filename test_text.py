@@ -281,6 +281,16 @@ def test_double_backslash_yields_exactly_one_backslash():
     assert list(v) == ["\\"]
 
 
+def test_why_tree_because_line_re_escapes():
+    """why_tree's `because=` line prints a value back as a quoted Planes
+    literal (interp.py) -- the same re-quote-as-source shape render.py's
+    Str case has, and the same fix (lexer.escape_string_literal): a
+    because-text containing a quote must round-trip in the tree's own
+    output, not corrupt it."""
+    tree = why_tree(val('x = 1', "x"), because='a"b')
+    assert 'because "a\\"b"' in tree
+
+
 if __name__ == "__main__":
     fails = []
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]

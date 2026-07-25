@@ -1103,7 +1103,8 @@ def why_tree(traced, max_depth=14, because=None):
         seen[id(n)] = True
         lines.append("  " * depth + f"{n.label} = {fmt(n.value)}{tail}")
         if depth == 0 and because:
-            lines.append("  " * (depth + 1) + f'because "{because}"')
+            lines.append("  " * (depth + 1) +
+                         f'because "{escape_string_literal(because)}"')
         for i in n.inputs:
             walk(i, depth + 1)
 

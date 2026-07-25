@@ -468,7 +468,7 @@
       "id": "lexer.planessyntaxerror-site-1",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "lexer.py:154",
+      "source": "lexer.py:177",
       "raised_in": "_resolve_string_escapes",
       "template": "line {lineno}: unrecognized escape '\\{nxt}' in a string literal -- the four recognized escapes are \\\" \\\\ \\n \\t",
       "slots": [
@@ -480,7 +480,7 @@
       "id": "lexer.planessyntaxerror-site-2",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "lexer.py:197",
+      "source": "lexer.py:220",
       "raised_in": "tokenize",
       "template": "line {lineno}: unterminated string literal -- a backslash right before the closing quote escapes that quote (\\\") instead of ending the string; the four recognized escapes are \\\" \\\\ \\n \\t -- write \\\\ for a literal trailing backslash",
       "slots": [
@@ -1133,10 +1133,10 @@
       "interp.py:660"
     ],
     "lexer.planessyntaxerror-site-1": [
-      "lexer.py:154"
+      "lexer.py:177"
     ],
     "lexer.planessyntaxerror-site-2": [
-      "lexer.py:197"
+      "lexer.py:220"
     ],
     "parser.planessyntaxerror-site-1": [
       "parser.py:302"

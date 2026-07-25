@@ -133,6 +133,29 @@ class Token:
 # need to know escapes exist).
 STRING_ESCAPES = {'"': '"', "\\": "\\", "n": "\n", "t": "\t"}
 
+# The inverse of STRING_ESCAPES, for any code path that prints a string
+# value back as Planes source (render.py's Str case, interp.py's why_tree
+# `because` line) rather than as a plain value (interp.py's fmt, for
+# `show`/`why`'s printed derivation, deliberately does not re-quote at
+# all). A single character-at-a-time pass, each character mapped
+# independently to its escaped form (or left as itself) -- no ordering
+# hazard from a separate backslash-doubling pass, since backslash is
+# just another entry here, produced once per original character.
+STRING_UNESCAPE = {v: "\\" + k for k, v in STRING_ESCAPES.items()}
+
+
+def escape_string_literal(s):
+    """`s`, re-escaped as the content of a Planes STRING literal — the
+    exact text between the delimiting quotes that STRING's own regex
+    would need to see to resolve back to `s`. `render(parse(src))` must
+    parse to an equal AST for every program (render.py's module
+    docstring); without this, a string containing a quote, backslash,
+    newline, or tab renders to source that either reparses to a
+    different value or does not reparse at all (fix/string-escapes-and-
+    bootstrap: none of those four could occur in a string before this
+    build, so nothing exercised the gap until now)."""
+    return "".join(STRING_UNESCAPE.get(c, c) for c in s)
+
 
 def _resolve_string_escapes(raw, lineno):
     """`raw` is a STRING token's content between its delimiting quotes,

@@ -65,6 +65,7 @@ from lexer import (
     Var,
     Why,
     WriteTo,
+    escape_string_literal,
 )
 from rules import check
 
@@ -89,7 +90,7 @@ def render_expr(node):
     if isinstance(node, Num):
         return node.value.text() if hasattr(node.value, "text") else str(node.value)
     if isinstance(node, Str):
-        return f'"{node.value}"'
+        return f'"{escape_string_literal(node.value)}"'
     if isinstance(node, Bool):
         return "true" if node.value else "false"
     if isinstance(node, Nothing):
@@ -156,7 +157,7 @@ def render_orfail(node):
 def render_because_suffix(node):
     if node.annotation is None:
         return ""
-    return f' because "{node.annotation.text}"'
+    return f' because "{escape_string_literal(node.annotation.text)}"'
 
 
 def render_assign(node):
@@ -168,7 +169,7 @@ def render_rule(node):
     verb = "may not" if node.assertion == "forbid" else "may"
     text = f"rule [{node.name}] {node.subject} {verb} {node.kind}"
     if node.target is not None:
-        text += f' to "{node.target}"'
+        text += f' to "{escape_string_literal(node.target)}"'
     if node.supersedes is not None:
         text += f" supersedes [{node.supersedes}]"
         if node.supersedes_fingerprint is not None:
@@ -180,7 +181,7 @@ def render_note(node, indent):
     lines = [indent + "note:"]
     for kind, value in node.entries:
         if kind == "from":
-            lines.append(indent + INDENT + f'from "{value}"')
+            lines.append(indent + INDENT + f'from "{escape_string_literal(value)}"')
         elif kind == "derives-from":
             lines.append(indent + INDENT + f"derives-from [{value}]")
     return "\n".join(lines)
@@ -197,7 +198,7 @@ def render_foreign(node):
     text = f"foreign {node.name}"
     if node.params:
         text += " of " + ", ".join(node.params)
-    text += f' from "{node.target}"'
+    text += f' from "{escape_string_literal(node.target)}"'
     if node.declared:
         if not node.effects:
             text += " doing nothing"
@@ -207,7 +208,7 @@ def render_foreign(node):
                 if where is None:
                     claims.append(kind)
                 elif where[0] == "literal":
-                    claims.append(f'{kind} "{where[1]}"')
+                    claims.append(f'{kind} "{escape_string_literal(where[1])}"')
                 else:   # ("param", name)
                     claims.append(f"{kind} {where[1]}")
             text += " doing " + ", ".join(claims)
