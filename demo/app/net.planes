@@ -2,5 +2,5 @@ use http
 use config
 
 to fetch package of name:
-  give ask (api base) + "/" + name + "/json"
+  give ask ((api base) + "/" + name + "/json")
     or fail as api-down

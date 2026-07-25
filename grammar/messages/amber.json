@@ -1,0 +1,54 @@
+{
+  "format": 1,
+  "note": "Amber's refusal templates (addendum v4.2 section 69.5, ruling D5). Authored as data from the start -- parser.py renders these, it does not compose message text inline. `readings` is applied once per candidate reading and the results are joined; `headline`, `reason`, and `fix` are each applied once. Every {slot} is filled by the site that raises the refusal.",
+  "templates": [
+    {
+      "id": "amber.multiword",
+      "site": "parser.py:parse_primary (multi-word longest match)",
+      "headline": "line {line}: two readings are possible here, and nothing says which",
+      "readings": "  reading {letter}:  {source}\n              {gloss}",
+      "reason": "both {names} are defined, so the parser will not choose between them",
+      "fix": "try: parenthesise the one you mean -- `{suggestion}` -- or rename one of the functions so only one reading is possible"
+    },
+    {
+      "id": "amber.juxtaposition",
+      "site": "parser.py:parse_primary (takes_arg)",
+      "headline": "line {line}: `{head} {next}` reads two ways, and nothing says which",
+      "readings": "  reading {letter}:  {source}\n              {gloss}",
+      "reason": "`{head}` takes an argument and `{next}` is also a defined function, so the parser will not choose between them",
+      "fix": "try: `{head} ({next})` to call `{next}` first and pass its result to `{head}` -- or write them as two separate statements if you meant them apart"
+    },
+    {
+      "id": "amber.juxtaposition.unknown_arity",
+      "site": "parser.py:parse_primary (takes_arg)",
+      "headline": "line {line}: whether `{subject}` takes an argument here is not known",
+      "readings": "  reading {letter}:  {source}\n              {gloss}",
+      "reason": "the arity of `{subject}` is not known here",
+      "fix": "declare it, or call it with `of` so the argument is explicit"
+    },
+    {
+      "id": "amber.paren_arglist",
+      "site": "parser.py:paren_is_arglist",
+      "headline": "line {line}: two readings are possible here, and nothing says which",
+      "readings": "  reading {letter}:  {source}\n              {gloss}",
+      "reason": "`{head}` takes exactly one argument, so both readings have the right shape",
+      "fix": "try: `{head}({paren_expr})` with nothing after the parens on this call, or restructure so `{head}` clearly applies to just one thing"
+    },
+    {
+      "id": "amber.paren_arglist.unknown_arity",
+      "site": "parser.py:paren_is_arglist",
+      "headline": "line {line}: whether `{head}` takes one argument here is not known",
+      "readings": "  reading {letter}:  {source}\n              {gloss}",
+      "reason": "the arity of `{head}` is not known here",
+      "fix": "declare it, or call it with `of` so the argument is explicit"
+    },
+    {
+      "id": "amber.rename_clause",
+      "site": "parser.py:parse_statement (USE rename clause)",
+      "headline": "line {line}: `{source}` reads two ways, and nothing says which",
+      "readings": "  reading {letter}:  {source}\n              {gloss}",
+      "reason": "more than one exported name matches this text, so the parser will not choose between them",
+      "fix": "try: rename to match only one exported name exactly -- a shorter or longer phrase"
+    }
+  ]
+}

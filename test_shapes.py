@@ -723,12 +723,19 @@ def test_analyser_sees_both_surfaces_after_a_rename():
 
 
 def test_rename_replaces_rather_than_aliases():
-    """Registering both names would put the collision straight back."""
+    """Registering both names would put the collision straight back.
+
+    The rename target is `b greet`, not `greet b` -- the latter would
+    share the prefix `greet` with the original name still in scope from
+    `a`, and `show greet b` would then be amber (§69.5 site 1): `greet`
+    alone and `greet b` are both known names, and nothing says which was
+    meant.
+    """
     _write("demo/_ren3", {
         "a.planes": 'to greet:\n  give "a"\n',
         "b.planes": 'to greet:\n  give "b"\n',
-        "main.planes": "use a\nuse b with greet as greet b\n\n"
-                       "show greet\nshow greet b\n",
+        "main.planes": "use a\nuse b with greet as b greet\n\n"
+                       "show greet\nshow b greet\n",
     })
     try:
         out = Interpreter().run_file("demo/_ren3/main.planes")
