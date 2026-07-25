@@ -230,6 +230,13 @@ class Parser:
             self.next()
             return self.parse_because(Assign(name, self.parse_expr()))
 
+        fail_tok = self.accept("FAIL")
+        if fail_tok:
+            message = self.parse_expr()
+            self.expect("AS")
+            tag = self.expect("NAME").value
+            return Fail(message, tag, fail_tok.line)
+
         return self.parse_expr()
 
     def parse_foreign(self):

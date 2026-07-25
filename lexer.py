@@ -331,6 +331,20 @@ class OrFail:
     # None keeps the original rename-and-reraise behavior.
     handler: Any = None
 @dataclass
+class Fail:
+    """`fail <message> as <tag>` (v9.0 §106, feat/fail-primitive-and-
+    parser-probe) — a statement, not an expression modifier like OrFail:
+    unconditionally raises the same {tag, detail} shape OrFail's handler
+    binds, with `message`'s value as detail. `message` is an ordinary
+    expression (Ruling 2: "not a literal-only slot"), evaluated for its
+    value, so it can carry effects of its own (an `ask` inside it, say)
+    that a static surface must still see even though `fail` itself
+    contributes none. Reuses `fail` and `as`, both already reserved by
+    OrFail's own grammar — no new reserved word."""
+    message: Any
+    tag: str
+    line: int = 0
+@dataclass
 class Builtin:
     name: str
     arg: Any

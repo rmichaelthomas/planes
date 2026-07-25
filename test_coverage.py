@@ -69,6 +69,19 @@ COVERAGE = {
                'else:\n  write [2] to "b.json"',
     "OrFail":  'use file\nwrite [1] to "o.json"\n'
                'r = (read "o.json") or fail as no-file',
+    # The fail branch never runs (1 > 1 is false) -- an oracle case must
+    # complete a real run (check_oracle calls interp(src) and expects it
+    # to finish), so Fail's own node-coverage comes from an untaken `if`
+    # branch, same idiom as any other never-taken construct would need.
+    # shapes.py still walks it (If walks both branches, per v9.0
+    # invariant 2 -- "a static surface is what the program CAN do"), so
+    # this also exercises walk()'s Fail case, just with no effect in the
+    # message to report; the real write below is the case's actual
+    # effect for the oracle to check.
+    "Fail":    'use file\n'
+               'if 1 > 1:\n'
+               '  fail "unreachable" as never-fires\n'
+               'write [1] to "o.json"',
     # `Builtin` is unreachable: builtins became ordinary functions, so the
     # parser now emits Call for `count of xs`. The node and its handling in
     # interp.py and shapes.py are dead code. Listed here so the node-coverage

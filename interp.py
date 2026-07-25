@@ -495,6 +495,15 @@ class Interpreter:
         if isinstance(stmt, When):
             return self.exec_when(stmt, env)
 
+        if isinstance(stmt, Fail):
+            v = self.eval(stmt.message, env)
+            if not isinstance(v.value, str):
+                raise PlanesError(
+                    "fail-message-not-text",
+                    f"fail's message must be text, found {fmt(v.value)}",
+                    "wrap it with text of")
+            raise PlanesError(stmt.tag, v.value)
+
         return self.eval(stmt, env)
 
     def exec_when(self, stmt, env):
