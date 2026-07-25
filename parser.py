@@ -1,12 +1,14 @@
 """Planes parser — turns tokens into AST."""
 from lexer import *
+from lexer import _VOCAB
 from planes_num import Number
 
 # Builtins are ordinary functions, not keywords. The parser only needs their
 # names so a bare `count of xs` is read as a call rather than a variable; it
 # does not need to know what they do. A user may define a function with the
-# same name, and theirs is the one that runs.
-BUILTIN_NAMES = {"count", "lower", "upper", "text", "whole", "ask", "read", "normalize"}
+# same name, and theirs is the one that runs. Source of truth is
+# grammar/vocabulary.json, loaded by lexer.py as _VOCAB.
+BUILTIN_NAMES = {b["name"] for b in _VOCAB["builtins"]}
 
 
 class PlanesSyntaxError(Exception):
@@ -506,9 +508,9 @@ class Parser:
 
     # Field names a with-clause or when-pattern entry may use — the same
     # keyword-as-field-name exception parse_record_field grants, since
-    # both are naming a record field, not opening a new construct.
-    FIELD_NAME_KINDS = ("NAME", "SHOW", "WRITE", "FIRST", "ROUND", "TO", "IN",
-                        "WHERE", "FROM", "AS", "OF", "USE", "WHY", "GIVE")
+    # both are naming a record field, not opening a new construct. Source
+    # of truth is grammar/vocabulary.json's field_name_token_kinds.
+    FIELD_NAME_KINDS = tuple(_VOCAB["field_name_token_kinds"])
 
     def at_field_start(self, ahead=0):
         t = self.peek(ahead)
@@ -688,8 +690,7 @@ class Parser:
         t = self.peek()
         if t.kind == "NAME":
             key = self.next().value
-        elif t.kind in ("SHOW", "WRITE", "FIRST", "ROUND", "TO", "IN",
-                        "WHERE", "FROM", "AS", "OF", "USE", "WHY", "GIVE"):
+        elif t.kind in self.FIELD_NAME_KINDS:
             # A field name is not a position where a keyword can be
             # structural. `{ to: "x", from: "y" }` must work.
             key = self.next().value

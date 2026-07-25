@@ -55,31 +55,57 @@ def find_line(text, pattern):
 LEXER = read("lexer.py")
 INTERP = read("interp.py")
 PARSER = read("parser.py")
+VOCAB_TEXT = read(os.path.join("grammar", "vocabulary.json"))
 
-SOURCES = {"lexer.py": LEXER, "interp.py": INTERP, "parser.py": PARSER}
+SOURCES = {"lexer.py": LEXER, "interp.py": INTERP, "parser.py": PARSER,
+           "grammar/vocabulary.json": VOCAB_TEXT}
+
+
+def _find_array_block(text, key):
+    """Locate `"<key>": [ ... ]` in a JSON text and return (block, start_line).
+
+    Depth-counts brackets rather than a single non-greedy regex, so a block
+    containing further `[`/`]` (none of ours do, but a future one might)
+    still resolves to the right close.
+    """
+    m = re.search(rf'"{key}"\s*:\s*\[', text)
+    if not m:
+        return None, None
+    depth, i = 0, m.end() - 1
+    start = i
+    while i < len(text):
+        if text[i] == "[":
+            depth += 1
+        elif text[i] == "]":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    return text[start:i + 1], text[:start].count("\n") + 1
 
 
 def check_keyword(word):
-    """Word appears inside the KEYWORDS set literal in lexer.py.
+    """Word appears in the `keywords` array of grammar/vocabulary.json.
 
-    Scans only the KEYWORDS = { ... } block so a keyword used elsewhere in
-    prose does not count.
+    Used to regex `KEYWORDS = { ... }` out of lexer.py directly. Since the
+    grammar-as-data build (addendum v4.2 section 69.1), that literal no
+    longer exists — lexer.py loads KEYWORDS from grammar/vocabulary.json —
+    so this check moved to the file that is now the actual source of
+    truth. Scans only the `"keywords": [ ... ]` block so a word appearing
+    elsewhere in the file (a positional word, a note) does not count.
     """
-    if LEXER is None:
+    if VOCAB_TEXT is None:
         return None
-    m = re.search(r"KEYWORDS\s*=\s*\{(.*?)\}", LEXER, re.DOTALL)
-    if not m:
+    block, block_start_line = _find_array_block(VOCAB_TEXT, "keywords")
+    if block is None:
         return None
-    block = m.group(1)
-    if not re.search(rf'"{re.escape(word)}"', block):
+    pat = rf'"word"\s*:\s*"{re.escape(word)}"'
+    if not re.search(pat, block):
         return None
-    # Point at the actual line the keyword sits on, not the block start,
-    # so the pointer is openable.
-    block_start_line = LEXER[: m.start(1)].count("\n") + 1
     for offset, bline in enumerate(block.split("\n")):
-        if re.search(rf'"{re.escape(word)}"', bline):
-            return f"lexer.py:{block_start_line + offset} (in KEYWORDS)"
-    return f"lexer.py:{block_start_line} (in KEYWORDS)"
+        if re.search(pat, bline):
+            return f"grammar/vocabulary.json:{block_start_line + offset} (in keywords)"
+    return f"grammar/vocabulary.json:{block_start_line} (in keywords)"
 
 
 def check_ast_node(classname):
@@ -93,15 +119,25 @@ def check_interp_branch(nodename):
 
 
 def check_builtin(name):
-    if PARSER is None:
+    """Name appears in the `builtins` array of grammar/vocabulary.json.
+
+    Used to regex `BUILTIN_NAMES = { ... }` out of parser.py directly.
+    Since the grammar-as-data build, that literal no longer exists —
+    parser.py loads BUILTIN_NAMES from grammar/vocabulary.json — so this
+    check moved the same way check_keyword did, and for the same reason.
+    """
+    if VOCAB_TEXT is None:
         return None
-    m = re.search(r"BUILTIN_NAMES\s*=\s*\{(.*?)\}", PARSER, re.DOTALL)
-    if not m:
+    block, block_start_line = _find_array_block(VOCAB_TEXT, "builtins")
+    if block is None:
         return None
-    if re.search(rf'"{re.escape(name)}"', m.group(1)):
-        start = PARSER[: m.start()].count("\n") + 1
-        return f"parser.py:~{start} (in BUILTIN_NAMES)"
-    return None
+    pat = rf'"name"\s*:\s*"{re.escape(name)}"'
+    if not re.search(pat, block):
+        return None
+    for offset, bline in enumerate(block.split("\n")):
+        if re.search(pat, bline):
+            return f"grammar/vocabulary.json:{block_start_line + offset} (in builtins)"
+    return f"grammar/vocabulary.json:{block_start_line} (in builtins)"
 
 
 def check_apply_op(opstring):
