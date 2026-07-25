@@ -1,0 +1,20 @@
+tokens = []
+current = { kind: "none", text: "" }
+
+for each c in "a+bc":
+  is-letter = c >= "a" and c <= "z"
+  next-kind = "NAME"
+  if not is-letter:
+    next-kind = "OP"
+  when current is { kind: next-kind }:
+    current = current with text: current.text + c
+  else:
+    if current.kind != "none":
+      tokens = tokens plus current
+    current = { kind: next-kind, text: c }
+
+if current.kind != "none":
+  tokens = tokens plus current
+
+show tokens
+show count of tokens
