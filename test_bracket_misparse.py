@@ -174,10 +174,11 @@ def test_multiline_record_at_top_level_still_works():
 # ================================================================ full corpus: zero regressions
 
 def test_every_valid_planes_file_in_the_repo_still_parses():
-    """The 30-file corpus (8 root files + 22 demo/ files, excluding
+    """The 31-file corpus (8 root files + 23 demo/ files, excluding
     demo/cycle/*) -- 29 at REPORT_GRAMMAR_AMBER.md §4, 30 since
     demo/association.planes entered it (fix/recursion-leak-and-fifth-
-    amber-site Phase 3) -- each analysed through the real module loader
+    amber-site Phase 3), 31 since demo/status_threading.planes entered it
+    (S2 §A.6 / Phase 5) -- each analysed through the real module loader
     (`shapes.analyse_file`, follow=True) rather than parsed standalone --
     module-graph files depend on cross-file known_funcs (e.g.
     demo/app/net.planes's `api base`, defined in config.planes) that only
@@ -200,7 +201,7 @@ def test_every_valid_planes_file_in_the_repo_still_parses():
     demo_files = sorted(f for f in glob.glob("demo/**/*.planes", recursive=True)
                         if "cycle" not in f)
     corpus = root_files + demo_files
-    assert len(corpus) == 30, f"expected 30 corpus files, found {len(corpus)}"
+    assert len(corpus) == 31, f"expected 31 corpus files, found {len(corpus)}"
 
     for path in corpus:
         try:

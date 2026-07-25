@@ -52,6 +52,7 @@ from lexer import (
     If,
     IsNothing,
     ListLit,
+    ListPlus,
     Not,
     Note,
     Nothing,
@@ -64,6 +65,7 @@ from lexer import (
     Str,
     Use,
     Var,
+    When,
     Why,
     WriteTo,
 )
@@ -100,6 +102,8 @@ def render_expr(node):
         return node.name
     if isinstance(node, ListLit):
         return "[" + ", ".join(render_expr(i) for i in node.items) + "]"
+    if isinstance(node, ListPlus):
+        return f"{render_operand(node.base)} plus {render_operand(node.item)}"
     if isinstance(node, RecordLit):
         fields = ", ".join(f"{k}: {render_expr(v)}" for k, v in node.fields)
         return "{ " + fields + " }" if fields else "{}"
@@ -241,6 +245,22 @@ def render_foreach_stmt(node, indent, markers):
     return header + "\n" + body
 
 
+def render_when(node, indent, markers):
+    # `when SUBJECT is { field: expr, bindname, ... }:` — a match entry
+    # renders as `field: expr`, a binding entry as the bare field name. The
+    # else block, when present, is an ordinary block (a nested when there is
+    # how an if-elif ladder is written). Mirrors render_if.
+    entries = []
+    for fname, (kind, arg) in node.pattern:
+        entries.append(f"{fname}: {render_expr(arg)}" if kind == "match" else fname)
+    header = indent + f"when {render_expr(node.subject)} is {{ {', '.join(entries)} }}:"
+    lines = [header, render_block(node.body, indent + INDENT, markers)]
+    if node.els:
+        lines.append(indent + "else:")
+        lines.append(render_block(node.els, indent + INDENT, markers))
+    return "\n".join(lines)
+
+
 def render_stmt(node, indent, markers):
     if isinstance(node, Use):
         return indent + render_use(node)
@@ -260,6 +280,8 @@ def render_stmt(node, indent, markers):
         return indent + f"show {render_expr(node.expr)}"
     if isinstance(node, Why):
         return indent + f"why {render_expr(node.expr)}"
+    if isinstance(node, When):
+        return render_when(node, indent, markers)
     if isinstance(node, WriteTo):
         return indent + render_writeto_inline(node)
     if isinstance(node, OrFail):
