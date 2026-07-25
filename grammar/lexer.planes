@@ -1,0 +1,43 @@
+note: from "lexer.py, written in Planes -- Route B stage one. Reads grammar/vocabulary.planes for its keyword/builtin/operator tables via `use vocabulary`, which is why this file lives here rather than at the repo root: `use` resolves strictly same-directory (modules.py:resolve), and vocabulary.planes has to stay at its Phase-5 path."
+
+use vocabulary
+
+# ================================================================ character classification
+#
+# No regex. Every class below is code-point comparison, per PROBE_LEXER.md's
+# confirmed capabilities: `==`, `>=`, `<=` order code points; `for each`
+# walks a string one code point at a time (fix/text-iteration-and-the-lexer).
+
+to is-digit of c:
+  give c >= "0" and c <= "9"
+
+to is-hex-digit of c:
+  is-lower-hex = c >= "a" and c <= "f"
+  is-upper-hex = c >= "A" and c <= "F"
+  give is-digit of c or is-lower-hex or is-upper-hex
+
+to is-alpha of c:
+  is-lower = c >= "a" and c <= "z"
+  is-upper = c >= "A" and c <= "Z"
+  give is-lower or is-upper
+
+to is-name-start of c:
+  give is-alpha of c or c == "_"
+
+to is-name-continue of c:
+  give is-name-start of c or is-digit of c
+
+# Planes STRING literals have no escape sequences (grammar/vocabulary.json's
+# own note on the STRING token class) -- "\t" in a Planes source file is
+# the two characters backslash and t, not a tab. A literal tab, carriage
+# return, vertical tab, or form feed can only be written as the raw byte
+# itself inside the quotes, which is unrepresentable cleanly in a hand-
+# authored, readable source file. This is a bounded, verified gap, not a
+# silent one: grep -rlP '\t|\x0b|\x0c|\r' across every root and demo/
+# .planes file in the repo (the corpus this build's agreement test
+# covers) finds none -- every file's indentation and inline spacing uses
+# the plain space character only. is-strippable below covers exactly
+# that verified case. A file that introduced a tab would need this
+# extended; none does today.
+to is-strippable of c:
+  give c == " "
