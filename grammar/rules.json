@@ -5,8 +5,8 @@
   "count": 26,
   "forms": [
     {
-      "form": "when_pattern_entry",
-      "parser_method": "parse_when_pattern_entry",
+      "form": "record_field",
+      "parser_method": "parse_record_field",
       "opens_with": [
         "OP"
       ],
@@ -14,7 +14,38 @@
       "calls": [
         "parse_expr"
       ],
-      "source": "parser.py:1021",
+      "source": "parser.py:1007",
+      "surface": "`name: expr`. The key is a bare word, never an expression."
+    },
+    {
+      "form": "when",
+      "parser_method": "parse_when",
+      "opens_with": [
+        "NAME",
+        "OP",
+        "ELSE"
+      ],
+      "produces": "When",
+      "calls": [
+        "parse_expr",
+        "parse_block",
+        "parse_when_pattern_entry"
+      ],
+      "source": "parser.py:1025",
+      "surface": "`when subject is { field: expr, bindname, ... }: body [else: els]` (v5.0 \u00a774). `WHEN` is already consumed by the caller. A chained dispatch ladder (`when ... else: when ... else: ...`) needs no dedicated grammar \u2014 the else block is an ordinary block, and a `When` is an ordinary statement, so nesting one inside the other falls out of parse_block for free, the same way `if / else: if` already forms an if-elif-else chain in this language."
+    },
+    {
+      "form": "when_pattern_entry",
+      "parser_method": "parse_when_pattern_entry",
+      "opens_with": [
+        "OP"
+      ],
+      "produces": [],
+      "calls": [
+        "check_binding_name",
+        "parse_expr"
+      ],
+      "source": "parser.py:1059",
       "surface": "`name: expr` (a match constraint) or a bare `name` (a binding). Same field-name recognition as parse_record_field \u2014 a pattern entry names a field, so a keyword like `to` or `from` must work here exactly as it does in a record literal."
     },
     {
@@ -51,7 +82,7 @@
         "check_juxtaposition_ambiguity",
         "parse_additive"
       ],
-      "source": "parser.py:1040",
+      "source": "parser.py:1083",
       "surface": null
     },
     {
@@ -65,7 +96,7 @@
       "calls": [
         "parse_statement"
       ],
-      "source": "parser.py:157",
+      "source": "parser.py:175",
       "surface": null
     },
     {
@@ -81,7 +112,7 @@
       "calls": [
         "parse_statement"
       ],
-      "source": "parser.py:168",
+      "source": "parser.py:186",
       "surface": "Indented block after ':' \u2014 or a single inline statement."
     },
     {
@@ -125,11 +156,12 @@
         "parse_block",
         "parse_when",
         "parse_foreach",
+        "check_binding_name",
         "read_multiword_name",
         "check_rename_name_ambiguity",
         "parse_rule"
       ],
-      "source": "parser.py:183",
+      "source": "parser.py:201",
       "surface": null
     },
     {
@@ -146,9 +178,10 @@
       ],
       "produces": "Foreign",
       "calls": [
+        "read_param",
         "read_claim"
       ],
-      "source": "parser.py:276",
+      "source": "parser.py:296",
       "surface": "`foreign sort of xs from \"builtins.sorted\" doing nothing`"
     },
     {
@@ -167,7 +200,7 @@
       "calls": [
         "read_effect_word"
       ],
-      "source": "parser.py:347",
+      "source": "parser.py:367",
       "surface": "`rule [name] subject may not kind` (forbid) or `rule [name] subject may kind` (permit), each optionally with `to \"target\"` and a `supersedes [other-name]` clause, which may itself carry a fingerprint (`@xxxxxx`) of the rule it overrides."
     },
     {
@@ -181,9 +214,10 @@
       ],
       "produces": "FuncDef",
       "calls": [
-        "parse_block"
+        "parse_block",
+        "read_param"
       ],
-      "source": "parser.py:440",
+      "source": "parser.py:460",
       "surface": null
     },
     {
@@ -192,21 +226,22 @@
       "opens_with": [
         "FOR",
         "EACH",
+        "NAME",
         "IN",
         "WHERE",
         "OP",
-        "NAME",
         "EOL",
         "END",
         "BEGIN"
       ],
       "produces": "ForEach",
       "calls": [
+        "check_binding_name",
         "parse_or",
         "parse_block",
         "parse_expr"
       ],
-      "source": "parser.py:454",
+      "source": "parser.py:490",
       "surface": null
     },
     {
@@ -219,7 +254,7 @@
       ],
       "produces": [],
       "calls": [],
-      "source": "parser.py:524",
+      "source": "parser.py:562",
       "surface": "A trailing `because \"...\"` on an Assign or Rule \u2014 same line, or an indented continuation (matching `trailing_or_fail`'s wrapped form). `because` is read positionally, right here, only \u2014 like `may` and `is` \u2014 so it stays free as an ordinary name everywhere else (test_names.py's reserved-word ceiling)."
     },
     {
@@ -236,7 +271,7 @@
       "calls": [
         "parse_note_entry"
       ],
-      "source": "parser.py:557",
+      "source": "parser.py:595",
       "surface": "`note:` followed by an indented block of `from \"...\"` and `derives-from [rule-name]` entries \u2014 or a single inline entry. Never executes; the interpreter raises if one reaches it."
     },
     {
@@ -250,7 +285,7 @@
       ],
       "produces": [],
       "calls": [],
-      "source": "parser.py:576",
+      "source": "parser.py:614",
       "surface": null
     },
     {
@@ -261,7 +296,7 @@
       "calls": [
         "parse_or"
       ],
-      "source": "parser.py:611",
+      "source": "parser.py:649",
       "surface": null
     },
     {
@@ -274,7 +309,7 @@
       "calls": [
         "parse_or"
       ],
-      "source": "parser.py:647",
+      "source": "parser.py:685",
       "surface": "`name: expr` inside a with-clause. Not parse_record_field: that one reads its value through parse_expr, which would re-enter trailing_with and let a *following* with-clause attach to this field's value instead of to the RecordUpdate as a whole \u2014 `p with a: 1 with b: 2` must chain onto `p with a: 1`, not parse as `p with a: (1 with b: 2)`. Everything parse_expr does except the with-chain itself, since that part is precisely what must not recurse here."
     },
     {
@@ -287,7 +322,7 @@
       "calls": [
         "parse_and"
       ],
-      "source": "parser.py:669",
+      "source": "parser.py:707",
       "surface": null
     },
     {
@@ -300,7 +335,7 @@
       "calls": [
         "parse_not"
       ],
-      "source": "parser.py:676",
+      "source": "parser.py:714",
       "surface": null
     },
     {
@@ -313,7 +348,7 @@
       "calls": [
         "parse_comparison"
       ],
-      "source": "parser.py:682",
+      "source": "parser.py:720",
       "surface": null
     },
     {
@@ -329,7 +364,7 @@
       "calls": [
         "parse_plus"
       ],
-      "source": "parser.py:687",
+      "source": "parser.py:725",
       "surface": null
     },
     {
@@ -342,7 +377,7 @@
       "calls": [
         "parse_additive"
       ],
-      "source": "parser.py:710",
+      "source": "parser.py:748",
       "surface": "`base plus item` (v5.0 \u00a772) \u2014 a named binary connective, bound below arithmetic so `xs plus a + b` reads as `xs plus (a + b)`."
     },
     {
@@ -355,7 +390,7 @@
       "calls": [
         "parse_multiplicative"
       ],
-      "source": "parser.py:719",
+      "source": "parser.py:757",
       "surface": null
     },
     {
@@ -368,7 +403,7 @@
       "calls": [
         "parse_unary"
       ],
-      "source": "parser.py:725",
+      "source": "parser.py:763",
       "surface": null
     },
     {
@@ -381,7 +416,7 @@
       "calls": [
         "parse_postfix"
       ],
-      "source": "parser.py:731",
+      "source": "parser.py:769",
       "surface": null
     },
     {
@@ -394,7 +429,7 @@
       "calls": [
         "parse_primary"
       ],
-      "source": "parser.py:737",
+      "source": "parser.py:775",
       "surface": null
     },
     {
@@ -403,38 +438,8 @@
       "opens_with": [],
       "produces": [],
       "calls": [],
-      "source": "parser.py:944",
+      "source": "parser.py:982",
       "surface": "Looking at `(`: is this an argument list, or a parenthesised argument that continues into a larger expression?"
-    },
-    {
-      "form": "record_field",
-      "parser_method": "parse_record_field",
-      "opens_with": [
-        "OP"
-      ],
-      "produces": [],
-      "calls": [
-        "parse_expr"
-      ],
-      "source": "parser.py:969",
-      "surface": "`name: expr`. The key is a bare word, never an expression."
-    },
-    {
-      "form": "when",
-      "parser_method": "parse_when",
-      "opens_with": [
-        "NAME",
-        "OP",
-        "ELSE"
-      ],
-      "produces": "When",
-      "calls": [
-        "parse_expr",
-        "parse_block",
-        "parse_when_pattern_entry"
-      ],
-      "source": "parser.py:987",
-      "surface": "`when subject is { field: expr, bindname, ... }: body [else: els]` (v5.0 \u00a774). `WHEN` is already consumed by the caller. A chained dispatch ladder (`when ... else: when ... else: ...`) needs no dedicated grammar \u2014 the else block is an ordinary block, and a `When` is an ordinary statement, so nesting one inside the other falls out of parse_block for free, the same way `if / else: if` already forms an if-elif-else chain in this language."
     }
   ]
 }
