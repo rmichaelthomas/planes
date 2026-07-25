@@ -1,0 +1,1118 @@
+note: from "parser.py, written in Planes -- Route B stage two. Turns grammar/lexer.planes's token stream into an AST that agrees with parser.py's, checked by test_parser_in_planes.py's canonical-AST-text comparison harness. Amber (the four disambiguation sites) is explicitly out of scope -- Build 5."
+
+use lexer
+
+# ================================================================ string escaping, for the canonical form
+#
+# planes_text.escape_string_literal's Planes twin: a string value,
+# re-escaped as the content of a Planes STRING literal (quote, backslash,
+# newline, tab) so a leaf value survives round-trip through the
+# canonical text form the same way it would through re-parsed source.
+# Character-by-character via for each -- a host-language loop, so this
+# costs zero Planes-level recursion regardless of string length, the
+# same shape lexer.planes's own step functions already use.
+
+to escape-char of c:
+  if c == "\"":
+    give "\\\""
+  else:
+    if c == "\\":
+      give "\\\\"
+    else:
+      if c == "\n":
+        give "\\n"
+      else:
+        if c == "\t":
+          give "\\t"
+        else:
+          give c
+
+to escape-string-literal of s:
+  result = ""
+  for each c in s:
+    result = result + escape-char of c
+  give result
+
+to render-string of s:
+  give "\"" + (escape-string-literal of s) + "\""
+
+to render-bool of b:
+  if b:
+    give "true"
+  else:
+    give "false"
+
+# ================================================================ number-literal text, parsed by hand
+#
+# Number.parse (planes_num.py) has no Planes-side equivalent, and none of
+# the 8 builtins converts text to a number -- `whole` truncates an
+# EXISTING number, it does not parse one. Rather than spend a 9th builtin
+# on this (declined on the same grounds `chr of n` was, REPORT_STRING_
+# ESCAPES.md's ruling: a magic conversion builtin reintroduces exactly
+# the opacity the closed vocabulary exists to avoid), a NUMBER token's
+# text is parsed digit by digit, the same character-by-character idiom
+# is-digit/is-alpha already use for classification -- built entirely from
+# already-proven capabilities (comparison, arithmetic, for each), not a
+# language change. Whole and fractional parts both accumulate as exact
+# integers; the fractional part becomes value/10^digits via ordinary `/`,
+# matching Number's own exact-rational semantics for a decimal literal.
+
+to digit-value of c:
+  if c == "0":
+    give 0
+  else:
+    if c == "1":
+      give 1
+    else:
+      if c == "2":
+        give 2
+      else:
+        if c == "3":
+          give 3
+        else:
+          if c == "4":
+            give 4
+          else:
+            if c == "5":
+              give 5
+            else:
+              if c == "6":
+                give 6
+              else:
+                if c == "7":
+                  give 7
+                else:
+                  if c == "8":
+                    give 8
+                  else:
+                    if c == "9":
+                      give 9
+                    else:
+                      fail "not a digit: '" + c + "'" as parse-error
+
+to parse-number-step of state, c:
+  if c == ".":
+    give { whole-part: state.whole-part, frac-part: state.frac-part, frac-divisor: state.frac-divisor, seen-dot: true }
+  else:
+    d = digit-value of c
+    if state.seen-dot:
+      new-frac = state.frac-part * 10 + d
+      new-divisor = state.frac-divisor * 10
+      give { whole-part: state.whole-part, frac-part: new-frac, frac-divisor: new-divisor, seen-dot: true }
+    else:
+      new-whole = state.whole-part * 10 + d
+      give { whole-part: new-whole, frac-part: state.frac-part, frac-divisor: state.frac-divisor, seen-dot: false }
+
+to parse-number-text of raw:
+  initial = { whole-part: 0, frac-part: 0, frac-divisor: 1, seen-dot: false }
+  result = initial
+  for each c in raw:
+    result = parse-number-step of result, c
+  if result.seen-dot:
+    give result.whole-part + (result.frac-part / result.frac-divisor)
+  else:
+    give result.whole-part
+
+# ================================================================ STRING token text, quotes stripped
+#
+# A STRING token's text already carries escape-resolved content between
+# two literal quote characters (lexer.planes's step-string, matching
+# lexer.py's own token.value exactly -- REPORT_STRING_ESCAPES.md's
+# ruling 1). parser.py strips them with `.value[1:-1]`; Planes has no
+# slice syntax (#11) and no "drop first/last" for a string, so this walks
+# every character once, counting position, and keeps everything except
+# position 0 and the last position -- the same counted-fold idiom
+# leading-whitespace-count already uses in lexer.planes, not indexing.
+
+to strip-quotes-step of state, c:
+  is-first = state.i == 0
+  is-last = state.i == (state.n - 1)
+  new-result = state.result
+  keep = not (is-first or is-last)
+  if keep:
+    new-result = state.result + c
+  give { result: new-result, i: (state.i + 1), n: state.n }
+
+to strip-quotes of s:
+  n = count of s
+  initial = { result: "", i: 0, n: n }
+  result = initial
+  for each c in s:
+    result = strip-quotes-step of result, c
+  give result.result
+
+# ================================================================ the canonical form
+#
+# One node per line, indentation for depth, node kind then its fields in
+# parser.py's own dataclass declaration order -- test_parser_in_planes.py
+# renders the Python side the same way, generically, by introspecting
+# lexer.py's dataclasses; this side is hand-written per node kind because
+# Planes has no way to enumerate a record's fields (no builtin for it,
+# and none is being added -- section 7 invariant 1). `indent` is threaded
+# as a literal string, grown by "  " per recursive level, rather than a
+# depth number -- one fewer arithmetic op per level, and it is what the
+# recursive call sites read directly.
+
+to join-with-newlines of lines:
+  result = ""
+  seen-one = false
+  for each line in lines:
+    if seen-one:
+      result = result + "\n" + line
+    else:
+      result = line
+      seen-one = true
+  give result
+
+# The body of a `field: [N]` list of AST nodes -- just the "- \n <node>"
+# blocks, newline-joined; "" for an empty list. The caller composes the
+# "fieldname: [N]" header itself, since the field name and count vary
+# per call site and this function has no way to know either generically
+# (same reason canonical-of-node is hand-dispatched, not introspected).
+to canonical-of-node-list of items, indent:
+  lines = []
+  for each item in items:
+    entry = indent + "-\n" + (canonical-of-node of item, (indent + "  "))
+    lines = lines plus entry
+  give join-with-newlines of lines
+
+to canonical-of-call of node, indent:
+  header = indent + "Call\n" + indent + "  name: " + (render-string of node.name)
+  n = count of node.args
+  with-header = header + "\n" + indent + "  args: [" + (text of n) + "]"
+  result = with-header
+  if n > 0:
+    body = canonical-of-node-list of node.args, (indent + "    ")
+    result = with-header + "\n" + body
+  give result + "\n" + indent + "  line: " + (text of node.line)
+
+# A `field: [N]` list header plus its body -- every list-valued AST field
+# (Call.args above, If.then/els here, and every later rung's block-body
+# fields) shares this exact two-line-or-more shape; only the field name
+# and the items differ per call site.
+to canonical-of-field-list of field-name, items, indent:
+  n = count of items
+  header = indent + "  " + field-name + ": [" + (text of n) + "]"
+  if n > 0:
+    body = canonical-of-node-list of items, (indent + "    ")
+    give header + "\n" + body
+  else:
+    give header
+
+to canonical-of-if of node, indent:
+  cond-part = canonical-of-node of node.cond, (indent + "    ")
+  header = indent + "If\n" + indent + "  cond:\n" + cond-part
+  then-part = canonical-of-field-list of "then", node.then, indent
+  els-part = canonical-of-field-list of "els", node.els, indent
+  give header + "\n" + then-part + "\n" + els-part
+
+# A field whose list items are plain strings (FuncDef.params), not AST
+# nodes -- "- value" on one line, matching the Python side's
+# _render_list_item for anything that isn't a node.
+to canonical-of-string-field-list of field-name, items, indent:
+  n = count of items
+  header = indent + "  " + field-name + ": [" + (text of n) + "]"
+  if n > 0:
+    item-indent = indent + "    "
+    lines = []
+    for each item in items:
+      lines = lines plus (item-indent + "- " + (render-string of item))
+    give header + "\n" + (join-with-newlines of lines)
+  else:
+    give header
+
+to canonical-of-funcdef of node, indent:
+  header = indent + "FuncDef\n" + indent + "  name: " + (render-string of node.name)
+  params-part = canonical-of-string-field-list of "params", node.params, indent
+  body-part = canonical-of-field-list of "body", node.body, indent
+  give header + "\n" + params-part + "\n" + body-part
+
+to canonical-of-where of node, indent:
+  if node.where is nothing:
+    give indent + "  where: nothing"
+  else:
+    where-node-part = canonical-of-node of node.where, (indent + "    ")
+    give indent + "  where:\n" + where-node-part
+
+to canonical-of-foreach of node, indent:
+  source-part = canonical-of-node of node.source, (indent + "    ")
+  header = indent + "ForEach\n" + indent + "  var: " + (render-string of node.var)
+  with-source = header + "\n" + indent + "  source:\n" + source-part
+  where-part = canonical-of-where of node, indent
+  with-where = with-source + "\n" + where-part
+  body-part = canonical-of-field-list of "body", node.body, indent
+  with-body = with-where + "\n" + body-part
+  give with-body + "\n" + indent + "  is_expr: " + (render-bool of node.is-expr)
+
+# Use.renames is a list of (old, new) name pairs -- Python-tuple-shaped
+# on parser.py's side, but Planes has no tuple literal syntax, only
+# records and lists (#11's scope again), so each pair is a plain
+# { old, new } record here. Not an AST node (no `kind`), so this can't
+# reuse canonical-of-node-list -- rendered directly to match the Python
+# side's own pair rendering for a non-node 2-tuple: "(old, new)".
+to canonical-of-renames of renames, indent:
+  n = count of renames
+  header = indent + "  renames: [" + (text of n) + "]"
+  if n > 0:
+    item-indent = indent + "    "
+    lines = []
+    for each r in renames:
+      pair-text = "(" + (render-string of r.old) + ", " + (render-string of r.new) + ")"
+      lines = lines plus (item-indent + "- " + pair-text)
+    give header + "\n" + (join-with-newlines of lines)
+  else:
+    give header
+
+to canonical-of-use of node, indent:
+  header = indent + "Use\n" + indent + "  module: " + (render-string of node.module)
+  renames-part = canonical-of-renames of node.renames, indent
+  give header + "\n" + renames-part
+
+to canonical-of-listlit of node, indent:
+  header = indent + "ListLit"
+  give header + "\n" + (canonical-of-field-list of "items", node.items, indent)
+
+# RecordLit.fields is a list of (name, expr) pairs on parser.py's side --
+# each one a plain { key, value } record here (no tuple syntax, #11,
+# same as Use.renames), rendered to match the Python side's own
+# (str, node)-pair item shape: `- "key":` then the value node indented
+# one more level, not canonical-of-node-list's bare `-` (that shape is
+# for plain node items, with no key to print).
+to canonical-of-record-fields of fields, indent:
+  n = count of fields
+  header = indent + "  fields: [" + (text of n) + "]"
+  if n > 0:
+    item-indent = indent + "    "
+    lines = []
+    for each f in fields:
+      key-line = item-indent + "- " + (render-string of f.key) + ":"
+      value-part = canonical-of-node of f.value, (item-indent + "  ")
+      lines = lines plus (key-line + "\n" + value-part)
+    give header + "\n" + (join-with-newlines of lines)
+  else:
+    give header
+
+to canonical-of-recordlit of node, indent:
+  give indent + "RecordLit\n" + (canonical-of-record-fields of node.fields, indent)
+
+to canonical-of-node of node, indent:
+  when node is { kind: "Num" }:
+    give indent + "Num\n" + indent + "  value: " + text of node.value
+  else:
+    when node is { kind: "Str" }:
+      give indent + "Str\n" + indent + "  value: " + render-string of node.value
+    else:
+      when node is { kind: "Bool" }:
+        give indent + "Bool\n" + indent + "  value: " + render-bool of node.value
+      else:
+        when node is { kind: "Nothing" }:
+          give indent + "Nothing"
+        else:
+          when node is { kind: "Var" }:
+            give indent + "Var\n" + indent + "  name: " + render-string of node.name
+          else:
+            when node is { kind: "BinOp" }:
+              left-part = canonical-of-node of node.left, (indent + "    ")
+              right-part = canonical-of-node of node.right, (indent + "    ")
+              header = indent + "BinOp\n" + indent + "  op: " + render-string of node.op
+              with-left = header + "\n" + indent + "  left:\n" + left-part
+              give with-left + "\n" + indent + "  right:\n" + right-part
+            else:
+              when node is { kind: "ListPlus" }:
+                base-part = canonical-of-node of node.base, (indent + "    ")
+                item-part = canonical-of-node of node.item, (indent + "    ")
+                header = indent + "ListPlus\n" + indent + "  base:\n" + base-part
+                give header + "\n" + indent + "  item:\n" + item-part
+              else:
+                when node is { kind: "Not" }:
+                  inner = canonical-of-node of node.expr, (indent + "    ")
+                  give indent + "Not\n" + indent + "  expr:\n" + inner
+                else:
+                  when node is { kind: "IsNothing" }:
+                    inner = canonical-of-node of node.expr, (indent + "    ")
+                    give indent + "IsNothing\n" + indent + "  expr:\n" + inner
+                  else:
+                    when node is { kind: "Field" }:
+                      obj-part = canonical-of-node of node.obj, (indent + "    ")
+                      header = indent + "Field\n" + indent + "  obj:\n" + obj-part
+                      give header + "\n" + indent + "  name: " + (render-string of node.name)
+                    else:
+                      when node is { kind: "Round" }:
+                        value-part = canonical-of-node of node.value, (indent + "    ")
+                        places-part = canonical-of-node of node.places-value, (indent + "    ")
+                        header = indent + "Round\n" + indent + "  value:\n" + value-part
+                        give header + "\n" + indent + "  places:\n" + places-part
+                      else:
+                        when node is { kind: "Call" }:
+                          give canonical-of-call of node, indent
+                        else:
+                          when node is { kind: "Assign" }:
+                            expr-part = canonical-of-node of node.expr, (indent + "    ")
+                            header = indent + "Assign\n" + indent + "  name: " + (render-string of node.name)
+                            with-expr = header + "\n" + indent + "  expr:\n" + expr-part
+                            with-let = with-expr + "\n" + indent + "  is_let: " + (render-bool of node.is-let)
+                            give with-let + "\n" + indent + "  annotation: nothing"
+                          else:
+                            when node is { kind: "Show" }:
+                              expr-part = canonical-of-node of node.expr, (indent + "    ")
+                              header = indent + "Show\n" + indent + "  expr:\n" + expr-part
+                              give header + "\n" + indent + "  line: " + (text of node.line)
+                            else:
+                              when node is { kind: "If" }:
+                                give canonical-of-if of node, indent
+                              else:
+                                when node is { kind: "FuncDef" }:
+                                  give canonical-of-funcdef of node, indent
+                                else:
+                                  when node is { kind: "Give" }:
+                                    inner = canonical-of-node of node.expr, (indent + "    ")
+                                    give indent + "Give\n" + indent + "  expr:\n" + inner
+                                  else:
+                                    when node is { kind: "ForEach" }:
+                                      give canonical-of-foreach of node, indent
+                                    else:
+                                      when node is { kind: "Use" }:
+                                        give canonical-of-use of node, indent
+                                      else:
+                                        when node is { kind: "ListLit" }:
+                                          give canonical-of-listlit of node, indent
+                                        else:
+                                          when node is { kind: "RecordLit" }:
+                                            give canonical-of-recordlit of node, indent
+                                          else:
+                                            fail "no canonical form for node kind '" + node.kind + "'" as unknown-node-kind
+
+# ================================================================ the cursor
+#
+# capability 4 (PROBE_PARSER.md): no `rest`/`drop`/index exists for a
+# Planes list (#11), so a forward-walking cursor is a cons-list of
+# records built once via to-cons -- `.rest` is plain field access, not
+# indexing. Safe at fragment scale (well under the ~140-deep ceiling
+# unreverse recurses at, per-item); Phase 3/4 revisit whether it stays
+# safe at whole-file scale.
+
+to reverse-into of items, acc:
+  result = acc
+  for each x in items:
+    result = { head: x, rest: result }
+  give unreverse of result, nothing
+
+to unreverse of node, acc:
+  if node is nothing:
+    give acc
+  else:
+    give unreverse of node.rest, { head: node.head, rest: acc }
+
+to to-cons of items:
+  give reverse-into of items, nothing
+
+to current of cursor:
+  give cursor.head
+
+to advance of cursor:
+  give cursor.rest
+
+to peek-at of cursor, k:
+  if k == 0:
+    give current of cursor
+  else:
+    give peek-at of (advance of cursor), (k - 1)
+
+to tok-at of cursor, kind:
+  t = current of cursor
+  give t.kind == kind
+
+to tok-at-value of cursor, kind, value:
+  t = current of cursor
+  give t.kind == kind and t.text == value
+
+to try-accept of cursor, kind:
+  if tok-at of cursor, kind:
+    give { matched: true, token: (current of cursor), cursor: (advance of cursor) }
+  else:
+    give { matched: false, token: (current of cursor), cursor: cursor }
+
+to try-accept-value of cursor, kind, value:
+  if tok-at-value of cursor, kind, value:
+    give { matched: true, token: (current of cursor), cursor: (advance of cursor) }
+  else:
+    give { matched: false, token: (current of cursor), cursor: cursor }
+
+to expect-kind of cursor, kind:
+  if tok-at of cursor, kind:
+    give { token: (current of cursor), cursor: (advance of cursor) }
+  else:
+    t = current of cursor
+    fail "line " + (text of t.line) + ": expected " + kind + ", found '" + t.text + "'" as parse-error
+
+to expect-op of cursor, value:
+  if tok-at-value of cursor, "OP", value:
+    give { token: (current of cursor), cursor: (advance of cursor) }
+  else:
+    t = current of cursor
+    fail "line " + (text of t.line) + ": expected '" + value + "', found '" + t.text + "'" as parse-error
+
+# ================================================================ paren-is-arglist lookahead
+#
+# parser.py's own lookahead, not amber (amber is Build 5, out of scope --
+# section 7 invariant 3): scan to the matching close paren; an operator
+# right after it means the parens were a sub-expression, not the whole
+# argument list. Recurses once per token between the parens -- bounded
+# by one call's argument-list size, not file length.
+
+to is-additive-or-comparison-op of txt:
+  group-a = txt == "+" or txt == "-" or txt == "*" or txt == "/"
+  group-b = txt == "<" or txt == ">" or txt == "<=" or txt == ">=" or txt == "==" or txt == "!="
+  give group-a or group-b
+
+to scan-to-matching-paren of cursor, depth:
+  t = current of cursor
+  if t.kind == "EOF":
+    give cursor
+  else:
+    if t.kind == "OP" and t.text == "(":
+      give scan-to-matching-paren of (advance of cursor), (depth + 1)
+    else:
+      if t.kind == "OP" and t.text == ")":
+        new-depth = depth - 1
+        if new-depth == 0:
+          give advance of cursor
+        else:
+          give scan-to-matching-paren of (advance of cursor), new-depth
+      else:
+        give scan-to-matching-paren of (advance of cursor), depth
+
+to paren-is-arglist of cursor:
+  after-close = scan-to-matching-paren of (advance of cursor), 1
+  t = current of after-close
+  if t.kind == "OP" and (is-additive-or-comparison-op of t.text):
+    give false
+  else:
+    give true
+
+# ================================================================ the expression precedence chain
+#
+# parser.py's own levels, read directly from parser.py (not inferred
+# from this prompt or PROBE_PARSER.md's illustrative example -- section
+# 0 step 5): parse_or -> parse_and -> parse_not -> parse_comparison ->
+# parse_plus -> parse_additive -> parse_multiplicative -> parse_unary ->
+# parse_postfix -> parse_primary. Amber's own four sites (multiword
+# names, juxtaposition calls) are out of scope (Build 5) -- a bare NAME
+# not immediately followed by `of` or `(` is always a Var here, never a
+# juxtaposition call, which is this build's stated scope limit, not an
+# oversight. Every parse function returns { node, cursor }, mirroring
+# capability 3's proven { node, index } shape with `cursor` standing in
+# for the index -- a cons-list cursor rather than an integer, since
+# Planes has no way to index a token list by position (#11).
+
+to parse-call-of-args of cursor:
+  first-arg = parse-unary of cursor
+  give collect-of-args of first-arg.cursor, [first-arg.node]
+
+to collect-of-args of cursor, acc:
+  comma = try-accept-value of cursor, "OP", ","
+  if comma.matched:
+    next-arg = parse-unary of comma.cursor
+    give collect-of-args of next-arg.cursor, (acc plus next-arg.node)
+  else:
+    give { nodes: acc, cursor: cursor }
+
+to parse-call-paren-args of cursor:
+  first-arg = parse-or of cursor
+  give collect-paren-args of first-arg.cursor, [first-arg.node]
+
+to collect-paren-args of cursor, acc:
+  comma = try-accept-value of cursor, "OP", ","
+  if comma.matched:
+    next-arg = parse-or of comma.cursor
+    give collect-paren-args of next-arg.cursor, (acc plus next-arg.node)
+  else:
+    give { nodes: acc, cursor: cursor }
+
+to parse-name-primary of t, cursor:
+  name = t.text
+  line = t.line
+  after-name = advance of cursor
+  of-try = try-accept of after-name, "OF"
+  if of-try.matched:
+    args = parse-call-of-args of of-try.cursor
+    give { node: { kind: "Call", name: name, args: args.nodes, line: line }, cursor: args.cursor }
+  else:
+    at-paren = tok-at-value of after-name, "OP", "("
+    if at-paren:
+      give parse-name-paren-call of name, line, after-name
+    else:
+      give { node: { kind: "Var", name: name }, cursor: after-name }
+
+to parse-name-paren-call of name, line, cursor:
+  is-arglist = paren-is-arglist of cursor
+  if is-arglist:
+    give parse-name-real-arglist of name, line, cursor
+  else:
+    single = parse-additive of cursor
+    give { node: { kind: "Call", name: name, args: [single.node], line: line }, cursor: single.cursor }
+
+to parse-name-real-arglist of name, line, cursor:
+  open-consumed = advance of cursor
+  at-close = tok-at-value of open-consumed, "OP", ")"
+  if at-close:
+    give { node: { kind: "Call", name: name, args: [], line: line }, cursor: (advance of open-consumed) }
+  else:
+    args = parse-call-paren-args of open-consumed
+    closed = expect-op of args.cursor, ")"
+    give { node: { kind: "Call", name: name, args: args.nodes, line: line }, cursor: closed.cursor }
+
+# `[` / `{` primaries: list and record literals. skip-bracket-ws mirrors
+# parser.py's own (EOL/`;`/BEGIN/END all transparent inside brackets --
+# a literal spanning indented lines picks up indentation tokens that
+# mean nothing here, since the brackets already carry the structure);
+# bounded by how many blank/dedent tokens sit between two literal
+# elements, not file size.
+
+to skip-bracket-ws of cursor:
+  t = current of cursor
+  is-blank-here = t.kind == "EOL" or t.kind == "BEGIN" or t.kind == "END" or (t.kind == "OP" and t.text == ";")
+  if is-blank-here:
+    give skip-bracket-ws of (advance of cursor)
+  else:
+    give cursor
+
+to collect-list-items of cursor, acc:
+  after-ws = skip-bracket-ws of cursor
+  comma = try-accept-value of after-ws, "OP", ","
+  if comma.matched:
+    after-comma-ws = skip-bracket-ws of comma.cursor
+    if tok-at-value of after-comma-ws, "OP", "]":
+      give { items: acc, cursor: after-comma-ws }
+    else:
+      next-result = parse-or of after-comma-ws
+      give collect-list-items of next-result.cursor, (acc plus next-result.node)
+  else:
+    give { items: acc, cursor: after-ws }
+
+to parse-list-literal of cursor:
+  after-open = skip-bracket-ws of (advance of cursor)
+  if tok-at-value of after-open, "OP", "]":
+    give { node: { kind: "ListLit", items: [] }, cursor: (advance of after-open) }
+  else:
+    first-result = parse-or of after-open
+    rest = collect-list-items of first-result.cursor, [first-result.node]
+    closed = expect-op of rest.cursor, "]"
+    give { node: { kind: "ListLit", items: rest.items }, cursor: closed.cursor }
+
+to parse-record-field of cursor:
+  after-ws = skip-bracket-ws of cursor
+  key-expect = expect-kind of after-ws, "NAME"
+  colon-expect = expect-op of key-expect.cursor, ":"
+  value-result = parse-or of colon-expect.cursor
+  give { key: key-expect.token.text, value: value-result.node, cursor: value-result.cursor }
+
+to collect-record-fields of cursor, acc:
+  after-ws = skip-bracket-ws of cursor
+  comma = try-accept-value of after-ws, "OP", ","
+  if comma.matched:
+    after-comma-ws = skip-bracket-ws of comma.cursor
+    if tok-at-value of after-comma-ws, "OP", "}":
+      give { fields: acc, cursor: after-comma-ws }
+    else:
+      next = parse-record-field of after-comma-ws
+      give collect-record-fields of next.cursor, (acc plus { key: next.key, value: next.value })
+  else:
+    give { fields: acc, cursor: after-ws }
+
+to parse-record-literal of cursor:
+  after-open = skip-bracket-ws of (advance of cursor)
+  if tok-at-value of after-open, "OP", "}":
+    give { node: { kind: "RecordLit", fields: [] }, cursor: (advance of after-open) }
+  else:
+    first-field = parse-record-field of after-open
+    rest = collect-record-fields of first-field.cursor, [{ key: first-field.key, value: first-field.value }]
+    closed = expect-op of rest.cursor, "}"
+    give { node: { kind: "RecordLit", fields: rest.fields }, cursor: closed.cursor }
+
+to parse-primary of cursor:
+  t = current of cursor
+  when t is { kind: "FIRST" }:
+    after-first = advance of cursor
+    n-result = parse-unary of after-first
+    of-expect = expect-kind of n-result.cursor, "OF"
+    x-result = parse-unary of of-expect.cursor
+    node = { kind: "BinOp", op: "first", left: n-result.node, right: x-result.node }
+    give { node: node, cursor: x-result.cursor }
+  else:
+    when t is { kind: "ROUND" }:
+      after-round = advance of cursor
+      value-result = parse-unary of after-round
+      to-expect = expect-kind of value-result.cursor, "TO"
+      places-result = parse-unary of to-expect.cursor
+      places-try = try-accept of places-result.cursor, "PLACES"
+      node = { kind: "Round", value: value-result.node, places-value: places-result.node }
+      give { node: node, cursor: places-try.cursor }
+    else:
+      when t is { kind: "NUMBER" }:
+        n = parse-number-text of t.text
+        give { node: { kind: "Num", value: n }, cursor: (advance of cursor) }
+      else:
+        when t is { kind: "STRING" }:
+          s = strip-quotes of t.text
+          give { node: { kind: "Str", value: s }, cursor: (advance of cursor) }
+        else:
+          when t is { kind: "TRUE" }:
+            give { node: { kind: "Bool", value: true }, cursor: (advance of cursor) }
+          else:
+            when t is { kind: "FALSE" }:
+              give { node: { kind: "Bool", value: false }, cursor: (advance of cursor) }
+            else:
+              when t is { kind: "NOTHING" }:
+                give { node: { kind: "Nothing" }, cursor: (advance of cursor) }
+              else:
+                is-open-brace = t.kind == "OP" and t.text == "{"
+                if is-open-brace:
+                  give parse-record-literal of cursor
+                else:
+                  is-open-bracket = t.kind == "OP" and t.text == "["
+                  if is-open-bracket:
+                    give parse-list-literal of cursor
+                  else:
+                    is-open-paren = t.kind == "OP" and t.text == "("
+                    if is-open-paren:
+                      inner = parse-or of (advance of cursor)
+                      closed = expect-op of inner.cursor, ")"
+                      give { node: inner.node, cursor: closed.cursor }
+                    else:
+                      if t.kind == "NAME":
+                        give parse-name-primary of t, cursor
+                      else:
+                        fail "line " + (text of t.line) + ": expected a value, found '" + t.text + "'" as parse-error
+
+to continue-postfix of node, cursor:
+  t = current of cursor
+  is-dot = t.kind == "OP" and t.text == "."
+  if is-dot:
+    after-dot = advance of cursor
+    name-tok = current of after-dot
+    new-node = { kind: "Field", obj: node, name: name-tok.text }
+    give continue-postfix of new-node, (advance of after-dot)
+  else:
+    is-bracket = t.kind == "OP" and t.text == "["
+    if is-bracket:
+      msg = "line " + (text of t.line) + ": '[' has no meaning here -- Planes has no index or slice syntax"
+      fail msg as parse-error
+    else:
+      give { node: node, cursor: cursor }
+
+to parse-postfix of cursor:
+  primary = parse-primary of cursor
+  give continue-postfix of primary.node, primary.cursor
+
+to parse-unary of cursor:
+  is-minus = tok-at-value of cursor, "OP", "-"
+  if is-minus:
+    inner = parse-unary of (advance of cursor)
+    zero-node = { kind: "Num", value: 0 }
+    node = { kind: "BinOp", op: "-", left: zero-node, right: inner.node }
+    give { node: node, cursor: inner.cursor }
+  else:
+    give parse-postfix of cursor
+
+to continue-multiplicative of node, cursor:
+  t = current of cursor
+  is-op = t.kind == "OP" and (t.text == "*" or t.text == "/")
+  if is-op:
+    right = parse-unary of (advance of cursor)
+    new-node = { kind: "BinOp", op: t.text, left: node, right: right.node }
+    give continue-multiplicative of new-node, right.cursor
+  else:
+    give { node: node, cursor: cursor }
+
+to parse-multiplicative of cursor:
+  left = parse-unary of cursor
+  give continue-multiplicative of left.node, left.cursor
+
+to continue-additive of node, cursor:
+  t = current of cursor
+  is-op = t.kind == "OP" and (t.text == "+" or t.text == "-")
+  if is-op:
+    right = parse-multiplicative of (advance of cursor)
+    new-node = { kind: "BinOp", op: t.text, left: node, right: right.node }
+    give continue-additive of new-node, right.cursor
+  else:
+    give { node: node, cursor: cursor }
+
+to parse-additive of cursor:
+  left = parse-multiplicative of cursor
+  give continue-additive of left.node, left.cursor
+
+to continue-plus of node, cursor:
+  t = current of cursor
+  if t.kind == "PLUS":
+    right = parse-additive of (advance of cursor)
+    new-node = { kind: "ListPlus", base: node, item: right.node }
+    give continue-plus of new-node, right.cursor
+  else:
+    give { node: node, cursor: cursor }
+
+to parse-plus of cursor:
+  left = parse-additive of cursor
+  give continue-plus of left.node, left.cursor
+
+to continue-comparison of node, cursor:
+  t = current of cursor
+  is-cmp = t.kind == "OP" and (is-additive-or-comparison-op of t.text) and not (is-additive-op of t.text)
+  if is-cmp:
+    right = parse-plus of (advance of cursor)
+    new-node = { kind: "BinOp", op: t.text, left: node, right: right.node }
+    give continue-comparison of new-node, right.cursor
+  else:
+    if t.kind == "IN":
+      right = parse-plus of (advance of cursor)
+      new-node = { kind: "BinOp", op: "in", left: node, right: right.node }
+      give continue-comparison of new-node, right.cursor
+    else:
+      is-is-nothing = t.kind == "NAME" and t.text == "is" and (peek-at of cursor, 1).kind == "NOTHING"
+      if is-is-nothing:
+        after-is = advance of cursor
+        after-nothing = advance of after-is
+        new-node = { kind: "IsNothing", expr: node }
+        give continue-comparison of new-node, after-nothing
+      else:
+        give { node: node, cursor: cursor }
+
+to is-additive-op of txt:
+  give txt == "+" or txt == "-"
+
+to parse-comparison of cursor:
+  left = parse-plus of cursor
+  give continue-comparison of left.node, left.cursor
+
+to parse-not of cursor:
+  if tok-at of cursor, "NOT":
+    inner = parse-not of (advance of cursor)
+    give { node: { kind: "Not", expr: inner.node }, cursor: inner.cursor }
+  else:
+    give parse-comparison of cursor
+
+to continue-and of node, cursor:
+  if tok-at of cursor, "AND":
+    right = parse-not of (advance of cursor)
+    new-node = { kind: "BinOp", op: "and", left: node, right: right.node }
+    give continue-and of new-node, right.cursor
+  else:
+    give { node: node, cursor: cursor }
+
+to parse-and of cursor:
+  left = parse-not of cursor
+  give continue-and of left.node, left.cursor
+
+to continue-or of node, cursor:
+  if tok-at of cursor, "OR":
+    right = parse-and of (advance of cursor)
+    new-node = { kind: "BinOp", op: "or", left: node, right: right.node }
+    give continue-or of new-node, right.cursor
+  else:
+    give { node: node, cursor: cursor }
+
+to parse-or of cursor:
+  left = parse-and of cursor
+  give continue-or of left.node, left.cursor
+
+# ================================================================ the statement walker (Phase 3)
+#
+# Iterative, not recursive-descent, for the SEQUENCE of statements at one
+# level (capability 4: a for-each pass over the token list costs zero
+# Planes-level recursion regardless of length; recursing once per
+# statement in a long sequence would scale with file size and hit the
+# ~140 ceiling -- #14's own recursion-too-deep fix exists for exactly
+# this shape of mistake). `tokens`, the ORIGINAL plain list, drives the
+# loop purely as a safe upper bound on iteration count (every statement
+# consumes at least one token, so token-count iterations is always
+# enough) -- its values are ignored; `program-step` reads the real
+# position from `state.cursor`. Ladder so far: assignment, show.
+
+to program-step of state, ignored-token:
+  if state.done:
+    give state
+  else:
+    t = current of state.cursor
+    if t.kind == "EOF":
+      give { out: state.out, cursor: state.cursor, done: true, tokens: state.tokens }
+    else:
+      is-skippable = t.kind == "EOL" or t.kind == "END" or (t.kind == "OP" and t.text == ";")
+      if is-skippable:
+        give { out: state.out, cursor: (advance of state.cursor), done: false, tokens: state.tokens }
+      else:
+        result = parse-statement of state.cursor, state.tokens
+        new-out = state.out plus result.node
+        give { out: new-out, cursor: result.cursor, done: false, tokens: state.tokens }
+
+to run-program of state, tokens:
+  result = state
+  for each t in tokens:
+    result = program-step of result, t
+  give result
+
+# parse-block-body/block-step mirror program-step/run-program, but stop
+# at the matching END (left unconsumed, for the caller to expect) rather
+# than skipping stray ones -- a nested block genuinely owns its closing
+# END, where the top level only ever sees leftover ones (already
+# consumed by whichever nested parse-block-body closed them). `tokens`
+# threaded through every level is the same whole-file list every time --
+# a generous but always-sufficient upper bound on how many statements
+# ANY block, at any depth, could still need to consume; recursion is
+# never used for the sequence itself, only for the depth of NESTING one
+# block sits inside another (bounded by how deeply a program indents,
+# not by how long it is).
+
+to block-step of state, ignored-token:
+  if state.done:
+    give state
+  else:
+    t = current of state.cursor
+    is-stop = t.kind == "EOF" or t.kind == "END"
+    if is-stop:
+      give { out: state.out, cursor: state.cursor, done: true, tokens: state.tokens }
+    else:
+      is-skippable = t.kind == "EOL" or (t.kind == "OP" and t.text == ";")
+      if is-skippable:
+        give { out: state.out, cursor: (advance of state.cursor), done: false, tokens: state.tokens }
+      else:
+        result = parse-statement of state.cursor, state.tokens
+        new-out = state.out plus result.node
+        give { out: new-out, cursor: result.cursor, done: false, tokens: state.tokens }
+
+to run-block of state, tokens:
+  result = state
+  for each t in tokens:
+    result = block-step of result, t
+  give result
+
+to parse-block-body of cursor, tokens:
+  initial = { out: [], cursor: cursor, done: false, tokens: tokens }
+  give run-block of initial, tokens
+
+# `<expr> ':' <block>` -- an indented BEGIN...END block, or a single
+# inline statement on the same line (parser.py's own parse_block, both
+# forms).
+to parse-block of cursor, tokens:
+  if tok-at of cursor, "EOL":
+    after-eol = advance of cursor
+    begin-expect = expect-kind of after-eol, "BEGIN"
+    body = parse-block-body of begin-expect.cursor, tokens
+    end-try = try-accept of body.cursor, "END"
+    give { stmts: body.out, cursor: end-try.cursor }
+  else:
+    single = parse-statement of cursor, tokens
+    give { stmts: [single.node], cursor: single.cursor }
+
+to skip-blank of cursor:
+  t = current of cursor
+  is-eol = t.kind == "EOL"
+  is-semi = t.kind == "OP" and t.text == ";"
+  if is-eol or is-semi:
+    give skip-blank of (advance of cursor)
+  else:
+    give cursor
+
+# `else` may follow on the same statement's line's own dedent -- EOL
+# (and any further blank lines) between the inline `then` and `else`
+# must be skipped before checking, exactly like parser.py's save/
+# skip_blank/restore. Skipped tokens are NOT kept if there is no
+# `else`: the original cursor is returned, leaving them for the
+# enclosing block-walker's own EOL handling.
+to parse-optional-else of cursor, tokens:
+  after-blank = skip-blank of cursor
+  is-else = tok-at of after-blank, "ELSE"
+  if is-else:
+    colon-expect = expect-op of (advance of after-blank), ":"
+    give parse-block of colon-expect.cursor, tokens
+  else:
+    give { stmts: [], cursor: cursor }
+
+to parse-if of cursor, tokens:
+  cond-result = parse-or of (advance of cursor)
+  colon-expect = expect-op of cond-result.cursor, ":"
+  then-result = parse-block of colon-expect.cursor, tokens
+  els-result = parse-optional-else of then-result.cursor, tokens
+  node = { kind: "If", cond: cond-result.node, then: then-result.stmts, els: els-result.stmts }
+  give { node: node, cursor: els-result.cursor }
+
+# `to name...:` -- a multi-word name is every consecutive NAME token
+# (parser.py's own read, unrelated to amber's multiword-CALL site, which
+# is out of scope here); recursion bounded by how many words a function
+# name has, realistically a handful.
+
+to collect-name-parts of cursor, acc:
+  if tok-at of cursor, "NAME":
+    t = current of cursor
+    give collect-name-parts of (advance of cursor), (acc plus t.text)
+  else:
+    give { parts: acc, cursor: cursor }
+
+to join-with-spaces of parts:
+  result = ""
+  seen-one = false
+  for each p in parts:
+    if seen-one:
+      result = result + " " + p
+    else:
+      result = p
+      seen-one = true
+  give result
+
+to collect-more-params of cursor, acc:
+  comma = try-accept-value of cursor, "OP", ","
+  if comma.matched:
+    param-expect = expect-kind of comma.cursor, "NAME"
+    give collect-more-params of param-expect.cursor, (acc plus param-expect.token.text)
+  else:
+    give { params: acc, cursor: cursor }
+
+to collect-params of cursor:
+  first-param = expect-kind of cursor, "NAME"
+  give collect-more-params of first-param.cursor, [first-param.token.text]
+
+to parse-funcdef of cursor, tokens:
+  first-name = expect-kind of (advance of cursor), "NAME"
+  rest = collect-name-parts of first-name.cursor, [first-name.token.text]
+  name = join-with-spaces of rest.parts
+  of-try = try-accept of rest.cursor, "OF"
+  if of-try.matched:
+    params-result = collect-params of of-try.cursor
+    give finish-funcdef of name, params-result.params, params-result.cursor, tokens
+  else:
+    give finish-funcdef of name, [], rest.cursor, tokens
+
+to finish-funcdef of name, params, cursor, tokens:
+  colon-expect = expect-op of cursor, ":"
+  body = parse-block of colon-expect.cursor, tokens
+  node = { kind: "FuncDef", name: name, params: params, body: body.stmts }
+  give { node: node, cursor: body.cursor }
+
+to parse-statement of cursor, tokens:
+  t = current of cursor
+  next = peek-at of cursor, 1
+  is-assign = t.kind == "NAME" and next.kind == "OP" and next.text == "="
+  is-funcdef = t.kind == "TO" and next.kind == "NAME"
+  if is-assign:
+    give parse-assign of t.text, cursor
+  else:
+    if t.kind == "SHOW":
+      give parse-show of t.line, cursor
+    else:
+      if t.kind == "IF":
+        give parse-if of cursor, tokens
+      else:
+        if is-funcdef:
+          give parse-funcdef of cursor, tokens
+        else:
+          if t.kind == "GIVE":
+            give parse-give of cursor
+          else:
+            if t.kind == "FOR":
+              give parse-foreach of cursor, tokens
+            else:
+              if t.kind == "USE":
+                give parse-use of cursor
+              else:
+                if t.kind == "LET":
+                  give parse-let of cursor
+                else:
+                  msg = "line " + (text of t.line) + ": unsupported statement (Phase 3 ladder not yet reached), found '" + t.text + "'"
+                  fail msg as parse-error
+
+to parse-give of cursor:
+  result = parse-or of (advance of cursor)
+  give { node: { kind: "Give", expr: result.node }, cursor: result.cursor }
+
+# `for each name in source [where cond]: body` -- the statement form only
+# (as_expr=False in parser.py; the wrapped comprehension-header shape
+# used only from expression context is out of this build's scope, same
+# as list/record literals in Phase 2).
+
+to parse-optional-where of cursor:
+  if tok-at of cursor, "WHERE":
+    result = parse-or of (advance of cursor)
+    give { node: result.node, cursor: result.cursor }
+  else:
+    give { node: nothing, cursor: cursor }
+
+to parse-foreach of cursor, tokens:
+  each-expect = expect-kind of (advance of cursor), "EACH"
+  var-expect = expect-kind of each-expect.cursor, "NAME"
+  in-expect = expect-kind of var-expect.cursor, "IN"
+  source-result = parse-or of in-expect.cursor
+  where-result = parse-optional-where of source-result.cursor
+  colon-expect = expect-op of where-result.cursor, ":"
+  body = parse-block of colon-expect.cursor, tokens
+  node = { kind: "ForEach", var: var-expect.token.text, source: source-result.node, where: where-result.node, body: body.stmts, is-expr: false }
+  give { node: node, cursor: body.cursor }
+
+# `use module [with old as new [with old as new ...]]`. Amber site 4
+# (check_rename_name_ambiguity) is out of scope here, same as every
+# other amber site (section 7 invariant 3).
+
+to read-multiword-name of cursor:
+  result = collect-name-parts of cursor, []
+  give { text: (join-with-spaces of result.parts), cursor: result.cursor }
+
+to collect-renames of cursor, acc:
+  old-result = read-multiword-name of cursor
+  as-expect = expect-kind of old-result.cursor, "AS"
+  new-result = read-multiword-name of as-expect.cursor
+  pair = { old: old-result.text, new: new-result.text }
+  new-acc = acc plus pair
+  with-try = try-accept of new-result.cursor, "WITH"
+  if with-try.matched:
+    give collect-renames of with-try.cursor, new-acc
+  else:
+    give { renames: new-acc, cursor: new-result.cursor }
+
+to parse-use of cursor:
+  module-expect = expect-kind of (advance of cursor), "NAME"
+  with-try = try-accept of module-expect.cursor, "WITH"
+  if with-try.matched:
+    renames-result = collect-renames of with-try.cursor, []
+    node = { kind: "Use", module: module-expect.token.text, renames: renames-result.renames }
+    give { node: node, cursor: renames-result.cursor }
+  else:
+    node = { kind: "Use", module: module-expect.token.text, renames: [] }
+    give { node: node, cursor: module-expect.cursor }
+
+to parse-assign of name, cursor:
+  after-eq = advance of (advance of cursor)
+  result = parse-or of after-eq
+  node = { kind: "Assign", name: name, expr: result.node, is-let: false }
+  give { node: node, cursor: result.cursor }
+
+to parse-let of cursor:
+  name-expect = expect-kind of (advance of cursor), "NAME"
+  eq-expect = expect-op of name-expect.cursor, "="
+  result = parse-or of eq-expect.cursor
+  node = { kind: "Assign", name: name-expect.token.text, expr: result.node, is-let: true }
+  give { node: node, cursor: result.cursor }
+
+to parse-show of line, cursor:
+  result = parse-or of (advance of cursor)
+  node = { kind: "Show", expr: result.node, line: line }
+  give { node: node, cursor: result.cursor }
+
+# ================================================================ entry points
+
+to canonical-of-expr-source of src:
+  toks = tokenize of src
+  cursor = to-cons of toks
+  result = parse-or of cursor
+  give canonical-of-node of result.node, ""
+
+to canonical-of-program of nodes:
+  lines = []
+  for each node in nodes:
+    lines = lines plus (canonical-of-node of node, "")
+  give join-with-newlines of lines
+
+to canonical-of-program-source of src:
+  toks = tokenize of src
+  cursor = to-cons of toks
+  initial = { out: [], cursor: cursor, done: false, tokens: toks }
+  final = run-program of initial, toks
+  give canonical-of-program of final.out
