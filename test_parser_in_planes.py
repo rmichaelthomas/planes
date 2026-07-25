@@ -29,6 +29,7 @@ from lexer import (
     Builtin,
     Call,
     Field,
+    ForEach,
     FuncDef,
     Give,
     If,
@@ -54,7 +55,7 @@ from planes_text import escape_string_literal
 # itself, not duplicated here).
 AST_NODE_TYPES = (
     Num, Str, Bool, Nothing, Var, ListLit, ListPlus, BinOp, Not, IsNothing,
-    Field, Assign, FuncDef, Call, Give, Show, If, Round, Builtin,
+    Field, Assign, FuncDef, Call, Give, Show, If, Round, Builtin, ForEach,
 )
 
 
@@ -403,6 +404,23 @@ GIVE_PROGRAMS = [
 
 def test_give_statements_agree():
     for src in GIVE_PROGRAMS:
+        assert_program_agrees(src)
+
+
+FOREACH_PROGRAMS = [
+    ("to sum-of of xs:\n  result = 0\n  for each x in xs:\n"
+     "    result = result + x\n  give result\n"),
+    ("to run-chars of state, s:\n  result = state\n  for each ch in s:\n"
+     "    result = step of result, ch\n  give result\n"),
+    ("to lookup of table, key:\n  result = nothing\n"
+     "  for each entry in table where entry.name == key:\n"
+     "    result = entry.value\n  give result\n"),
+    "for each c in s:\n  show c\n",
+]
+
+
+def test_foreach_statements_agree():
+    for src in FOREACH_PROGRAMS:
         assert_program_agrees(src)
 
 

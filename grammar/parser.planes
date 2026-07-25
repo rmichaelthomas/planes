@@ -227,6 +227,23 @@ to canonical-of-funcdef of node, indent:
   body-part = canonical-of-field-list of "body", node.body, indent
   give header + "\n" + params-part + "\n" + body-part
 
+to canonical-of-where of node, indent:
+  if node.where is nothing:
+    give indent + "  where: nothing"
+  else:
+    where-node-part = canonical-of-node of node.where, (indent + "    ")
+    give indent + "  where:\n" + where-node-part
+
+to canonical-of-foreach of node, indent:
+  source-part = canonical-of-node of node.source, (indent + "    ")
+  header = indent + "ForEach\n" + indent + "  var: " + (render-string of node.var)
+  with-source = header + "\n" + indent + "  source:\n" + source-part
+  where-part = canonical-of-where of node, indent
+  with-where = with-source + "\n" + where-part
+  body-part = canonical-of-field-list of "body", node.body, indent
+  with-body = with-where + "\n" + body-part
+  give with-body + "\n" + indent + "  is_expr: " + (render-bool of node.is-expr)
+
 to canonical-of-node of node, indent:
   when node is { kind: "Num" }:
     give indent + "Num\n" + indent + "  value: " + text of node.value
@@ -300,7 +317,10 @@ to canonical-of-node of node, indent:
                                     inner = canonical-of-node of node.expr, (indent + "    ")
                                     give indent + "Give\n" + indent + "  expr:\n" + inner
                                   else:
-                                    fail "no canonical form for node kind '" + node.kind + "'" as unknown-node-kind
+                                    when node is { kind: "ForEach" }:
+                                      give canonical-of-foreach of node, indent
+                                    else:
+                                      fail "no canonical form for node kind '" + node.kind + "'" as unknown-node-kind
 
 # ================================================================ the cursor
 #
@@ -852,12 +872,38 @@ to parse-statement of cursor, tokens:
           if t.kind == "GIVE":
             give parse-give of cursor
           else:
-            msg = "line " + (text of t.line) + ": unsupported statement (Phase 3 ladder not yet reached), found '" + t.text + "'"
-            fail msg as parse-error
+            if t.kind == "FOR":
+              give parse-foreach of cursor, tokens
+            else:
+              msg = "line " + (text of t.line) + ": unsupported statement (Phase 3 ladder not yet reached), found '" + t.text + "'"
+              fail msg as parse-error
 
 to parse-give of cursor:
   result = parse-or of (advance of cursor)
   give { node: { kind: "Give", expr: result.node }, cursor: result.cursor }
+
+# `for each name in source [where cond]: body` -- the statement form only
+# (as_expr=False in parser.py; the wrapped comprehension-header shape
+# used only from expression context is out of this build's scope, same
+# as list/record literals in Phase 2).
+
+to parse-optional-where of cursor:
+  if tok-at of cursor, "WHERE":
+    result = parse-or of (advance of cursor)
+    give { node: result.node, cursor: result.cursor }
+  else:
+    give { node: nothing, cursor: cursor }
+
+to parse-foreach of cursor, tokens:
+  each-expect = expect-kind of (advance of cursor), "EACH"
+  var-expect = expect-kind of each-expect.cursor, "NAME"
+  in-expect = expect-kind of var-expect.cursor, "IN"
+  source-result = parse-or of in-expect.cursor
+  where-result = parse-optional-where of source-result.cursor
+  colon-expect = expect-op of where-result.cursor, ":"
+  body = parse-block of colon-expect.cursor, tokens
+  node = { kind: "ForEach", var: var-expect.token.text, source: source-result.node, where: where-result.node, body: body.stmts, is-expr: false }
+  give { node: node, cursor: body.cursor }
 
 to parse-assign of name, cursor:
   after-eq = advance of (advance of cursor)
