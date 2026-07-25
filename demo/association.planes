@@ -1,0 +1,25 @@
+# The association idiom (Ruling 1, fix/recursion-leak-and-fifth-amber-site;
+# proven at PROBE_PARSER.md capability 7). Records are structural: a
+# record's field set is part of its shape, and every field a program reads
+# must be a name known when the source is written -- that is what lets
+# shapes.py's origins_of trace a value back to where it came from. `r[k]`
+# for a computed `k` would make fields dynamically addressable and break
+# that guarantee, so Planes has no dynamic, string-keyed lookup into a
+# record. A list of records plus a linear `for each ... where` scan gives
+# the same capability -- every field access below is still a literal name.
+
+to lookup of table, key:
+  result = nothing
+  for each entry in table where entry.name == key:
+    result = entry.value
+  give result
+
+prices = [{ name: "widget", value: 12 },
+          { name: "gadget", value: 30 },
+          { name: "gizmo", value: 7 }]
+
+hit = lookup of prices, "gadget"
+miss = lookup of prices, "nonexistent"
+
+show hit
+show miss

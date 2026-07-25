@@ -110,12 +110,14 @@ def test_bracketed_rule_name_still_parses():
 # ================================================================ full corpus: zero regressions
 
 def test_every_valid_planes_file_in_the_repo_still_parses():
-    """The 29-file corpus REPORT_GRAMMAR_AMBER.md §4 counts (8 root files
-    + 21 demo/ files, excluding demo/cycle/*), each analysed through the
-    real module loader (`shapes.analyse_file`, follow=True) rather than
-    parsed standalone -- module-graph files depend on cross-file
-    known_funcs (e.g. demo/app/net.planes's `api base`, defined in
-    config.planes) that only exist once the whole graph is loaded.
+    """The 30-file corpus (8 root files + 22 demo/ files, excluding
+    demo/cycle/*) -- 29 at REPORT_GRAMMAR_AMBER.md §4, 30 since
+    demo/association.planes entered it (fix/recursion-leak-and-fifth-
+    amber-site Phase 3) -- each analysed through the real module loader
+    (`shapes.analyse_file`, follow=True) rather than parsed standalone --
+    module-graph files depend on cross-file known_funcs (e.g.
+    demo/app/net.planes's `api base`, defined in config.planes) that only
+    exist once the whole graph is loaded.
 
     demo/clash/main.planes is the one documented exception: it exists to
     demonstrate the two-modules-define-one-name collision error (README
@@ -134,7 +136,7 @@ def test_every_valid_planes_file_in_the_repo_still_parses():
     demo_files = sorted(f for f in glob.glob("demo/**/*.planes", recursive=True)
                         if "cycle" not in f)
     corpus = root_files + demo_files
-    assert len(corpus) == 29, f"expected 29 corpus files, found {len(corpus)}"
+    assert len(corpus) == 30, f"expected 30 corpus files, found {len(corpus)}"
 
     for path in corpus:
         try:

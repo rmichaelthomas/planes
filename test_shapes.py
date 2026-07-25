@@ -1066,6 +1066,42 @@ def test_effect_derivation_excluded_from_equality():
     assert hash(a) == hash(b)
 
 
+# ================================================================ the association idiom (Ruling 1)
+
+def test_association_idiom_produces_a_complete_correct_effect_surface():
+    """demo/association.planes -- a list-of-records table, a `lookup`
+    function doing a `for each ... where` linear scan, and a `show` of a
+    hit and a miss. Ruling 1 (fix/recursion-leak-and-fifth-amber-site)
+    promotes this from PROBE_PARSER.md capability 7's workaround to the
+    canonical idiom; the oracle check is this claim's actual test --
+    every effect the program performs at runtime must be covered by the
+    statically computed surface, control flow through the lookup and
+    all."""
+    surface, i = check_oracle_file("demo/association.planes")
+    assert i.output == ["30", "nothing"]
+    assert {e.kind for e in surface.effects} == {"show"}
+
+
+def test_origins_of_traces_an_association_lookup_back_to_its_table():
+    """The analyser sees through the idiom's call boundary: `hit`'s
+    origin traces back to `prices`, the table `lookup` scanned, even
+    though the matched value itself (dependent on which key was passed)
+    stays statically UNKNOWN -- widening the value is sound; dropping the
+    argument names it derived from would not be seeing through the idiom
+    at all, just stopping at the call."""
+    from shapes import analyse_file
+    s = analyse_file("demo/association.planes")
+    # s.effects, not s.at()/.declared -- the latter dedupes by (kind,
+    # target, computed), and both shows share the same generic computed
+    # target ("{...}"), collapsing to one entry despite two distinct call
+    # sites with two distinct derivations.
+    shows = [e for e in s.effects if e.kind == "show"]
+    assert len(shows) == 2
+    for e in shows:
+        names = {n for n, _f in s.origins_of(e)}
+        assert "prices" in names, f"origins {names} do not trace back to prices"
+
+
 # ================================================================ anti-drift
 
 def test_no_governance_vocabulary():
