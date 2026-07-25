@@ -70,25 +70,31 @@ to finish-name of word-text, line-no:
   give { kind: kind, text: word-text, line: line-no }
 
 to step of state, c:
-  when state.pending is { kind: "name" }:
-    give step-name of state, c
+  when state.pending is { kind: "comment" }:
+    give state
   else:
-    when state.pending is { kind: "name-hyphen" }:
-      give step-name-hyphen of state, c
+    when state.pending is { kind: "name" }:
+      give step-name of state, c
     else:
-      when state.pending is { kind: "number" }:
-        give step-number of state, c
+      when state.pending is { kind: "name-hyphen" }:
+        give step-name-hyphen of state, c
       else:
-        when state.pending is { kind: "op-lookahead" }:
-          give step-op-lookahead of state, c
+        when state.pending is { kind: "number" }:
+          give step-number of state, c
         else:
-          give step-fresh of state, c
+          when state.pending is { kind: "op-lookahead" }:
+            give step-op-lookahead of state, c
+          else:
+            give step-fresh of state, c
 
 to step-fresh of state, c:
   if c == " ":
     give state
   else:
-    give step-fresh-nonspace of state, c
+    if c == "#":
+      give { out: state.out, pending: { kind: "comment" }, line: state.line }
+    else:
+      give step-fresh-nonspace of state, c
 
 to step-fresh-nonspace of state, c:
   if is-digit of c:
@@ -198,6 +204,43 @@ to flush-op-lookahead of state:
     give { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
   else:
     give { out: state.out, pending: { kind: "none" }, line: state.line }
+
+# ================================================================ STRING: verified not expressible
+#
+# This lexer does not tokenize STRING. Not "not yet" -- checked, and there
+# is no way to write it in the language as it stands. STRING detection
+# needs exactly one thing: a way to test whether a code point is a double
+# quote. There is no way to produce that value:
+#
+#   - A Planes STRING literal cannot contain a `"` -- vocabulary.json's
+#     own STRING pattern is `"[^\"]*"`, no escape sequences, so the
+#     character class inside the quotes explicitly excludes a quote.
+#     Verified directly, not assumed: parsing `x = """` gives
+#     Assign(x, Str("")) -- the first two quotes close an EMPTY string --
+#     with the third quote silently unmatched, and `x = """"` (four
+#     quotes) gives two separate empty-string statements. No sequence of
+#     quote characters ever produces one *containing* a quote.
+#   - No builtin converts a number (e.g. 34, the code point) to a
+#     character, or vice versa -- count/lower/upper/text/whole/ask/read/
+#     normalize, the entire closed set, does none of this.
+#   - A `read` or `ask` effect could fetch a quote from outside the
+#     program, but that reintroduces exactly the effect Phase 5 exists to
+#     avoid (grammar_gen.py's docstring), and this build's invariants
+#     forbid a new host method or effect kind to work around it besides.
+#   - An exclusion-based approximation -- "not a digit, not a name
+#     character, not an operator, not #, not @, not space, so it must be
+#     a quote" -- is unsound, not just inelegant: gate.planes's own
+#     `because "...March's reconciliation..."` contains an apostrophe,
+#     which is none of those things either, and would end the string
+#     early. Checked against the actual corpus, not a hypothetical.
+#
+# So: no workaround is written here, per this build's own rule that a
+# language gap is reported, not routed around. Every `"..."` literal in
+# a tokenized line surfaces as whatever its *contents* tokenize into on
+# their own terms (comments, names, numbers, operators) rather than one
+# STRING token -- the corpus agreement test (test_lexer_in_planes.py)
+# reports every line this touches as a disagreement traced to this gap,
+# not a silent pass.
 
 to tokenize-line of stripped, line-no:
   initial = { out: [], pending: { kind: "none" }, line: line-no }
