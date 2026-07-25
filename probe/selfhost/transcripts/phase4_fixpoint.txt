@@ -1,0 +1,22 @@
+# Phase 4 — fixpoint via recursion (verbatim output)
+reachable count:
+5
+a
+b
+c
+d
+e
+reachable count:
+5
+a
+b
+c
+d
+e
+
+## no range literal:
+syntax error — line 1: expected ], found '.'
+## 'in' works as a membership operator (2 in xs):
+true
+## keywords (32, none iterate-until-condition):
+['to', 'give', 'let', 'use', 'show', 'write', 'why', 'if', 'else', 'for', 'each', 'in', 'where', 'when', 'and', 'or', 'not', 'of', 'as', 'fail', 'with', 'plus', 'foreign', 'from', 'doing', 'true', 'false', 'nothing', 'first', 'round', 'places', 'rule']

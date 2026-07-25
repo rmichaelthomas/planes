@@ -1,0 +1,32 @@
+# Phase 3 — string building at renderer scale
+# machine: macOS-26.5.1-arm64-arm-64bit-Mach-O
+# python:  3.14.6 (cpython)
+# timer:   time.perf_counter, host-side
+
+## (1) building a string by repeated `+` in a Planes loop
+   target  actual_bytes   chunks     seconds    us/byte
+     1024          1024       64     0.00053     0.5165
+    10240         10240      640     0.00210     0.2047
+   102400        102400     6400     0.15442     1.5081
+   204800        204800    12800     0.34399     1.6796
+   409600        409600    25600     1.25330     3.0598
+
+## (1b) is it quadratic? ratio of times vs ratio of sizes
+# size    1024 ->   10240 (x10):  time x4.0   (linear would be x10, quadratic x100)
+# size   10240 ->  102400 (x10):  time x73.7   (linear would be x10, quadratic x100)
+# size  102400 ->  204800 (x2):  time x2.2   (linear would be x2, quadratic x4)
+# size  204800 ->  409600 (x2):  time x3.6   (linear would be x2, quadratic x4)
+
+## (2) accumulate-with-plus then collapse — no join means still quadratic
+   bytes  plus_collect_s   collapse_s
+    1024         0.00017      0.00018
+   10240         0.00242      0.00228
+  102400         0.12813      0.07354
+# `plus` collection is linear-ish; the collapse is the quadratic, and there is no builtin that would replace it.
+
+## projection — rendering a lexer.planes-sized file
+# grammar/lexer.planes is 564 lines; its canonical source is on the
+# order of 15-20 KB of text. Locate that between the 10KB and 100KB
+# rows above: the quadratic means it is closer to the 10KB cost than
+# linear interpolation would suggest, but well under the 100KB cost.
+

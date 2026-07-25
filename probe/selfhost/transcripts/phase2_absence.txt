@@ -1,0 +1,7 @@
+# Phase 2 — absence of field enumeration (verbatim results)
+## for each over a record:
+error — not-a-collection: cannot loop over {record}
+  try: for each needs a list, or a string to walk its code points
+
+## builtins available (grammar/vocabulary.json), none enumerate fields:
+['count', 'lower', 'upper', 'text', 'whole', 'ask', 'read', 'normalize']
