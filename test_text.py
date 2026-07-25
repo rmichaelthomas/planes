@@ -129,6 +129,67 @@ def test_normalize_is_not_an_effect_kind():
     assert "normalize" not in EFFECT_KINDS
 
 
+# ================================================================ A.4 -- text is iterable
+
+def test_for_each_over_a_string_statement_form():
+    out = run('s = "abc"\nfor each c in s:\n  show c\n')
+    assert out == ["a", "b", "c"]
+
+
+def test_for_each_over_a_string_comprehension_form_yields_a_list():
+    v = val('x = for each c in "abc": c', "x").value
+    assert v == ["a", "b", "c"]
+    assert isinstance(v, list), "the result follows the body, not the source"
+
+
+def test_for_each_over_a_string_where_filters():
+    v = val('x = for each c in "abc" where c != "b": c', "x").value
+    assert v == ["a", "c"]
+
+
+def test_for_each_over_an_empty_string_iterates_zero_times():
+    v = val('x = for each c in "": c', "x").value
+    assert v == []
+
+
+def test_for_each_over_a_string_elements_are_one_code_point_strings():
+    v = val('x = for each c in "abc": c', "x").value
+    assert all(isinstance(c, str) and len(c) == 1 for c in v)
+
+
+def test_for_each_over_a_string_counts_code_points_not_utf8_bytes():
+    # "h\u00e9llo" -- a precomposed e-acute, one code point, two UTF-8 bytes.
+    # Iteration must yield 5 elements (code points), not 6 (bytes).
+    v = val('x = for each c in "h\u00e9llo": c', "x").value
+    assert len(v) == 5
+    assert len("h\u00e9llo".encode("utf-8")) == 6, "the byte count this test guards against"
+    assert v == ["h", "\u00e9", "l", "l", "o"]
+
+
+def test_for_each_over_a_number_still_raises_not_a_collection():
+    try:
+        run("for each c in 5:\n  show c\n")
+        assert False, "should raise"
+    except PlanesError as e:
+        assert e.tag == "not-a-collection"
+
+
+def test_for_each_over_a_record_still_raises_not_a_collection():
+    try:
+        run('for each c in { a: 1 }:\n  show c\n')
+        assert False, "should raise"
+    except PlanesError as e:
+        assert e.tag == "not-a-collection"
+
+
+def test_not_a_collection_fix_text_names_strings_as_acceptable():
+    try:
+        run("for each c in 5:\n  show c\n")
+        assert False, "should raise"
+    except PlanesError as e:
+        assert "string" in e.fix
+
+
 if __name__ == "__main__":
     fails = []
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]

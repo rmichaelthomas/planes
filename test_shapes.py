@@ -125,6 +125,17 @@ def test_oracle_effect_inside_comprehension():
     assert len(surface.at("network")) == 1     # one site, three executions
 
 
+def test_oracle_effect_inside_string_for_each():
+    """A string source is walked with the loop variable widened to UNKNOWN,
+    the same as any other for-each source -- the analyser never inspects
+    node.source's runtime type, so no oracle-specific change was needed for
+    text iteration (interp.py's `for each` fix). This just confirms it."""
+    src = 'use file\nfor each c in "abc":\n  write c to "out.json"\n'
+    surface, i = check_oracle(src, fs={})
+    assert len(i.effects) == 3
+    assert len(surface.at("file")) == 1        # one site, three executions
+
+
 def test_oracle_effect_in_untaken_branch():
     """A branch that does not run this time still belongs in the surface."""
     src = ('use file\n'

@@ -177,7 +177,7 @@
       "slots": [
         "fmt(source.value)"
       ],
-      "fix": "for each needs a list"
+      "fix": "for each needs a list, or a string to walk its code points"
     },
     {
       "id": "interp.unknown-function",
