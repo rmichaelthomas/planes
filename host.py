@@ -36,7 +36,7 @@ class Host:
 
     The vocabulary is what makes this small. Because effects were closed
     early — `ask`, `read`, `write`, `show`, `clock`, `random`, `env` — the
-    host surface could not sprawl. That was decided for Shapes, and it pays
+    host surface could not sprawl. That was decided for the analyser, and it pays
     out here.
     """
 

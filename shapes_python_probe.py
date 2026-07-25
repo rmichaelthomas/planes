@@ -1,4 +1,4 @@
-"""Probe: does the Shapes architecture port to a language people already write?
+"""Probe: does the effect-surface architecture port to a language people already write?
 
 Not a product. Forty lines answering one question — whether the core of
 shapes.py (fixed point over a call graph, effects inherited transitively by

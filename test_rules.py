@@ -1,7 +1,7 @@
 """Rule plane — effect-only slice.
 
 Tests inception checkpoint §8's claim for the half it can be tested against:
-an effect-reaching rule is checked with the same machinery Shapes already
+an effect-reaching rule is checked with the same machinery the analyser already
 computes, never executed, and never changes what the program does.
 """
 import json

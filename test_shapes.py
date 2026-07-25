@@ -398,7 +398,7 @@ def test_diff_render_names_the_new_boundary():
 
 def test_library_with_no_toplevel_is_not_pure():
     """A library's effects live behind its functions. Reporting `pure`
-    because nothing runs at load time is the exact lie Shapes prevents."""
+    because nothing runs at load time is the exact lie the analyser prevents."""
     src = 'use http\nto get of url:\n  give ask url'
     s = analyse(src)
     assert s.effects == [], "nothing runs at top level"

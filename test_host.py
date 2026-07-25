@@ -33,7 +33,7 @@ def test_a_host_is_five_capabilities_and_a_resolver():
     """The whole requirement Planes places on a machine.
 
     It is this small because the effect vocabulary was closed early, for
-    Shapes. A host cannot be asked for more than the language can name.
+    the analyser. A host cannot be asked for more than the language can name.
     """
     required = {"ask", "read", "write", "show", "clock",
                 "resolve", "parse_json", "to_json"}
@@ -116,7 +116,7 @@ def test_the_foreign_target_is_opaque_to_the_language():
 
 
 def test_the_analyser_never_parses_a_target():
-    """Shapes uses the target as a label. A non-Python target analyses fine."""
+    """The analyser uses the target as a label. A non-Python target analyses fine."""
     from shapes import analyse
     s = analyse('foreign f of x from "crate::mod::fn" doing ask "https://a/b"\n'
                 'r = f of 1')

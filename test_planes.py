@@ -1,5 +1,7 @@
 """Planes test suite. Every claim is testable; every feature has a case."""
+import glob
 import json
+import re
 import sys
 
 from interp import Interpreter, PlanesError, origins, why_tree
@@ -364,6 +366,25 @@ def test_no_governance_vocabulary_in_source():
         text = open(fname).read().lower()
         for word in banned:
             assert word not in text, f"{word!r} appeared in {fname} — drift"
+
+
+def test_no_capital_shapes_in_source_or_readme():
+    """The capitalized product name is retired (planes v1.1 §29, v5.0 §77).
+    REPORT_*.md files are the historical record and are excluded — they may
+    name the retired framing because they are the record of when it was
+    live."""
+    retired_name = "Shape" + "s"
+    offenders = []
+    targets = glob.glob("*.py") + ["README.md"]
+    for path in targets:
+        with open(path) as f:
+            for i, line in enumerate(f, 1):
+                if re.search(r"\b" + retired_name + r"\b", line):
+                    offenders.append(f"{path}:{i}: {line.strip()}")
+    assert not offenders, (
+        "the capitalized product name is retired (planes v1.1 §29); "
+        "use lowercase 'shapes' for the tool or 'the effect surface' for the "
+        "capability:\n" + "\n".join(offenders))
 
 
 def test_ordinary_program_needs_no_governance():
