@@ -1,0 +1,146 @@
+"""Tests for the Tier 2 text laws (planes v9.0 A.1-A.3).
+
+`+` requires type homogeneity, `first n of` a string stays a string, and
+`normalize of` is an explicit pure builtin — equality never normalizes.
+"""
+import sys
+
+from interp import Interpreter, PlanesError, why_tree
+from shapes import analyse
+
+
+def run(src, **kw):
+    return Interpreter(**kw).run(src)
+
+
+def interp(src, **kw):
+    i = Interpreter(**kw)
+    i.run(src)
+    return i
+
+
+def val(src, name, **kw):
+    return interp(src, **kw).env.get(name)
+
+
+# ================================================================ A.1 -- + homogeneity
+
+def test_string_plus_number_raises():
+    try:
+        run('x = "a" + 1')
+        assert False, "should raise"
+    except PlanesError as e:
+        assert e.tag == "cannot-combine"
+
+
+def test_string_plus_number_fix_is_text_of():
+    assert run('x = "a" + text of 1\nshow x') == ["a1"]
+
+
+def test_number_plus_number_unaffected():
+    assert val("x = 1 + 2", "x").value == 3
+
+
+def test_list_plus_list_unaffected():
+    assert val("x = [1] + [2]", "x").value == [1, 2]
+
+
+def test_string_plus_string_still_concatenates():
+    assert val('x = "hi " + "there"', "x").value == "hi there"
+
+
+def test_list_plus_string_raises():
+    try:
+        run('x = [1] + "a"')
+        assert False, "should raise"
+    except PlanesError as e:
+        assert e.tag == "cannot-combine"
+
+
+def test_shapes_widens_mixed_plus_to_unknown_never_raises():
+    """The analyser never executes and must stay total (v9.0 invariant 2)."""
+    s = analyse('x = "a" + 1\nshow x')          # must not raise
+    assert s.effects, "still analyses past the mixed +"
+
+
+def test_shapes_still_folds_same_type_plus():
+    s = analyse('x = "a" + "b"\nshow x')
+    assert s.effects[0].target == "ab", "same-type + still folds statically"
+
+
+# ================================================================ A.2 -- first n of a string
+
+def test_first_of_string_returns_a_string():
+    v = val('x = first 2 of "hello"', "x").value
+    assert v == "he"
+    assert isinstance(v, str)
+
+
+def test_first_of_list_returns_a_list():
+    v = val("x = first 2 of [1, 2, 3]", "x").value
+    assert v == [1, 2]
+    assert isinstance(v, list)
+
+
+def test_count_of_first_of_string_is_code_points():
+    assert val('x = count of (first 2 of "héllo")', "x").value == 2
+
+
+# ================================================================ A.3 -- normalize
+
+def test_normalize_folds_to_nfc():
+    combining = "é"       # e + combining acute
+    precomposed = "é"      # \xe9, single code point
+    v = val(f'x = normalize of "{combining}"', "x").value
+    assert v == precomposed
+
+
+def test_equality_does_not_normalize():
+    combining = "é"
+    precomposed = "é"
+    try:
+        run(f'x = ("{combining}" == "{precomposed}")')
+    except PlanesError:
+        assert False, "same-type string == must not raise"
+    assert val(f'x = ("{combining}" == "{precomposed}")', "x").value is False
+
+
+def test_normalize_of_both_sides_makes_them_equal():
+    combining = "é"
+    precomposed = "é"
+    src = f'x = (normalize of "{combining}" == normalize of "{precomposed}")'
+    assert val(src, "x").value is True
+
+
+def test_why_shows_normalize_derivation():
+    combining = "é"
+    tree = why_tree(val(f'x = normalize of "{combining}"', "x"))
+    assert "normalize of" in tree
+
+
+def test_shapes_folds_normalize_statically_no_effect():
+    s = analyse('x = normalize of "abc"\nshow x')
+    assert s.effects[0].target == "abc"
+    assert s.kinds() == ["show"], "normalize contributes no effect kind"
+
+
+def test_normalize_is_not_an_effect_kind():
+    from lexer import EFFECT_KINDS
+    assert "normalize" not in EFFECT_KINDS
+
+
+if __name__ == "__main__":
+    fails = []
+    tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
+    for name, fn in tests:
+        try:
+            fn()
+            print(f"  ok    {name}")
+        except AssertionError as e:
+            print(f"  FAIL  {name}: {e}")
+            fails.append(name)
+        except Exception as e:
+            print(f"  ERROR {name}: {type(e).__name__}: {e}")
+            fails.append(name)
+    print(f"\n{len(tests) - len(fails)}/{len(tests)} passing")
+    sys.exit(1 if fails else 0)

@@ -1,6 +1,7 @@
 """Planes evaluator — values, provenance, effects."""
 import json
 import os
+import unicodedata
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -61,19 +62,26 @@ def fmt(v):
     return str(v)
 
 
-def equal(a, b):
+def equal(a, b, path=None):
     """Sameness, guarded. Cross-type comparison is an error, not `false`.
 
     A `false` from `5 == "5"` is true about the computation and useless
     about the mistake — and it enters a derivation as a fact. The number
     model refuses rather than rounds silently; equality refuses rather
     than answers.
+
+    `path` accumulates the list-index/record-field steps from the root to
+    a nested mismatch, so a mismatch buried inside a list of records names
+    exactly where it is, not just what it is.
     """
+    path = path if path is not None else []
+
     if a is None or b is None:
         raise PlanesError(
             "cannot-compare",
             "nothing cannot be compared with ==",
-            "test for absence with `is nothing`")
+            "test for absence with `is nothing`",
+            path=path)
 
     if is_num(a) and is_num(b):
         return Number.of(a) == Number.of(b)
@@ -82,7 +90,8 @@ def equal(a, b):
         raise PlanesError(
             "cannot-compare",
             f"cannot compare {fmt(a)} with {fmt(b)}",
-            "compare a yes/no value with a yes/no value")
+            "compare a yes/no value with a yes/no value",
+            path=path)
     if isinstance(a, bool):
         return a is b
 
@@ -90,7 +99,8 @@ def equal(a, b):
         raise PlanesError(
             "cannot-compare",
             f"cannot compare {fmt(a)} with {fmt(b)}",
-            "compare numbers with numbers, or text with text")
+            "compare numbers with numbers, or text with text",
+            path=path)
 
     if isinstance(a, str):
         return a == b
@@ -98,8 +108,8 @@ def equal(a, b):
     if isinstance(a, list):
         if len(a) != len(b):
             return False
-        for x, y in zip(a, b):
-            if not equal(x, y):     # raises, with the position, on type mismatch
+        for i, (x, y) in enumerate(zip(a, b)):
+            if not equal(x, y, path + [i]):    # raises, with the path, on type mismatch
                 return False
         return True
 
@@ -109,8 +119,9 @@ def equal(a, b):
                 "cannot-compare",
                 f"records have different fields: "
                 f"{sorted(set(a) ^ set(b))}",
-                "compare records with the same fields")
-        return all(equal(a[k], b[k]) for k in a)
+                "compare records with the same fields",
+                path=path)
+        return all(equal(a[k], b[k], path + [k]) for k in a)
 
     return a == b
 
@@ -128,10 +139,12 @@ def condition(v):
 # ================================================================ errors
 
 class PlanesError(Exception):
-    def __init__(self, tag, detail="", fix=""):
+    def __init__(self, tag, detail="", fix="", path=None):
         self.tag = tag
         self.detail = detail
         self.fix = fix
+        self.path = path      # list-index/record-field steps to a comparison
+                              # mismatch, or None when not applicable (§109)
         msg = tag
         if detail:
             msg += f": {detail}"
@@ -143,6 +156,87 @@ class PlanesError(Exception):
 class _Give(Exception):
     def __init__(self, value):
         self.value = value
+
+
+# ================================================================ the record plane
+
+# Bumped when the meaning of a field changes. A reader that does not
+# recognise the version refuses the document rather than guess — the same
+# contract shapes_cli.py's JSON output documents (FORMAT_VERSION there).
+RECORD_FORMAT_VERSION = 1
+
+
+@dataclass(frozen=True)
+class Anchor:
+    """Who owned the boundary a record crossed (§97).
+
+    `kind` alone carries witnessed-vs-claimed — no separate boolean:
+    "host" is a witnessed crossing (the host performed it and returned);
+    "foreign-declaration" is a claim (declared by whoever wrote the
+    `doing` clause, not verified by the analyser or the host).
+    """
+    kind: str
+    identity: str
+
+
+@dataclass(frozen=True)
+class Record:
+    """One boundary crossing, formalising the existing effect log (§95-96
+    — not a new tracer). Four things: what crossed (kind/boundary/target/
+    computed), who owned the boundary (anchor), when (one timestamp — the
+    host call's return for a witness, the claim's recording for a claim),
+    and which values flowed there (derivation, optional)."""
+    kind: str
+    boundary: str
+    target: str
+    computed: bool
+    anchor: Anchor
+    when: Any
+    derivation: Optional[Any] = None
+    format: int = RECORD_FORMAT_VERSION
+
+
+def record_to_dict(r):
+    """Per §105, text is code points; a `target` string serializes as its
+    code-point sequence — a Python str already is one, so no extra
+    encoding step is needed here."""
+    return {
+        "format": r.format,
+        "kind": r.kind,
+        "boundary": r.boundary,
+        "target": r.target,
+        "computed": r.computed,
+        "anchor": {"kind": r.anchor.kind, "identity": r.anchor.identity},
+        "when": r.when,
+    }
+
+
+def records_to_json(records):
+    return {"format": RECORD_FORMAT_VERSION,
+            "records": [record_to_dict(r) for r in records]}
+
+
+def records_from_json(doc):
+    """The refuse-don't-guess half of the contract: an unrecognised
+    format version is rejected, not silently reinterpreted."""
+    version = doc.get("format")
+    if version != RECORD_FORMAT_VERSION:
+        raise PlanesError(
+            "unrecognized-record-format",
+            f"record format {version!r} is not {RECORD_FORMAT_VERSION}",
+            "regenerate the record with a matching version of planes")
+    return doc["records"]
+
+
+def error_record(e):
+    """A caught error, as an ordinary record — discriminated by shape
+    (§74), never by type. `path` (A.4) is present only when the error
+    carries one; a path step is a Planes number (list index) or the field
+    name itself (already a string)."""
+    rec = {"tag": e.tag, "detail": e.detail}
+    if e.path is not None:
+        rec["path"] = [Number.of(p) if isinstance(p, int) else p for p in e.path]
+    return rec
 
 
 # ================================================================ env
@@ -196,7 +290,7 @@ def real_http(url):
 
 
 class Interpreter:
-    def __init__(self, http=None, fs=None, host=None):
+    def __init__(self, http=None, fs=None, host=None, record=False):
         self.env = Env()
         self.funcs = {}
         self.foreigns = {}       # name -> Foreign declaration
@@ -216,10 +310,42 @@ class Interpreter:
         else:
             self.host = PythonHost()
 
+        # The record plane (§95-102). `record` toggles it; the toggle must
+        # never change self.effects, self.output, or the static surface —
+        # that is the whole of §99, and test_record.py's inertness gate is
+        # the mechanical check. Recording itself is a host capability: the
+        # clock and any persistence are requested from self.host, never
+        # performed by the interpreter directly.
+        self.record = record
+        self.records = []
+
     @property
     def fs(self):
         """Files this run touched, when the host keeps them in memory."""
         return getattr(self.host, "files", {})
+
+    # ---- the record plane
+
+    def host_anchor(self):
+        return Anchor("host", getattr(self.host, "name", "host"))
+
+    def foreign_anchor(self, decl):
+        return Anchor("foreign-declaration", decl.name)
+
+    def maybe_record(self, kind, target, anchor, derivation=None, computed=False):
+        """Request a record from the host; never perform one as an effect.
+
+        A no-op when `record` is off — the caller always calls this at the
+        same point in control flow either way, so the toggle can only ever
+        add an entry to `self.records`, never change anything else.
+        """
+        if not self.record:
+            return
+        entry = Record(kind=kind, boundary=EFFECT_KINDS.get(kind, "foreign"),
+                       target=target, computed=computed, anchor=anchor,
+                       when=self.host.clock(), derivation=derivation)
+        self.records.append(entry)
+        self.host.record(entry)
 
     # ---- driving
 
@@ -351,6 +477,7 @@ class Interpreter:
             self.output.append(text)
             self.host.show(text)
             self.effects.append(("show", text))
+            self.maybe_record("show", text, self.host_anchor(), derivation=v.node)
             return v
 
         if isinstance(stmt, Why):
@@ -445,6 +572,8 @@ class Interpreter:
             payload = to_json(value.value)
             self.host.write(dest.value, payload)
             self.effects.append(("write", dest.value, len(payload)))
+            self.maybe_record("write", dest.value, self.host_anchor(),
+                              derivation=dest.node)
             return Traced(None, Deriv("effect", f"write to {dest.value}", None,
                                       [value.node], origin=f"file:{dest.value}"))
 
@@ -454,8 +583,13 @@ class Interpreter:
             except _Give:
                 raise
             except PlanesError as e:
-                raise PlanesError(node.tag, e.detail or e.tag)
+                if node.handler is not None:
+                    return self.run_or_fail_handler(node, e, env)
+                raise PlanesError(node.tag, e.detail or e.tag, path=e.path)
             except Exception as e:
+                if node.handler is not None:
+                    return self.run_or_fail_handler(
+                        node, PlanesError(node.tag, str(e)), env)
                 raise PlanesError(node.tag, str(e))
 
         if isinstance(node, ForEach):
@@ -487,7 +621,7 @@ class Interpreter:
         if node.op == "first":
             n = self.eval(node.left, env)
             src = self.eval(node.right, env)
-            v = list(src.value)[: int(n.value)]
+            v = src.value[: int(n.value)]
             return Traced(v, Deriv("op", f"first {int(n.value)} of", v, [src.node]))
 
         left = self.eval(node.left, env)
@@ -513,6 +647,7 @@ class Interpreter:
             except HostError as e:
                 raise PlanesError("ask-failed", str(e))
             self.effects.append(("ask", url, len(body)))
+            self.maybe_record("ask", url, self.host_anchor(), derivation=arg.node)
             try:
                 parsed = from_foreign(self.host.parse_json(body))
             except Exception:
@@ -532,6 +667,7 @@ class Interpreter:
                 raise PlanesError("no-such-file", path,
                                   "check the path, or write it first")
             self.effects.append(("read", path, len(body)))
+            self.maybe_record("read", path, self.host_anchor(), derivation=arg.node)
             return Traced(body, Deriv("effect", f"read {path}", body,
                                       [arg.node], origin=f"file:{path}"))
 
@@ -554,8 +690,23 @@ class Interpreter:
         if node.name == "text":
             v = fmt(arg.value)
             return Traced(v, Deriv("op", "text of", v, [arg.node]))
+        if node.name == "normalize":
+            v = unicodedata.normalize("NFC", str(arg.value))
+            return Traced(v, Deriv("op", "normalize of", v, [arg.node]))
 
         raise PlanesError("unknown-builtin", node.name)
+
+    def run_or_fail_handler(self, node, error, env):
+        """Bind `node.tag` to `error`, as a record, and run the handler.
+
+        No child scope: an `or fail as` handler runs in the same env an
+        `if`/`else` body does (exec_stmt's If case), so a name the handler
+        assigns is visible afterward exactly the way an if-branch's is.
+        """
+        rec = error_record(error)
+        bound = Traced(rec, Deriv("record", "{record}", rec, []))
+        env.bind_local(node.tag, bound)
+        return self.exec_block(node.handler, env)
 
     def eval_foreach(self, node, env):
         source = self.eval(node.source, env)
@@ -644,6 +795,7 @@ class Interpreter:
             # value, so its log is the ground truth the static surface is
             # checked against.
             dest = decl.target
+            dest_node = None
             if where is not None:
                 if where[0] == "literal":
                     dest = where[1]
@@ -651,7 +803,15 @@ class Interpreter:
                     i = decl.params.index(where[1])
                     if i < len(arg_vals):
                         dest = fmt(arg_vals[i].value)
+                        dest_node = arg_vals[i].node
             self.effects.append((kind, dest))
+            # A claim, anchored to the declaration — recorded here, before
+            # the call, regardless of whether it goes on to raise (§97).
+            # This is the one site that must never move: the append above
+            # is correct for a claim precisely because it is pre-invoke,
+            # and the record beside it inherits that same reasoning.
+            self.maybe_record(kind, dest, self.foreign_anchor(decl),
+                              derivation=dest_node)
 
         try:
             raw = fn(*[to_host(a.value) for a in arg_vals])
@@ -689,11 +849,16 @@ class Interpreter:
 
 def apply_op(op, a, b):
     if op == "+":
-        if isinstance(a, str) or isinstance(b, str):
-            return fmt(a) + fmt(b)
+        if isinstance(a, str) and isinstance(b, str):
+            return a + b
         if isinstance(a, list) and isinstance(b, list):
             return a + b
-        return arith("+", a, b)
+        if is_num(a) and is_num(b):
+            return arith("+", a, b)
+        raise PlanesError(
+            "cannot-combine",
+            f"cannot combine {fmt(a)} with {fmt(b)} using +",
+            "convert first — e.g. \"total: \" + text of n")
     if op == "-": return arith("-", a, b)
     if op == "*": return arith("*", a, b)
     if op == "/":
