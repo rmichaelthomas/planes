@@ -6,3 +6,16 @@ __pycache__/
 .coverage
 .coverage.*
 
+
+# Demo program `write ... to "X.json"` outputs (money.planes -> invoice.json,
+# ordinary -> big.json, pypi/net -> packages.json, rule demos -> refunds/
+# results/processed.json, cache demos -> cache/config.json). Build artifacts,
+# not source.
+big.json
+invoice.json
+packages.json
+refunds.json
+results.json
+processed.json
+cache.json
+config.json
