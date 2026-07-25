@@ -129,6 +129,16 @@ def test_condition_renders_forbid_and_permit_correctly():
     assert condition(permit) == 'anything may ask to "https://x.example.com"'
 
 
+def test_condition_re_escapes_a_target_containing_a_quote():
+    """A rule's target holds already-resolved text (parser.py's
+    `.value[1:-1]`, same as any other STRING-typed field), so a target
+    containing a quote became expressible at fix/string-escapes-and-
+    bootstrap -- condition() must re-escape it back into the message,
+    the same fix render.py's Str case needed for the same reason."""
+    forbid = Rule("f", "anything", "ask", 'a"b', 1)
+    assert condition(forbid) == 'anything may not ask to "a\\"b"'
+
+
 def test_rule_name_does_not_enter_known_funcs():
     names = scan_names('rule [readings-stay-local] readings may not ask')
     assert "readings-stay-local" not in names
@@ -203,6 +213,20 @@ def test_computed_target_is_treated_as_a_possible_match():
     assert v[0].uncertain is True
     rendered = v[0].render()
     assert "could not be pinned down" in rendered
+
+
+def test_uncertain_target_message_re_escapes_a_quote_in_the_rule_target():
+    src = ('use http\n'
+           'rule [no-telemetry] anything may not ask '
+           'to "https://x.example.com/a\\"b"\n'
+           'urls = ["https://a.example.com", "https://x.example.com/a\\"b"]\n'
+           'for each u in urls:\n'
+           '  x = ask u\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].uncertain is True
+    rendered = v[0].render()
+    assert 'may or may not be "https://x.example.com/a\\"b"' in rendered
 
 
 def test_named_subject_raises_rather_than_passing_silently():
@@ -298,8 +322,17 @@ def test_named_subject_unresolvable_does_not_report_clean():
         assert "nonexistent-name" in str(e)
 
 
-def test_rules_module_imports_only_hashlib():
-    """§8's duck-typing claim, asserted directly rather than only reviewed."""
+def test_rules_module_imports_only_hashlib_and_planes_text():
+    """§8's duck-typing claim, asserted directly rather than only reviewed:
+    rules.py reaches Surface only through its public queries, never into
+    Analyser/Consts/Effect construction -- the docstring's actual claim,
+    which importing `shapes` (or `interp`, or `parser`) would break.
+    `planes_text` joined `hashlib` at feat/fail-primitive-and-parser-probe
+    (Ruling 1): a leaf utility with no project dependencies of its own
+    (test_planes_text.py asserts that separately), not a `shapes`
+    coupling -- rules.py's four violation/conflict messages that quote a
+    rule's `target` needed to re-escape it once fix/string-escapes-and-
+    bootstrap made a target containing a quote expressible."""
     import ast
     tree = ast.parse(open("rules.py").read())
     imports = set()
@@ -308,7 +341,7 @@ def test_rules_module_imports_only_hashlib():
             imports.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             imports.add(node.module)
-    assert imports == {"hashlib"}
+    assert imports == {"hashlib", "planes_text"}
 
 
 def test_violation_render_includes_derivation_line_when_traceable():
@@ -429,6 +462,21 @@ def test_equal_specificity_conflict_is_a_compile_error():
     except RuleConflict as e:
         msg = str(e)
         assert "[a]" in msg and "[b]" in msg
+
+
+def test_conflict_message_re_escapes_a_quote_in_the_shared_target():
+    src = ('use http\n'
+           'rule [a] anything may not ask to "https://x.example.com/a\\"b"\n'
+           'rule [b] anything may not ask to "https://x.example.com/a\\"b"\n'
+           'y = ask "https://x.example.com/a\\"b"\n')
+    prog = parse(src)
+    found = [s for s in prog if isinstance(s, Rule)]
+    surface = analyse(src)
+    try:
+        check(found, surface)
+        assert False, "should raise"
+    except RuleConflict as e:
+        assert 'to "https://x.example.com/a\\"b"' in str(e)
 
 
 def test_supersedes_resolves_what_would_otherwise_conflict():
@@ -711,6 +759,20 @@ def test_vacuous_situation_3_subject_reaches_the_kind_but_not_the_target():
     assert "checked nothing" in rendered
     assert "excludes every one" in rendered
     assert "https://different.example.com" in rendered
+
+
+def test_vacuous_situation_3_message_re_escapes_a_quote_in_the_target():
+    src = ('use http\n'
+           'let payload = "secret"\n'
+           'let full = "https://collector.example.com/?d=" + payload\n'
+           'rule [no-other-leak] payload may not ask '
+           'to "https://x.example.com/a\\"b"\n'
+           'x = ask full\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].vacuous
+    rendered = v[0].render()
+    assert 'never at "https://x.example.com/a\\"b"' in rendered
 
 
 def test_anything_subject_is_never_vacuous():

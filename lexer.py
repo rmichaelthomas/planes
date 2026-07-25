@@ -11,6 +11,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from planes_text import resolve_string_escapes
+
 # ================================================================ grammar as data
 #
 # The language's vocabulary — token classes, reserved words, builtin names,
@@ -124,66 +126,28 @@ class Token:
         return f"{self.kind}({self.value!r})"
 
 
-# The four escapes a STRING literal may contain (v9.0 §105: text is a
-# sequence of Unicode code points, and the literal syntax must be able to
-# denote any such sequence — REPORT_STRING_ESCAPES.md). No numeric escapes
-# (\x41, A): those reintroduce the opacity a magic-number `chr of n`
-# builtin was declined for. Resolved here, at token construction, so a Str
-# AST node always holds already-resolved text (parser.py, interp.py do not
-# need to know escapes exist).
-STRING_ESCAPES = {'"': '"', "\\": "\\", "n": "\n", "t": "\t"}
-
-# The inverse of STRING_ESCAPES, for any code path that prints a string
-# value back as Planes source (render.py's Str case, interp.py's why_tree
-# `because` line) rather than as a plain value (interp.py's fmt, for
-# `show`/`why`'s printed derivation, deliberately does not re-quote at
-# all). A single character-at-a-time pass, each character mapped
-# independently to its escaped form (or left as itself) -- no ordering
-# hazard from a separate backslash-doubling pass, since backslash is
-# just another entry here, produced once per original character.
-STRING_UNESCAPE = {v: "\\" + k for k, v in STRING_ESCAPES.items()}
-
-
-def escape_string_literal(s):
-    """`s`, re-escaped as the content of a Planes STRING literal — the
-    exact text between the delimiting quotes that STRING's own regex
-    would need to see to resolve back to `s`. `render(parse(src))` must
-    parse to an equal AST for every program (render.py's module
-    docstring); without this, a string containing a quote, backslash,
-    newline, or tab renders to source that either reparses to a
-    different value or does not reparse at all (fix/string-escapes-and-
-    bootstrap: none of those four could occur in a string before this
-    build, so nothing exercised the gap until now)."""
-    return "".join(STRING_UNESCAPE.get(c, c) for c in s)
-
-
 def _resolve_string_escapes(raw, lineno):
     """`raw` is a STRING token's content between its delimiting quotes,
-    exactly as STRING's regex matched it — an escape is still the two raw
-    source characters (e.g. backslash then `n`). STRING's pattern
-    (`(?:\\.|[^"\\])*`) only ever matches a backslash paired with a
-    following character, so a backslash here is never the last character
-    of `raw`; an unmatched trailing backslash instead fails the STRING
-    match entirely and is caught in tokenize() as an unterminated string.
+    exactly as STRING's regex matched it. The actual resolution — the
+    four escapes, and the table both directions share — lives in
+    `planes_text.py` now (fix/string-escapes-and-bootstrap moved it
+    there, alongside `escape_string_literal`, once `render.py`,
+    `interp.py`, `shapes.py`, and `rules.py` all needed one direction or
+    the other and none of them was the lexer). This wrapper exists
+    because that module cannot raise `PlanesSyntaxError` itself — it has
+    no notion of "which line," and importing `PlanesSyntaxError` from
+    here would make the two modules import each other — so it raises a
+    plain `ValueError` naming the bad character, and this is where that
+    becomes the error the language actually shows.
     """
-    out = []
-    i = 0
-    n = len(raw)
-    while i < n:
-        c = raw[i]
-        if c == "\\":
-            nxt = raw[i + 1]
-            if nxt not in STRING_ESCAPES:
-                raise PlanesSyntaxError(
-                    f"line {lineno}: unrecognized escape '\\{nxt}' in a "
-                    f"string literal -- the four recognized escapes are "
-                    f'\\" \\\\ \\n \\t')
-            out.append(STRING_ESCAPES[nxt])
-            i += 2
-        else:
-            out.append(c)
-            i += 1
-    return "".join(out)
+    try:
+        return resolve_string_escapes(raw)
+    except ValueError as e:
+        nxt = e.args[0]
+        raise PlanesSyntaxError(
+            f"line {lineno}: unrecognized escape '\\{nxt}' in a "
+            f"string literal -- the four recognized escapes are "
+            f'\\" \\\\ \\n \\t') from e
 
 
 def tokenize(src):
@@ -217,13 +181,28 @@ def tokenize(src):
             m = TOKEN_RE.match(stripped, pos)
             if m is None:
                 if stripped[pos] == '"':
+                    # STRING's own regex is anchored at pos and already
+                    # failed, so if the remainder ends in a quote, an odd
+                    # count of backslashes must precede it (an even count
+                    # would have let the regex match normally) -- that
+                    # quote was consumed as an escape, not left to close
+                    # the string. If the remainder does not end in a
+                    # quote at all, nothing closed it; saying a backslash
+                    # is to blame would be inventing one that may not be
+                    # there (verified: "abc, with no backslash anywhere,
+                    # hits this same branch).
+                    if stripped[pos:].endswith('"'):
+                        raise PlanesSyntaxError(
+                            f"line {lineno}: unterminated string literal -- a "
+                            f"backslash right before the closing quote escapes "
+                            f'that quote (\\") instead of ending the string; '
+                            f"the four recognized escapes are "
+                            f'\\" \\\\ \\n \\t -- write \\\\ for a literal '
+                            f"trailing backslash")
                     raise PlanesSyntaxError(
-                        f"line {lineno}: unterminated string literal -- a "
-                        f"backslash right before the closing quote escapes "
-                        f'that quote (\\") instead of ending the string; '
-                        f"the four recognized escapes are "
-                        f'\\" \\\\ \\n \\t -- write \\\\ for a literal '
-                        f"trailing backslash")
+                        f"line {lineno}: unterminated string literal -- no "
+                        f"closing quote found before the end of the line "
+                        f"(a Planes string cannot span multiple lines)")
                 pos += 1
                 continue
             kind, val = m.lastgroup, m.group()
@@ -366,6 +345,20 @@ class OrFail:
     # existing if/field-access machinery — no new dispatch mechanism.
     # None keeps the original rename-and-reraise behavior.
     handler: Any = None
+@dataclass
+class Fail:
+    """`fail <message> as <tag>` (v9.0 §106, feat/fail-primitive-and-
+    parser-probe) — a statement, not an expression modifier like OrFail:
+    unconditionally raises the same {tag, detail} shape OrFail's handler
+    binds, with `message`'s value as detail. `message` is an ordinary
+    expression (Ruling 2: "not a literal-only slot"), evaluated for its
+    value, so it can carry effects of its own (an `ask` inside it, say)
+    that a static surface must still see even though `fail` itself
+    contributes none. Reuses `fail` and `as`, both already reserved by
+    OrFail's own grammar — no new reserved word."""
+    message: Any
+    tag: str
+    line: int = 0
 @dataclass
 class Builtin:
     name: str

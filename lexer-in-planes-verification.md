@@ -102,10 +102,19 @@ and the self-tokenization runs are now a permanent test
 Zero disagreements remain across all 29 corpus files and both
 self-tokenization runs. `grammar/lexer.planes` tokenizes every
 construct `lexer.py` produces a token for, including `STRING` with its
-four escapes, with no known remaining gap in tokenization itself. The
-one gap this build's own STRING section documents in place — that a
-`to` function has no way to raise a custom-message error the way
-`lexer.py` raises `PlanesSyntaxError` on malformed input — is untested
-by this corpus (every string in it is well-formed; ESCAPE_AUDIT.md)
-and is a narrower, separate gap in error-signaling from ordinary Planes
-code, not in tokenization. See REPORT_STRING_ESCAPES.md for its cost.
+four escapes, with no known remaining gap in tokenization itself.
+
+**Update (feat/fail-primitive-and-parser-probe):** the one gap this
+build's own STRING section documented in place — that a `to` function
+had no way to raise a custom-message error the way `lexer.py` raises
+`PlanesSyntaxError` on malformed input — is closed. `fail <message> as
+<tag>` (Ruling 2) lets `grammar/lexer.planes` raise its own
+unrecognized-escape and unterminated-string errors, at the same two
+sites this document's prior text named. The two implementations' error
+messages agree exactly, verified directly (`test_unrecognized_escape_
+messages_agree`, `test_unterminated_string_messages_agree` in
+`test_lexer_in_planes.py`), not assumed from the shared message-
+building logic. Still untested against real corpus content (every
+string in the 29-file corpus is well-formed; `ESCAPE_AUDIT.md`), since
+nothing in it is malformed — the tests above exercise the message-
+agreement property directly, against hand-built malformed source.

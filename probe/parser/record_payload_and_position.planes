@@ -1,0 +1,13 @@
+to make-result of node, next-index:
+  give { node: node, index: next-index }
+
+to advance of r:
+  new-node = r.node + "-advanced"
+  give make-result of new-node, (r.index + 1)
+
+r1 = make-result of "some-node", 5
+r2 = advance of r1
+show r1.node
+show r1.index
+show r2.node
+show r2.index

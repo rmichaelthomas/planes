@@ -8,14 +8,20 @@ program's effect surface; this module only consumes it, through the public
 the one query named-subject resolution needs). If this file ever needs to
 reach inside `Analyser`, `Consts`, or `Effect` construction, that is a
 finding about §8 — report it, don't route around it. `hashlib`, for
-fingerprinting (§5), is the one import this file has ever needed — stdlib,
-not a `shapes` coupling.
+fingerprinting (§5), and `planes_text`, for the four-entry STRING escape
+table a rule's `target` may now contain (fix/string-escapes-and-bootstrap)
+and its own violation/conflict messages must re-escape when quoting it
+back, are the only imports this file has ever needed — stdlib, or a leaf
+utility with no project dependencies of its own, never a `shapes`
+coupling.
 
 Matching is static and structural (unbound v2.0 §34): no execution. A rule
 is never triggered; it is only ever checked against a surface that was
 already computed without running anything.
 """
 import hashlib
+
+from planes_text import escape_string_literal
 
 
 class RuleNotSupported(Exception):
@@ -86,7 +92,7 @@ def condition(rule):
     verb = "may not" if rule.assertion == "forbid" else "may"
     text = f"{rule.subject} {verb} {rule.kind}"
     if rule.target is not None:
-        text += f' to "{rule.target}"'
+        text += f' to "{escape_string_literal(rule.target)}"'
     return text
 
 
@@ -155,7 +161,8 @@ class Violation:
         if self.uncertain:
             lines.append(
                 "  target could not be pinned down statically — this "
-                f"computed value may or may not be \"{self.rule.target}\"")
+                f'computed value may or may not be '
+                f'"{escape_string_literal(self.rule.target)}"')
         lines.append(f"  rule declared at line {self.rule.line}: "
                      f"{condition(self.rule)}")
         if self.narrowed_by:
@@ -187,7 +194,7 @@ class Violation:
                       f"'{rule.kind}' effect, but the rule's target "
                       f"excludes every one")
             reason = (f"'{rule.subject}' reaches this effect kind, but "
-                      f"never at \"{rule.target}\"")
+                      f'never at "{escape_string_literal(rule.target)}"')
             fix = (f"check the target matches where '{rule.subject}' "
                   f"actually goes, or remove the target to check every "
                   f"'{rule.kind}' effect '{rule.subject}' reaches")
@@ -449,7 +456,8 @@ def _check_conflicts(active):
             if a.supersedes == b.name or b.supersedes == a.name:
                 continue
 
-            where = f"'{a.kind}'" + (f' to "{a.target}"' if a.target else "")
+            where = f"'{a.kind}'" + (
+                f' to "{escape_string_literal(a.target)}"' if a.target else "")
             if a.assertion != b.assertion:
                 forbid, permit = (
                     (a, b) if a.assertion == "forbid" else (b, a))

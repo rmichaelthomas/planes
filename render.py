@@ -43,6 +43,7 @@ from lexer import (
     Bool,
     Builtin,
     Call,
+    Fail,
     Field,
     ForEach,
     Foreign,
@@ -65,8 +66,8 @@ from lexer import (
     Var,
     Why,
     WriteTo,
-    escape_string_literal,
 )
+from planes_text import escape_string_literal
 from rules import check
 
 INDENT = "  "
@@ -263,6 +264,8 @@ def render_stmt(node, indent, markers):
         return indent + render_writeto_inline(node)
     if isinstance(node, OrFail):
         return indent + render_orfail(node)
+    if isinstance(node, Fail):
+        return indent + f"fail {render_expr(node.message)} as {node.tag}"
     if isinstance(node, If):
         return render_if(node, indent, markers)
     if isinstance(node, ForEach):

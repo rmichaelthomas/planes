@@ -1,0 +1,31 @@
+# Amber site 1's algorithm needs a name table it can query by a
+# DYNAMICALLY-BUILT string (the accumulated multi-word probe text) --
+# not a literal field name known at the point the source is written.
+# `.field` is always a literal identifier (`r.k` reads the field
+# literally named "k", never "whatever k's value is"), and `r[k]` /
+# `r["a"]` are both syntax errors -- Planes has no index syntax at all
+# (#11), for records any more than for strings or lists. The workaround:
+# represent the table as a LIST of records and do a linear `for each`
+# scan, comparing against the dynamic key with `==` -- O(n) instead of
+# O(1), but functionally correct, built entirely from capabilities
+# already proven (for each, ==, records, lists).
+
+r = { a: 1, b: 2 }
+k = "a"
+static-miss = r.k
+show static-miss
+
+to lookup of table, key:
+  give lookup-into of table, key, nothing
+
+to lookup-into of table, key, found:
+  result = found
+  for each entry in table where entry.name == key:
+    result = entry.arity
+  give result
+
+known-funcs = [{ name: "word", arity: 0 }, { name: "word count", arity: 1 }, { name: "ask", arity: 1 }]
+hit = lookup of known-funcs, "word count"
+miss = lookup of known-funcs, "nonexistent"
+show hit
+show miss

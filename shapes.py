@@ -19,6 +19,7 @@ from typing import Any, Optional
 
 from lexer import *
 from parser import BUILTIN_NAMES, parse
+from planes_text import escape_string_literal
 
 # ================================================================ effect kinds
 
@@ -495,6 +496,16 @@ class Analyser:
 
         if isinstance(node, (Give, Why)):
             return self.walk(node.expr, fn_effects, consts)
+
+        if isinstance(node, Fail):
+            # Failing is not an effect (Ruling 2 item 5) -- no Effect is
+            # added, the same as Give/Why above -- but message is an
+            # ordinary expression and may carry a real effect of its own
+            # (`fail (text of (ask url)) as tag`), which the static
+            # surface must still see: a static surface is what the
+            # program CAN do, and evaluating message always runs,
+            # whether or not the fail after it does anything new.
+            return self.walk(node.message, fn_effects, consts)
 
         if isinstance(node, BinOp):
             return (self.walk(node.left, fn_effects, consts)

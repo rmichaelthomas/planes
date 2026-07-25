@@ -25,12 +25,22 @@ correctly tokenizing itself).
 
 lexer-in-planes-verification.md carries the full per-file table these
 assertions are drawn from.
+
+A third, narrower gap remained even after full agreement: lexer.planes
+could tokenize well-formed input identically to lexer.py, but had no
+way to *raise* on malformed input the way lexer.py raises
+PlanesSyntaxError, since no `to` function could manufacture a failure
+from ordinary code. feat/fail-primitive-and-parser-probe's `fail
+<message> as <tag>` closes that one too, at the exact site
+grammar/lexer.planes's STRING section documented it in place -- the
+malformed-input tests below check the message text itself agrees, not
+only that both sides raise.
 """
 import glob
 import sys
 
 import lexer as pylexer
-from interp import Deriv, Interpreter, Traced
+from interp import Deriv, Interpreter, PlanesError, Traced
 
 ROOT_CORPUS = ["annotated.planes", "foreign.planes", "gate.planes", "hn.planes",
               "money.planes", "names.planes", "ordinary.planes", "pypi.planes"]
@@ -122,6 +132,79 @@ def test_lexer_planes_tokenizes_vocabulary_planes_exactly():
     got = planes_tokenize(src)
     assert got == want, f"expected byte-identical self-tokenization, " \
                         f"first divergence at {first_divergence(got, want)}"
+
+
+# ================================================================ malformed input (fail primitive)
+#
+# lexer.planes's STRING section documented, in place, the one thing it
+# could not do: raise its own error on malformed input the way lexer.py
+# raises PlanesSyntaxError, because no `to` function could manufacture a
+# failure. `fail <message> as <tag>` closes that gap, at the exact site
+# that reported it -- these tests check the two implementations now
+# agree on the message text itself, not just on well-formed input.
+# lexer.planes raises PlanesError (a Planes program's only failure
+# primitive); lexer.py raises PlanesSyntaxError (a host-language parse
+# error) -- the two can never share an exception type, so what agreeing
+# means here is the message text lexer.planes builds via `fail` equals
+# the message text `str()` of lexer.py's exception.
+
+def test_unrecognized_escape_messages_agree():
+    src = 'x = "a\\zb"'
+    try:
+        pylexer.tokenize(src)
+        assert False, "lexer.py should have raised"
+    except pylexer.PlanesSyntaxError as e:
+        py_msg = str(e)
+
+    try:
+        planes_tokenize(src)
+        assert False, "lexer.planes should have raised"
+    except PlanesError as e:
+        assert e.detail == py_msg, f"planes: {e.detail!r}\npython: {py_msg!r}"
+
+
+def test_unterminated_string_messages_agree_trailing_backslash():
+    """The backslash consumed what looked like the closing quote --
+    both implementations correctly blame the backslash."""
+    src = 'x = "a\\"'
+    try:
+        pylexer.tokenize(src)
+        assert False, "lexer.py should have raised"
+    except pylexer.PlanesSyntaxError as e:
+        py_msg = str(e)
+
+    try:
+        planes_tokenize(src)
+        assert False, "lexer.planes should have raised"
+    except PlanesError as e:
+        assert e.detail == py_msg, f"planes: {e.detail!r}\npython: {py_msg!r}"
+
+
+def test_unterminated_string_messages_agree_no_backslash_at_all():
+    """A plain forgotten closing quote, no backslash anywhere on the
+    line. Found during this build's own gate self-check (self-run, not
+    deferred): the message used to say "a backslash right before the
+    closing quote" even here, inventing one that never occurred --
+    lexer.py distinguishes the two cases now (stripped[pos:].endswith
+    ('"') -- an odd backslash count precedes a trailing quote only if
+    one is actually there), and lexer.planes mirrors the distinction via
+    ends-in-escaped-quote, a flag only ever true right after resolving
+    \\" (the one path a literal quote can enter `text` by, since a raw
+    `"` closes the token immediately rather than joining it)."""
+    src = 'x = "abc'
+    try:
+        pylexer.tokenize(src)
+        assert False, "lexer.py should have raised"
+    except pylexer.PlanesSyntaxError as e:
+        py_msg = str(e)
+    assert "backslash" not in py_msg, \
+        f"no backslash occurred in the source; message must not blame one: {py_msg!r}"
+
+    try:
+        planes_tokenize(src)
+        assert False, "lexer.planes should have raised"
+    except PlanesError as e:
+        assert e.detail == py_msg, f"planes: {e.detail!r}\npython: {py_msg!r}"
 
 
 if __name__ == "__main__":

@@ -1,13 +1,13 @@
 {
   "format": 1,
   "generated_by": "grammar_gen.py",
-  "count": 85,
+  "count": 88,
   "entries": [
     {
       "id": "interp.not-a-yes-no",
       "class": "PlanesError",
       "tag": "not-a-yes-no",
-      "source": "interp.py:133",
+      "source": "interp.py:134",
       "raised_in": "condition",
       "template": "a condition needs a yes/no value, found {fmt(v)}",
       "slots": [
@@ -19,7 +19,7 @@
       "id": "interp.unknown-operator-1",
       "class": "PlanesError",
       "tag": "unknown-operator",
-      "source": "interp.py:945",
+      "source": "interp.py:955",
       "raised_in": "apply_op",
       "template": null,
       "slots": [],
@@ -30,7 +30,7 @@
       "id": "interp.unknown-operator-2",
       "class": "PlanesError",
       "tag": "unknown-operator",
-      "source": "interp.py:970",
+      "source": "interp.py:980",
       "raised_in": "arith",
       "template": null,
       "slots": [],
@@ -41,7 +41,7 @@
       "id": "interp.cannot-compare-1",
       "class": "PlanesError",
       "tag": "cannot-compare",
-      "source": "interp.py:80",
+      "source": "interp.py:81",
       "raised_in": "equal",
       "template": "nothing cannot be compared with ==",
       "slots": [],
@@ -51,7 +51,7 @@
       "id": "interp.cannot-compare-2",
       "class": "PlanesError",
       "tag": "cannot-compare",
-      "source": "interp.py:90",
+      "source": "interp.py:91",
       "raised_in": "equal",
       "template": "cannot compare {fmt(a)} with {fmt(b)}",
       "slots": [
@@ -64,7 +64,7 @@
       "id": "interp.cannot-compare-3",
       "class": "PlanesError",
       "tag": "cannot-compare",
-      "source": "interp.py:99",
+      "source": "interp.py:100",
       "raised_in": "equal",
       "template": "cannot compare {fmt(a)} with {fmt(b)}",
       "slots": [
@@ -77,7 +77,7 @@
       "id": "interp.unrecognized-record-format",
       "class": "PlanesError",
       "tag": "unrecognized-record-format",
-      "source": "interp.py:224",
+      "source": "interp.py:225",
       "raised_in": "records_from_json",
       "template": "record format {version} is not {RECORD_FORMAT_VERSION}",
       "slots": [
@@ -90,7 +90,7 @@
       "id": "interp.unknown-name",
       "class": "PlanesError",
       "tag": "unknown-name",
-      "source": "interp.py:254",
+      "source": "interp.py:255",
       "raised_in": "get",
       "template": "no name '{name}' here",
       "slots": [
@@ -102,7 +102,7 @@
       "id": "interp.cannot-evaluate",
       "class": "PlanesError",
       "tag": "cannot-evaluate",
-      "source": "interp.py:671",
+      "source": "interp.py:681",
       "raised_in": "eval",
       "template": null,
       "slots": [],
@@ -113,7 +113,7 @@
       "id": "interp.unknown-builtin",
       "class": "PlanesError",
       "tag": "unknown-builtin",
-      "source": "interp.py:766",
+      "source": "interp.py:776",
       "raised_in": "builtin",
       "template": null,
       "slots": [],
@@ -124,7 +124,7 @@
       "id": "interp.cannot-combine",
       "class": "PlanesError",
       "tag": "cannot-combine",
-      "source": "interp.py:927",
+      "source": "interp.py:937",
       "raised_in": "apply_op",
       "template": "cannot combine {fmt(a)} with {fmt(b)} using +",
       "slots": [
@@ -137,7 +137,7 @@
       "id": "interp.cannot-compare-4",
       "class": "PlanesError",
       "tag": "cannot-compare",
-      "source": "interp.py:118",
+      "source": "interp.py:119",
       "raised_in": "equal",
       "template": "records have different fields: {sorted(set(a) ^ set(b))}",
       "slots": [
@@ -149,17 +149,28 @@
       "id": "interp.annotation-executed",
       "class": "PlanesError",
       "tag": "annotation-executed",
-      "source": "interp.py:446",
+      "source": "interp.py:447",
       "raised_in": "exec_stmt",
       "template": "an annotation reached the evaluator",
       "slots": [],
       "fix": "this is a bug in Planes, not in your program \u2014 please report it"
     },
     {
+      "id": "interp.planeserror-site-1",
+      "class": "PlanesError",
+      "tag": null,
+      "source": "interp.py:505",
+      "raised_in": "exec_stmt",
+      "template": null,
+      "slots": [],
+      "assembled": false,
+      "note": "message is not a literal/f-string at the call site (built elsewhere)"
+    },
+    {
       "id": "interp.not-a-record-1",
       "class": "PlanesError",
       "tag": "not-a-record",
-      "source": "interp.py:510",
+      "source": "interp.py:520",
       "raised_in": "exec_when",
       "template": "cannot match {fmt(subject.value)} against a shape",
       "slots": [
@@ -171,7 +182,7 @@
       "id": "interp.not-a-collection",
       "class": "PlanesError",
       "tag": "not-a-collection",
-      "source": "interp.py:783",
+      "source": "interp.py:793",
       "raised_in": "eval_foreach",
       "template": "cannot loop over {fmt(source.value)}",
       "slots": [
@@ -183,7 +194,7 @@
       "id": "interp.unknown-function",
       "class": "PlanesError",
       "tag": "unknown-function",
-      "source": "interp.py:826",
+      "source": "interp.py:836",
       "raised_in": "call",
       "template": "no function named '{name}'",
       "slots": [
@@ -195,7 +206,7 @@
       "id": "interp.wrong-arity-1",
       "class": "PlanesError",
       "tag": "wrong-arity",
-      "source": "interp.py:841",
+      "source": "interp.py:851",
       "raised_in": "call_foreign",
       "template": "'{decl.name}' takes {len(decl.params)} {word}, given {len(args)}",
       "slots": [
@@ -209,7 +220,7 @@
       "id": "interp.wrong-arity-2",
       "class": "PlanesError",
       "tag": "wrong-arity",
-      "source": "interp.py:902",
+      "source": "interp.py:912",
       "raised_in": "invoke",
       "template": "'{name}' takes {len(fn.params)} {word}, given {len(args)}",
       "slots": [
@@ -223,7 +234,7 @@
       "id": "interp.divided-by-zero",
       "class": "PlanesError",
       "tag": "divided-by-zero",
-      "source": "interp.py:935",
+      "source": "interp.py:945",
       "raised_in": "apply_op",
       "template": "the right side of / was 0",
       "slots": [],
@@ -233,7 +244,7 @@
       "id": "interp.not-a-number-1",
       "class": "PlanesError",
       "tag": "not-a-number",
-      "source": "interp.py:956",
+      "source": "interp.py:966",
       "raised_in": "arith",
       "template": "cannot use '{op}' on {fmt(v)}",
       "slots": [
@@ -246,7 +257,7 @@
       "id": "interp.needs-rounding",
       "class": "PlanesError",
       "tag": "needs-rounding",
-      "source": "interp.py:967",
+      "source": "interp.py:977",
       "raised_in": "arith",
       "template": null,
       "slots": [],
@@ -258,7 +269,7 @@
       "id": "interp.cannot-compare-5",
       "class": "PlanesError",
       "tag": "cannot-compare",
-      "source": "interp.py:978",
+      "source": "interp.py:988",
       "raised_in": "compare",
       "template": "cannot compare {fmt(a)} with {fmt(b)}",
       "slots": [
@@ -268,10 +279,22 @@
       "fix": "compare numbers with numbers, or text with text"
     },
     {
+      "id": "interp.fail-message-not-text",
+      "class": "PlanesError",
+      "tag": "fail-message-not-text",
+      "source": "interp.py:501",
+      "raised_in": "exec_stmt",
+      "template": "fail's message must be text, found {fmt(v.value)}",
+      "slots": [
+        "fmt(v.value)"
+      ],
+      "fix": "wrap it with text of"
+    },
+    {
       "id": "interp.not-a-record-2",
       "class": "PlanesError",
       "tag": "not-a-record",
-      "source": "interp.py:574",
+      "source": "interp.py:584",
       "raised_in": "eval",
       "template": "cannot update {fmt(base.value)} with with",
       "slots": [
@@ -283,7 +306,7 @@
       "id": "interp.not-a-list",
       "class": "PlanesError",
       "tag": "not-a-list",
-      "source": "interp.py:586",
+      "source": "interp.py:596",
       "raised_in": "eval",
       "template": "cannot append to {fmt(base.value)} with plus",
       "slots": [
@@ -295,7 +318,7 @@
       "id": "interp.not-a-record-3",
       "class": "PlanesError",
       "tag": "not-a-record",
-      "source": "interp.py:610",
+      "source": "interp.py:620",
       "raised_in": "eval",
       "template": "cannot read .{node.name} from {fmt(obj.value)}",
       "slots": [
@@ -308,7 +331,7 @@
       "id": "interp.not-a-number-2",
       "class": "PlanesError",
       "tag": "not-a-number",
-      "source": "interp.py:627",
+      "source": "interp.py:637",
       "raised_in": "eval",
       "template": "cannot round {fmt(v.value)}",
       "slots": [
@@ -320,7 +343,7 @@
       "id": "interp.module-not-used-1",
       "class": "PlanesError",
       "tag": "module-not-used",
-      "source": "interp.py:638",
+      "source": "interp.py:648",
       "raised_in": "eval",
       "template": "writing a file needs the file module",
       "slots": [],
@@ -330,7 +353,7 @@
       "id": "interp.module-not-used-2",
       "class": "PlanesError",
       "tag": "module-not-used",
-      "source": "interp.py:710",
+      "source": "interp.py:720",
       "raised_in": "builtin",
       "template": "asking a url needs the http module",
       "slots": [],
@@ -340,7 +363,7 @@
       "id": "interp.module-not-used-3",
       "class": "PlanesError",
       "tag": "module-not-used",
-      "source": "interp.py:729",
+      "source": "interp.py:739",
       "raised_in": "builtin",
       "template": "reading a file needs the file module",
       "slots": [],
@@ -350,7 +373,7 @@
       "id": "interp.not-a-number-3",
       "class": "PlanesError",
       "tag": "not-a-number",
-      "source": "interp.py:754",
+      "source": "interp.py:764",
       "raised_in": "builtin",
       "template": "cannot take the whole part of {fmt(arg.value)}",
       "slots": [
@@ -361,7 +384,7 @@
       "id": "interp.wrong-arity-3",
       "class": "PlanesError",
       "tag": "wrong-arity",
-      "source": "interp.py:809",
+      "source": "interp.py:819",
       "raised_in": "call",
       "template": "'{name}' takes 1 value, given {len(args)}",
       "slots": [
@@ -374,7 +397,7 @@
       "id": "interp.foreign-not-found",
       "class": "PlanesError",
       "tag": "foreign-not-found",
-      "source": "interp.py:856",
+      "source": "interp.py:866",
       "raised_in": "call_foreign",
       "template": "cannot find '{decl.target}' in the host",
       "slots": [
@@ -386,7 +409,7 @@
       "id": "interp.foreign-failed",
       "class": "PlanesError",
       "tag": "foreign-failed",
-      "source": "interp.py:888",
+      "source": "interp.py:898",
       "raised_in": "call_foreign",
       "template": "'{decl.name}' raised {type(e).__name__}: {e}",
       "slots": [
@@ -397,10 +420,10 @@
       "fix": "wrap the call with `or fail as ...` to name the failure"
     },
     {
-      "id": "interp.planeserror-site-1",
+      "id": "interp.planeserror-site-2",
       "class": "PlanesError",
       "tag": null,
-      "source": "interp.py:657",
+      "source": "interp.py:667",
       "raised_in": "eval",
       "template": null,
       "slots": [],
@@ -408,10 +431,10 @@
       "note": "message is not a literal/f-string at the call site (built elsewhere)"
     },
     {
-      "id": "interp.planeserror-site-2",
+      "id": "interp.planeserror-site-3",
       "class": "PlanesError",
       "tag": null,
-      "source": "interp.py:662",
+      "source": "interp.py:672",
       "raised_in": "eval",
       "template": null,
       "slots": [],
@@ -422,7 +445,7 @@
       "id": "interp.ask-failed",
       "class": "PlanesError",
       "tag": "ask-failed",
-      "source": "interp.py:717",
+      "source": "interp.py:727",
       "raised_in": "builtin",
       "template": null,
       "slots": [],
@@ -433,7 +456,7 @@
       "id": "interp.no-such-file",
       "class": "PlanesError",
       "tag": "no-such-file",
-      "source": "interp.py:736",
+      "source": "interp.py:746",
       "raised_in": "builtin",
       "template": null,
       "slots": [],
@@ -445,7 +468,7 @@
       "id": "interp.bad-foreign-target",
       "class": "PlanesError",
       "tag": "bad-foreign-target",
-      "source": "interp.py:853",
+      "source": "interp.py:863",
       "raised_in": "call_foreign",
       "template": null,
       "slots": [],
@@ -454,10 +477,10 @@
       "note": "message is not a literal/f-string at the call site (built elsewhere)"
     },
     {
-      "id": "interp.planeserror-site-3",
+      "id": "interp.planeserror-site-4",
       "class": "PlanesError",
       "tag": null,
-      "source": "interp.py:661",
+      "source": "interp.py:671",
       "raised_in": "eval",
       "template": null,
       "slots": [],
@@ -468,7 +491,7 @@
       "id": "lexer.planessyntaxerror-site-1",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "lexer.py:177",
+      "source": "lexer.py:147",
       "raised_in": "_resolve_string_escapes",
       "template": "line {lineno}: unrecognized escape '\\{nxt}' in a string literal -- the four recognized escapes are \\\" \\\\ \\n \\t",
       "slots": [
@@ -480,7 +503,18 @@
       "id": "lexer.planessyntaxerror-site-2",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "lexer.py:220",
+      "source": "lexer.py:202",
+      "raised_in": "tokenize",
+      "template": "line {lineno}: unterminated string literal -- no closing quote found before the end of the line (a Planes string cannot span multiple lines)",
+      "slots": [
+        "lineno"
+      ]
+    },
+    {
+      "id": "lexer.planessyntaxerror-site-3",
+      "class": "PlanesSyntaxError",
+      "tag": null,
+      "source": "lexer.py:195",
       "raised_in": "tokenize",
       "template": "line {lineno}: unterminated string literal -- a backslash right before the closing quote escapes that quote (\\\") instead of ending the string; the four recognized escapes are \\\" \\\\ \\n \\t -- write \\\\ for a literal trailing backslash",
       "slots": [
@@ -491,7 +525,7 @@
       "id": "parser.planessyntaxerror-site-1",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:302",
+      "source": "parser.py:309",
       "raised_in": "read_effect_word",
       "template": "line {t.line}: expected an effect name after {after}, found '{t.value or 'end of line'}'",
       "slots": [
@@ -504,7 +538,7 @@
       "id": "parser.planessyntaxerror-site-2",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:563",
+      "source": "parser.py:570",
       "raised_in": "parse_note_entry",
       "template": "line {g.line}: unrecognised entry in a note, found '{g.value or 'end of line'}'\n  try: from \"source\"  or  derives-from [rule-name]",
       "slots": [
@@ -516,7 +550,7 @@
       "id": "parser.planesambiguity-site-1",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:768",
+      "source": "parser.py:775",
       "raised_in": "check_rename_name_ambiguity",
       "template": null,
       "slots": [],
@@ -527,7 +561,7 @@
       "id": "parser.planesambiguity-site-2",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:827",
+      "source": "parser.py:834",
       "raised_in": "raise_amber_multiword",
       "template": null,
       "slots": [],
@@ -538,7 +572,7 @@
       "id": "parser.planesambiguity-site-3",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:837",
+      "source": "parser.py:844",
       "raised_in": "raise_amber_juxtaposition",
       "template": null,
       "slots": [],
@@ -549,7 +583,7 @@
       "id": "parser.planesambiguity-site-4",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:847",
+      "source": "parser.py:854",
       "raised_in": "raise_amber_juxtaposition_unknown",
       "template": null,
       "slots": [],
@@ -560,7 +594,7 @@
       "id": "parser.planesambiguity-site-5",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:901",
+      "source": "parser.py:908",
       "raised_in": "check_paren_arglist_ambiguity",
       "template": null,
       "slots": [],
@@ -571,7 +605,7 @@
       "id": "parser.planessyntaxerror-site-3",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1157",
+      "source": "parser.py:1164",
       "raised_in": "parse_primary",
       "template": "line {t.line}: expected a value, found '{t.value or 'end of line'}'",
       "slots": [
@@ -596,7 +630,7 @@
       "id": "parser.planessyntaxerror-site-5",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:284",
+      "source": "parser.py:291",
       "raised_in": "read_claim",
       "template": "line {g.line}: '{g.value}' is not a parameter of this function, so it cannot be where '{kind}' goes\n  parameters: {', '.join(params) or 'none'}",
       "slots": [
@@ -610,7 +644,7 @@
       "id": "parser.planessyntaxerror-site-6",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:319",
+      "source": "parser.py:326",
       "raised_in": "parse_rule",
       "template": "line {g.line}: a rule needs a bracketed name, found '{g.value or 'end of line'}'\n  try: rule [name-here] subject may not effect-kind",
       "slots": [
@@ -622,7 +656,7 @@
       "id": "parser.planessyntaxerror-site-7",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:326",
+      "source": "parser.py:333",
       "raised_in": "parse_rule",
       "template": "line {g.line}: a rule's bracketed name must be a word, found '{g.value or 'end of line'}'\n  try: rule [name-here] subject may not effect-kind",
       "slots": [
@@ -634,7 +668,7 @@
       "id": "parser.planessyntaxerror-site-8",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:337",
+      "source": "parser.py:344",
       "raised_in": "parse_rule",
       "template": "line {g.line}: expected 'may not' or 'may' after a rule's subject, found '{g.value or 'end of line'}'\n  try: rule [{name}] {subject} may not effect-kind  (forbid)\n    or: rule [{name}] {subject} may effect-kind  (permit)",
       "slots": [
@@ -650,7 +684,7 @@
       "id": "parser.planessyntaxerror-site-9",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:355",
+      "source": "parser.py:362",
       "raised_in": "parse_rule",
       "template": "line {kind_tok.line}: '{kind}' is not an effect kind a rule can name\n  valid kinds: {', '.join(sorted(EFFECT_KINDS))}",
       "slots": [
@@ -663,7 +697,7 @@
       "id": "parser.planessyntaxerror-site-10",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:509",
+      "source": "parser.py:516",
       "raised_in": "finish_because",
       "template": "line {g.line}: 'because' needs a quoted reason\n  try: cap = 200 because \"the reason\"",
       "slots": [
@@ -674,7 +708,7 @@
       "id": "parser.planessyntaxerror-site-11",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:621",
+      "source": "parser.py:628",
       "raised_in": "parse_with_field",
       "template": "line {t.line}: expected a field name, found '{t.value or 'end of line'}'\n  try: with name: value",
       "slots": [
@@ -686,7 +720,7 @@
       "id": "parser.planessyntaxerror-site-12",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:718",
+      "source": "parser.py:725",
       "raised_in": "parse_postfix",
       "template": "line {g.line}: '[' has no meaning here \u2014 Planes has no index or slice syntax\n  try: first n of x \u2014 takes the first n code points or items; there is no way to take one position or a range",
       "slots": [
@@ -697,7 +731,7 @@
       "id": "parser.planessyntaxerror-site-13",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:742",
+      "source": "parser.py:749",
       "raised_in": "read_multiword_name",
       "template": "line {g.line}: expected a name, found '{g.value or 'end of line'}'",
       "slots": [
@@ -709,7 +743,7 @@
       "id": "parser.planesambiguity-site-6",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:889",
+      "source": "parser.py:896",
       "raised_in": "check_paren_arglist_ambiguity",
       "template": null,
       "slots": [],
@@ -720,7 +754,7 @@
       "id": "parser.planessyntaxerror-site-14",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:990",
+      "source": "parser.py:997",
       "raised_in": "parse_when_pattern_entry",
       "template": "line {t.line}: expected a field name, found '{t.value or 'end of line'}'\n  try: { name: value }  or  { name }",
       "slots": [
@@ -732,7 +766,7 @@
       "id": "parser.planessyntaxerror-site-15",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1207",
+      "source": "parser.py:1214",
       "raised_in": "prescan_funcs",
       "template": "line {tokens[i + 1].line}: '{tokens[i + 1].value}' is a reserved word and cannot start a function name\n  reserved: {', '.join(sorted(KEYWORDS))}",
       "slots": [
@@ -745,7 +779,7 @@
       "id": "parser.planessyntaxerror-site-16",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1215",
+      "source": "parser.py:1222",
       "raised_in": "prescan_funcs",
       "template": "line {tokens[j].line}: '{tokens[j].value}' is a reserved word and cannot appear in the function name '{' '.join(parts)} {tokens[j].value}'\n  reserved: {', '.join(sorted(KEYWORDS))}",
       "slots": [
@@ -760,7 +794,7 @@
       "id": "parser.planessyntaxerror-site-17",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:370",
+      "source": "parser.py:377",
       "raised_in": "parse_rule",
       "template": "line {g.line}: 'supersedes' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: {form} supersedes [other-rule-name]",
       "slots": [
@@ -773,7 +807,7 @@
       "id": "parser.planessyntaxerror-site-18",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:377",
+      "source": "parser.py:384",
       "raised_in": "parse_rule",
       "template": "line {g.line}: 'supersedes' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: {form} supersedes [other-rule-name]",
       "slots": [
@@ -786,7 +820,7 @@
       "id": "parser.planessyntaxerror-site-19",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:540",
+      "source": "parser.py:547",
       "raised_in": "parse_note_entry",
       "template": "line {g.line}: 'from' in a note needs a quoted source\n  try: from \"the source\"",
       "slots": [
@@ -795,18 +829,6 @@
     },
     {
       "id": "parser.planessyntaxerror-site-20",
-      "class": "PlanesSyntaxError",
-      "tag": null,
-      "source": "parser.py:548",
-      "raised_in": "parse_note_entry",
-      "template": "line {g.line}: 'derives-from' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: derives-from [rule-name]",
-      "slots": [
-        "g.line",
-        "g.value or 'end of line'"
-      ]
-    },
-    {
-      "id": "parser.planessyntaxerror-site-21",
       "class": "PlanesSyntaxError",
       "tag": null,
       "source": "parser.py:555",
@@ -818,10 +840,22 @@
       ]
     },
     {
+      "id": "parser.planessyntaxerror-site-21",
+      "class": "PlanesSyntaxError",
+      "tag": null,
+      "source": "parser.py:562",
+      "raised_in": "parse_note_entry",
+      "template": "line {g.line}: 'derives-from' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: derives-from [rule-name]",
+      "slots": [
+        "g.line",
+        "g.value or 'end of line'"
+      ]
+    },
+    {
       "id": "parser.planessyntaxerror-site-22",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:939",
+      "source": "parser.py:946",
       "raised_in": "parse_record_field",
       "template": "line {t.line}: expected a field name, found '{t.value or 'end of line'}'\n  try: { name: value }",
       "slots": [
@@ -833,7 +867,7 @@
       "id": "parser.planessyntaxerror-site-23",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:389",
+      "source": "parser.py:396",
       "raised_in": "parse_rule",
       "template": "line {at_tok.line}: a fingerprint must be exactly six hex characters after '@', found '{bad.value or 'end of line'}'\n  try: {form} supersedes [{supersedes}] @abcdef \u2014 or omit it for an unverified override",
       "slots": [
@@ -847,7 +881,7 @@
       "id": "parser.planessyntaxerror-site-24",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1056",
+      "source": "parser.py:1063",
       "raised_in": "parse_primary",
       "template": "line {t.line}: field '{k}' appears twice in this record",
       "slots": [
@@ -859,7 +893,7 @@
       "id": "rules.rulenotsupported-site-1",
       "class": "RuleNotSupported",
       "tag": null,
-      "source": "rules.py:297",
+      "source": "rules.py:304",
       "raised_in": "_resolve_subject",
       "template": "rule [{rule.name}] (line {rule.line}): subject '{rule.subject}' does not resolve to anything in the traced effect surface \u2014 checking it needs a value this file's derivation graph can reach\n  check the name is spelled as it appears in this file, or write the rule against 'anything' instead",
       "slots": [
@@ -872,7 +906,7 @@
       "id": "rules.rulenotsupported-site-2",
       "class": "RuleNotSupported",
       "tag": null,
-      "source": "rules.py:290",
+      "source": "rules.py:297",
       "raised_in": "_resolve_subject",
       "template": "rule [{rule.name}] (line {rule.line}): subject '{rule.subject}' only resolves in {other}, not in the file that declares this rule \u2014 a rule cannot reach across an import boundary to a name it never saw declared\n  write the rule in {other} instead, or name a subject local to this file",
       "slots": [
@@ -887,7 +921,7 @@
       "id": "rules.ruleconflict-site-1",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:348",
+      "source": "rules.py:355",
       "raised_in": "_resolve_active",
       "template": "two rules are both named [{r.name}] (line {other.line} and line {r.line}) \u2014 a rule name must be unique\n  rename one of them",
       "slots": [
@@ -900,7 +934,7 @@
       "id": "rules.ruleconflict-site-2",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:359",
+      "source": "rules.py:366",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes itself\n  supersedes should name an earlier, different rule",
       "slots": [
@@ -912,7 +946,7 @@
       "id": "rules.ruleconflict-site-3",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:363",
+      "source": "rules.py:370",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes [{r.supersedes}], which is not a rule in this file\n  check the name, or remove the supersedes clause",
       "slots": [
@@ -925,7 +959,7 @@
       "id": "rules.ruleconflict-site-4",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:413",
+      "source": "rules.py:420",
       "raised_in": "_check_permits_are_related",
       "template": "rule [{p.name}] (line {p.line}) permits '{p.kind}' but excepts no forbid rule \u2014 a permit only has force against a prohibition it supersedes or narrows\n  add 'supersedes [name-of-the-forbid-rule]' to [{p.name}], or give it a target that narrows one of the forbid rules over '{p.kind}'",
       "slots": [
@@ -940,7 +974,7 @@
       "id": "rules.ruleconflict-site-5",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:465",
+      "source": "rules.py:473",
       "raised_in": "_check_conflicts",
       "template": "rule [{a.name}] (line {a.line}) and rule [{b.name}] (line {b.line}) are equally specific over {where} \u2014 neither narrows nor supersedes the other\n  add 'supersedes [{a.name}]' to [{b.name}] (or the reverse), or give one of them a target the other lacks",
       "slots": [
@@ -957,7 +991,7 @@
       "id": "rules.ruleconflict-site-6",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:372",
+      "source": "rules.py:379",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes [{r.supersedes}] (line {target_rule.line}) as of @{r.supersedes_fingerprint}, but [{r.supersedes}] is now @{actual} \u2014 it changed after [{r.name}] was written to override it\n  confirm the override still means what it meant, then update the fingerprint to @{actual}",
       "slots": [
@@ -976,7 +1010,7 @@
       "id": "rules.ruleconflict-site-7",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:456",
+      "source": "rules.py:464",
       "raised_in": "_check_conflicts",
       "template": "rule [{forbid.name}] (line {forbid.line}) and rule [{permit.name}] (line {permit.line}) demand opposite things over {where} \u2014 one forbids it, the other permits it, and neither narrows nor supersedes the other\n  add 'supersedes [{forbid.name}]' to [{permit.name}] to make the exception explicit, or give one of them a target the other lacks",
       "slots": [
@@ -993,7 +1027,7 @@
       "id": "rules.render.branch-1",
       "class": null,
       "tag": null,
-      "source": "rules.py:148-151",
+      "source": "rules.py:154-157",
       "raised_in": "render",
       "template": "[{self.rule.name}] would have been violated at line {self.effect.site} \u2014 excepted by [{self.cleared_by.name}] (line {self.cleared_by.line})",
       "slots": [],
@@ -1003,9 +1037,9 @@
       "id": "rules.render.branch-2",
       "class": null,
       "tag": null,
-      "source": "rules.py:153-168",
+      "source": "rules.py:159-175",
       "raised_in": "render",
-      "template": "[{self.rule.name}] violated at line {self.effect.site}.\n  {self.effect}\n  target could not be pinned down statically \u2014 this computed value may or may not be \"{self.rule.target}\"\n  rule declared at line {self.rule.line}: {condition(self.rule)}\n  narrowed here by {names}\n  derived from: {', '.join(parts)}",
+      "template": "[{self.rule.name}] violated at line {self.effect.site}.\n  {self.effect}\n  target could not be pinned down statically \u2014 this computed value may or may not be \"{escape_string_literal(self.rule.target)}\"\n  rule declared at line {self.rule.line}: {condition(self.rule)}\n  narrowed here by {names}\n  derived from: {', '.join(parts)}",
       "slots": [],
       "assembled": true
     },
@@ -1013,7 +1047,7 @@
       "id": "rules._render_vacuous.branch-1",
       "class": null,
       "tag": null,
-      "source": "rules.py:177-183",
+      "source": "rules.py:184-190",
       "raised_in": "_render_vacuous",
       "template": "[{rule.name}] (line {rule.line}) checked nothing \u2014 subject '{rule.subject}' resolves in this file, but the program performs no '{rule.kind}' effect at all\nthe rule is inert against this program as written\ncheck the program still performs the effect you expect, or remove the rule if it no longer applies",
       "slots": [],
@@ -1023,9 +1057,9 @@
       "id": "rules._render_vacuous.branch-2",
       "class": null,
       "tag": null,
-      "source": "rules.py:185-193",
+      "source": "rules.py:192-200",
       "raised_in": "_render_vacuous",
-      "template": "[{rule.name}] (line {rule.line}) checked nothing \u2014 subject '{rule.subject}' derives a '{rule.kind}' effect, but the rule's target excludes every one\n'{rule.subject}' reaches this effect kind, but never at \"{rule.target}\"\ncheck the target matches where '{rule.subject}' actually goes, or remove the target to check every '{rule.kind}' effect '{rule.subject}' reaches",
+      "template": "[{rule.name}] (line {rule.line}) checked nothing \u2014 subject '{rule.subject}' derives a '{rule.kind}' effect, but the rule's target excludes every one\n'{rule.subject}' reaches this effect kind, but never at \"{escape_string_literal(rule.target)}\"\ncheck the target matches where '{rule.subject}' actually goes, or remove the target to check every '{rule.kind}' effect '{rule.subject}' reaches",
       "slots": [],
       "assembled": true
     },
@@ -1033,7 +1067,7 @@
       "id": "rules._render_vacuous.branch-3",
       "class": null,
       "tag": null,
-      "source": "rules.py:195-201",
+      "source": "rules.py:202-208",
       "raised_in": "_render_vacuous",
       "template": "[{rule.name}] (line {rule.line}) checked nothing \u2014 subject '{rule.subject}' resolves in this file, but no '{rule.kind}' effect derives from it\nthe program performs '{rule.kind}', but to a target that does not derive from '{rule.subject}'\ncheck the subject names the value you meant, or write the rule against 'anything'",
       "slots": [],
@@ -1042,233 +1076,242 @@
   ],
   "tags": {
     "not-a-yes-no": [
-      "interp.py:133"
+      "interp.py:134"
     ],
     "unknown-operator": [
-      "interp.py:945",
-      "interp.py:970"
+      "interp.py:955",
+      "interp.py:980"
     ],
     "cannot-compare": [
-      "interp.py:80",
-      "interp.py:90",
-      "interp.py:99",
-      "interp.py:118",
-      "interp.py:978"
+      "interp.py:81",
+      "interp.py:91",
+      "interp.py:100",
+      "interp.py:119",
+      "interp.py:988"
     ],
     "unrecognized-record-format": [
-      "interp.py:224"
+      "interp.py:225"
     ],
     "unknown-name": [
-      "interp.py:254"
+      "interp.py:255"
     ],
     "cannot-evaluate": [
-      "interp.py:671"
+      "interp.py:681"
     ],
     "unknown-builtin": [
-      "interp.py:766"
+      "interp.py:776"
     ],
     "cannot-combine": [
-      "interp.py:927"
+      "interp.py:937"
     ],
     "annotation-executed": [
-      "interp.py:446"
-    ],
-    "not-a-record": [
-      "interp.py:510",
-      "interp.py:574",
-      "interp.py:610"
-    ],
-    "not-a-collection": [
-      "interp.py:783"
-    ],
-    "unknown-function": [
-      "interp.py:826"
-    ],
-    "wrong-arity": [
-      "interp.py:841",
-      "interp.py:902",
-      "interp.py:809"
-    ],
-    "divided-by-zero": [
-      "interp.py:935"
-    ],
-    "not-a-number": [
-      "interp.py:956",
-      "interp.py:627",
-      "interp.py:754"
-    ],
-    "needs-rounding": [
-      "interp.py:967"
-    ],
-    "not-a-list": [
-      "interp.py:586"
-    ],
-    "module-not-used": [
-      "interp.py:638",
-      "interp.py:710",
-      "interp.py:729"
-    ],
-    "foreign-not-found": [
-      "interp.py:856"
-    ],
-    "foreign-failed": [
-      "interp.py:888"
+      "interp.py:447"
     ],
     "interp.planeserror-site-1": [
-      "interp.py:657"
+      "interp.py:505"
+    ],
+    "not-a-record": [
+      "interp.py:520",
+      "interp.py:584",
+      "interp.py:620"
+    ],
+    "not-a-collection": [
+      "interp.py:793"
+    ],
+    "unknown-function": [
+      "interp.py:836"
+    ],
+    "wrong-arity": [
+      "interp.py:851",
+      "interp.py:912",
+      "interp.py:819"
+    ],
+    "divided-by-zero": [
+      "interp.py:945"
+    ],
+    "not-a-number": [
+      "interp.py:966",
+      "interp.py:637",
+      "interp.py:764"
+    ],
+    "needs-rounding": [
+      "interp.py:977"
+    ],
+    "fail-message-not-text": [
+      "interp.py:501"
+    ],
+    "not-a-list": [
+      "interp.py:596"
+    ],
+    "module-not-used": [
+      "interp.py:648",
+      "interp.py:720",
+      "interp.py:739"
+    ],
+    "foreign-not-found": [
+      "interp.py:866"
+    ],
+    "foreign-failed": [
+      "interp.py:898"
     ],
     "interp.planeserror-site-2": [
-      "interp.py:662"
-    ],
-    "ask-failed": [
-      "interp.py:717"
-    ],
-    "no-such-file": [
-      "interp.py:736"
-    ],
-    "bad-foreign-target": [
-      "interp.py:853"
+      "interp.py:667"
     ],
     "interp.planeserror-site-3": [
-      "interp.py:661"
+      "interp.py:672"
+    ],
+    "ask-failed": [
+      "interp.py:727"
+    ],
+    "no-such-file": [
+      "interp.py:746"
+    ],
+    "bad-foreign-target": [
+      "interp.py:863"
+    ],
+    "interp.planeserror-site-4": [
+      "interp.py:671"
     ],
     "lexer.planessyntaxerror-site-1": [
-      "lexer.py:177"
+      "lexer.py:147"
     ],
     "lexer.planessyntaxerror-site-2": [
-      "lexer.py:220"
+      "lexer.py:202"
+    ],
+    "lexer.planessyntaxerror-site-3": [
+      "lexer.py:195"
     ],
     "parser.planessyntaxerror-site-1": [
-      "parser.py:302"
+      "parser.py:309"
     ],
     "parser.planessyntaxerror-site-2": [
-      "parser.py:563"
+      "parser.py:570"
     ],
     "parser.planesambiguity-site-1": [
-      "parser.py:768"
+      "parser.py:775"
     ],
     "parser.planesambiguity-site-2": [
-      "parser.py:827"
+      "parser.py:834"
     ],
     "parser.planesambiguity-site-3": [
-      "parser.py:837"
+      "parser.py:844"
     ],
     "parser.planesambiguity-site-4": [
-      "parser.py:847"
+      "parser.py:854"
     ],
     "parser.planesambiguity-site-5": [
-      "parser.py:901"
+      "parser.py:908"
     ],
     "parser.planessyntaxerror-site-3": [
-      "parser.py:1157"
+      "parser.py:1164"
     ],
     "parser.planessyntaxerror-site-4": [
       "parser.py:100"
     ],
     "parser.planessyntaxerror-site-5": [
-      "parser.py:284"
+      "parser.py:291"
     ],
     "parser.planessyntaxerror-site-6": [
-      "parser.py:319"
-    ],
-    "parser.planessyntaxerror-site-7": [
       "parser.py:326"
     ],
+    "parser.planessyntaxerror-site-7": [
+      "parser.py:333"
+    ],
     "parser.planessyntaxerror-site-8": [
-      "parser.py:337"
+      "parser.py:344"
     ],
     "parser.planessyntaxerror-site-9": [
-      "parser.py:355"
+      "parser.py:362"
     ],
     "parser.planessyntaxerror-site-10": [
-      "parser.py:509"
+      "parser.py:516"
     ],
     "parser.planessyntaxerror-site-11": [
-      "parser.py:621"
+      "parser.py:628"
     ],
     "parser.planessyntaxerror-site-12": [
-      "parser.py:718"
+      "parser.py:725"
     ],
     "parser.planessyntaxerror-site-13": [
-      "parser.py:742"
+      "parser.py:749"
     ],
     "parser.planesambiguity-site-6": [
-      "parser.py:889"
+      "parser.py:896"
     ],
     "parser.planessyntaxerror-site-14": [
-      "parser.py:990"
+      "parser.py:997"
     ],
     "parser.planessyntaxerror-site-15": [
-      "parser.py:1207"
+      "parser.py:1214"
     ],
     "parser.planessyntaxerror-site-16": [
-      "parser.py:1215"
+      "parser.py:1222"
     ],
     "parser.planessyntaxerror-site-17": [
-      "parser.py:370"
-    ],
-    "parser.planessyntaxerror-site-18": [
       "parser.py:377"
     ],
+    "parser.planessyntaxerror-site-18": [
+      "parser.py:384"
+    ],
     "parser.planessyntaxerror-site-19": [
-      "parser.py:540"
+      "parser.py:547"
     ],
     "parser.planessyntaxerror-site-20": [
-      "parser.py:548"
-    ],
-    "parser.planessyntaxerror-site-21": [
       "parser.py:555"
     ],
+    "parser.planessyntaxerror-site-21": [
+      "parser.py:562"
+    ],
     "parser.planessyntaxerror-site-22": [
-      "parser.py:939"
+      "parser.py:946"
     ],
     "parser.planessyntaxerror-site-23": [
-      "parser.py:389"
+      "parser.py:396"
     ],
     "parser.planessyntaxerror-site-24": [
-      "parser.py:1056"
+      "parser.py:1063"
     ],
     "rules.rulenotsupported-site-1": [
-      "rules.py:297"
+      "rules.py:304"
     ],
     "rules.rulenotsupported-site-2": [
-      "rules.py:290"
+      "rules.py:297"
     ],
     "rules.ruleconflict-site-1": [
-      "rules.py:348"
+      "rules.py:355"
     ],
     "rules.ruleconflict-site-2": [
-      "rules.py:359"
+      "rules.py:366"
     ],
     "rules.ruleconflict-site-3": [
-      "rules.py:363"
+      "rules.py:370"
     ],
     "rules.ruleconflict-site-4": [
-      "rules.py:413"
+      "rules.py:420"
     ],
     "rules.ruleconflict-site-5": [
-      "rules.py:465"
+      "rules.py:473"
     ],
     "rules.ruleconflict-site-6": [
-      "rules.py:372"
+      "rules.py:379"
     ],
     "rules.ruleconflict-site-7": [
-      "rules.py:456"
+      "rules.py:464"
     ],
     "rules.render.branch-1": [
-      "rules.py:148-151"
+      "rules.py:154-157"
     ],
     "rules.render.branch-2": [
-      "rules.py:153-168"
+      "rules.py:159-175"
     ],
     "rules._render_vacuous.branch-1": [
-      "rules.py:177-183"
+      "rules.py:184-190"
     ],
     "rules._render_vacuous.branch-2": [
-      "rules.py:185-193"
+      "rules.py:192-200"
     ],
     "rules._render_vacuous.branch-3": [
-      "rules.py:195-201"
+      "rules.py:202-208"
     ]
   }
 }
