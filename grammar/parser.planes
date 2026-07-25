@@ -244,6 +244,30 @@ to canonical-of-foreach of node, indent:
   with-body = with-where + "\n" + body-part
   give with-body + "\n" + indent + "  is_expr: " + (render-bool of node.is-expr)
 
+# Use.renames is a list of (old, new) name pairs -- Python-tuple-shaped
+# on parser.py's side, but Planes has no tuple literal syntax, only
+# records and lists (#11's scope again), so each pair is a plain
+# { old, new } record here. Not an AST node (no `kind`), so this can't
+# reuse canonical-of-node-list -- rendered directly to match the Python
+# side's own pair rendering for a non-node 2-tuple: "(old, new)".
+to canonical-of-renames of renames, indent:
+  n = count of renames
+  header = indent + "  renames: [" + (text of n) + "]"
+  if n > 0:
+    item-indent = indent + "    "
+    lines = []
+    for each r in renames:
+      pair-text = "(" + (render-string of r.old) + ", " + (render-string of r.new) + ")"
+      lines = lines plus (item-indent + "- " + pair-text)
+    give header + "\n" + (join-with-newlines of lines)
+  else:
+    give header
+
+to canonical-of-use of node, indent:
+  header = indent + "Use\n" + indent + "  module: " + (render-string of node.module)
+  renames-part = canonical-of-renames of node.renames, indent
+  give header + "\n" + renames-part
+
 to canonical-of-node of node, indent:
   when node is { kind: "Num" }:
     give indent + "Num\n" + indent + "  value: " + text of node.value
@@ -320,7 +344,10 @@ to canonical-of-node of node, indent:
                                     when node is { kind: "ForEach" }:
                                       give canonical-of-foreach of node, indent
                                     else:
-                                      fail "no canonical form for node kind '" + node.kind + "'" as unknown-node-kind
+                                      when node is { kind: "Use" }:
+                                        give canonical-of-use of node, indent
+                                      else:
+                                        fail "no canonical form for node kind '" + node.kind + "'" as unknown-node-kind
 
 # ================================================================ the cursor
 #
@@ -875,8 +902,11 @@ to parse-statement of cursor, tokens:
             if t.kind == "FOR":
               give parse-foreach of cursor, tokens
             else:
-              msg = "line " + (text of t.line) + ": unsupported statement (Phase 3 ladder not yet reached), found '" + t.text + "'"
-              fail msg as parse-error
+              if t.kind == "USE":
+                give parse-use of cursor
+              else:
+                msg = "line " + (text of t.line) + ": unsupported statement (Phase 3 ladder not yet reached), found '" + t.text + "'"
+                fail msg as parse-error
 
 to parse-give of cursor:
   result = parse-or of (advance of cursor)
@@ -904,6 +934,37 @@ to parse-foreach of cursor, tokens:
   body = parse-block of colon-expect.cursor, tokens
   node = { kind: "ForEach", var: var-expect.token.text, source: source-result.node, where: where-result.node, body: body.stmts, is-expr: false }
   give { node: node, cursor: body.cursor }
+
+# `use module [with old as new [with old as new ...]]`. Amber site 4
+# (check_rename_name_ambiguity) is out of scope here, same as every
+# other amber site (section 7 invariant 3).
+
+to read-multiword-name of cursor:
+  result = collect-name-parts of cursor, []
+  give { text: (join-with-spaces of result.parts), cursor: result.cursor }
+
+to collect-renames of cursor, acc:
+  old-result = read-multiword-name of cursor
+  as-expect = expect-kind of old-result.cursor, "AS"
+  new-result = read-multiword-name of as-expect.cursor
+  pair = { old: old-result.text, new: new-result.text }
+  new-acc = acc plus pair
+  with-try = try-accept of new-result.cursor, "WITH"
+  if with-try.matched:
+    give collect-renames of with-try.cursor, new-acc
+  else:
+    give { renames: new-acc, cursor: new-result.cursor }
+
+to parse-use of cursor:
+  module-expect = expect-kind of (advance of cursor), "NAME"
+  with-try = try-accept of module-expect.cursor, "WITH"
+  if with-try.matched:
+    renames-result = collect-renames of with-try.cursor, []
+    node = { kind: "Use", module: module-expect.token.text, renames: renames-result.renames }
+    give { node: node, cursor: renames-result.cursor }
+  else:
+    node = { kind: "Use", module: module-expect.token.text, renames: [] }
+    give { node: node, cursor: module-expect.cursor }
 
 to parse-assign of name, cursor:
   after-eq = advance of (advance of cursor)

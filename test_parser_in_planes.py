@@ -42,6 +42,7 @@ from lexer import (
     Round,
     Show,
     Str,
+    Use,
     Var,
 )
 from parser import parse
@@ -55,7 +56,7 @@ from planes_text import escape_string_literal
 # itself, not duplicated here).
 AST_NODE_TYPES = (
     Num, Str, Bool, Nothing, Var, ListLit, ListPlus, BinOp, Not, IsNothing,
-    Field, Assign, FuncDef, Call, Give, Show, If, Round, Builtin, ForEach,
+    Field, Assign, FuncDef, Call, Give, Show, If, Round, Builtin, ForEach, Use,
 )
 
 
@@ -83,22 +84,16 @@ def _render_value(name, v, indent, out):
         out.append(f"{indent}{name}:")
         _render_node(v, indent + "  ", out)
         return
-    if isinstance(v, list):
+    if isinstance(v, (list, tuple)):
+        # A sequence field -- a plain list (RecordLit.fields, a function's
+        # body, ...) or a tuple (Use.renames, Foreign.effects): both are
+        # "N items", not a single (key, value) pair, which only ever
+        # shows up as one ITEM inside a sequence like this, handled by
+        # _render_list_item below -- never as the field's own top-level
+        # shape.
         out.append(f"{indent}{name}: [{len(v)}]")
         for item in v:
             _render_list_item(item, indent + "  ", out)
-        return
-    if isinstance(v, tuple):
-        # A (name, expr) pair -- RecordLit/RecordUpdate field, or a plain
-        # (str, str) parameter-like pair. Node-valued second element
-        # recurses; everything else renders as a scalar.
-        key, val = v
-        if _is_node(val):
-            out.append(f"{indent}{name}: \"{escape_string_literal(str(key))}\"")
-            _render_node(val, indent + "  ", out)
-        else:
-            out.append(f"{indent}{name}: (\"{escape_string_literal(str(key))}\", "
-                       f"{_render_scalar(val)})")
         return
     out.append(f"{indent}{name}: {_render_scalar(v)}")
 
@@ -111,6 +106,10 @@ def _render_list_item(item, indent, out):
         key, val = item
         out.append(f"{indent}- \"{escape_string_literal(str(key))}\":")
         _render_node(val, indent + "  ", out)
+    elif isinstance(item, tuple) and len(item) == 2:
+        # A plain (str, str)-shaped pair -- Use.renames's (old, new).
+        key, val = item
+        out.append(f"{indent}- ({_render_scalar(key)}, {_render_scalar(val)})")
     else:
         out.append(f"{indent}- {_render_scalar(item)}")
 
@@ -421,6 +420,19 @@ FOREACH_PROGRAMS = [
 
 def test_foreach_statements_agree():
     for src in FOREACH_PROGRAMS:
+        assert_program_agrees(src)
+
+
+USE_PROGRAMS = [
+    "use vocabulary\n",
+    "use file\n",
+    "use cache with load record as load cached\n",
+    "use vocabulary\n\nto main:\n  give 1\n",
+]
+
+
+def test_use_statements_agree():
+    for src in USE_PROGRAMS:
         assert_program_agrees(src)
 
 
