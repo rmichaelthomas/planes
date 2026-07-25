@@ -46,7 +46,7 @@ class Effect:
     `target` is the static description of where — a literal when the program
     names one, or a pattern when it is computed. Patterns matter: a package
     that asks a computed URL is a different fact from one that asks a fixed
-    endpoint, and Shapes has to be able to say which.
+    endpoint, and the analyser has to be able to say which.
     """
     kind: str
     boundary: str
@@ -83,7 +83,7 @@ class Surface:
     Right question for a library, where the top level is empty and the
     effects live behind functions the consumer calls. A library that
     reported `pure` because nothing runs at import time would be a lie of
-    exactly the kind Shapes exists to prevent.
+    exactly the kind this analyser exists to prevent.
     """
     effects: list = field(default_factory=list)
     functions: dict = field(default_factory=dict)   # name -> set of Effect
@@ -128,7 +128,7 @@ class Surface:
         return not self.effects and (any(self.functions.values())
                                      or bool(self.foreign))
 
-    # ---- queries Shapes needs to answer
+    # ---- queries the analyser needs to answer
     #
     # These read the declared surface, because "does this package touch the
     # network" must be true of a library whose network call is one function
@@ -961,7 +961,7 @@ def analyse_file(path, follow=True):
 
     `follow=False` gives the single-file surface. The default follows
     imports, because a package that hides its network call in a helper file
-    is exactly the case Shapes has to see through.
+    is exactly the case the analyser has to see through.
     """
     if not follow:
         return analyse(open(path).read(), file=path)

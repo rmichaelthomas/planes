@@ -203,7 +203,7 @@ denominators grows the denominator. Summing 2000 distinct fractions takes
 about 10ms; past the bound an operation is *refused* rather than silently
 rounded, because a refusal is visible and a rounding is not.
 
-## Effect surface (Shapes)
+## Effect surface
 
 `shapes.py` computes what a program **can** do, without running it. The
 runtime effect log records what one run **did**; the two must agree, and
@@ -231,7 +231,7 @@ console:
   show found {...} (computed)
 ```
 
-Upgrade diff — the case Shapes exists for. Exits 1, so it works as a CI gate:
+Upgrade diff — the case the effect surface exists for. Exits 1, so it works as a CI gate:
 
 ```
 $ python3 shapes_cli.py --diff demo/v1.planes demo/v2.planes
@@ -428,4 +428,4 @@ label = REQUESTS
 ## Effect surface
 
 Every boundary crossing is logged in order as the program runs. `--effects`
-prints it. This is the runtime half of Shapes; the static half is not built.
+prints it. This is the runtime effect log; the static half is `shapes.py`.

@@ -3,7 +3,7 @@
 The design question this session settled: does a foreign function declare
 its effects, or does the analyser derive them from the host?
 
-Declaration, because derivation is impossible in general — Shapes would have
+Declaration, because derivation is impossible in general — the analyser would have
 to analyse CPython, then a C extension — and the failure mode is silent. An
 analyser that cannot see inside would report "pure", which is a guess
 published as a fact.

@@ -1,7 +1,7 @@
 """Rule-plane checker — permits, exception resolution, fingerprinting.
 
 Tests inception checkpoint §8's claim that a rule is the same question
-Shapes and Why already answer, asked at compile time. shapes.py computes a
+the analyser and Why already answer, asked at compile time. shapes.py computes a
 program's effect surface; this module only consumes it, through the public
 `Surface` queries (`at`, `targets`, `touches`, `declared`, `kinds`,
 `boundaries`, and — since the static derivation graph build — `origins_of`,
