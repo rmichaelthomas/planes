@@ -5,6 +5,43 @@
   "count": 26,
   "forms": [
     {
+      "form": "primary",
+      "parser_method": "parse_primary",
+      "opens_with": [
+        "OF",
+        "TO",
+        "PLACES",
+        "OP",
+        "NAME",
+        "STRING",
+        "NUMBER"
+      ],
+      "produces": [
+        "BinOp",
+        "Round",
+        "Num",
+        "Str",
+        "Bool",
+        "Nothing",
+        "RecordLit",
+        "ListLit",
+        "Var",
+        "Call"
+      ],
+      "calls": [
+        "parse_unary",
+        "parse_foreach",
+        "parse_expr",
+        "parse_record_field",
+        "paren_is_arglist",
+        "check_paren_arglist_ambiguity",
+        "check_juxtaposition_ambiguity",
+        "parse_additive"
+      ],
+      "source": "parser.py:1003",
+      "surface": null
+    },
+    {
       "form": "program",
       "parser_method": "parse_program",
       "opens_with": [
@@ -351,7 +388,7 @@
       "opens_with": [],
       "produces": [],
       "calls": [],
-      "source": "parser.py:890",
+      "source": "parser.py:907",
       "surface": "Looking at `(`: is this an argument list, or a parenthesised argument that continues into a larger expression?"
     },
     {
@@ -364,7 +401,7 @@
       "calls": [
         "parse_expr"
       ],
-      "source": "parser.py:915",
+      "source": "parser.py:932",
       "surface": "`name: expr`. The key is a bare word, never an expression."
     },
     {
@@ -381,7 +418,7 @@
         "parse_block",
         "parse_when_pattern_entry"
       ],
-      "source": "parser.py:933",
+      "source": "parser.py:950",
       "surface": "`when subject is { field: expr, bindname, ... }: body [else: els]` (v5.0 \u00a774). `WHEN` is already consumed by the caller. A chained dispatch ladder (`when ... else: when ... else: ...`) needs no dedicated grammar \u2014 the else block is an ordinary block, and a `When` is an ordinary statement, so nesting one inside the other falls out of parse_block for free, the same way `if / else: if` already forms an if-elif-else chain in this language."
     },
     {
@@ -394,45 +431,8 @@
       "calls": [
         "parse_expr"
       ],
-      "source": "parser.py:967",
+      "source": "parser.py:984",
       "surface": "`name: expr` (a match constraint) or a bare `name` (a binding). Same field-name recognition as parse_record_field \u2014 a pattern entry names a field, so a keyword like `to` or `from` must work here exactly as it does in a record literal."
-    },
-    {
-      "form": "primary",
-      "parser_method": "parse_primary",
-      "opens_with": [
-        "OF",
-        "TO",
-        "PLACES",
-        "OP",
-        "NAME",
-        "STRING",
-        "NUMBER"
-      ],
-      "produces": [
-        "BinOp",
-        "Round",
-        "Num",
-        "Str",
-        "Bool",
-        "Nothing",
-        "RecordLit",
-        "ListLit",
-        "Var",
-        "Call"
-      ],
-      "calls": [
-        "parse_unary",
-        "parse_foreach",
-        "parse_expr",
-        "parse_record_field",
-        "paren_is_arglist",
-        "check_paren_arglist_ambiguity",
-        "check_juxtaposition_ambiguity",
-        "parse_additive"
-      ],
-      "source": "parser.py:986",
-      "surface": null
     }
   ]
 }

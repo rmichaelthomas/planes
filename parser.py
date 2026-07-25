@@ -707,6 +707,23 @@ class Parser:
             # happens to double as a keyword elsewhere.
             self.next()
             node = Field(node, self.next().value)
+        if self.at("OP", "["):
+            # Planes has no index or slice syntax. Without this check,
+            # `s[1]` does not raise at all: parse_primary returns Var("s")
+            # for the name, the statement ends there, and the leftover
+            # `[1]` tokens are read as an unrelated second statement — a
+            # list literal, evaluated and silently discarded. `c = s[1]`
+            # then binds `c` to the whole string, not a character, with
+            # nothing to say so (found by direct AST inspection,
+            # PROBE_LEXER.md §2). This does not add indexing; it turns a
+            # silent misparse into a syntax error naming what exists
+            # instead (`first n of x`).
+            g = self.peek()
+            raise PlanesSyntaxError(
+                f"line {g.line}: '[' has no meaning here — Planes has no "
+                f"index or slice syntax\n"
+                f"  try: first n of x — takes the first n code points or "
+                f"items; there is no way to take one position or a range")
         return node
 
     def read_multiword_name(self):
