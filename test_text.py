@@ -133,6 +133,67 @@ def test_normalize_is_not_an_effect_kind():
     assert "normalize" not in EFFECT_KINDS
 
 
+# ================================================================ S2 A.2 -- join
+
+def test_join_concatenates_a_list_of_text_in_order():
+    assert val('x = join of ["a", "b", "c"]', "x").value == "abc"
+
+
+def test_join_empty_list_is_the_empty_string():
+    # A.2 ruling 2: an empty list joins to "", not an error.
+    assert val("x = join of []", "x").value == ""
+
+
+def test_join_single_element():
+    assert val('x = join of ["only"]', "x").value == "only"
+
+
+def test_join_no_separator_argument():
+    # Adjacent, in order, no separator — a separator is for-each's job.
+    assert val('x = join of ["1", "2", "3"]', "x").value == "123"
+
+
+def test_join_non_text_element_raises_naming_the_fix():
+    # A.2 ruling 1: no silent coercion. The message names `text of`.
+    try:
+        run('x = join of ["a", 3]')
+        assert False, "join of a list with a number must raise"
+    except PlanesError as e:
+        assert e.tag == "cannot-join"
+        assert "text of" in e.fix, f"fix must name text of, got: {e.fix!r}"
+
+
+def test_join_non_list_raises_naming_the_fix():
+    try:
+        run('x = join of "abc"')
+        assert False, "join of a non-list must raise"
+    except PlanesError as e:
+        assert e.tag == "cannot-join"
+        assert "list" in e.fix
+
+
+def test_shapes_folds_join_statically_no_effect():
+    s = analyse('x = join of ["a", "b"]\nshow x')
+    assert s.effects[0].target == "ab", "join of a known list folds to its value"
+    assert s.kinds() == ["show"], "join contributes no effect kind"
+
+
+def test_join_is_not_an_effect_kind():
+    from lexer import EFFECT_KINDS
+    assert "join" not in EFFECT_KINDS
+
+
+def test_why_shows_join_derivation():
+    tree = why_tree(val('x = join of ["a", "b"]', "x"))
+    assert "join of" in tree
+
+
+def test_join_is_shadowable_by_a_user_function():
+    # A builtin is an ordinary function name; a user's own definition wins.
+    src = "to join of xs:\n  give 42\n\nx = join of [\"a\", \"b\"]"
+    assert val(src, "x").value == 42
+
+
 # ================================================================ A.4 -- text is iterable
 
 def test_for_each_over_a_string_statement_form():

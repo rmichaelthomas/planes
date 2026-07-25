@@ -784,6 +784,25 @@ class Interpreter:
         if node.name == "normalize":
             v = unicodedata.normalize("NFC", str(arg.value))
             return Traced(v, Deriv("op", "normalize of", v, [arg.node]))
+        if node.name == "join":
+            # Fold a list of text into one string in O(n) — the answer to the
+            # O(n^2) repeated-`+` build the sweep measured (S2 §A.2). No
+            # coercion: a non-text element is an error naming the fix, the same
+            # refusal `+` makes (§12-era), not a silent stringify. An empty
+            # list joins to the empty string, not an error.
+            if not isinstance(arg.value, list):
+                raise PlanesError(
+                    "cannot-join",
+                    f"cannot join {fmt(arg.value)}",
+                    "join takes a list of text; check the value is a list")
+            for x in arg.value:
+                if not isinstance(x, str):
+                    raise PlanesError(
+                        "cannot-join",
+                        f"join needs a list of text, found {fmt(x)}",
+                        "convert each item first — e.g. text of n")
+            v = "".join(arg.value)
+            return Traced(v, Deriv("op", "join of", v, [arg.node]))
 
         raise PlanesError("unknown-builtin", node.name)
 
