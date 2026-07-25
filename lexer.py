@@ -44,6 +44,19 @@ class GrammarDataError(Exception):
         super().__init__(msg)
 
 
+class PlanesSyntaxError(Exception):
+    """A malformed program — refuse, don't guess.
+
+    Defined here rather than in parser.py because tokenize() below must be
+    able to raise it (an unrecognized string escape, or a trailing
+    backslash that consumes the string's closing quote): parser.py already
+    imports lexer.py, so the reverse import would cycle. parser.py picks
+    this up via `from lexer import *` and keeps raising it exactly as
+    before; PlanesAmbiguity still subclasses it there.
+    """
+    pass
+
+
 def _load_vocabulary():
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "grammar", "vocabulary.json")
@@ -111,8 +124,80 @@ class Token:
         return f"{self.kind}({self.value!r})"
 
 
+# The four escapes a STRING literal may contain (v9.0 §105: text is a
+# sequence of Unicode code points, and the literal syntax must be able to
+# denote any such sequence — REPORT_STRING_ESCAPES.md). No numeric escapes
+# (\x41, A): those reintroduce the opacity a magic-number `chr of n`
+# builtin was declined for. Resolved here, at token construction, so a Str
+# AST node always holds already-resolved text (parser.py, interp.py do not
+# need to know escapes exist).
+STRING_ESCAPES = {'"': '"', "\\": "\\", "n": "\n", "t": "\t"}
+
+# The inverse of STRING_ESCAPES, for any code path that prints a string
+# value back as Planes source (render.py's Str case, interp.py's why_tree
+# `because` line) rather than as a plain value (interp.py's fmt, for
+# `show`/`why`'s printed derivation, deliberately does not re-quote at
+# all). A single character-at-a-time pass, each character mapped
+# independently to its escaped form (or left as itself) -- no ordering
+# hazard from a separate backslash-doubling pass, since backslash is
+# just another entry here, produced once per original character.
+STRING_UNESCAPE = {v: "\\" + k for k, v in STRING_ESCAPES.items()}
+
+
+def escape_string_literal(s):
+    """`s`, re-escaped as the content of a Planes STRING literal — the
+    exact text between the delimiting quotes that STRING's own regex
+    would need to see to resolve back to `s`. `render(parse(src))` must
+    parse to an equal AST for every program (render.py's module
+    docstring); without this, a string containing a quote, backslash,
+    newline, or tab renders to source that either reparses to a
+    different value or does not reparse at all (fix/string-escapes-and-
+    bootstrap: none of those four could occur in a string before this
+    build, so nothing exercised the gap until now)."""
+    return "".join(STRING_UNESCAPE.get(c, c) for c in s)
+
+
+def _resolve_string_escapes(raw, lineno):
+    """`raw` is a STRING token's content between its delimiting quotes,
+    exactly as STRING's regex matched it — an escape is still the two raw
+    source characters (e.g. backslash then `n`). STRING's pattern
+    (`(?:\\.|[^"\\])*`) only ever matches a backslash paired with a
+    following character, so a backslash here is never the last character
+    of `raw`; an unmatched trailing backslash instead fails the STRING
+    match entirely and is caught in tokenize() as an unterminated string.
+    """
+    out = []
+    i = 0
+    n = len(raw)
+    while i < n:
+        c = raw[i]
+        if c == "\\":
+            nxt = raw[i + 1]
+            if nxt not in STRING_ESCAPES:
+                raise PlanesSyntaxError(
+                    f"line {lineno}: unrecognized escape '\\{nxt}' in a "
+                    f"string literal -- the four recognized escapes are "
+                    f'\\" \\\\ \\n \\t')
+            out.append(STRING_ESCAPES[nxt])
+            i += 2
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
 def tokenize(src):
-    """Indentation-sensitive. Emits EOL, BEGIN, END."""
+    """Indentation-sensitive. Emits EOL, BEGIN, END.
+
+    Scans each line at an explicit position (`TOKEN_RE.match(stripped,
+    pos)`, anchored, rather than `TOKEN_RE.finditer`) so a position where
+    no token class matches is visible as such, instead of finditer's
+    default of silently skipping ahead to the next match. The only place
+    that currently matters is a `"` that fails to start a valid STRING
+    match — a trailing backslash consumed the closing quote as an escape
+    (`\\"`) instead of ending the string, so the string is unterminated;
+    every other kind of stray character is skipped exactly as before.
+    """
     out = []
     indents = [0]
     lineno = 0
@@ -127,13 +212,30 @@ def tokenize(src):
         while indent < indents[-1]:
             indents.pop()
             out.append(Token("END", "", lineno))
-        for m in TOKEN_RE.finditer(stripped):
+        pos, n = 0, len(stripped)
+        while pos < n:
+            m = TOKEN_RE.match(stripped, pos)
+            if m is None:
+                if stripped[pos] == '"':
+                    raise PlanesSyntaxError(
+                        f"line {lineno}: unterminated string literal -- a "
+                        f"backslash right before the closing quote escapes "
+                        f'that quote (\\") instead of ending the string; '
+                        f"the four recognized escapes are "
+                        f'\\" \\\\ \\n \\t -- write \\\\ for a literal '
+                        f"trailing backslash")
+                pos += 1
+                continue
             kind, val = m.lastgroup, m.group()
             if kind in ("WS", "COMMENT"):
+                pos = m.end()
                 continue
             if kind == "NAME" and val in KEYWORDS:
                 kind = val.upper()
+            elif kind == "STRING":
+                val = '"' + _resolve_string_escapes(val[1:-1], lineno) + '"'
             out.append(Token(kind, val, lineno))
+            pos = m.end()
         out.append(Token("EOL", "", lineno))
     while len(indents) > 1:
         indents.pop()

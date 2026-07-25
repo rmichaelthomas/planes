@@ -34,14 +34,26 @@ CASES = 200
 def rand_string(rng, max_len=8):
     """Random text, including some combining-mark and astral code points.
 
-    Excludes '"' -- Planes strings have no escape syntax, so a generated
-    string must embed directly into source for the text-law tests below.
+    Excludes '"' -- kept out of the pool so the fixed SEED's draw sequence
+    (and every currently-passing case built on it) is undisputed by this
+    build; embedding into source no longer requires it (fix/string-
+    escapes-and-bootstrap), planes_string_literal below escapes whatever
+    the pool does produce, including the backslash it already contains.
     """
     pool = (
         [chr(c) for c in range(0x20, 0x7F) if c != ord('"')]   # ascii, no quote
         + ["é", "é", "日", "🎈", "́", "ñ", " "]                  # multi-byte / combining
     )
     return "".join(rng.choice(pool) for _ in range(rng.randint(0, max_len)))
+
+
+def planes_string_literal(s):
+    """`s` as Planes STRING-literal source text that parses back to exactly
+    `s` (fix/string-escapes-and-bootstrap) -- \\ and " each need escaping;
+    rand_string's pool already contains a bare backslash, which used to
+    embed directly (Planes strings had no escape syntax) and now needs it,
+    same as embedding arbitrary text in any other escaped-string format."""
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def rand_number(rng):
@@ -296,14 +308,14 @@ def test_arithmetic_result_denominator_never_exceeds_the_bound():
 # ================================================================ text (section 105, 105.1)
 
 def test_count_of_matches_code_point_length():
-    """The string pool never contains '"' (Planes strings have no escape
-    syntax), so every generated string embeds directly into source."""
+    """planes_string_literal escapes whatever the pool draws (including
+    the backslash it already contains) so it always embeds into source."""
     rng = random.Random(SEED + 7)
     for _ in range(CASES):
         s = rand_string(rng, max_len=12)
         assert '"' not in s
         i = Interpreter()
-        i.run(f'x = count of "{s}"\n')
+        i.run(f'x = count of {planes_string_literal(s)}\n')
         assert i.env.get("x").value == Number.of(len(s))
 
 
@@ -313,7 +325,7 @@ def test_first_n_of_string_is_a_code_point_prefix():
         s = rand_string(rng, max_len=10)
         n = rng.randint(0, 12)
         i = Interpreter()
-        i.run(f'x = first {n} of "{s}"\n')
+        i.run(f'x = first {n} of {planes_string_literal(s)}\n')
         v = i.env.get("x").value
         assert isinstance(v, str)
         assert v == s[:n]

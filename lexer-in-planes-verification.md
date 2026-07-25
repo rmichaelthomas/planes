@@ -1,6 +1,6 @@
-# lexer-in-planes-verification.md — Phase 7 agreement table
+# lexer-in-planes-verification.md — full agreement table
 
-**Build:** fix/text-iteration-and-the-lexer (Route B stage one, continued)
+**Build:** fix/string-escapes-and-bootstrap (Route B stage one, closed)
 **Compares:** `lexer.py`'s `tokenize(src)` against `grammar/lexer.planes`'s
 `tokenize of src`, whole-program (not line-by-line), including `BEGIN`/
 `END`/`EOL`/`EOF` and line numbers.
@@ -12,84 +12,100 @@ documented *module-collision* fixture, not a tokenization fixture — is
 included and tokenizes exactly like any other file.
 
 **Status legend:** PASS — exact match, every token, including line
-numbers. PARTIAL — agrees token-for-token up to a specific point, then
-diverges for the reason given. No file is SKIPPED: every one of the 29
-tokenizes to completion on both sides; nothing crashes or hangs.
+numbers. No file is SKIPPED: every one of the 29 tokenizes to completion
+on both sides; nothing crashes or hangs.
 
-## Result summary
+## Result summary: 29 PASS, 0 PARTIAL
 
-**2 PASS, 27 PARTIAL, 0 SKIPPED.** Every PARTIAL result diverges at
-*exactly* the first `STRING` literal `lexer.py` finds in that file, and
-nowhere else — verified per file, not asserted in aggregate. The two PASS
-files are the only two corpus files that contain no string literal at
-all. This is the direct, checkable consequence of the STRING gap
-`grammar/lexer.planes` documents in place (§ "STRING: verified not
-expressible"): there is no way to test whether a code point is a double
-quote without a `read`/`ask` effect this build's design avoids, so a
-quoted string's contents surface as whatever they tokenize into on their
-own terms — names, numbers, operators — instead of one `STRING` token.
+**Every corpus file matches `lexer.py`'s token stream exactly, in full —
+not up to a point, the whole stream.** The prior build
+(fix/text-iteration-and-the-lexer, PR #11) left 27 of these 29 PARTIAL,
+each diverging at exactly its first `STRING` literal: there was no way
+to write a Planes string literal containing a double quote, so
+`grammar/lexer.planes` had no way to test "is this character a quote"
+and could not tokenize `STRING`. fix/string-escapes-and-bootstrap closed
+that gap directly, in the grammar: `\"` (among `\\` `\n` `\t`) makes the
+quote character writable, and `grammar/lexer.planes`'s new STRING
+section uses exactly that to detect and tokenize a string correctly,
+including its own escape sequences. Every file that was PARTIAL for that
+one, single, already-understood reason is now PASS for the same reason
+closed.
 
 ## Per-file table
 
-| File | Status | Detail |
+| File | Status | Tokens |
 |---|---|---|
-| `annotated.planes` | PARTIAL | 9/102 tokens agree; diverges at its first STRING literal (line 1) |
-| `foreign.planes` | PARTIAL | 5/147 tokens agree; diverges at its first STRING literal (line 7) |
-| `gate.planes` | PARTIAL | 13/201 tokens agree; diverges at its first STRING literal (line 2) |
-| `hn.planes` | PARTIAL | 16/167 tokens agree; diverges at its first STRING literal (line 5) |
-| `money.planes` | PARTIAL | 49/115 tokens agree; diverges at its first STRING literal (line 11) |
-| `names.planes` | PARTIAL | 30/85 tokens agree; diverges at its first STRING literal (line 11) |
-| `ordinary.planes` | PARTIAL | 49/66 tokens agree; diverges at its first STRING literal (line 9) |
-| `pypi.planes` | PARTIAL | 14/158 tokens agree; diverges at its first STRING literal (line 5) |
-| `demo/app/config.planes` | PARTIAL | 7/21 tokens agree; diverges at its first STRING literal (line 2) |
-| `demo/app/main.planes` | PARTIAL | 17/39 tokens agree; diverges at its first STRING literal (line 5) |
-| `demo/app/net.planes` | PARTIAL | 22/38 tokens agree; diverges at its first STRING literal (line 5) |
-| `demo/clash/cache.planes` | PARTIAL | 13/21 tokens agree; diverges at its first STRING literal (line 4) |
-| `demo/clash/loader.planes` | PARTIAL | 13/21 tokens agree; diverges at its first STRING literal (line 4) |
-| `demo/clash/main.planes` | PARTIAL | 11/14 tokens agree; diverges at its first STRING literal (line 4) |
-| `demo/fdiff/v1.planes` | PARTIAL | 5/30 tokens agree; diverges at its first STRING literal (line 1) |
-| `demo/fdiff/v2.planes` | PARTIAL | 5/30 tokens agree; diverges at its first STRING literal (line 1) |
-| `demo/pkgs/cachelib.planes` | PARTIAL | 13/17 tokens agree; diverges at its first STRING literal (line 4) |
-| `demo/pkgs/fetcher.planes` | **PASS** | 16/16 tokens match exactly |
-| `demo/pkgs/logger.planes` | PARTIAL | 8/14 tokens agree; diverges at its first STRING literal (line 2) |
-| `demo/pkgs/mathlib.planes` | **PASS** | 28/28 tokens match exactly |
-| `demo/pkgs/sneaky.planes` | PARTIAL | 48/56 tokens agree; diverges at its first STRING literal (line 12) |
-| `demo/rename/cache.planes` | PARTIAL | 13/21 tokens agree; diverges at its first STRING literal (line 4) |
-| `demo/rename/loader.planes` | PARTIAL | 13/21 tokens agree; diverges at its first STRING literal (line 4) |
-| `demo/rename/main.planes` | PARTIAL | 17/31 tokens agree; diverges at its first STRING literal (line 7) |
-| `demo/rules/clean.planes` | PARTIAL | 9/52 tokens agree; diverges at its first STRING literal (line 1) |
-| `demo/rules/exception.planes` | PARTIAL | 11/64 tokens agree; diverges at its first STRING literal (line 2) |
-| `demo/rules/violation.planes` | PARTIAL | 9/51 tokens agree; diverges at its first STRING literal (line 1) |
-| `demo/v1.planes` | PARTIAL | 11/48 tokens agree; diverges at its first STRING literal (line 4) |
-| `demo/v2.planes` | PARTIAL | 14/73 tokens agree; diverges at its first STRING literal (line 5) |
+| `annotated.planes` | **PASS** | 102/102 |
+| `foreign.planes` | **PASS** | 147/147 |
+| `gate.planes` | **PASS** | 201/201 |
+| `hn.planes` | **PASS** | 167/167 |
+| `money.planes` | **PASS** | 115/115 |
+| `names.planes` | **PASS** | 85/85 |
+| `ordinary.planes` | **PASS** | 66/66 |
+| `pypi.planes` | **PASS** | 158/158 |
+| `demo/app/config.planes` | **PASS** | 21/21 |
+| `demo/app/main.planes` | **PASS** | 39/39 |
+| `demo/app/net.planes` | **PASS** | 38/38 |
+| `demo/clash/cache.planes` | **PASS** | 21/21 |
+| `demo/clash/loader.planes` | **PASS** | 21/21 |
+| `demo/clash/main.planes` | **PASS** | 14/14 |
+| `demo/fdiff/v1.planes` | **PASS** | 30/30 |
+| `demo/fdiff/v2.planes` | **PASS** | 30/30 |
+| `demo/pkgs/cachelib.planes` | **PASS** | 17/17 |
+| `demo/pkgs/fetcher.planes` | **PASS** | 16/16 |
+| `demo/pkgs/logger.planes` | **PASS** | 14/14 |
+| `demo/pkgs/mathlib.planes` | **PASS** | 28/28 |
+| `demo/pkgs/sneaky.planes` | **PASS** | 56/56 |
+| `demo/rename/cache.planes` | **PASS** | 21/21 |
+| `demo/rename/loader.planes` | **PASS** | 21/21 |
+| `demo/rename/main.planes` | **PASS** | 31/31 |
+| `demo/rules/clean.planes` | **PASS** | 52/52 |
+| `demo/rules/exception.planes` | **PASS** | 64/64 |
+| `demo/rules/violation.planes` | **PASS** | 51/51 |
+| `demo/v1.planes` | **PASS** | 48/48 |
+| `demo/v2.planes` | **PASS** | 73/73 |
 
-## Self-tokenization
+`demo/pkgs/fetcher.planes` and `demo/pkgs/mathlib.planes` are the only
+two corpus files with no string literal at all — they were already PASS
+before this build (`test_exactly_two_corpus_files_have_no_string_literal`
+establishes this, not assumes it) and remain PASS now for the same
+reason plus the new one: every file matches exactly, string-bearing or
+not.
+
+## Self-tokenization — the bootstrap assertion, closed
 
 Run `grammar/lexer.planes`'s own `tokenize` over its own source, and over
 `grammar/vocabulary.planes`, both checked against `lexer.py`:
 
-| File | Status | Detail |
+| File | Status | Tokens |
 |---|---|---|
-| `grammar/lexer.planes` (self) | PARTIAL | agrees up to its own first STRING literal (the `note:` header's quoted text), same gap, no new one |
-| `grammar/vocabulary.planes` | PARTIAL | agrees up to its own first STRING literal (the generated `note:` header), same gap, no new one |
+| `grammar/lexer.planes` (self) | **PASS** | 3835/3835 |
+| `grammar/vocabulary.planes` | **PASS** | 159/159 |
 
-**The first bootstrap assertion in this domain's history holds, up to
-the documented gap.** `lexer.planes` correctly tokenizes its own source
-code for every construct it implements — character classification
-functions, the fold/lookahead state machine, `when`/`is` dispatch,
-record `with`, indentation, `use vocabulary` — and diverges from
-`lexer.py` at exactly the same, single, already-understood point every
-other file does: its own first quoted string. No new divergence, no
-crash, no infinite loop. Both self-tokenization runs complete and match
-`lexer.py` for 100% of their non-string content.
+**Complete self-tokenization now holds, stated in those words.** A
+lexer for Planes, written in Planes, tokenizes its own source —
+`grammar/lexer.planes`, 3835 tokens including every STRING literal in
+its own doc comments and pending-state records, and the generated
+`grammar/vocabulary.planes`, 159 tokens — to the exact same stream
+`lexer.py` produces. Nothing is approximate, nothing stops early, no
+divergence survives anywhere in either file. This is the first closed
+bootstrap assertion in this domain's history: the previous build closed
+every other construct and left this one gap, checked and named rather
+than guessed around; this build closes the gap itself, in the grammar,
+and the self-tokenization runs are now a permanent test
+(`test_lexer_planes_tokenizes_itself_exactly`,
+`test_lexer_planes_tokenizes_vocabulary_planes_exactly` in
+`test_lexer_in_planes.py`), not a probe.
 
-## Where this leaves Phase 7
+## Where this leaves Route B stage one
 
-Every disagreement across all 29 corpus files plus both self-tokenization
-runs traces to one root cause, verified per-file rather than assumed in
-aggregate: the STRING gap documented in `grammar/lexer.planes` itself.
-Zero disagreements are unexplained. Zero files are SKIPPED. The
-"partial agreement table is a result" — and the result is that this
-lexer is complete for every token class except one, and the one it
-lacks is lacking for a specific, checked, non-workaroundable reason,
-not an unexamined gap.
+Zero disagreements remain across all 29 corpus files and both
+self-tokenization runs. `grammar/lexer.planes` tokenizes every
+construct `lexer.py` produces a token for, including `STRING` with its
+four escapes, with no known remaining gap in tokenization itself. The
+one gap this build's own STRING section documents in place — that a
+`to` function has no way to raise a custom-message error the way
+`lexer.py` raises `PlanesSyntaxError` on malformed input — is untested
+by this corpus (every string in it is well-formed; ESCAPE_AUDIT.md)
+and is a narrower, separate gap in error-signaling from ordinary Planes
+code, not in tokenization. See REPORT_STRING_ESCAPES.md for its cost.

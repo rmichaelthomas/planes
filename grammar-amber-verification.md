@@ -89,15 +89,15 @@ Verification gate for grammar-as-data-and-scoped-amber (addendum v4.2 §69.1, §
 
 | Result | Check | Detail |
 |---|---|---|
-| PASS | full suite passes, 523 tests (baseline was 481 pre-build) |  |
+| PASS | full suite passes, 573 tests (baseline was 481 pre-build) |  |
 | PASS | ruff check . is clean | All checks passed!<br> |
-| PASS | mypy . is clean | Success: no issues found in 40 source files<br> |
+| PASS | mypy . is clean | Success: no issues found in 42 source files<br> |
 
 ## I. Benchmarks (reported, not blocking unless >25%)
 
 | Result | Check | Detail |
 |---|---|---|
-| PASS | no file more than 25% slower (worst: +8.4%) |  |
+| PASS | no file more than 25% slower (worst: +14.0%) |  |
 
 **Blocking sections (A, C, D, E, H): PASS**
 **All sections: PASS**

@@ -645,7 +645,8 @@ class Analyser:
         kind, value = where
         if kind == "literal":
             return (value, False,
-                    StaticDeriv("literal", f'"{value}"', file=self.current_file))
+                    StaticDeriv("literal", f'"{escape_string_literal(value)}"',
+                               file=self.current_file))
         # A parameter. Resolve it from the call site if there is one.
         if args is not None and consts is not None:
             try:
@@ -865,7 +866,8 @@ class Analyser:
                                         file=self.current_file)
 
         if isinstance(node, Str):
-            return node.value, StaticDeriv("literal", f'"{node.value}"',
+            return node.value, StaticDeriv("literal",
+                                           f'"{escape_string_literal(node.value)}"',
                                            file=self.current_file)
         if isinstance(node, Num):
             return node.value, StaticDeriv("literal", str(node.value),

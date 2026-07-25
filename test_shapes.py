@@ -967,6 +967,17 @@ def test_derivation_reaches_a_literal():
     assert literal.kind == "literal"
 
 
+def test_literal_derivation_label_re_escapes_a_quote():
+    """const()'s Str case builds the literal's display label as a quoted
+    Planes literal (`f'"{...}"'`) -- the same re-quote-as-source shape
+    render.py's Str case has, and the same fix, so a string containing a
+    quote does not corrupt the label."""
+    s = analyse('use http\nlet u = "a\\"b"\nx = ask u')
+    e = s.at("network")[0]
+    literal = e.derivation.inputs[0]
+    assert literal.label == '"a\\"b"'
+
+
 def test_widening_produces_an_unknown_provenance_node():
     src = ('use http\n'
            'let u = "https://example.com/default.json"\n'

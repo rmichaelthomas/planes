@@ -27,34 +27,34 @@ to is-name-start of c:
 to is-name-continue of c:
   give is-name-start of c or is-digit of c
 
-# Planes STRING literals have no escape sequences (grammar/vocabulary.json's
-# own note on the STRING token class) -- "\t" in a Planes source file is
-# the two characters backslash and t, not a tab. A literal tab, carriage
-# return, vertical tab, or form feed can only be written as the raw byte
-# itself inside the quotes, which is unrepresentable cleanly in a hand-
-# authored, readable source file. This is a bounded, verified gap, not a
-# silent one: grep -rlP '\t|\x0b|\x0c|\r' across every root and demo/
-# .planes file in the repo (the corpus this build's agreement test
-# covers) finds none -- every file's indentation and inline spacing uses
-# the plain space character only. is-strippable below covers exactly
-# that verified case. A file that introduced a tab would need this
+# is-strippable measures raw source-file indentation, on the line before
+# tokenize-line ever runs -- a different domain from STRING content
+# below, and unaffected by fix/string-escapes-and-bootstrap's four
+# escapes: those resolve inside a STRING token's own content, never in
+# the leading whitespace tokenize-line hasn't reached yet. A literal tab
+# character used *for indentation* is still only writable as the raw
+# byte itself, same as before this build. Verified, not assumed: grep
+# -rlP '\t|\x0b|\x0c|\r' across every root and demo/ .planes file in the
+# repo (the corpus this build's agreement test covers) finds none --
+# every file's indentation and inline spacing uses the plain space
+# character only. A file that introduced a tab would need this
 # extended; none does today.
 to is-strippable of c:
   give c == " "
 
-# A newline cannot be written as a Planes string literal either -- the
-# same unwritable-control-character problem STRING runs into below --
-# but unlike a quote, a newline never needs to be told apart from
-# arbitrary string content: `<`/`>` order code points (capability 3),
-# and every character this lexer cares about outside of STRING content
-# (digits, name characters, the operator set, space, # and @) sits at or
-# above the space character (code point 32); a newline (10) is the only
-# one below it that a well-formed source file ever contains (no other
-# C0 control character appears anywhere in the corpus -- the same grep
-# that justified is-strippable's space-only scope covers this too).
-# Verified directly against the interpreter's own compare(), not assumed:
-# "\n" < " " is true, '"' < " " is false, every other corpus character
-# is false.
+# is-newline, likewise, measures the raw source file (split-lines below
+# runs before tokenize-line, same as is-strippable) -- unaffected by
+# this build's escapes for the same reason. Unlike a quote, a newline in
+# the *raw file* never needs to be told apart from string content: `<`/
+# `>` order code points (capability 3), and every character this lexer
+# cares about outside of STRING content (digits, name characters, the
+# operator set, space, # and @) sits at or above the space character
+# (code point 32); a newline (10) is the only one below it that a
+# well-formed source file ever contains (no other C0 control character
+# appears anywhere in the corpus -- the same grep that justified
+# is-strippable's space-only scope covers this too). Verified directly
+# against the interpreter's own compare(), not assumed: "\n" < " " is
+# true, '"' < " " is false, every other corpus character is false.
 to is-newline of c:
   give c < " "
 
@@ -89,25 +89,31 @@ to step of state, c:
   when state.pending is { kind: "comment" }:
     give state
   else:
-    when state.pending is { kind: "name" }:
-      give step-name of state, c
+    when state.pending is { kind: "string" }:
+      give step-string of state, c
     else:
-      when state.pending is { kind: "name-hyphen" }:
-        give step-name-hyphen of state, c
+      when state.pending is { kind: "string-escape" }:
+        give step-string-escape of state, c
       else:
-        when state.pending is { kind: "number" }:
-          give step-number of state, c
+        when state.pending is { kind: "name" }:
+          give step-name of state, c
         else:
-          when state.pending is { kind: "number-maybe-dot" }:
-            give step-number-maybe-dot of state, c
+          when state.pending is { kind: "name-hyphen" }:
+            give step-name-hyphen of state, c
           else:
-            when state.pending is { kind: "fingerprint" }:
-              give step-fingerprint of state, c
+            when state.pending is { kind: "number" }:
+              give step-number of state, c
             else:
-              when state.pending is { kind: "op-lookahead" }:
-                give step-op-lookahead of state, c
+              when state.pending is { kind: "number-maybe-dot" }:
+                give step-number-maybe-dot of state, c
               else:
-                give step-fresh of state, c
+                when state.pending is { kind: "fingerprint" }:
+                  give step-fingerprint of state, c
+                else:
+                  when state.pending is { kind: "op-lookahead" }:
+                    give step-op-lookahead of state, c
+                  else:
+                    give step-fresh of state, c
 
 to step-fresh of state, c:
   if c == " ":
@@ -125,6 +131,12 @@ to step-fresh-nonspace of state, c:
     give step-fresh-not-fingerprint of state, c
 
 to step-fresh-not-fingerprint of state, c:
+  if c == "\"":
+    give { out: state.out, pending: { kind: "string", text: "" }, line: state.line }
+  else:
+    give step-fresh-not-string of state, c
+
+to step-fresh-not-string of state, c:
   if is-digit of c:
     new-pending = { kind: "number", text: c, seen-dot: false }
     give { out: state.out, pending: new-pending, line: state.line }
@@ -284,42 +296,74 @@ to flush-op-lookahead of state:
   else:
     give { out: state.out, pending: { kind: "none" }, line: state.line }
 
-# ================================================================ STRING: verified not expressible
+# ================================================================ STRING
 #
-# This lexer does not tokenize STRING. Not "not yet" -- checked, and there
-# is no way to write it in the language as it stands. STRING detection
-# needs exactly one thing: a way to test whether a code point is a double
-# quote. There is no way to produce that value:
+# The prior blocker is gone: STRING detection needed exactly one thing, a
+# way to test whether a code point is a double quote, and there was no
+# way to produce that value -- fix/string-escapes-and-bootstrap adds \"
+# (among \\ \n \t) to the grammar precisely so that value is writable,
+# here, as `c == "\""`. This section could not have been written before
+# that change landed; it is the reason the change was made.
 #
-#   - A Planes STRING literal cannot contain a `"` -- vocabulary.json's
-#     own STRING pattern is `"[^\"]*"`, no escape sequences, so the
-#     character class inside the quotes explicitly excludes a quote.
-#     Verified directly, not assumed: parsing `x = """` gives
-#     Assign(x, Str("")) -- the first two quotes close an EMPTY string --
-#     with the third quote silently unmatched, and `x = """"` (four
-#     quotes) gives two separate empty-string statements. No sequence of
-#     quote characters ever produces one *containing* a quote.
-#   - No builtin converts a number (e.g. 34, the code point) to a
-#     character, or vice versa -- count/lower/upper/text/whole/ask/read/
-#     normalize, the entire closed set, does none of this.
-#   - A `read` or `ask` effect could fetch a quote from outside the
-#     program, but that reintroduces exactly the effect Phase 5 exists to
-#     avoid (grammar_gen.py's docstring), and this build's invariants
-#     forbid a new host method or effect kind to work around it besides.
-#   - An exclusion-based approximation -- "not a digit, not a name
-#     character, not an operator, not #, not @, not space, so it must be
-#     a quote" -- is unsound, not just inelegant: gate.planes's own
-#     `because "...March's reconciliation..."` contains an apostrophe,
-#     which is none of those things either, and would end the string
-#     early. Checked against the actual corpus, not a hypothetical.
+# step-string accumulates resolved content one character at a time, the
+# same streaming-fold shape as every other pending kind above: a quote
+# closes the token, a backslash opens the one-character-lookahead escape
+# state (step-string-escape), anything else is appended as itself. No
+# lookahead beyond capability 2's still-MISSING index -- an escape is
+# handled by deferring commitment by exactly one character, the same
+# idiom step-name-hyphen and step-op-lookahead already use for `-` and
+# `->`/`==`/etc.
 #
-# So: no workaround is written here, per this build's own rule that a
-# language gap is reported, not routed around. Every `"..."` literal in
-# a tokenized line surfaces as whatever its *contents* tokenize into on
-# their own terms (comments, names, numbers, operators) rather than one
-# STRING token -- the corpus agreement test (test_lexer_in_planes.py)
-# reports every line this touches as a disagreement traced to this gap,
-# not a silent pass.
+# The STRING token's `text` carries resolved content between literal
+# quote characters (`"\"" + resolved + "\""`), matching lexer.py's own
+# token.value exactly -- parser.py strips the two outer quote characters
+# either way (`.value[1:-1]`), so this is what makes a Str AST node hold
+# already-resolved text without parser.py or interp.py needing to know
+# escapes exist (REPORT_STRING_ESCAPES.md's ruling 1).
+
+to step-string of state, c:
+  if c == "\"":
+    tok = { kind: "STRING", text: "\"" + state.pending.text + "\"", line: state.line }
+    give { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+  else:
+    if c == "\\":
+      give { out: state.out, pending: { kind: "string-escape", text: state.pending.text }, line: state.line }
+    else:
+      new-pending = { kind: "string", text: state.pending.text + c }
+      give { out: state.out, pending: new-pending, line: state.line }
+
+# The four resolved escapes, and the one place this file still cannot
+# match lexer.py: an unrecognized escape (lexer.py: PlanesSyntaxError
+# naming the four that exist) or a trailing backslash that consumes the
+# closing quote (lexer.py: PlanesSyntaxError, unterminated string) are
+# both errors lexer.py *raises* -- and this language has no expression a
+# `to` function can use to raise one of its own. `... or fail as tag`
+# (the only fail-shaped syntax that exists) renames or catches a failure
+# an expression already produced; it is not a way to manufacture a new
+# one with a chosen message from ordinary code. That is a real, narrower
+# gap than the one this build closes, not routed around here either: an
+# unrecognized escape falls back to including `c` literally (dropping
+# the backslash) rather than stopping, and an unterminated string simply
+# never closes -- flush-pending's final `else` drops it along with its
+# tokens, silently, same as any other pending kind that function does
+# not name. Untested by the corpus (ESCAPE_AUDIT.md: zero corpus strings
+# contain a backslash at all) and untested by this file's own source or
+# vocabulary.planes (every escape either writes, below, is one of the
+# four valid ones) -- both are line-splittable, well-formed input only.
+to step-string-escape of state, c:
+  if c == "\"":
+    give { out: state.out, pending: { kind: "string", text: state.pending.text + "\"" }, line: state.line }
+  else:
+    if c == "\\":
+      give { out: state.out, pending: { kind: "string", text: state.pending.text + "\\" }, line: state.line }
+    else:
+      if c == "n":
+        give { out: state.out, pending: { kind: "string", text: state.pending.text + "\n" }, line: state.line }
+      else:
+        if c == "t":
+          give { out: state.out, pending: { kind: "string", text: state.pending.text + "\t" }, line: state.line }
+        else:
+          give { out: state.out, pending: { kind: "string", text: state.pending.text + c }, line: state.line }
 
 to tokenize-line of stripped, line-no:
   initial = { out: [], pending: { kind: "none" }, line: line-no }

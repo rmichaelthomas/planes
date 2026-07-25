@@ -544,7 +544,8 @@ class Interpreter:
         if isinstance(node, Num):
             return lit(node.value)
         if isinstance(node, Str):
-            return Traced(node.value, Deriv("literal", f'"{node.value}"', node.value))
+            label = f'"{escape_string_literal(node.value)}"'
+            return Traced(node.value, Deriv("literal", label, node.value))
         if isinstance(node, Bool):
             return lit(node.value)
         if isinstance(node, Nothing):
@@ -1043,7 +1044,7 @@ def explain(traced, because=None):
     inner = n.inputs[0] if n.kind == "name" and n.inputs else n
     text = f"{fmt(traced.value)} from {render(inner)}"
     if because:
-        text += f'\n  because "{because}"'
+        text += f'\n  because "{escape_string_literal(because)}"'
     return text
 
 
@@ -1103,7 +1104,8 @@ def why_tree(traced, max_depth=14, because=None):
         seen[id(n)] = True
         lines.append("  " * depth + f"{n.label} = {fmt(n.value)}{tail}")
         if depth == 0 and because:
-            lines.append("  " * (depth + 1) + f'because "{because}"')
+            lines.append("  " * (depth + 1) +
+                         f'because "{escape_string_literal(because)}"')
         for i in n.inputs:
             walk(i, depth + 1)
 

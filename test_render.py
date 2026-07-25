@@ -74,6 +74,49 @@ def test_a_program_with_annotations_round_trips():
     assert all(ast_equal(a, b) for a, b in zip(prog, prog2))
 
 
+# ================================================================ round-trip with escapes
+#
+# None of the four escapes could occur in any string before this build
+# (ESCAPE_AUDIT.md), so nothing exercised render.py's re-quoting until
+# now -- render_expr's Str case, and every other site that prints a
+# string-typed AST field back as a quoted literal (Because.text, Rule
+# and Foreign's `target`, a Note entry's `from`), shared the same gap:
+# each field holds already-resolved text (parser.py's `.value[1:-1]`),
+# so printing it back inside bare quotes either reparses to a different
+# value or, for an escaped quote, does not reparse at all.
+
+def _round_trips(src):
+    prog = parse(src)
+    out = render(prog)
+    prog2 = parse(out)
+    return len(prog) == len(prog2) and all(ast_equal(a, b) for a, b in zip(prog, prog2))
+
+
+def test_string_literal_with_escaped_quote_round_trips():
+    assert _round_trips(r'x = "a\"b"' + "\n")
+
+
+def test_string_literal_with_each_escape_round_trips():
+    for body in (r'a\"b', r"a\\b", r"a\nb", r"a\tb"):
+        assert _round_trips(f'x = "{body}"\n'), body
+
+
+def test_because_annotation_with_escaped_quote_round_trips():
+    assert _round_trips('x = 1 because "a\\"b"\n')
+
+
+def test_rule_target_with_escaped_quote_round_trips():
+    assert _round_trips('rule [r] anything may not write to "a\\"b"\n')
+
+
+def test_rendered_escaped_string_reparses_to_the_same_value():
+    """Not just re-parseable -- the *value* survives the round trip,
+    not merely well-formed source."""
+    prog = parse(r'x = "a\"b"' + "\n")
+    prog2 = parse(render(prog))
+    assert prog2[0].expr.value == 'a"b'
+
+
 # ================================================================ the generated marker
 
 RULE_SRC = (

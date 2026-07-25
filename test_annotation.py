@@ -279,6 +279,25 @@ def test_why_displays_because_text():
     assert 'because "board policy, ratified March"' in out[0]
 
 
+def test_why_re_escapes_a_because_text_containing_a_quote():
+    """explain()'s `because` line prints the text back as a quoted
+    Planes literal (interp.py) -- fix/string-escapes-and-bootstrap made
+    a because text containing a quote writable in the first place, and
+    that same text must round-trip in why's own output, not corrupt it."""
+    src = 'cap = 200 because "board says \\"no exceptions\\""\nwhy cap\n'
+    out = Interpreter(fs={}).run(src)
+    assert 'because "board says \\"no exceptions\\""' in out[0]
+
+
+def test_why_re_escapes_a_string_literal_value_containing_a_quote():
+    """The Str case's own Deriv label (interp.py eval()) has the same
+    shape: `render(inner)` for a literal shows the value as a quoted
+    Planes literal, which must re-escape too."""
+    src = 'x = "a\\"b"\nwhy x\n'
+    out = Interpreter(fs={}).run(src)
+    assert 'from "a\\"b"' in out[0]
+
+
 def test_why_omits_because_when_none_given():
     src = 'cap = 200\nwhy cap\n'
     out = Interpreter(fs={}).run(src)
