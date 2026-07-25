@@ -41,3 +41,166 @@ to is-name-continue of c:
 # extended; none does today.
 to is-strippable of c:
   give c == " "
+
+# ================================================================ single-line tokenizer
+#
+# A streaming fold over one line's characters (run-chars/step), carrying a
+# `pending` record for whatever token is mid-flight. Lookahead beyond the
+# current character is never indexed -- capability 2 (PROBE_LEXER.md) is
+# still MISSING and this build does not add it. Every multi-character
+# spelling (a name's internal hyphen, ->/==/!=/<=/>=) is instead resolved
+# by DEFERRING commitment by exactly one character: seeing "-" does not
+# yet decide anything, it opens a pending state that the *next* character
+# resolves. When a pending state fails to extend, whatever it was
+# buffering was never truly consumed, so it is reprocessed -- from a
+# clean `pending: none` -- through the very same step function, via
+# run-chars. This is the one recursive idiom this whole file leans on.
+
+to run-chars of state, s:
+  result = state
+  for each ch in s:
+    result = step of result, ch
+  give result
+
+to finish-name of word-text, line-no:
+  is-kw = word-text in keywords
+  kind = "NAME"
+  if is-kw:
+    kind = upper of word-text
+  give { kind: kind, text: word-text, line: line-no }
+
+to step of state, c:
+  when state.pending is { kind: "name" }:
+    give step-name of state, c
+  else:
+    when state.pending is { kind: "name-hyphen" }:
+      give step-name-hyphen of state, c
+    else:
+      when state.pending is { kind: "number" }:
+        give step-number of state, c
+      else:
+        when state.pending is { kind: "op-lookahead" }:
+          give step-op-lookahead of state, c
+        else:
+          give step-fresh of state, c
+
+to step-fresh of state, c:
+  if c == " ":
+    give state
+  else:
+    give step-fresh-nonspace of state, c
+
+to step-fresh-nonspace of state, c:
+  if is-digit of c:
+    give { out: state.out, pending: { kind: "number", text: c }, line: state.line }
+  else:
+    if is-name-start of c:
+      give { out: state.out, pending: { kind: "name", text: c }, line: state.line }
+    else:
+      give step-fresh-op of state, c
+
+to is-lookahead-op of c:
+  give c == "-" or c == "=" or c == "!" or c == "<" or c == ">"
+
+to is-simple-op of c:
+  group-a = c == "+" or c == "*" or c == "/" or c == "(" or c == ")"
+  group-b = c == "." or c == "," or c == ";" or c == ":"
+  group-c = c == "[" or c == "]" or c == "{" or c == "}"
+  give group-a or group-b or group-c
+
+to step-fresh-op of state, c:
+  if is-lookahead-op of c:
+    give { out: state.out, pending: { kind: "op-lookahead", first: c }, line: state.line }
+  else:
+    if is-simple-op of c:
+      new-tok = { kind: "OP", text: c, line: state.line }
+      give { out: state.out plus new-tok, pending: { kind: "none" }, line: state.line }
+    else:
+      give state
+
+to step-name of state, c:
+  if is-name-continue of c:
+    new-pending = { kind: "name", text: state.pending.text + c }
+    give { out: state.out, pending: new-pending, line: state.line }
+  else:
+    if c == "-":
+      new-pending = { kind: "name-hyphen", text: state.pending.text }
+      give { out: state.out, pending: new-pending, line: state.line }
+    else:
+      tok = finish-name of state.pending.text, state.line
+      flushed = { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+      give step of flushed, c
+
+to step-name-hyphen of state, c:
+  if is-name-continue of c:
+    new-pending = { kind: "name", text: state.pending.text + "-" + c }
+    give { out: state.out, pending: new-pending, line: state.line }
+  else:
+    tok = finish-name of state.pending.text, state.line
+    flushed = { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+    leftover = "-" + c
+    give run-chars of flushed, leftover
+
+to step-number of state, c:
+  if is-digit of c:
+    new-pending = { kind: "number", text: state.pending.text + c }
+    give { out: state.out, pending: new-pending, line: state.line }
+  else:
+    tok = { kind: "NUMBER", text: state.pending.text, line: state.line }
+    flushed = { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+    give step of flushed, c
+
+to is-standalone-op of c:
+  give c == "-" or c == "=" or c == "<" or c == ">"
+
+to is-two-char-op of combined:
+  group-a = combined == "->" or combined == "==" or combined == "!="
+  group-b = combined == "<=" or combined == ">="
+  give group-a or group-b
+
+to step-op-lookahead of state, c:
+  combined = state.pending.first + c
+  if is-two-char-op of combined:
+    new-tok = { kind: "OP", text: combined, line: state.line }
+    give { out: state.out plus new-tok, pending: { kind: "none" }, line: state.line }
+  else:
+    first-char = state.pending.first
+    with-first = { out: state.out, pending: { kind: "none" }, line: state.line }
+    if is-standalone-op of first-char:
+      first-tok = { kind: "OP", text: first-char, line: state.line }
+      with-first = { out: state.out plus first-tok, pending: { kind: "none" }, line: state.line }
+    give step of with-first, c
+
+to flush-pending of state:
+  when state.pending is { kind: "name" }:
+    tok = finish-name of state.pending.text, state.line
+    give { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+  else:
+    when state.pending is { kind: "name-hyphen" }:
+      tok = finish-name of state.pending.text, state.line
+      with-name = state.out plus tok
+      dash-tok = { kind: "OP", text: "-", line: state.line }
+      give { out: with-name plus dash-tok, pending: { kind: "none" }, line: state.line }
+    else:
+      when state.pending is { kind: "number" }:
+        tok = { kind: "NUMBER", text: state.pending.text, line: state.line }
+        give { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+      else:
+        when state.pending is { kind: "op-lookahead" }:
+          give flush-op-lookahead of state
+        else:
+          give state
+
+to flush-op-lookahead of state:
+  first-char = state.pending.first
+  if is-standalone-op of first-char:
+    tok = { kind: "OP", text: first-char, line: state.line }
+    give { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+  else:
+    give { out: state.out, pending: { kind: "none" }, line: state.line }
+
+to tokenize-line of stripped, line-no:
+  initial = { out: [], pending: { kind: "none" }, line: line-no }
+  mid = run-chars of initial, stripped
+  final = flush-pending of mid
+  give final.out
