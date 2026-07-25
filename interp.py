@@ -490,10 +490,59 @@ class Interpreter:
 
         if isinstance(stmt, If):
             c = self.eval(stmt.cond, env)
-            return self.exec_block(stmt.then if condition(c.value) else stmt.els, env)
+            # Block run inlined, not delegated to exec_block: on the recursion
+            # spine (a function whose body is an `if`), a per-branch exec_block
+            # frame is pure overhead against the ~140 ceiling (§42). Semantics
+            # are exec_block's exactly — skip Note, return the last result.
+            result = None
+            for s in (stmt.then if condition(c.value) else stmt.els):
+                if not isinstance(s, Note):
+                    result = self.exec_stmt(s, env)
+            return result
 
         if isinstance(stmt, When):
-            return self.exec_when(stmt, env)
+            # Shape dispatch (v5.0 §74), folded in from the former exec_when
+            # method (its only caller). A self-hosted `eval` is a NESTED
+            # when/else ladder, so every ladder level used to pay an
+            # exec_stmt(When) frame AND an exec_when frame; folding halves the
+            # per-arm cost — the compounding A.1 is about (§42). Semantics are
+            # unchanged: a missing field is no match; a present field of the
+            # wrong shape raises through the same guarded equal() `==` uses;
+            # bindings land directly in env (the no-child-scope choice if/else
+            # already makes); the matched (or else) block runs with Note
+            # skipped and its last result carried out.
+            subject = self.eval(stmt.subject, env)
+            if not isinstance(subject.value, dict):
+                raise PlanesError(
+                    "not-a-record",
+                    f"cannot match {fmt(subject.value)} against a shape",
+                    "when matches record shapes only")
+            matched, bindings = True, []
+            for fname, (kind, arg) in stmt.pattern:
+                if fname not in subject.value:
+                    matched = False
+                    break
+                field_val = subject.value[fname]
+                if kind == "match":
+                    want = self.eval(arg, env)
+                    if not equal(field_val, want.value):
+                        matched = False
+                        break
+                else:
+                    bindings.append((fname, field_val))
+            if matched:
+                for name, val in bindings:
+                    env.bind_local(name, Traced(
+                        val, Deriv("field", f".{name}", val, [subject.node])))
+            result = None
+            for s in (stmt.body if matched else stmt.els):
+                if not isinstance(s, Note):
+                    result = self.exec_stmt(s, env)
+            fields = ", ".join(f for f, _ in stmt.pattern)
+            label = f"when {{{fields}}} " + ("matched" if matched else "did not match")
+            rv = result.value if result is not None else None
+            rn = result.node if result is not None else Deriv("literal", "nothing", None)
+            return Traced(rv, Deriv("op", label, rv, [subject.node, rn]))
 
         if isinstance(stmt, Fail):
             v = self.eval(stmt.message, env)
@@ -505,48 +554,6 @@ class Interpreter:
             raise PlanesError(stmt.tag, v.value)
 
         return self.eval(stmt, env)
-
-    def exec_when(self, stmt, env):
-        """Dispatch on record shape, with field binding (v5.0 §74) — not
-        type tags, not a type system. A missing field is simply no match;
-        a present field with the wrong shape raises through the same
-        guarded equal() `==` uses (§59), so a mismatch is an honest error
-        rather than a silent non-match. Bindings land directly in `env`,
-        the same no-child-scope choice `if`/`else` and the or-fail handler
-        already make in this interpreter.
-        """
-        subject = self.eval(stmt.subject, env)
-        if not isinstance(subject.value, dict):
-            raise PlanesError(
-                "not-a-record",
-                f"cannot match {fmt(subject.value)} against a shape",
-                "when matches record shapes only")
-
-        matched, bindings = True, []
-        for fname, (kind, arg) in stmt.pattern:
-            if fname not in subject.value:
-                matched = False
-                break
-            field_val = subject.value[fname]
-            if kind == "match":
-                want = self.eval(arg, env)
-                if not equal(field_val, want.value):
-                    matched = False
-                    break
-            else:
-                bindings.append((fname, field_val))
-
-        if matched:
-            for name, val in bindings:
-                env.bind_local(name, Traced(
-                    val, Deriv("field", f".{name}", val, [subject.node])))
-
-        result = self.exec_block(stmt.body if matched else stmt.els, env)
-        fields = ", ".join(f for f, _ in stmt.pattern)
-        label = f"when {{{fields}}} " + ("matched" if matched else "did not match")
-        rv = result.value if result is not None else None
-        rn = result.node if result is not None else Deriv("literal", "nothing", None)
-        return Traced(rv, Deriv("op", label, rv, [subject.node, rn]))
 
     # ---- expressions
 
@@ -676,7 +683,12 @@ class Interpreter:
 
         if isinstance(node, If):
             c = self.eval(node.cond, env)
-            return self.exec_block(node.then if condition(c.value) else node.els, env)
+            # inlined block run (§42), matching exec_stmt's If case above
+            result = None
+            for s in (node.then if condition(c.value) else node.els):
+                if not isinstance(s, Note):
+                    result = self.exec_stmt(s, env)
+            return result
 
         raise PlanesError("cannot-evaluate", type(node).__name__)
 
@@ -827,15 +839,57 @@ class Interpreter:
         if name in self.foreigns and name not in self.funcs:
             return self.call_foreign(self.foreigns[name], args, env)
 
-        if name not in self.funcs:
+        if name in self.funcs:
+            fn, iname = self.funcs[name], name
+        else:
             # A renamed function keeps working inside the file that defines
             # it: importers see the new name, the module sees its own.
-            for fn in self.funcs.values():
-                if fn.local == name:
-                    return self.invoke(fn, args, env)
-            raise PlanesError("unknown-function", f"no function named '{name}'",
-                              f"define it: to {name}: ...")
-        return self.invoke(self.funcs[name], args, env, name)
+            fn = next((f for f in self.funcs.values() if f.local == name), None)
+            if fn is None:
+                raise PlanesError("unknown-function",
+                                  f"no function named '{name}'",
+                                  f"define it: to {name}: ...")
+            iname = fn.local or fn.name
+
+        # invoke folded in (was its own method, called only from here): its
+        # frame was pure overhead on the recursion spine (call -> invoke), and
+        # exec_block(fn.body) was a second such frame. Both are inlined below
+        # with semantics unchanged — arity check, a child scope binding each
+        # parameter, the body run with Note skipped, _Give caught as the
+        # return value, RecursionError narrowed to this body (§42).
+        if len(args) != len(fn.params):
+            word = "value" if len(fn.params) == 1 else "values"
+            raise PlanesError(
+                "wrong-arity",
+                f"'{iname}' takes {len(fn.params)} {word}, given {len(args)}")
+        arg_vals = [a if isinstance(a, Traced) else self.eval(a, env)
+                    for a in args]
+        inner = Env(fn.env)
+        for p, a in zip(fn.params, arg_vals):
+            inner.bind_local(p, Traced(a.value, Deriv("name", p, a.value, [a.node])))
+        try:
+            for s in fn.body:
+                if not isinstance(s, Note):
+                    self.exec_stmt(s, inner)
+            return Traced(None, Deriv("call", iname, None,
+                                      [a.node for a in arg_vals]))
+        except _Give as g:
+            return Traced(g.value.value,
+                          Deriv("call", iname, g.value.value,
+                                [g.value.node] + [a.node for a in arg_vals]))
+        except RecursionError:
+            # Narrow on purpose: only around the recursive re-entry through
+            # this function's own body, so a RecursionError raised inside a
+            # host method for unrelated reasons is never mistaken for depth
+            # exhaustion (unbound v3.0 §42 — the observable failure is
+            # identical, and the cheaper implementation wins).
+            raise PlanesError(
+                "recursion-too-deep",
+                f"'{iname}' recursed past the depth this interpreter can follow",
+                "replace per-item recursion with one `for each` pass over "
+                "the whole collection, threading a state record forward; "
+                "for nested structure, track depth with a cons-list stack "
+                "sized to nesting depth, not item count")
 
     def call_foreign(self, decl, args, env):
         """Call a host function.
@@ -905,42 +959,6 @@ class Interpreter:
                                    [a.node for a in arg_vals],
                                    origin=f"foreign:{decl.target}"))
 
-    def invoke(self, fn, args, env, name=None):
-        name = name or fn.local or fn.name
-        if len(args) != len(fn.params):
-            word = "value" if len(fn.params) == 1 else "values"
-            raise PlanesError(
-                "wrong-arity",
-                f"'{name}' takes {len(fn.params)} {word}, given {len(args)}")
-        arg_vals = [a if isinstance(a, Traced) else self.eval(a, env) for a in args]
-        inner = Env(fn.env)
-        for p, a in zip(fn.params, arg_vals):
-            inner.bind_local(p, Traced(a.value, Deriv("name", p, a.value, [a.node])))
-        try:
-            self.exec_block(fn.body, inner)
-            return Traced(None, Deriv("call", name, None,
-                                      [a.node for a in arg_vals]))
-        except _Give as g:
-            return Traced(g.value.value,
-                          Deriv("call", name, g.value.value,
-                                [g.value.node] + [a.node for a in arg_vals]))
-        except RecursionError:
-            # Caught here, not counted with a Planes-level depth counter: the
-            # host's own signal costs nothing until it fires, and the
-            # observable behaviour (a clean, catchable failure past the
-            # depth this interpreter can follow) is identical either way
-            # (unbound v3.0 §42 — the cheaper implementation wins). Narrow
-            # on purpose: only around the recursive re-entry through this
-            # function's own body, not the whole call machinery, so a
-            # RecursionError genuinely raised inside a host method for
-            # unrelated reasons is never mistaken for depth exhaustion here.
-            raise PlanesError(
-                "recursion-too-deep",
-                f"'{name}' recursed past the depth this interpreter can follow",
-                "replace per-item recursion with one `for each` pass over "
-                "the whole collection, threading a state record forward; "
-                "for nested structure, track depth with a cons-list stack "
-                "sized to nesting depth, not item count")
 
 
 def apply_op(op, a, b):
