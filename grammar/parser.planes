@@ -1,6 +1,7 @@
 note: from "parser.py, written in Planes -- Route B stage two. Turns grammar/lexer.planes's token stream into an AST that agrees with parser.py's, checked by test_parser_in_planes.py's canonical-AST-text comparison harness. Amber (the four disambiguation sites) is explicitly out of scope -- Build 5."
 
 use lexer
+use vocabulary
 
 # ================================================================ string escaping, for the canonical form
 #
@@ -418,6 +419,518 @@ to peek-at of cursor, k:
   else:
     give peek-at of (advance of cursor), (k - 1)
 
+# ================================================================ the name table (known_funcs)
+#
+# parser.py carries known_funcs as ambient class state (Parser.known_funcs,
+# set once by parse()); Planes has no globals, so the same table is built
+# once at the entry point and threaded as `known` alongside the cursor
+# (A.1 keeps the cursor the plain token list, so `known` cannot ride
+# inside it). The table is the association idiom (A.2): a LIST of
+# { name, arity } records, scanned with `for each ... where`. No dynamic
+# record lookup (r[k]) -- every field access below is statically named, so
+# shapes.py can still see which fields a program reads, which is the
+# soundness reason a name table is expressible this way and r[k] was not.
+
+# The 10 builtins, each arity 1 -- parser.py's
+# {b["name"]: b.get("arity", 1) for b in _VOCAB["builtins"]}, and every
+# builtin defaults to 1 (none declares another). `builtins` comes from
+# grammar/vocabulary.planes via `use vocabulary`, the same single source
+# of truth lexer.planes reads, so this never drifts from the locked 10.
+to builtin-entries:
+  result = []
+  for each b in builtins:
+    result = result plus { name: b, arity: 1 }
+  give result
+
+# A `to` starts a definition only when it begins a statement -- the token
+# before it is a line/block boundary, or it is the very first token
+# (parser.py: i == 0 or tokens[i-1].kind in (EOL, BEGIN, END)). "START" is
+# the sentinel prev-kind for the first token.
+to prev-allows-def of prev-kind:
+  is-start = prev-kind == "START"
+  is-boundary = prev-kind == "EOL" or prev-kind == "BEGIN" or prev-kind == "END"
+  give is-start or is-boundary
+
+# Comma-separated NAME parameters after `of` -- parser.py's _param_arity.
+# The cursor points at the first parameter (the token after `of`); 0 when
+# there is no NAME there at all. Bounded by the parameter count, a handful.
+to count-params-more of cursor, n:
+  is-comma = tok-at-value of cursor, "OP", ","
+  next-is-name = (peek-at of cursor, 1).kind == "NAME"
+  if is-comma and next-is-name:
+    give count-params-more of (advance of (advance of cursor)), (n + 1)
+  else:
+    give n
+
+to count-params of cursor:
+  if tok-at of cursor, "NAME":
+    give count-params-more of (advance of cursor), 1
+  else:
+    give 0
+
+# The name and arity of one `to`/`foreign` declaration -- the cursor points
+# just after the `to`/`foreign` keyword. { has-name, name, arity }. A bare
+# `of` never occurs, so arity is 0 exactly when there is no `of` clause.
+to decl-name-arity of cursor:
+  name-result = collect-name-parts of cursor, []
+  parts = name-result.parts
+  if count of parts == 0:
+    give { has-name: false, name: "", arity: 0 }
+  else:
+    name = join-with-spaces of parts
+    after-name = name-result.cursor
+    if tok-at of after-name, "OF":
+      arity = count-params of (advance of after-name)
+      give { has-name: true, name: name, arity: arity }
+    else:
+      give { has-name: true, name: name, arity: 0 }
+
+# prescan_funcs (parser.py): one forward pass over every token, acting only
+# at TO/FOREIGN tokens, tracking the previous token's kind so a `to` that
+# opens `write x to "path"` is not mistaken for a definition. Iterative
+# over the whole list (capability 4: a for-each pass costs zero Planes-level
+# recursion regardless of length) -- `tokens` drives the loop purely as a
+# safe upper bound; the real position rides in state.cursor. The sub-scan
+# for each name/arity is local (from the token after the keyword) and never
+# moves the main cursor, exactly as parser.py's inner `j` is local to `i`.
+to prescan-step of state, ignored-token:
+  if state.done:
+    give state
+  else:
+    t = current of state.cursor
+    if t.kind == "EOF":
+      give { table: state.table, cursor: state.cursor, prev-kind: "EOF", done: true }
+    else:
+      new-table = state.table
+      if t.kind == "FOREIGN":
+        info = decl-name-arity of (advance of state.cursor)
+        if info.has-name:
+          new-table = state.table plus { name: info.name, arity: info.arity }
+        else:
+          new-table = state.table
+      else:
+        is-def = t.kind == "TO" and (prev-allows-def of state.prev-kind)
+        if is-def:
+          info = decl-name-arity of (advance of state.cursor)
+          if info.has-name:
+            new-table = state.table plus { name: info.name, arity: info.arity }
+          else:
+            new-table = state.table
+        else:
+          new-table = state.table
+      give { table: new-table, cursor: (advance of state.cursor), prev-kind: t.kind, done: false }
+
+to run-prescan of state, tokens:
+  result = state
+  for each tok in tokens:
+    result = prescan-step of result, tok
+  give result
+
+to prescan-funcs of tokens:
+  initial = { table: [], cursor: tokens, prev-kind: "START", done: false }
+  final = run-prescan of initial, tokens
+  give final.table
+
+# builtins first, prescan appended -- lookup-func returns the LAST match, so
+# a user function shadows a builtin of the same name, exactly as parser.py's
+# merged.update(prescan) overwrites the builtins map (parse() docstring).
+# The harness parses each file standalone, so cross-file `known` is empty on
+# both sides; only builtins + this file's own prescan populate the table.
+to append-all of base, more:
+  result = base
+  for each x in more:
+    result = result plus x
+  give result
+
+to build-known of tokens:
+  prescanned = prescan-funcs of tokens
+  give append-all of (builtin-entries), prescanned
+
+# A lookup is one for-each over the table; the `where` keeps only matching
+# entries and the last one wins (append order = insertion order = parser.py
+# dict order). { found, arity }; arity is `nothing` only when a name is
+# present with unknown arity (cross-file `known` set-form -- never reached
+# through the standalone-file parsing this harness does, but represented
+# faithfully so the amber sites' unknown-arity branches are ports, not
+# stubs).
+to lookup-func of known, name:
+  result = { found: false, arity: nothing }
+  for each entry in known where entry.name == name:
+    result = { found: true, arity: entry.arity }
+  give result
+
+to is-known-func of known, name:
+  give (lookup-func of known, name).found
+
+# ================================================================ amber (the four refusal sites)
+#
+# parser.py refuses -- it does not guess -- whenever the name table admits
+# more than one viable parse (addendum v4.2 section 69.5). The refusal text
+# is rendered to match parser.py's render_amber byte for byte (A.3: one
+# refusal style, not two), so test_amber_in_planes.py can assert the two
+# implementations produce the SAME message on the same ambiguous fragment.
+# parser.py reads the templates from grammar/messages/amber.json (ruling
+# D5, "no message text inline in parser.py"); that ruling scopes parser.py,
+# and Planes cannot read a JSON file without an effect, so the fixed
+# template text is reproduced here as ordinary string literals -- the same
+# way this file already reproduces parser.py's inline ordinary-error text.
+
+# 0 -> "A", 1 -> "B", ... one letter per candidate reading (chr(ord("A")+i)
+# in render_amber). Eight covers any realistic multiword overlap; a reading
+# past that degrades to "?" rather than failing (never reached in practice).
+to letter-of of i:
+  letters = ["A", "B", "C", "D", "E", "F", "G", "H"]
+  result = "?"
+  j = 0
+  for each L in letters:
+    if j == i:
+      result = L
+    j = j + 1
+  give result
+
+# `  reading {letter}:  {source}\n              {gloss}` -- amber.json's
+# `readings` template, identical across every amber message.
+to render-one-reading of letter, reading:
+  give "  reading " + letter + ":  " + reading.source + "\n              " + reading.gloss
+
+to nth-reading of readings, i:
+  result = nothing
+  j = 0
+  for each r in readings:
+    if j == i:
+      result = r
+    j = j + 1
+  give result
+
+to render-readings-from of readings, i, acc, seen:
+  n = count of readings
+  if i >= n:
+    give acc
+  else:
+    reading = nth-reading of readings, i
+    line = render-one-reading of (letter-of of i), reading
+    if seen:
+      give render-readings-from of readings, (i + 1), (acc + "\n" + line), true
+    else:
+      give render-readings-from of readings, (i + 1), line, true
+
+# render_amber's join: headline, blank, the readings (each two lines),
+# blank, reason, fix. The caller passes headline/reason/fix already
+# substituted, since it holds the per-site slot values.
+to assemble-amber of headline, readings, reason, fix:
+  readings-text = render-readings-from of readings, 0, "", false
+  give headline + "\n\n" + readings-text + "\n\n" + reason + "\n" + fix
+
+# ", ".join(labels[:-1]) + ", and " + labels[-1], with the 1- and 2-label
+# special cases render_amber's raise_amber_multiword uses for `names_txt`.
+to first-item of xs:
+  result = nothing
+  for each x in (first 1 of xs):
+    result = x
+  give result
+
+to last-item of xs:
+  result = nothing
+  for each x in xs:
+    result = x
+  give result
+
+to join-comma of items:
+  result = ""
+  seen = false
+  for each x in items:
+    if seen:
+      result = result + ", " + x
+    else:
+      result = x
+      seen = true
+  give result
+
+to join-labels of labels:
+  n = count of labels
+  if n == 1:
+    give last-item of labels
+  else:
+    if n == 2:
+      give (first-item of labels) + " and " + (last-item of labels)
+    else:
+      head-part = join-comma of (first (n - 1) of labels)
+      give head-part + ", and " + (last-item of labels)
+
+# parser.py's _peek_text / _peek_trailer: a best-effort source
+# reconstruction for an amber message (not a claim about original spacing).
+# _peek_text joins token text (its kind when the text is empty, i.e. a
+# boundary token) from offset `start` to `end`; _peek_trailer takes up to
+# four tokens from `offset`, stopping at a statement boundary.
+to peek-text-from of cursor, k, endpos, acc, seen:
+  if k >= endpos:
+    give acc
+  else:
+    tok = peek-at of cursor, k
+    piece = tok.text
+    if piece == "":
+      piece = tok.kind
+    if seen:
+      give peek-text-from of cursor, (k + 1), endpos, (acc + " " + piece), true
+    else:
+      give peek-text-from of cursor, (k + 1), endpos, piece, true
+
+to peek-text of cursor, start, endpos:
+  give peek-text-from of cursor, start, endpos, "", false
+
+to peek-trailer-loop of cursor, offset, endpos, i:
+  if i == 4:
+    give peek-text of cursor, offset, endpos
+  else:
+    tok = peek-at of cursor, (offset + i)
+    is-boundary = tok.kind == "EOL" or tok.kind == "EOF" or tok.kind == "END" or tok.kind == "BEGIN"
+    if is-boundary:
+      give peek-text of cursor, offset, endpos
+    else:
+      new-end = offset + i + 1
+      is-stmt-sep = tok.kind == "OP" and (tok.text == ":" or tok.text == ";")
+      if is-stmt-sep:
+        give peek-text of cursor, offset, new-end
+      else:
+        give peek-trailer-loop of cursor, offset, new-end, (i + 1)
+
+to peek-trailer of cursor, offset:
+  give peek-trailer-loop of cursor, offset, offset, 0
+
+# ---- the four refusal sites, each a faithful port of parser.py's raise_*
+# / check_* pair. Amber refuses `as ambiguity`; the message is the assembled
+# amber text, equal to parser.py's render_amber output on the same fragment.
+
+# Site 1 (parser.py:parse_primary multi-word longest match) --
+# raise_amber_multiword. `after-name` is the cursor just past the head name,
+# where parser.py's own self.peek(0) sits when it raises, so peek-trailer
+# reads the same tokens. bare-hit contributes reading A when the head name
+# is itself a known function; each ext-hit { k, probe } contributes one.
+to build-ext-readings of ext-hits, after-name, readings0, labels0:
+  acc = { readings: readings0, labels: labels0 }
+  for each hit in ext-hits:
+    trailer = peek-trailer of after-name, hit.k
+    if trailer == "":
+      source = hit.probe
+    else:
+      source = hit.probe + "  " + trailer
+    reading = { source: source, gloss: "one call to `" + hit.probe + "`" }
+    label = "`" + hit.probe + "`"
+    acc = { readings: (acc.readings plus reading), labels: (acc.labels plus label) }
+  give acc
+
+to raise-amber-multiword of line, name, bare-hit, ext-hits, after-name:
+  base-readings = []
+  base-labels = []
+  if bare-hit:
+    trailer0 = peek-trailer of after-name, 0
+    if trailer0 == "":
+      source0 = name
+    else:
+      source0 = name + "  then  " + trailer0
+    reading0 = { source: source0, gloss: "the value `" + name + "`, then whatever parses next on its own" }
+    base-readings = [reading0]
+    base-labels = ["`" + name + "`"]
+  built = build-ext-readings of ext-hits, after-name, base-readings, base-labels
+  names-txt = join-labels of built.labels
+  if count of ext-hits > 0:
+    last-hit = last-item of ext-hits
+    suggestion = "(" + last-hit.probe + ")"
+  else:
+    suggestion = "(" + name + ")"
+  headline = "line " + (text of line) + ": two readings are possible here, and nothing says which"
+  reason = "both " + names-txt + " are defined, so the parser will not choose between them"
+  fix = "try: parenthesise the one you mean -- `" + suggestion + "` -- or rename one of the functions so only one reading is possible"
+  msg = assemble-amber of headline, built.readings, reason, fix
+  fail msg as ambiguity
+
+# Site 2 (parser.py:parse_primary takes_arg) -- raise_amber_juxtaposition /
+# _unknown, and check_juxtaposition_ambiguity's decision. after-name points
+# at the following NAME (parser.py's self.peek()).
+to raise-amber-juxtaposition of line, head, next-name:
+  r0 = { source: head + " (" + next-name + ")", gloss: "one call to `" + head + "`, passing the result of calling `" + next-name + "`" }
+  r1 = { source: head + "  then  " + next-name, gloss: "`" + head + "` with no argument, then a separate call to `" + next-name + "`" }
+  headline = "line " + (text of line) + ": `" + head + " " + next-name + "` reads two ways, and nothing says which"
+  reason = "`" + head + "` takes an argument and `" + next-name + "` is also a defined function, so the parser will not choose between them"
+  fix = "try: `" + head + " (" + next-name + ")` to call `" + next-name + "` first and pass its result to `" + head + "` -- or write them as two separate statements if you meant them apart"
+  msg = assemble-amber of headline, [r0, r1], reason, fix
+  fail msg as ambiguity
+
+to raise-amber-juxtaposition-unknown of line, subject:
+  r0 = { source: subject + "(...)", gloss: "if `" + subject + "` takes an argument here, one call using what follows" }
+  r1 = { source: subject + "  then  ...", gloss: "if `" + subject + "` takes no argument here, a separate statement follows" }
+  headline = "line " + (text of line) + ": whether `" + subject + "` takes an argument here is not known"
+  reason = "the arity of `" + subject + "` is not known here"
+  fix = "declare it, or call it with `of` so the argument is explicit"
+  msg = assemble-amber of headline, [r0, r1], reason, fix
+  fail msg as ambiguity
+
+# Returns whether the following NAME is consumed as the argument; fails when
+# both readings fit. Only called when `name` is known and a NAME follows.
+to check-juxtaposition-ambiguity of known, name, after-name, line:
+  look = lookup-func of known, name
+  if look.arity is nothing:
+    give raise-amber-juxtaposition-unknown of line, name
+  else:
+    if look.arity == 0:
+      give false
+    else:
+      next-name = (current of after-name).text
+      next-look = lookup-func of known, next-name
+      if not next-look.found:
+        give true
+      else:
+        if next-look.arity is nothing:
+          give raise-amber-juxtaposition-unknown of line, next-name
+        else:
+          if next-look.arity == 0:
+            give raise-amber-juxtaposition of line, name, next-name
+          else:
+            give true
+
+# Site 3 (parser.py:paren_is_arglist) -- check_paren_arglist_ambiguity.
+# `paren-cursor` points at the `(`; close/paren-src/rest-src are computed
+# unconditionally, as parser.py does. Fails when arity is 1 (both readings
+# fit) or unknown; a sentinel record otherwise (parser.py returns None and
+# the caller parses the single-argument call).
+to matching-close-paren-offset of cursor, k, depth:
+  tok = peek-at of cursor, k
+  if tok.kind == "EOF":
+    give k + 1
+  else:
+    if tok.kind == "OP" and tok.text == "(":
+      give matching-close-paren-offset of cursor, (k + 1), (depth + 1)
+    else:
+      if tok.kind == "OP" and tok.text == ")":
+        new-depth = depth - 1
+        if new-depth == 0:
+          give k + 1
+        else:
+          give matching-close-paren-offset of cursor, (k + 1), new-depth
+      else:
+        give matching-close-paren-offset of cursor, (k + 1), depth
+
+# str.strip() for the paren-arglist sources -- only leading/trailing space
+# can appear (the sources are built by concatenation with single spaces, no
+# tabs/newlines). `rest`/index are list-only (S2 A.3), so both trims walk the
+# string with for-each, which iterates code points and costs no recursion.
+to strip-leading-space of s:
+  result = ""
+  started = false
+  for each c in s:
+    keep = started or (not (c == " "))
+    if keep:
+      result = result + c
+      started = true
+  give result
+
+to last-char-of of s, n:
+  result = ""
+  i = 0
+  for each c in s:
+    if i == (n - 1):
+      result = c
+    i = i + 1
+  give result
+
+to all-but-last-char of s, n:
+  result = ""
+  i = 0
+  for each c in s:
+    if i < (n - 1):
+      result = result + c
+    i = i + 1
+  give result
+
+to strip-trailing-space of s:
+  n = count of s
+  if n == 0:
+    give s
+  else:
+    if (last-char-of of s, n) == " ":
+      give strip-trailing-space of (all-but-last-char of s, n)
+    else:
+      give s
+
+to strip-both-spaces of s:
+  give strip-trailing-space of (strip-leading-space of s)
+
+to check-paren-arglist-ambiguity of known, name, paren-cursor, line:
+  look = lookup-func of known, name
+  close = matching-close-paren-offset of paren-cursor, 0, 0
+  paren-src = peek-text of paren-cursor, 1, (close - 1)
+  rest-src = peek-trailer of paren-cursor, close
+  if look.arity is nothing:
+    r0 = { source: name + "(" + paren-src + ")", gloss: "if `" + name + "` takes one argument here, this call alone" }
+    r1src = strip-both-spaces of (name + "(" + paren-src + ") " + rest-src)
+    r1 = { source: r1src, gloss: "if not, the whole expression including what follows" }
+    headline = "line " + (text of line) + ": whether `" + name + "` takes one argument here is not known"
+    reason = "the arity of `" + name + "` is not known here"
+    fix = "declare it, or call it with `of` so the argument is explicit"
+    msg = assemble-amber of headline, [r0, r1], reason, fix
+    fail msg as ambiguity
+  else:
+    if look.arity == 1:
+      s0 = strip-both-spaces of (name + "(" + paren-src + ") " + rest-src)
+      r0 = { source: s0, gloss: "one call to `" + name + "`, argument = everything up to and including `" + rest-src + "`" }
+      s1 = strip-both-spaces of ("(" + name + "(" + paren-src + ")) " + rest-src)
+      r1 = { source: s1, gloss: "one call to `" + name + "`, argument = `" + paren-src + "` alone; `" + rest-src + "` applies to the call's result, not inside it" }
+      headline = "line " + (text of line) + ": two readings are possible here, and nothing says which"
+      reason = "`" + name + "` takes exactly one argument, so both readings have the right shape"
+      fix = "try: `" + name + "(" + paren-src + ")` with nothing after the parens on this call, or restructure so `" + name + "` clearly applies to just one thing"
+      msg = assemble-amber of headline, [r0, r1], reason, fix
+      fail msg as ambiguity
+    else:
+      give { checked: true }
+
+# Site 4 (parser.py:parse_statement USE rename clause) --
+# check_rename_name_ambiguity. `parts` is the `old` name already split into
+# words (read-multiword-name keeps them), so no string split is needed.
+# Every prefix parts[:k] is checked against the table; two or more matches
+# means the greedy full read was not the only viable one.
+to rename-hits of known, parts, k, maxk, acc:
+  if k > maxk:
+    give acc
+  else:
+    prefix = join-with-spaces of (first (k) of parts)
+    if is-known-func of known, prefix:
+      give rename-hits of known, parts, (k + 1), maxk, (acc plus k)
+    else:
+      give rename-hits of known, parts, (k + 1), maxk, acc
+
+to drop-n of xs, k:
+  if k == 0:
+    give xs
+  else:
+    give drop-n of (rest of xs), (k - 1)
+
+to build-rename-readings of parts, hits:
+  result = []
+  for each k in hits:
+    prefix = join-with-spaces of (first (k) of parts)
+    rest-text = join-with-spaces of (drop-n of parts, k)
+    if rest-text == "":
+      gloss = "`" + prefix + "` alone"
+      source = prefix
+    else:
+      gloss = "`" + prefix + "`, leaving `" + rest-text + "` unaccounted for"
+      source = prefix + " | " + rest-text
+    result = result plus { source: source, gloss: gloss }
+  give result
+
+to check-rename-name-ambiguity of known, parts, name, line:
+  maxk = count of parts
+  hits = rename-hits of known, parts, 1, maxk, []
+  if count of hits < 2:
+    give { checked: true }
+  else:
+    readings = build-rename-readings of parts, hits
+    headline = "line " + (text of line) + ": `" + name + "` reads two ways, and nothing says which"
+    reason = "more than one exported name matches this text, so the parser will not choose between them"
+    fix = "try: rename to match only one exported name exactly -- a shorter or longer phrase"
+    msg = assemble-amber of headline, readings, reason, fix
+    fail msg as ambiguity
+
 to tok-at of cursor, kind:
   t = current of cursor
   give t.kind == kind
@@ -496,69 +1009,142 @@ to paren-is-arglist of cursor:
 # from this prompt or PROBE_PARSER.md's illustrative example -- section
 # 0 step 5): parse_or -> parse_and -> parse_not -> parse_comparison ->
 # parse_plus -> parse_additive -> parse_multiplicative -> parse_unary ->
-# parse_postfix -> parse_primary. Amber's own four sites (multiword
-# names, juxtaposition calls) are out of scope (Build 5) -- a bare NAME
-# not immediately followed by `of` or `(` is always a Var here, never a
-# juxtaposition call, which is this build's stated scope limit, not an
-# oversight. Every parse function returns { node, cursor }, mirroring
-# capability 3's proven { node, index } shape with `cursor` standing in
-# for the index -- a cons-list cursor rather than an integer, since
-# Planes has no way to index a token list by position (#11).
+# parse_postfix -> parse_primary. `known` (the name table) is threaded
+# through every level down to parse-primary, where juxtaposition and
+# multi-word calls are resolved and the amber sites refuse (parser.py
+# reaches the same table as ambient class state -- Planes has no globals).
+# Every parse function returns { node, cursor }, mirroring capability 3's
+# proven { node, index } shape with `cursor` (the remaining token list,
+# A.1) standing in for the index.
 
-to parse-call-of-args of cursor:
-  first-arg = parse-unary of cursor
-  give collect-of-args of first-arg.cursor, [first-arg.node]
+to parse-call-of-args of cursor, known:
+  first-arg = parse-unary of cursor, known
+  give collect-of-args of first-arg.cursor, [first-arg.node], known
 
-to collect-of-args of cursor, acc:
+to collect-of-args of cursor, acc, known:
   comma = try-accept-value of cursor, "OP", ","
   if comma.matched:
-    next-arg = parse-unary of comma.cursor
-    give collect-of-args of next-arg.cursor, (acc plus next-arg.node)
+    next-arg = parse-unary of comma.cursor, known
+    give collect-of-args of next-arg.cursor, (acc plus next-arg.node), known
   else:
     give { nodes: acc, cursor: cursor }
 
-to parse-call-paren-args of cursor:
-  first-arg = parse-or of cursor
-  give collect-paren-args of first-arg.cursor, [first-arg.node]
+to parse-call-paren-args of cursor, known:
+  first-arg = parse-or of cursor, known
+  give collect-paren-args of first-arg.cursor, [first-arg.node], known
 
-to collect-paren-args of cursor, acc:
+to collect-paren-args of cursor, acc, known:
   comma = try-accept-value of cursor, "OP", ","
   if comma.matched:
-    next-arg = parse-or of comma.cursor
-    give collect-paren-args of next-arg.cursor, (acc plus next-arg.node)
+    next-arg = parse-or of comma.cursor, known
+    give collect-paren-args of next-arg.cursor, (acc plus next-arg.node), known
   else:
     give { nodes: acc, cursor: cursor }
 
-to parse-name-primary of t, cursor:
+# parser.py's parse_primary NAME branch, in order: an `of` call, a `(`
+# argument list (or a parenthesised single argument -- site 3), a
+# multi-word longest match (site 1), a juxtaposition single-argument call
+# (site 2), and finally a plain variable.
+to parse-name-primary of t, cursor, known:
   name = t.text
   line = t.line
   after-name = advance of cursor
   of-try = try-accept of after-name, "OF"
   if of-try.matched:
-    args = parse-call-of-args of of-try.cursor
+    args = parse-call-of-args of of-try.cursor, known
     give { node: { kind: "Call", name: name, args: args.nodes, line: line }, cursor: args.cursor }
   else:
     at-paren = tok-at-value of after-name, "OP", "("
     if at-paren:
-      give parse-name-paren-call of name, line, after-name
+      give parse-name-paren-call of name, line, after-name, known
     else:
-      give { node: { kind: "Var", name: name }, cursor: after-name }
+      if tok-at of after-name, "NAME":
+        give parse-name-multiword of name, line, after-name, known
+      else:
+        give parse-name-juxtaposition of name, line, after-name, known
 
-to parse-name-paren-call of name, line, cursor:
+# Site 1: every k whose joined text `name w1 ... wk` is a known function,
+# plus the bare name itself, is a candidate reading; two or more means the
+# parser refuses (raise_amber_multiword) rather than silently preferring
+# one. With fewer than two, the single extension (if any) is consumed.
+to collect-ext-hits of known, probe, cursor, k, acc:
+  t = current of cursor
+  if t.kind == "NAME":
+    new-probe = probe + " " + t.text
+    new-k = k + 1
+    if is-known-func of known, new-probe:
+      new-acc = acc plus { k: new-k, probe: new-probe }
+    else:
+      new-acc = acc
+    give collect-ext-hits of known, new-probe, (advance of cursor), new-k, new-acc
+  else:
+    give acc
+
+to advance-n of cursor, j:
+  if j == 0:
+    give cursor
+  else:
+    give advance-n of (advance of cursor), (j - 1)
+
+to parse-name-multiword of name, line, after-name, known:
+  ext-hits = collect-ext-hits of known, name, after-name, 0, []
+  bare-hit = is-known-func of known, name
+  if bare-hit:
+    bare-count = 1
+  else:
+    bare-count = 0
+  total = bare-count + (count of ext-hits)
+  if total >= 2:
+    give raise-amber-multiword of line, name, bare-hit, ext-hits, after-name
+  else:
+    if count of ext-hits > 0:
+      hit = first-item of ext-hits
+      consumed = advance-n of after-name, hit.k
+      of-try = try-accept of consumed, "OF"
+      if of-try.matched:
+        args = parse-call-of-args of of-try.cursor, known
+        give { node: { kind: "Call", name: hit.probe, args: args.nodes, line: line }, cursor: args.cursor }
+      else:
+        give { node: { kind: "Call", name: hit.probe, args: [], line: line }, cursor: consumed }
+    else:
+      give parse-name-juxtaposition of name, line, after-name, known
+
+# Site 2: a known function may take one argument by juxtaposition
+# (`ask url`, `ask "https://" + text of id`). A following NAME only counts
+# as the argument when it is not itself the start of a call the parser
+# cannot choose against (check-juxtaposition-ambiguity).
+to parse-name-juxtaposition of name, line, after-name, known:
+  if is-known-func of known, name:
+    nt = current of after-name
+    takes-arg = nt.kind == "STRING" or nt.kind == "NUMBER" or (nt.kind == "OP" and nt.text == "(") or (nt.kind == "OP" and nt.text == "[")
+    if (not takes-arg) and (nt.kind == "NAME"):
+      takes-arg = check-juxtaposition-ambiguity of known, name, after-name, line
+    if takes-arg:
+      arg = parse-additive of after-name, known
+      give { node: { kind: "Call", name: name, args: [arg.node], line: line }, cursor: arg.cursor }
+    else:
+      give { node: { kind: "Call", name: name, args: [], line: line }, cursor: after-name }
+  else:
+    give { node: { kind: "Var", name: name }, cursor: after-name }
+
+to parse-name-paren-call of name, line, cursor, known:
   is-arglist = paren-is-arglist of cursor
   if is-arglist:
-    give parse-name-real-arglist of name, line, cursor
+    give parse-name-real-arglist of name, line, cursor, known
   else:
-    single = parse-additive of cursor
+    # site 3: guard refuses when both readings fit; otherwise the single
+    # parenthesised argument is parsed (parse-additive, as parser.py).
+    guard = check-paren-arglist-ambiguity of known, name, cursor, line
+    single = parse-additive of cursor, known
     give { node: { kind: "Call", name: name, args: [single.node], line: line }, cursor: single.cursor }
 
-to parse-name-real-arglist of name, line, cursor:
+to parse-name-real-arglist of name, line, cursor, known:
   open-consumed = advance of cursor
   at-close = tok-at-value of open-consumed, "OP", ")"
   if at-close:
     give { node: { kind: "Call", name: name, args: [], line: line }, cursor: (advance of open-consumed) }
   else:
-    args = parse-call-paren-args of open-consumed
+    args = parse-call-paren-args of open-consumed, known
     closed = expect-op of args.cursor, ")"
     give { node: { kind: "Call", name: name, args: args.nodes, line: line }, cursor: closed.cursor }
 
@@ -577,7 +1163,7 @@ to skip-bracket-ws of cursor:
   else:
     give cursor
 
-to collect-list-items of cursor, acc:
+to collect-list-items of cursor, acc, known:
   after-ws = skip-bracket-ws of cursor
   comma = try-accept-value of after-ws, "OP", ","
   if comma.matched:
@@ -585,29 +1171,29 @@ to collect-list-items of cursor, acc:
     if tok-at-value of after-comma-ws, "OP", "]":
       give { items: acc, cursor: after-comma-ws }
     else:
-      next-result = parse-or of after-comma-ws
-      give collect-list-items of next-result.cursor, (acc plus next-result.node)
+      next-result = parse-or of after-comma-ws, known
+      give collect-list-items of next-result.cursor, (acc plus next-result.node), known
   else:
     give { items: acc, cursor: after-ws }
 
-to parse-list-literal of cursor:
+to parse-list-literal of cursor, known:
   after-open = skip-bracket-ws of (advance of cursor)
   if tok-at-value of after-open, "OP", "]":
     give { node: { kind: "ListLit", items: [] }, cursor: (advance of after-open) }
   else:
-    first-result = parse-or of after-open
-    remaining = collect-list-items of first-result.cursor, [first-result.node]
+    first-result = parse-or of after-open, known
+    remaining = collect-list-items of first-result.cursor, [first-result.node], known
     closed = expect-op of remaining.cursor, "]"
     give { node: { kind: "ListLit", items: remaining.items }, cursor: closed.cursor }
 
-to parse-record-field of cursor:
+to parse-record-field of cursor, known:
   after-ws = skip-bracket-ws of cursor
   key-expect = expect-kind of after-ws, "NAME"
   colon-expect = expect-op of key-expect.cursor, ":"
-  value-result = parse-or of colon-expect.cursor
+  value-result = parse-or of colon-expect.cursor, known
   give { key: key-expect.token.text, value: value-result.node, cursor: value-result.cursor }
 
-to collect-record-fields of cursor, acc:
+to collect-record-fields of cursor, acc, known:
   after-ws = skip-bracket-ws of cursor
   comma = try-accept-value of after-ws, "OP", ","
   if comma.matched:
@@ -615,36 +1201,36 @@ to collect-record-fields of cursor, acc:
     if tok-at-value of after-comma-ws, "OP", "}":
       give { fields: acc, cursor: after-comma-ws }
     else:
-      next = parse-record-field of after-comma-ws
-      give collect-record-fields of next.cursor, (acc plus { key: next.key, value: next.value })
+      next = parse-record-field of after-comma-ws, known
+      give collect-record-fields of next.cursor, (acc plus { key: next.key, value: next.value }), known
   else:
     give { fields: acc, cursor: after-ws }
 
-to parse-record-literal of cursor:
+to parse-record-literal of cursor, known:
   after-open = skip-bracket-ws of (advance of cursor)
   if tok-at-value of after-open, "OP", "}":
     give { node: { kind: "RecordLit", fields: [] }, cursor: (advance of after-open) }
   else:
-    first-field = parse-record-field of after-open
-    remaining = collect-record-fields of first-field.cursor, [{ key: first-field.key, value: first-field.value }]
+    first-field = parse-record-field of after-open, known
+    remaining = collect-record-fields of first-field.cursor, [{ key: first-field.key, value: first-field.value }], known
     closed = expect-op of remaining.cursor, "}"
     give { node: { kind: "RecordLit", fields: remaining.fields }, cursor: closed.cursor }
 
-to parse-primary of cursor:
+to parse-primary of cursor, known:
   t = current of cursor
   when t is { kind: "FIRST" }:
     after-first = advance of cursor
-    n-result = parse-unary of after-first
+    n-result = parse-unary of after-first, known
     of-expect = expect-kind of n-result.cursor, "OF"
-    x-result = parse-unary of of-expect.cursor
+    x-result = parse-unary of of-expect.cursor, known
     node = { kind: "BinOp", op: "first", left: n-result.node, right: x-result.node }
     give { node: node, cursor: x-result.cursor }
   else:
     when t is { kind: "ROUND" }:
       after-round = advance of cursor
-      value-result = parse-unary of after-round
+      value-result = parse-unary of after-round, known
       to-expect = expect-kind of value-result.cursor, "TO"
-      places-result = parse-unary of to-expect.cursor
+      places-result = parse-unary of to-expect.cursor, known
       places-try = try-accept of places-result.cursor, "PLACES"
       node = { kind: "Round", value: value-result.node, places-value: places-result.node }
       give { node: node, cursor: places-try.cursor }
@@ -668,20 +1254,20 @@ to parse-primary of cursor:
               else:
                 is-open-brace = t.kind == "OP" and t.text == "{"
                 if is-open-brace:
-                  give parse-record-literal of cursor
+                  give parse-record-literal of cursor, known
                 else:
                   is-open-bracket = t.kind == "OP" and t.text == "["
                   if is-open-bracket:
-                    give parse-list-literal of cursor
+                    give parse-list-literal of cursor, known
                   else:
                     is-open-paren = t.kind == "OP" and t.text == "("
                     if is-open-paren:
-                      inner = parse-or of (advance of cursor)
+                      inner = parse-or of (advance of cursor), known
                       closed = expect-op of inner.cursor, ")"
                       give { node: inner.node, cursor: closed.cursor }
                     else:
                       if t.kind == "NAME":
-                        give parse-name-primary of t, cursor
+                        give parse-name-primary of t, cursor, known
                       else:
                         fail "line " + (text of t.line) + ": expected a value, found '" + t.text + "'" as parse-error
 
@@ -701,120 +1287,120 @@ to continue-postfix of node, cursor:
     else:
       give { node: node, cursor: cursor }
 
-to parse-postfix of cursor:
-  primary = parse-primary of cursor
+to parse-postfix of cursor, known:
+  primary = parse-primary of cursor, known
   give continue-postfix of primary.node, primary.cursor
 
-to parse-unary of cursor:
+to parse-unary of cursor, known:
   is-minus = tok-at-value of cursor, "OP", "-"
   if is-minus:
-    inner = parse-unary of (advance of cursor)
+    inner = parse-unary of (advance of cursor), known
     zero-node = { kind: "Num", value: 0 }
     node = { kind: "BinOp", op: "-", left: zero-node, right: inner.node }
     give { node: node, cursor: inner.cursor }
   else:
-    give parse-postfix of cursor
+    give parse-postfix of cursor, known
 
-to continue-multiplicative of node, cursor:
+to continue-multiplicative of node, cursor, known:
   t = current of cursor
   is-op = t.kind == "OP" and (t.text == "*" or t.text == "/")
   if is-op:
-    right = parse-unary of (advance of cursor)
+    right = parse-unary of (advance of cursor), known
     new-node = { kind: "BinOp", op: t.text, left: node, right: right.node }
-    give continue-multiplicative of new-node, right.cursor
+    give continue-multiplicative of new-node, right.cursor, known
   else:
     give { node: node, cursor: cursor }
 
-to parse-multiplicative of cursor:
-  left = parse-unary of cursor
-  give continue-multiplicative of left.node, left.cursor
+to parse-multiplicative of cursor, known:
+  left = parse-unary of cursor, known
+  give continue-multiplicative of left.node, left.cursor, known
 
-to continue-additive of node, cursor:
+to continue-additive of node, cursor, known:
   t = current of cursor
   is-op = t.kind == "OP" and (t.text == "+" or t.text == "-")
   if is-op:
-    right = parse-multiplicative of (advance of cursor)
+    right = parse-multiplicative of (advance of cursor), known
     new-node = { kind: "BinOp", op: t.text, left: node, right: right.node }
-    give continue-additive of new-node, right.cursor
+    give continue-additive of new-node, right.cursor, known
   else:
     give { node: node, cursor: cursor }
 
-to parse-additive of cursor:
-  left = parse-multiplicative of cursor
-  give continue-additive of left.node, left.cursor
+to parse-additive of cursor, known:
+  left = parse-multiplicative of cursor, known
+  give continue-additive of left.node, left.cursor, known
 
-to continue-plus of node, cursor:
+to continue-plus of node, cursor, known:
   t = current of cursor
   if t.kind == "PLUS":
-    right = parse-additive of (advance of cursor)
+    right = parse-additive of (advance of cursor), known
     new-node = { kind: "ListPlus", base: node, item: right.node }
-    give continue-plus of new-node, right.cursor
+    give continue-plus of new-node, right.cursor, known
   else:
     give { node: node, cursor: cursor }
 
-to parse-plus of cursor:
-  left = parse-additive of cursor
-  give continue-plus of left.node, left.cursor
+to parse-plus of cursor, known:
+  left = parse-additive of cursor, known
+  give continue-plus of left.node, left.cursor, known
 
-to continue-comparison of node, cursor:
+to continue-comparison of node, cursor, known:
   t = current of cursor
   is-cmp = t.kind == "OP" and (is-additive-or-comparison-op of t.text) and not (is-additive-op of t.text)
   if is-cmp:
-    right = parse-plus of (advance of cursor)
+    right = parse-plus of (advance of cursor), known
     new-node = { kind: "BinOp", op: t.text, left: node, right: right.node }
-    give continue-comparison of new-node, right.cursor
+    give continue-comparison of new-node, right.cursor, known
   else:
     if t.kind == "IN":
-      right = parse-plus of (advance of cursor)
+      right = parse-plus of (advance of cursor), known
       new-node = { kind: "BinOp", op: "in", left: node, right: right.node }
-      give continue-comparison of new-node, right.cursor
+      give continue-comparison of new-node, right.cursor, known
     else:
       is-is-nothing = t.kind == "NAME" and t.text == "is" and (peek-at of cursor, 1).kind == "NOTHING"
       if is-is-nothing:
         after-is = advance of cursor
         after-nothing = advance of after-is
         new-node = { kind: "IsNothing", expr: node }
-        give continue-comparison of new-node, after-nothing
+        give continue-comparison of new-node, after-nothing, known
       else:
         give { node: node, cursor: cursor }
 
 to is-additive-op of txt:
   give txt == "+" or txt == "-"
 
-to parse-comparison of cursor:
-  left = parse-plus of cursor
-  give continue-comparison of left.node, left.cursor
+to parse-comparison of cursor, known:
+  left = parse-plus of cursor, known
+  give continue-comparison of left.node, left.cursor, known
 
-to parse-not of cursor:
+to parse-not of cursor, known:
   if tok-at of cursor, "NOT":
-    inner = parse-not of (advance of cursor)
+    inner = parse-not of (advance of cursor), known
     give { node: { kind: "Not", expr: inner.node }, cursor: inner.cursor }
   else:
-    give parse-comparison of cursor
+    give parse-comparison of cursor, known
 
-to continue-and of node, cursor:
+to continue-and of node, cursor, known:
   if tok-at of cursor, "AND":
-    right = parse-not of (advance of cursor)
+    right = parse-not of (advance of cursor), known
     new-node = { kind: "BinOp", op: "and", left: node, right: right.node }
-    give continue-and of new-node, right.cursor
+    give continue-and of new-node, right.cursor, known
   else:
     give { node: node, cursor: cursor }
 
-to parse-and of cursor:
-  left = parse-not of cursor
-  give continue-and of left.node, left.cursor
+to parse-and of cursor, known:
+  left = parse-not of cursor, known
+  give continue-and of left.node, left.cursor, known
 
-to continue-or of node, cursor:
+to continue-or of node, cursor, known:
   if tok-at of cursor, "OR":
-    right = parse-and of (advance of cursor)
+    right = parse-and of (advance of cursor), known
     new-node = { kind: "BinOp", op: "or", left: node, right: right.node }
-    give continue-or of new-node, right.cursor
+    give continue-or of new-node, right.cursor, known
   else:
     give { node: node, cursor: cursor }
 
-to parse-or of cursor:
-  left = parse-and of cursor
-  give continue-or of left.node, left.cursor
+to parse-or of cursor, known:
+  left = parse-and of cursor, known
+  give continue-or of left.node, left.cursor, known
 
 # ================================================================ the statement walker (Phase 3)
 #
@@ -827,7 +1413,8 @@ to parse-or of cursor:
 # loop purely as a safe upper bound on iteration count (every statement
 # consumes at least one token, so token-count iterations is always
 # enough) -- its values are ignored; `program-step` reads the real
-# position from `state.cursor`. Ladder so far: assignment, show.
+# position from `state.cursor`. `known` (the name table) rides in the
+# state record alongside `tokens`, threaded into every statement parser.
 
 to program-step of state, ignored-token:
   if state.done:
@@ -835,15 +1422,15 @@ to program-step of state, ignored-token:
   else:
     t = current of state.cursor
     if t.kind == "EOF":
-      give { out: state.out, cursor: state.cursor, done: true, tokens: state.tokens }
+      give { out: state.out, cursor: state.cursor, done: true, tokens: state.tokens, known: state.known }
     else:
       is-skippable = t.kind == "EOL" or t.kind == "END" or (t.kind == "OP" and t.text == ";")
       if is-skippable:
-        give { out: state.out, cursor: (advance of state.cursor), done: false, tokens: state.tokens }
+        give { out: state.out, cursor: (advance of state.cursor), done: false, tokens: state.tokens, known: state.known }
       else:
-        result = parse-statement of state.cursor, state.tokens
+        result = parse-statement of state.cursor, state.tokens, state.known
         new-out = state.out plus result.node
-        give { out: new-out, cursor: result.cursor, done: false, tokens: state.tokens }
+        give { out: new-out, cursor: result.cursor, done: false, tokens: state.tokens, known: state.known }
 
 to run-program of state, tokens:
   result = state
@@ -870,15 +1457,15 @@ to block-step of state, ignored-token:
     t = current of state.cursor
     is-stop = t.kind == "EOF" or t.kind == "END"
     if is-stop:
-      give { out: state.out, cursor: state.cursor, done: true, tokens: state.tokens }
+      give { out: state.out, cursor: state.cursor, done: true, tokens: state.tokens, known: state.known }
     else:
       is-skippable = t.kind == "EOL" or (t.kind == "OP" and t.text == ";")
       if is-skippable:
-        give { out: state.out, cursor: (advance of state.cursor), done: false, tokens: state.tokens }
+        give { out: state.out, cursor: (advance of state.cursor), done: false, tokens: state.tokens, known: state.known }
       else:
-        result = parse-statement of state.cursor, state.tokens
+        result = parse-statement of state.cursor, state.tokens, state.known
         new-out = state.out plus result.node
-        give { out: new-out, cursor: result.cursor, done: false, tokens: state.tokens }
+        give { out: new-out, cursor: result.cursor, done: false, tokens: state.tokens, known: state.known }
 
 to run-block of state, tokens:
   result = state
@@ -886,22 +1473,22 @@ to run-block of state, tokens:
     result = block-step of result, t
   give result
 
-to parse-block-body of cursor, tokens:
-  initial = { out: [], cursor: cursor, done: false, tokens: tokens }
+to parse-block-body of cursor, tokens, known:
+  initial = { out: [], cursor: cursor, done: false, tokens: tokens, known: known }
   give run-block of initial, tokens
 
 # `<expr> ':' <block>` -- an indented BEGIN...END block, or a single
 # inline statement on the same line (parser.py's own parse_block, both
 # forms).
-to parse-block of cursor, tokens:
+to parse-block of cursor, tokens, known:
   if tok-at of cursor, "EOL":
     after-eol = advance of cursor
     begin-expect = expect-kind of after-eol, "BEGIN"
-    body = parse-block-body of begin-expect.cursor, tokens
+    body = parse-block-body of begin-expect.cursor, tokens, known
     end-try = try-accept of body.cursor, "END"
     give { stmts: body.out, cursor: end-try.cursor }
   else:
-    single = parse-statement of cursor, tokens
+    single = parse-statement of cursor, tokens, known
     give { stmts: [single.node], cursor: single.cursor }
 
 to skip-blank of cursor:
@@ -919,20 +1506,20 @@ to skip-blank of cursor:
 # skip_blank/restore. Skipped tokens are NOT kept if there is no
 # `else`: the original cursor is returned, leaving them for the
 # enclosing block-walker's own EOL handling.
-to parse-optional-else of cursor, tokens:
+to parse-optional-else of cursor, tokens, known:
   after-blank = skip-blank of cursor
   is-else = tok-at of after-blank, "ELSE"
   if is-else:
     colon-expect = expect-op of (advance of after-blank), ":"
-    give parse-block of colon-expect.cursor, tokens
+    give parse-block of colon-expect.cursor, tokens, known
   else:
     give { stmts: [], cursor: cursor }
 
-to parse-if of cursor, tokens:
-  cond-result = parse-or of (advance of cursor)
+to parse-if of cursor, tokens, known:
+  cond-result = parse-or of (advance of cursor), known
   colon-expect = expect-op of cond-result.cursor, ":"
-  then-result = parse-block of colon-expect.cursor, tokens
-  els-result = parse-optional-else of then-result.cursor, tokens
+  then-result = parse-block of colon-expect.cursor, tokens, known
+  els-result = parse-optional-else of then-result.cursor, tokens, known
   node = { kind: "If", cond: cond-result.node, then: then-result.stmts, els: els-result.stmts }
   give { node: node, cursor: els-result.cursor }
 
@@ -971,57 +1558,57 @@ to collect-params of cursor:
   first-param = expect-kind of cursor, "NAME"
   give collect-more-params of first-param.cursor, [first-param.token.text]
 
-to parse-funcdef of cursor, tokens:
+to parse-funcdef of cursor, tokens, known:
   first-name = expect-kind of (advance of cursor), "NAME"
   remaining = collect-name-parts of first-name.cursor, [first-name.token.text]
   name = join-with-spaces of remaining.parts
   of-try = try-accept of remaining.cursor, "OF"
   if of-try.matched:
     params-result = collect-params of of-try.cursor
-    give finish-funcdef of name, params-result.params, params-result.cursor, tokens
+    give finish-funcdef of name, params-result.params, params-result.cursor, tokens, known
   else:
-    give finish-funcdef of name, [], remaining.cursor, tokens
+    give finish-funcdef of name, [], remaining.cursor, tokens, known
 
-to finish-funcdef of name, params, cursor, tokens:
+to finish-funcdef of name, params, cursor, tokens, known:
   colon-expect = expect-op of cursor, ":"
-  body = parse-block of colon-expect.cursor, tokens
+  body = parse-block of colon-expect.cursor, tokens, known
   node = { kind: "FuncDef", name: name, params: params, body: body.stmts }
   give { node: node, cursor: body.cursor }
 
-to parse-statement of cursor, tokens:
+to parse-statement of cursor, tokens, known:
   t = current of cursor
   next = peek-at of cursor, 1
   is-assign = t.kind == "NAME" and next.kind == "OP" and next.text == "="
   is-funcdef = t.kind == "TO" and next.kind == "NAME"
   if is-assign:
-    give parse-assign of t.text, cursor
+    give parse-assign of t.text, cursor, known
   else:
     if t.kind == "SHOW":
-      give parse-show of t.line, cursor
+      give parse-show of t.line, cursor, known
     else:
       if t.kind == "IF":
-        give parse-if of cursor, tokens
+        give parse-if of cursor, tokens, known
       else:
         if is-funcdef:
-          give parse-funcdef of cursor, tokens
+          give parse-funcdef of cursor, tokens, known
         else:
           if t.kind == "GIVE":
-            give parse-give of cursor
+            give parse-give of cursor, known
           else:
             if t.kind == "FOR":
-              give parse-foreach of cursor, tokens
+              give parse-foreach of cursor, tokens, known
             else:
               if t.kind == "USE":
-                give parse-use of cursor
+                give parse-use of cursor, known
               else:
                 if t.kind == "LET":
-                  give parse-let of cursor
+                  give parse-let of cursor, known
                 else:
                   msg = "line " + (text of t.line) + ": unsupported statement (Phase 3 ladder not yet reached), found '" + t.text + "'"
                   fail msg as parse-error
 
-to parse-give of cursor:
-  result = parse-or of (advance of cursor)
+to parse-give of cursor, known:
+  result = parse-or of (advance of cursor), known
   give { node: { kind: "Give", expr: result.node }, cursor: result.cursor }
 
 # `for each name in source [where cond]: body` -- the statement form only
@@ -1029,70 +1616,76 @@ to parse-give of cursor:
 # used only from expression context is out of this build's scope, same
 # as list/record literals in Phase 2).
 
-to parse-optional-where of cursor:
+to parse-optional-where of cursor, known:
   if tok-at of cursor, "WHERE":
-    result = parse-or of (advance of cursor)
+    result = parse-or of (advance of cursor), known
     give { node: result.node, cursor: result.cursor }
   else:
     give { node: nothing, cursor: cursor }
 
-to parse-foreach of cursor, tokens:
+to parse-foreach of cursor, tokens, known:
   each-expect = expect-kind of (advance of cursor), "EACH"
   var-expect = expect-kind of each-expect.cursor, "NAME"
   in-expect = expect-kind of var-expect.cursor, "IN"
-  source-result = parse-or of in-expect.cursor
-  where-result = parse-optional-where of source-result.cursor
+  source-result = parse-or of in-expect.cursor, known
+  where-result = parse-optional-where of source-result.cursor, known
   colon-expect = expect-op of where-result.cursor, ":"
-  body = parse-block of colon-expect.cursor, tokens
+  body = parse-block of colon-expect.cursor, tokens, known
   node = { kind: "ForEach", var: var-expect.token.text, source: source-result.node, where: where-result.node, body: body.stmts, is-expr: false }
   give { node: node, cursor: body.cursor }
 
-# `use module [with old as new [with old as new ...]]`. Amber site 4
-# (check_rename_name_ambiguity) is out of scope here, same as every
-# other amber site (section 7 invariant 3).
+# `use module [with old as new [with old as new ...]]`. Site 4
+# (check_rename_name_ambiguity) checks the `old` half of each rename: it is
+# a lookup against the module's exported names (via the name table), so a
+# shorter exported prefix is a real second reading. `new` is not a lookup
+# (the alias is introduced right here) and is not checked. read-multiword-
+# name keeps the split words so the check needs no string split. The `with`
+# token's line is threaded so the refusal cites the same line parser.py's
+# `with_tok.line` does.
 
 to read-multiword-name of cursor:
   result = collect-name-parts of cursor, []
-  give { text: (join-with-spaces of result.parts), cursor: result.cursor }
+  give { text: (join-with-spaces of result.parts), parts: result.parts, cursor: result.cursor }
 
-to collect-renames of cursor, acc:
+to collect-renames of cursor, acc, known, with-line:
   old-result = read-multiword-name of cursor
+  guard = check-rename-name-ambiguity of known, old-result.parts, old-result.text, with-line
   as-expect = expect-kind of old-result.cursor, "AS"
   new-result = read-multiword-name of as-expect.cursor
   pair = { old: old-result.text, new: new-result.text }
   new-acc = acc plus pair
   with-try = try-accept of new-result.cursor, "WITH"
   if with-try.matched:
-    give collect-renames of with-try.cursor, new-acc
+    give collect-renames of with-try.cursor, new-acc, known, with-try.token.line
   else:
     give { renames: new-acc, cursor: new-result.cursor }
 
-to parse-use of cursor:
+to parse-use of cursor, known:
   module-expect = expect-kind of (advance of cursor), "NAME"
   with-try = try-accept of module-expect.cursor, "WITH"
   if with-try.matched:
-    renames-result = collect-renames of with-try.cursor, []
+    renames-result = collect-renames of with-try.cursor, [], known, with-try.token.line
     node = { kind: "Use", module: module-expect.token.text, renames: renames-result.renames }
     give { node: node, cursor: renames-result.cursor }
   else:
     node = { kind: "Use", module: module-expect.token.text, renames: [] }
     give { node: node, cursor: module-expect.cursor }
 
-to parse-assign of name, cursor:
+to parse-assign of name, cursor, known:
   after-eq = advance of (advance of cursor)
-  result = parse-or of after-eq
+  result = parse-or of after-eq, known
   node = { kind: "Assign", name: name, expr: result.node, is-let: false }
   give { node: node, cursor: result.cursor }
 
-to parse-let of cursor:
+to parse-let of cursor, known:
   name-expect = expect-kind of (advance of cursor), "NAME"
   eq-expect = expect-op of name-expect.cursor, "="
-  result = parse-or of eq-expect.cursor
+  result = parse-or of eq-expect.cursor, known
   node = { kind: "Assign", name: name-expect.token.text, expr: result.node, is-let: true }
   give { node: node, cursor: result.cursor }
 
-to parse-show of line, cursor:
-  result = parse-or of (advance of cursor)
+to parse-show of line, cursor, known:
+  result = parse-or of (advance of cursor), known
   node = { kind: "Show", expr: result.node, line: line }
   give { node: node, cursor: result.cursor }
 
@@ -1100,7 +1693,8 @@ to parse-show of line, cursor:
 
 to canonical-of-expr-source of src:
   toks = tokenize of src
-  result = parse-or of toks
+  known = build-known of toks
+  result = parse-or of toks, known
   give canonical-of-node of result.node, ""
 
 to canonical-of-program of nodes:
@@ -1111,6 +1705,7 @@ to canonical-of-program of nodes:
 
 to canonical-of-program-source of src:
   toks = tokenize of src
-  initial = { out: [], cursor: toks, done: false, tokens: toks }
+  known = build-known of toks
+  initial = { out: [], cursor: toks, done: false, tokens: toks, known: known }
   final = run-program of initial, toks
   give canonical-of-program of final.out
