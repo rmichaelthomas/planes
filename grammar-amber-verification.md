@@ -27,6 +27,8 @@ Verification gate for grammar-as-data-and-scoped-amber (addendum v4.2 §69.1, §
 | PASS | 'with (record update)' reports BUILT with an openable pointer |  |
 | PASS | 'plus (list append)' reports BUILT with an openable pointer |  |
 | PASS | 'normalize builtin' reports BUILT with an openable pointer |  |
+| PASS | 'join builtin' reports BUILT with an openable pointer |  |
+| PASS | 'rest builtin' reports BUILT with an openable pointer |  |
 | PASS | 'when shape-dispatch' reports BUILT with an openable pointer |  |
 
 ## D. Projection inertness (blocking)
@@ -89,15 +91,15 @@ Verification gate for grammar-as-data-and-scoped-amber (addendum v4.2 §69.1, §
 
 | Result | Check | Detail |
 |---|---|---|
-| PASS | full suite passes, 603 tests (baseline was 481 pre-build) |  |
-| PASS | ruff check . is clean | All checks passed!<br> |
-| PASS | mypy . is clean | Success: no issues found in 45 source files<br> |
+| PASS | full suite passes, 669 tests (baseline was 481 pre-build) |  |
+| FAIL | ruff check . is clean |  |
+| FAIL | mypy . is clean |  |
 
 ## I. Benchmarks (reported, not blocking unless >25%)
 
 | Result | Check | Detail |
 |---|---|---|
-| PASS | no file more than 25% slower (worst: +19.7%) |  |
+| PASS | no file more than 25% slower (worst: +16.5%) |  |
 
-**Blocking sections (A, C, D, E, H): PASS**
-**All sections: PASS**
+**Blocking sections (A, C, D, E, H): FAIL**
+**All sections: FAIL**

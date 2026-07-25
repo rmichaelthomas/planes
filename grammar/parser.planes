@@ -384,33 +384,33 @@ to canonical-of-node of node, indent:
 
 # ================================================================ the cursor
 #
-# capability 4 (PROBE_PARSER.md): no `rest`/`drop`/index exists for a
-# Planes list (#11), so a forward-walking cursor is a cons-list of
-# records built once via to-cons -- `.rest` is plain field access, not
-# indexing. Safe at fragment scale (well under the ~140-deep ceiling
-# unreverse recurses at, per-item); Phase 3/4 revisit whether it stays
-# safe at whole-file scale.
-
-to reverse-into of items, acc:
-  result = acc
-  for each x in items:
-    result = { head: x, rest: result }
-  give unreverse of result, nothing
-
-to unreverse of node, acc:
-  if node is nothing:
-    give acc
-  else:
-    give unreverse of node.rest, { head: node.head, rest: acc }
-
-to to-cons of items:
-  give reverse-into of items, nothing
+# A cursor is the remaining token list -- nothing more (S3a ruling A.1).
+# `rest of xs` (S2) is the advance, so the cons-list machinery that used
+# to stand in for it -- to-cons / reverse-into / unreverse -- retires
+# entirely. It existed only to give a forward-walking handle back when no
+# `rest` builtin existed, and its per-token `unreverse` recursion was the
+# construction ceiling every long file hit (one frame per token: 140 deep
+# before S2, 245 after, and status_threading.planes at 577 tokens still
+# hit it). With `rest`, cursor construction costs zero Planes-level
+# recursion at any file length. `advance` clamps at the final token (the
+# EOF the tokenizer always appends) so a peek past the end returns EOF --
+# exactly as parser.py's own peek() clamps -- which also means `rest` is
+# never called on an empty list (`rest of []` raises, S2 A.3).
 
 to current of cursor:
-  give cursor.head
+  # the first remaining token; `first 1 of` yields a one-element list,
+  # unwrapped by a single for-each pass (one iteration, no recursion).
+  result = nothing
+  for each t in (first 1 of cursor):
+    result = t
+  give result
 
 to advance of cursor:
-  give cursor.rest
+  remaining = rest of cursor
+  if count of remaining == 0:
+    give cursor
+  else:
+    give remaining
 
 to peek-at of cursor, k:
   if k == 0:
@@ -1100,8 +1100,7 @@ to parse-show of line, cursor:
 
 to canonical-of-expr-source of src:
   toks = tokenize of src
-  cursor = to-cons of toks
-  result = parse-or of cursor
+  result = parse-or of toks
   give canonical-of-node of result.node, ""
 
 to canonical-of-program of nodes:
@@ -1112,7 +1111,6 @@ to canonical-of-program of nodes:
 
 to canonical-of-program-source of src:
   toks = tokenize of src
-  cursor = to-cons of toks
-  initial = { out: [], cursor: cursor, done: false, tokens: toks }
+  initial = { out: [], cursor: toks, done: false, tokens: toks }
   final = run-program of initial, toks
   give canonical-of-program of final.out
