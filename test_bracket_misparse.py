@@ -16,12 +16,17 @@ something else.
 """
 import sys
 
+from interp import Interpreter
 from parser import PlanesSyntaxError, parse
 
 
 def parses(src):
     parse(src)
     return True
+
+
+def outputs(src):
+    return Interpreter().run(src)
 
 
 def raises_bracket_error(src):
@@ -105,6 +110,65 @@ def test_bracketed_rule_name_still_parses():
     """Statement-level `[name]` in `rule [...]` is a different grammar
     position (parse_rule, not parse_primary) and must be unaffected."""
     assert parses('rule [no-network] anything may not ask\n')
+
+
+# ================================================ S2 §4: multi-line literals in a body
+
+# The defect (REPORT_SELFHOST_SWEEP.md §10): a multi-line record or list
+# literal parses at top level but truncates the block when it sits inside an
+# indented function body. The literal's continuation line raises the
+# indentation, so the tokenizer emits a BEGIN the bracket parser consumes and
+# a matching END that leaks to the block level, where parse_block (unlike
+# parse_program) mistakes it for the block's close — so `give` falls outside
+# the function and the binding is lost. It parses without error; the damage is
+# a wrong block structure, so these run the program rather than only parse it.
+
+def test_multiline_record_literal_inside_a_function_body():
+    src = ('to mk of n:\n'
+           '  r = { a: 1,\n'
+           '        b: 2 }\n'
+           '  give r\n'
+           'show (mk of 5).b\n')
+    assert outputs(src) == ["2"], "the block must keep `give r`; it was truncated"
+
+
+def test_multiline_list_literal_inside_a_function_body():
+    src = ('to mk of n:\n'
+           '  xs = [1,\n'
+           '        2,\n'
+           '        3]\n'
+           '  give xs\n'
+           'show count of (mk of 0)\n')
+    assert outputs(src) == ["3"]
+
+
+def test_statement_after_a_multiline_literal_in_a_body_still_runs():
+    # The give is not the only casualty: any statement after the literal was
+    # dropped from the block. Here a second binding must survive.
+    src = ('to mk of n:\n'
+           '  r = { a: 1,\n'
+           '        b: 2 }\n'
+           '  doubled = r.b + r.b\n'
+           '  give doubled\n'
+           'show mk of 0\n')
+    assert outputs(src) == ["4"]
+
+
+def test_multiline_nested_record_inside_a_function_body():
+    src = ('to mk of n:\n'
+           '  r = { outer: { x: 1 },\n'
+           '        y: 2 }\n'
+           '  give r.y\n'
+           'show mk of 0\n')
+    assert outputs(src) == ["2"]
+
+
+def test_multiline_record_at_top_level_still_works():
+    # Regression guard: the top-level case worked before and must still work.
+    src = ('r = { a: 1,\n'
+           '      b: 2 }\n'
+           'show r.b\n')
+    assert outputs(src) == ["2"]
 
 
 # ================================================================ full corpus: zero regressions

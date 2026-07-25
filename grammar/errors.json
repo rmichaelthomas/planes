@@ -595,7 +595,7 @@
       "id": "parser.planessyntaxerror-site-1",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:309",
+      "source": "parser.py:343",
       "raised_in": "read_effect_word",
       "template": "line {t.line}: expected an effect name after {after}, found '{t.value or 'end of line'}'",
       "slots": [
@@ -608,7 +608,7 @@
       "id": "parser.planessyntaxerror-site-2",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:570",
+      "source": "parser.py:604",
       "raised_in": "parse_note_entry",
       "template": "line {g.line}: unrecognised entry in a note, found '{g.value or 'end of line'}'\n  try: from \"source\"  or  derives-from [rule-name]",
       "slots": [
@@ -620,7 +620,7 @@
       "id": "parser.planesambiguity-site-1",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:775",
+      "source": "parser.py:809",
       "raised_in": "check_rename_name_ambiguity",
       "template": null,
       "slots": [],
@@ -631,7 +631,7 @@
       "id": "parser.planesambiguity-site-2",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:834",
+      "source": "parser.py:868",
       "raised_in": "raise_amber_multiword",
       "template": null,
       "slots": [],
@@ -642,7 +642,7 @@
       "id": "parser.planesambiguity-site-3",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:844",
+      "source": "parser.py:878",
       "raised_in": "raise_amber_juxtaposition",
       "template": null,
       "slots": [],
@@ -653,7 +653,7 @@
       "id": "parser.planesambiguity-site-4",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:854",
+      "source": "parser.py:888",
       "raised_in": "raise_amber_juxtaposition_unknown",
       "template": null,
       "slots": [],
@@ -664,7 +664,7 @@
       "id": "parser.planesambiguity-site-5",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:908",
+      "source": "parser.py:942",
       "raised_in": "check_paren_arglist_ambiguity",
       "template": null,
       "slots": [],
@@ -675,7 +675,7 @@
       "id": "parser.planessyntaxerror-site-3",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1164",
+      "source": "parser.py:1198",
       "raised_in": "parse_primary",
       "template": "line {t.line}: expected a value, found '{t.value or 'end of line'}'",
       "slots": [
@@ -687,7 +687,7 @@
       "id": "parser.planessyntaxerror-site-4",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:100",
+      "source": "parser.py:110",
       "raised_in": "expect",
       "template": "line {g.line}: expected {value or kind.lower()}, found '{g.value or 'end of line'}'",
       "slots": [
@@ -700,7 +700,7 @@
       "id": "parser.planessyntaxerror-site-5",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:291",
+      "source": "parser.py:325",
       "raised_in": "read_claim",
       "template": "line {g.line}: '{g.value}' is not a parameter of this function, so it cannot be where '{kind}' goes\n  parameters: {', '.join(params) or 'none'}",
       "slots": [
@@ -714,7 +714,7 @@
       "id": "parser.planessyntaxerror-site-6",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:326",
+      "source": "parser.py:360",
       "raised_in": "parse_rule",
       "template": "line {g.line}: a rule needs a bracketed name, found '{g.value or 'end of line'}'\n  try: rule [name-here] subject may not effect-kind",
       "slots": [
@@ -726,7 +726,7 @@
       "id": "parser.planessyntaxerror-site-7",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:333",
+      "source": "parser.py:367",
       "raised_in": "parse_rule",
       "template": "line {g.line}: a rule's bracketed name must be a word, found '{g.value or 'end of line'}'\n  try: rule [name-here] subject may not effect-kind",
       "slots": [
@@ -738,7 +738,7 @@
       "id": "parser.planessyntaxerror-site-8",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:344",
+      "source": "parser.py:378",
       "raised_in": "parse_rule",
       "template": "line {g.line}: expected 'may not' or 'may' after a rule's subject, found '{g.value or 'end of line'}'\n  try: rule [{name}] {subject} may not effect-kind  (forbid)\n    or: rule [{name}] {subject} may effect-kind  (permit)",
       "slots": [
@@ -754,7 +754,7 @@
       "id": "parser.planessyntaxerror-site-9",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:362",
+      "source": "parser.py:396",
       "raised_in": "parse_rule",
       "template": "line {kind_tok.line}: '{kind}' is not an effect kind a rule can name\n  valid kinds: {', '.join(sorted(EFFECT_KINDS))}",
       "slots": [
@@ -767,7 +767,7 @@
       "id": "parser.planessyntaxerror-site-10",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:516",
+      "source": "parser.py:550",
       "raised_in": "finish_because",
       "template": "line {g.line}: 'because' needs a quoted reason\n  try: cap = 200 because \"the reason\"",
       "slots": [
@@ -778,7 +778,7 @@
       "id": "parser.planessyntaxerror-site-11",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:628",
+      "source": "parser.py:662",
       "raised_in": "parse_with_field",
       "template": "line {t.line}: expected a field name, found '{t.value or 'end of line'}'\n  try: with name: value",
       "slots": [
@@ -790,7 +790,7 @@
       "id": "parser.planessyntaxerror-site-12",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:725",
+      "source": "parser.py:759",
       "raised_in": "parse_postfix",
       "template": "line {g.line}: '[' has no meaning here \u2014 Planes has no index or slice syntax\n  try: first n of x \u2014 takes the first n code points or items; there is no way to take one position or a range",
       "slots": [
@@ -801,7 +801,7 @@
       "id": "parser.planessyntaxerror-site-13",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:749",
+      "source": "parser.py:783",
       "raised_in": "read_multiword_name",
       "template": "line {g.line}: expected a name, found '{g.value or 'end of line'}'",
       "slots": [
@@ -813,7 +813,7 @@
       "id": "parser.planesambiguity-site-6",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:896",
+      "source": "parser.py:930",
       "raised_in": "check_paren_arglist_ambiguity",
       "template": null,
       "slots": [],
@@ -824,7 +824,7 @@
       "id": "parser.planessyntaxerror-site-14",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:997",
+      "source": "parser.py:1031",
       "raised_in": "parse_when_pattern_entry",
       "template": "line {t.line}: expected a field name, found '{t.value or 'end of line'}'\n  try: { name: value }  or  { name }",
       "slots": [
@@ -836,7 +836,7 @@
       "id": "parser.planessyntaxerror-site-15",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1214",
+      "source": "parser.py:1248",
       "raised_in": "prescan_funcs",
       "template": "line {tokens[i + 1].line}: '{tokens[i + 1].value}' is a reserved word and cannot start a function name\n  reserved: {', '.join(sorted(KEYWORDS))}",
       "slots": [
@@ -849,7 +849,7 @@
       "id": "parser.planessyntaxerror-site-16",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1222",
+      "source": "parser.py:1256",
       "raised_in": "prescan_funcs",
       "template": "line {tokens[j].line}: '{tokens[j].value}' is a reserved word and cannot appear in the function name '{' '.join(parts)} {tokens[j].value}'\n  reserved: {', '.join(sorted(KEYWORDS))}",
       "slots": [
@@ -864,7 +864,7 @@
       "id": "parser.planessyntaxerror-site-17",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:377",
+      "source": "parser.py:411",
       "raised_in": "parse_rule",
       "template": "line {g.line}: 'supersedes' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: {form} supersedes [other-rule-name]",
       "slots": [
@@ -877,7 +877,7 @@
       "id": "parser.planessyntaxerror-site-18",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:384",
+      "source": "parser.py:418",
       "raised_in": "parse_rule",
       "template": "line {g.line}: 'supersedes' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: {form} supersedes [other-rule-name]",
       "slots": [
@@ -890,7 +890,7 @@
       "id": "parser.planessyntaxerror-site-19",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:547",
+      "source": "parser.py:581",
       "raised_in": "parse_note_entry",
       "template": "line {g.line}: 'from' in a note needs a quoted source\n  try: from \"the source\"",
       "slots": [
@@ -901,7 +901,7 @@
       "id": "parser.planessyntaxerror-site-20",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:555",
+      "source": "parser.py:589",
       "raised_in": "parse_note_entry",
       "template": "line {g.line}: 'derives-from' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: derives-from [rule-name]",
       "slots": [
@@ -913,7 +913,7 @@
       "id": "parser.planessyntaxerror-site-21",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:562",
+      "source": "parser.py:596",
       "raised_in": "parse_note_entry",
       "template": "line {g.line}: 'derives-from' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: derives-from [rule-name]",
       "slots": [
@@ -925,7 +925,7 @@
       "id": "parser.planessyntaxerror-site-22",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:946",
+      "source": "parser.py:980",
       "raised_in": "parse_record_field",
       "template": "line {t.line}: expected a field name, found '{t.value or 'end of line'}'\n  try: { name: value }",
       "slots": [
@@ -937,7 +937,7 @@
       "id": "parser.planessyntaxerror-site-23",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:396",
+      "source": "parser.py:430",
       "raised_in": "parse_rule",
       "template": "line {at_tok.line}: a fingerprint must be exactly six hex characters after '@', found '{bad.value or 'end of line'}'\n  try: {form} supersedes [{supersedes}] @abcdef \u2014 or omit it for an unverified override",
       "slots": [
@@ -951,7 +951,7 @@
       "id": "parser.planessyntaxerror-site-24",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1063",
+      "source": "parser.py:1097",
       "raised_in": "parse_primary",
       "template": "line {t.line}: field '{k}' appears twice in this record",
       "slots": [
@@ -1264,94 +1264,94 @@
       "lexer.py:195"
     ],
     "parser.planessyntaxerror-site-1": [
-      "parser.py:309"
+      "parser.py:343"
     ],
     "parser.planessyntaxerror-site-2": [
-      "parser.py:570"
+      "parser.py:604"
     ],
     "parser.planesambiguity-site-1": [
-      "parser.py:775"
+      "parser.py:809"
     ],
     "parser.planesambiguity-site-2": [
-      "parser.py:834"
+      "parser.py:868"
     ],
     "parser.planesambiguity-site-3": [
-      "parser.py:844"
+      "parser.py:878"
     ],
     "parser.planesambiguity-site-4": [
-      "parser.py:854"
+      "parser.py:888"
     ],
     "parser.planesambiguity-site-5": [
-      "parser.py:908"
+      "parser.py:942"
     ],
     "parser.planessyntaxerror-site-3": [
-      "parser.py:1164"
+      "parser.py:1198"
     ],
     "parser.planessyntaxerror-site-4": [
-      "parser.py:100"
+      "parser.py:110"
     ],
     "parser.planessyntaxerror-site-5": [
-      "parser.py:291"
+      "parser.py:325"
     ],
     "parser.planessyntaxerror-site-6": [
-      "parser.py:326"
+      "parser.py:360"
     ],
     "parser.planessyntaxerror-site-7": [
-      "parser.py:333"
+      "parser.py:367"
     ],
     "parser.planessyntaxerror-site-8": [
-      "parser.py:344"
+      "parser.py:378"
     ],
     "parser.planessyntaxerror-site-9": [
-      "parser.py:362"
-    ],
-    "parser.planessyntaxerror-site-10": [
-      "parser.py:516"
-    ],
-    "parser.planessyntaxerror-site-11": [
-      "parser.py:628"
-    ],
-    "parser.planessyntaxerror-site-12": [
-      "parser.py:725"
-    ],
-    "parser.planessyntaxerror-site-13": [
-      "parser.py:749"
-    ],
-    "parser.planesambiguity-site-6": [
-      "parser.py:896"
-    ],
-    "parser.planessyntaxerror-site-14": [
-      "parser.py:997"
-    ],
-    "parser.planessyntaxerror-site-15": [
-      "parser.py:1214"
-    ],
-    "parser.planessyntaxerror-site-16": [
-      "parser.py:1222"
-    ],
-    "parser.planessyntaxerror-site-17": [
-      "parser.py:377"
-    ],
-    "parser.planessyntaxerror-site-18": [
-      "parser.py:384"
-    ],
-    "parser.planessyntaxerror-site-19": [
-      "parser.py:547"
-    ],
-    "parser.planessyntaxerror-site-20": [
-      "parser.py:555"
-    ],
-    "parser.planessyntaxerror-site-21": [
-      "parser.py:562"
-    ],
-    "parser.planessyntaxerror-site-22": [
-      "parser.py:946"
-    ],
-    "parser.planessyntaxerror-site-23": [
       "parser.py:396"
     ],
+    "parser.planessyntaxerror-site-10": [
+      "parser.py:550"
+    ],
+    "parser.planessyntaxerror-site-11": [
+      "parser.py:662"
+    ],
+    "parser.planessyntaxerror-site-12": [
+      "parser.py:759"
+    ],
+    "parser.planessyntaxerror-site-13": [
+      "parser.py:783"
+    ],
+    "parser.planesambiguity-site-6": [
+      "parser.py:930"
+    ],
+    "parser.planessyntaxerror-site-14": [
+      "parser.py:1031"
+    ],
+    "parser.planessyntaxerror-site-15": [
+      "parser.py:1248"
+    ],
+    "parser.planessyntaxerror-site-16": [
+      "parser.py:1256"
+    ],
+    "parser.planessyntaxerror-site-17": [
+      "parser.py:411"
+    ],
+    "parser.planessyntaxerror-site-18": [
+      "parser.py:418"
+    ],
+    "parser.planessyntaxerror-site-19": [
+      "parser.py:581"
+    ],
+    "parser.planessyntaxerror-site-20": [
+      "parser.py:589"
+    ],
+    "parser.planessyntaxerror-site-21": [
+      "parser.py:596"
+    ],
+    "parser.planessyntaxerror-site-22": [
+      "parser.py:980"
+    ],
+    "parser.planessyntaxerror-site-23": [
+      "parser.py:430"
+    ],
     "parser.planessyntaxerror-site-24": [
-      "parser.py:1063"
+      "parser.py:1097"
     ],
     "rules.rulenotsupported-site-1": [
       "rules.py:304"

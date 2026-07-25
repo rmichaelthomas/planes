@@ -75,6 +75,16 @@ class Parser:
     def __init__(self, tokens):
         self.toks = tokens
         self.i = 0
+        # A multi-line bracket literal raises the indentation on its
+        # continuation lines, so the tokenizer (which is oblivious to bracket
+        # nesting) emits a BEGIN inside the brackets whose matching END lands
+        # AFTER the closing bracket, at the enclosing block level. skip_bracket_ws
+        # consumes the BEGIN but the END leaks; parse_block would mistake it
+        # for the block's own close and drop every statement after the literal.
+        # This counts the leaked ENDs owed so skip_blank can absorb them
+        # before the block sees them. Zero for any program without a
+        # bracket literal that wraps across an indent.
+        self.pending_ends = 0
 
     # ---- token helpers
 
@@ -103,8 +113,17 @@ class Parser:
         return t
 
     def skip_blank(self):
+        # Common path first, unchanged and hot: skip blank separators. Then,
+        # only when a multi-line bracket literal has left an END owed (rare —
+        # `pending_ends` is 0 for any program without one), absorb it before
+        # it can be mistaken for a block close (see __init__/skip_bracket_ws).
         while self.accept("EOL") or self.accept("OP", ";"):
             pass
+        while self.pending_ends > 0 and self.at("END"):
+            self.accept("END")
+            self.pending_ends -= 1
+            while self.accept("EOL") or self.accept("OP", ";"):
+                pass
 
     def skip_bracket_ws(self):
         """Blank tokens inside `[...]` / `{...}`.
@@ -113,10 +132,25 @@ class Parser:
         bracket nesting — a literal spanning indented lines picks up BEGIN
         and END tokens that mean nothing here (brackets already carry the
         structure). Consume them along with EOL/`;` so a literal can wrap
-        across lines the way a person writing one down would."""
-        while self.accept("EOL") or self.accept("OP", ";") \
-                or self.accept("BEGIN") or self.accept("END"):
-            pass
+        across lines the way a person writing one down would.
+
+        A BEGIN consumed here has no matching END inside the brackets — that
+        END lands one dedent later, outside the literal, where it would close
+        the enclosing block early. Record each such unmatched BEGIN in
+        `pending_ends` so skip_blank absorbs the leaked END instead."""
+        while True:
+            if self.accept("EOL") or self.accept("OP", ";"):
+                continue
+            if self.accept("BEGIN"):
+                self.pending_ends += 1
+                continue
+            if self.accept("END"):
+                # an END inside the brackets balances a BEGIN we already
+                # counted (a fully-nested indent) — cancel it, don't owe it.
+                if self.pending_ends > 0:
+                    self.pending_ends -= 1
+                continue
+            break
 
     # ---- structure
 
