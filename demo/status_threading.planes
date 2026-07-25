@@ -1,0 +1,113 @@
+# status_threading.planes — the state-record idiom, S2 §A.6, made corpus
+# evidence rather than folklore (the same move that made the association idiom
+# a corpus file at #14).
+#
+# A self-hosted interpreter cannot use host exceptions for `give` and error
+# propagation — Planes has no exceptions and no early exit. Instead every
+# evaluation step takes a status record and returns one:
+#
+#   { status: "normal", value: <result>,  env: <env>, error: nothing }
+#   { status: "give",   value: <given>,   env: <env>, error: nothing }
+#   { status: "fail",   value: nothing,   env: <env>, error: { tag, detail } }
+#
+# All four fields are always present. This toy evaluator over a list-of-record
+# "program" implements all five rules exactly as A.6 specifies them.
+
+# The environment is the association idiom (Phase 1): a list of { name, value }.
+to lookup-env of env, key:
+  found = nothing
+  for each entry in env where entry.name == key:
+    found = entry.value
+  give found
+
+to normal-state of env:
+  give { status: "normal", value: nothing, env: env, error: nothing }
+
+# Rule 5: a step never inspects `value` without first checking `status`.
+# run-stmt is only ever reached from exec-stmt's normal branch, so every
+# read of stmt/state below stands on a checked "normal" status.
+to run-stmt of stmt, state:
+  result = state
+  when stmt is { kind: "bind", name, value }:
+    new-env = state.env plus { name: name, value: value }
+    result = { status: "normal", value: value, env: new-env, error: nothing }
+  else:
+    when stmt is { kind: "give", value }:
+      result = { status: "give", value: value, env: state.env, error: nothing }
+    else:
+      when stmt is { kind: "fail", tag }:
+        the-error = { tag: tag, detail: "" }
+        result = { status: "fail", value: nothing, env: state.env, error: the-error }
+      else:
+        result = state
+  give result
+
+# Rule 1: pass-through is the substitute for early exit. A step that receives
+# a non-normal status returns its input unchanged, evaluating nothing. This is
+# the mechanical heart of the idiom, and it is not optional.
+to exec-stmt of stmt, state:
+  result = state
+  when state is { status: "normal" }:
+    result = run-stmt of stmt, state
+  give result
+
+# Rule 4: the environment rides in the record — not threaded separately. One
+# record carries everything a step produces, so the block just threads it.
+# A block runs to the end of its statement list; after the first non-normal
+# status every remaining step is a pass-through (Rule 1), so nothing happens.
+to exec-block of stmts, state:
+  threaded = state
+  for each stmt in stmts:
+    threaded = exec-stmt of stmt, threaded
+  give threaded
+
+# Rule 2: `give` stops at the function boundary. It propagates up through
+# statement execution until a function application receives it, at which point
+# the function's result is the value and the status resets to "normal" for the
+# caller. `give` never escapes past the function that issued it.
+to apply-function of body, state:
+  after = exec-block of body, state
+  result = after
+  when after is { status: "give" }:
+    result = { status: "normal", value: after.value, env: state.env, error: nothing }
+  give result
+
+# Rule 3: `fail` does NOT stop at the function boundary. It propagates outward
+# through every frame until `or fail as` catches it, which resets the status
+# to "normal" and yields the { tag, detail } record as the value.
+to or-fail of body, state:
+  after = apply-function of body, state
+  result = after
+  when after is { status: "fail" }:
+    result = { status: "normal", value: after.error, env: state.env, error: nothing }
+  give result
+
+start = normal-state of []
+
+# Rule 1, tested hardest: a block whose LATER statement would give a visibly
+# wrong answer if it ran after a non-normal status. `give 1` then `give 999` —
+# the result is 1, proving the second give never ran.
+give-then-more = [{ kind: "give", value: 1 }, { kind: "give", value: 999 }]
+r1 = apply-function of give-then-more, start
+show "rule 1 — later give never runs:"
+show r1.value
+
+# Rule 2: after a give-returning function, the caller's status is "normal".
+show "rule 2 — status resets at the function boundary:"
+show r1.status
+
+# Rule 3: fail is NOT reset by the function boundary, but or-fail catches it.
+fail-prog = [{ kind: "fail", tag: "boom" }]
+r3-uncaught = apply-function of fail-prog, start
+show "rule 3 — fail survives the function boundary:"
+show r3-uncaught.status
+r3-caught = or-fail of fail-prog, start
+show "rule 3 — or fail resets to normal, value is the error:"
+show r3-caught.status
+show r3-caught.value.tag
+
+# Rule 4: the env rides in the record — bind x, then read it back out.
+bind-prog = [{ kind: "bind", name: "x", value: 42 }]
+r4 = apply-function of bind-prog, start
+show "rule 4 — the env rides in the record:"
+show lookup-env of r4.env, "x"

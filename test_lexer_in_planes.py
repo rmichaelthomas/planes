@@ -84,11 +84,12 @@ def first_divergence(got, want):
 
 # ================================================================ sanity: the corpus split itself
 
-def test_corpus_is_the_30_files_report_grammar_amber_counts():
+def test_corpus_is_the_31_files_report_grammar_amber_counts():
     """29 at REPORT_GRAMMAR_AMBER.md §4; 30 since demo/association.planes
     entered the corpus (fix/recursion-leak-and-fifth-amber-site Phase 3,
-    P-Q15's corpus half)."""
-    assert len(CORPUS) == 30, f"expected 30 corpus files, found {len(CORPUS)}"
+    P-Q15's corpus half); 31 since demo/status_threading.planes entered it
+    (S2 §A.6 / Phase 5, the state-record idiom made corpus evidence)."""
+    assert len(CORPUS) == 31, f"expected 31 corpus files, found {len(CORPUS)}"
 
 
 def test_exactly_two_corpus_files_have_no_string_literal():

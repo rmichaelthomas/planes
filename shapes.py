@@ -1018,6 +1018,23 @@ class Analyser:
         if node.name == "normalize":
             return (unicodedata.normalize("NFC", str(v)),
                     StaticDeriv("op", label, inputs=(n,), file=self.current_file))
+        if node.name == "join":
+            # Pure and foldable when the argument is a known list of text,
+            # like the other pure string builtins above. A non-list or a list
+            # with a non-text element is not foldable — fall through to
+            # UNKNOWN, which is sound (the interpreter raises at runtime).
+            if isinstance(v, list) and all(isinstance(x, str) for x in v):
+                return "".join(v), StaticDeriv("op", label, inputs=(n,),
+                                               file=self.current_file)
+        if node.name == "rest":
+            # Pure and foldable when the argument is a known non-empty list —
+            # the analyser sees through it exactly as through first n of. The
+            # empty-list and non-list cases fall through to UNKNOWN (the
+            # interpreter raises at runtime); `n` rides in the derivation
+            # either way, so origins_of traces the tail back to the list.
+            if isinstance(v, list) and v:
+                return v[1:], StaticDeriv("op", label, inputs=(n,),
+                                          file=self.current_file)
         return UNKNOWN, StaticDeriv("unknown", label, inputs=(n,),
                                     file=self.current_file)
 

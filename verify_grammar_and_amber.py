@@ -95,7 +95,8 @@ def section_c():
     record("C", "no [NOT BUILT] entries in audit output", "NOT BUILT" not in out,
            "" if "NOT BUILT" not in out else "found a NOT BUILT line")
     for construct in ("first", "with (record update)", "plus (list append)",
-                      "normalize builtin", "when shape-dispatch"):
+                      "normalize builtin", "join builtin", "rest builtin",
+                      "when shape-dispatch"):
         pattern = rf"\[BUILT\s*\]\s*{re.escape(construct)}"
         found = re.search(pattern, out) is not None
         record("C", f"'{construct}' reports BUILT with an openable pointer", found,
