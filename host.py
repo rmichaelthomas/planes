@@ -64,6 +64,16 @@ class Host:
         """Seconds since the epoch, as a float."""
         raise NotImplementedError
 
+    # ---- the record plane (§99) — a host capability, not a program effect
+
+    def record(self, entry):
+        """Persist a record entry, if this host keeps one.
+
+        Optional, unlike the five capabilities above: a host that does
+        nothing here is still a complete host, and the interpreter must
+        not depend on this happening. The default is a no-op.
+        """
+
     # ---- foreign resolution
 
     def resolve(self, target):
@@ -165,6 +175,7 @@ class TestHost(PythonHost):
         self.files = dict(files or {})
         self.now = now if now is not None else 1_000_000.0
         self.shown = []
+        self.recorded = []      # the record plane's in-memory sink
 
     def ask(self, url):
         r = self.responses
@@ -187,3 +198,6 @@ class TestHost(PythonHost):
 
     def clock(self):
         return self.now
+
+    def record(self, entry):
+        self.recorded.append(entry)
