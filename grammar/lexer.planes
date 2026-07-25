@@ -42,6 +42,22 @@ to is-name-continue of c:
 to is-strippable of c:
   give c == " "
 
+# A newline cannot be written as a Planes string literal either -- the
+# same unwritable-control-character problem STRING runs into below --
+# but unlike a quote, a newline never needs to be told apart from
+# arbitrary string content: `<`/`>` order code points (capability 3),
+# and every character this lexer cares about outside of STRING content
+# (digits, name characters, the operator set, space, # and @) sits at or
+# above the space character (code point 32); a newline (10) is the only
+# one below it that a well-formed source file ever contains (no other
+# C0 control character appears anywhere in the corpus -- the same grep
+# that justified is-strippable's space-only scope covers this too).
+# Verified directly against the interpreter's own compare(), not assumed:
+# "\n" < " " is true, '"' < " " is false, every other corpus character
+# is false.
+to is-newline of c:
+  give c < " "
+
 # ================================================================ single-line tokenizer
 #
 # A streaming fold over one line's characters (run-chars/step), carrying a
@@ -310,3 +326,150 @@ to tokenize-line of stripped, line-no:
   mid = run-chars of initial, stripped
   final = flush-pending of mid
   give final.out
+
+# ================================================================ lines and indentation
+#
+# lexer.py splits on "\n" before anything else and only then applies
+# TOKEN_RE to each line. Matched here the same way: split-lines first,
+# so tokenize-line above always receives one physical line and never
+# has to reason about BEGIN/END/EOL itself.
+#
+# Leading whitespace is measured on the RAW line (not tokenize-line's
+# input) because tokenize-line already discards leading/trailing spaces
+# on its own -- step-fresh's `c == " "` case is a no-op, the same as
+# WS being filtered out of TOKEN_RE's matches -- so there is no need to
+# separately trim before tokenizing. Passing the raw line straight
+# through and measuring indent independently is simpler than building a
+# strip() this file has no way to write anyway (is-strippable only
+# tests one character at a time; producing the *trimmed substring*
+# would need a suffix/drop operation this build's capability 2 still
+# lacks -- unneeded here only because tokenize-line's own whitespace
+# handling already makes it redundant).
+
+to split-lines of s:
+  initial = { lines: [], current: "" }
+  final = run-split-lines of initial, s
+  give final.lines plus final.current
+
+to run-split-lines of state, s:
+  result = state
+  for each c in s:
+    result = split-lines-step of result, c
+  give result
+
+to split-lines-step of state, c:
+  if is-newline of c:
+    give { lines: state.lines plus state.current, current: "" }
+  else:
+    give { lines: state.lines, current: state.current + c }
+
+to leading-whitespace-count of raw-line:
+  initial = { done: false, count: 0 }
+  final = run-leading-whitespace of initial, raw-line
+  give final.count
+
+to run-leading-whitespace of state, raw-line:
+  result = state
+  for each c in raw-line:
+    result = leading-whitespace-step of result, c
+  give result
+
+to leading-whitespace-step of state, c:
+  if state.done:
+    give state
+  else:
+    if is-strippable of c:
+      give { done: false, count: state.count + 1 }
+    else:
+      give { done: true, count: state.count }
+
+# "blank" (nothing but whitespace), "comment" (whitespace then #), or
+# "code" -- lexer.py's `if not stripped or stripped.startswith("#"):
+# continue` decides this on the fully-stripped line; this walks the raw
+# line instead and stops at the first non-whitespace character, which
+# answers the same question without needing a stripped substring.
+to line-content-kind of raw-line:
+  initial = { done: false, kind: "blank" }
+  final = run-line-content-kind of initial, raw-line
+  give final.kind
+
+to run-line-content-kind of state, raw-line:
+  result = state
+  for each c in raw-line:
+    result = line-content-kind-step of result, c
+  give result
+
+to line-content-kind-step of state, c:
+  if state.done:
+    give state
+  else:
+    if is-strippable of c:
+      give state
+    else:
+      if c == "#":
+        give { done: true, kind: "comment" }
+      else:
+        give { done: true, kind: "code" }
+
+# The indent stack, as a cons-list of records rather than a Planes list:
+# `{ level: N, rest: <previous-stack-or-nothing> }`. A Planes list only
+# ever gives a prefix (first n of) or an append (plus) -- no way to read
+# or drop its *last* element, which is exactly what a stack's top and
+# pop need. Record field access has no such limit: .level and .rest are
+# both O(1), so this is the shape that actually works, not a stylistic
+# choice.
+
+to maybe-begin of stack, indent, line-no, tokens:
+  if indent > stack.level:
+    new-stack = { level: indent, rest: stack }
+    begin-tok = { kind: "BEGIN", text: "", line: line-no }
+    give { stack: new-stack, tokens: tokens plus begin-tok }
+  else:
+    give { stack: stack, tokens: tokens }
+
+# Recursive, not a loop -- `while` is not in this language (v3.0's
+# reserved-word ceiling never added one), and a single line transition
+# can dedent through more than one level at once.
+to pop-dedents of stack, target, line-no, tokens:
+  if stack.level > target:
+    end-tok = { kind: "END", text: "", line: line-no }
+    new-tokens = tokens plus end-tok
+    give pop-dedents of stack.rest, target, line-no, new-tokens
+  else:
+    give { stack: stack, tokens: tokens }
+
+to process-code-line of state, raw-line, line-no:
+  indent = leading-whitespace-count of raw-line
+  after-begin = maybe-begin of state.stack, indent, line-no, state.tokens
+  popped = pop-dedents of after-begin.stack, indent, line-no, after-begin.tokens
+  line-tokens = tokenize-line of raw-line, line-no
+  eol-tok = { kind: "EOL", text: "", line: line-no }
+  with-line-tokens = popped.tokens + line-tokens
+  final-tokens = with-line-tokens plus eol-tok
+  give { tokens: final-tokens, stack: popped.stack, line-no: line-no }
+
+to process-line of state, raw-line:
+  new-line-no = state.line-no + 1
+  kind = line-content-kind of raw-line
+  is-skippable = kind == "blank" or kind == "comment"
+  if is-skippable:
+    give { tokens: state.tokens, stack: state.stack, line-no: new-line-no }
+  else:
+    give process-code-line of state, raw-line, new-line-no
+
+to tokenize-lines of state, lines:
+  result = state
+  for each raw-line in lines:
+    result = process-line of result, raw-line
+  give result
+
+to tokenize of src:
+  lines = split-lines of src
+  initial-stack = { level: 0, rest: nothing }
+  initial-state = { tokens: [], stack: initial-stack, line-no: 0 }
+  after-lines = tokenize-lines of initial-state, lines
+  final-popped = pop-dedents of after-lines.stack, 0, after-lines.line-no, after-lines.tokens
+  eof-line = after-lines.line-no + 1
+  eof-tok = { kind: "EOF", text: "", line: eof-line }
+  final-tokens = final-popped.tokens plus eof-tok
+  give final-tokens
