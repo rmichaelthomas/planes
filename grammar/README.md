@@ -40,6 +40,6 @@ like any other input, not written.
 ## CI
 
 `scripts/ci.sh` runs, in order: the full test suite, `audit_locked_vs_built.py`,
-and `grammar_gen.py --check`. All three exit with a count usable as a gate
-(0 = clean). There was no existing CI configuration in this repo to extend,
-so this script is that gate, until one exists.
+`grammar_gen.py --check`, `ruff check .`, and `mypy .`. Every step exits
+non-zero on failure. There was no existing CI configuration in this repo to
+extend, so this script is that gate, until one exists.
