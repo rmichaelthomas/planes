@@ -127,6 +127,16 @@ def canonical(node):
     return "\n".join(out)
 
 
+def canonical_program(stmts):
+    """The canonical text form of a whole program: canonical() per
+    top-level statement, joined -- matches grammar/parser.planes's own
+    canonical-of-program."""
+    out = []
+    for s in stmts:
+        _render_node(s, "", out)
+    return "\n".join(out)
+
+
 # ================================================================ the canonical form (Planes side)
 
 _interp = None
@@ -148,6 +158,12 @@ def planes_canonical_expr(src):
     """Canonical form of one expression, parsed by grammar/parser.planes."""
     i = _get_interp()
     return i.call("canonical-of-expr-source", [_traced(src)], i.env).value
+
+
+def planes_canonical_program(src):
+    """Canonical form of a whole program, parsed by grammar/parser.planes."""
+    i = _get_interp()
+    return i.call("canonical-of-program-source", [_traced(src)], i.env).value
 
 
 def planes_canonical_node(record_src):
@@ -302,6 +318,48 @@ def test_first_and_round_builtin_forms_agree():
 def test_complex_expressions_agree():
     for src in COMPLEX_FRAGMENTS:
         assert_expr_agrees(src)
+
+
+# ================================================================ Phase 3: the statement walker
+#
+# The ladder (section 3): assignment, show, ... -- each rung tested here
+# as it lands. A whole small program per fragment, compared via
+# canonical_program/canonical-of-program (one canonical form per
+# top-level statement, joined) rather than the single-node form Phase 2
+# uses.
+
+def assert_program_agrees(src):
+    prog = parse(src)
+    py_form = canonical_program(prog)
+    planes_form = planes_canonical_program(src)
+    assert planes_form == py_form, (
+        f"\nsrc:\n{src}\n--- planes ---\n{planes_form}\n--- python ---\n{py_form}")
+
+
+ASSIGNMENT_PROGRAMS = [
+    "x = 1\n",
+    "x = 1 + 2\n",
+    'name = "widget"\n',
+    "x = 1\ny = 2\n",
+    "x = 1\ny = x + 1\nz = y * 2\n",
+]
+
+SHOW_PROGRAMS = [
+    'show "hello"\n',
+    "show 1 + 2\n",
+    "x = 5\nshow x\n",
+    'x = 1\nshow "x is"\nshow x\n',
+]
+
+
+def test_assignment_statements_agree():
+    for src in ASSIGNMENT_PROGRAMS:
+        assert_program_agrees(src)
+
+
+def test_show_statements_agree():
+    for src in SHOW_PROGRAMS:
+        assert_program_agrees(src)
 
 
 if __name__ == "__main__":

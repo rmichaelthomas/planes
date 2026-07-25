@@ -237,7 +237,19 @@ to canonical-of-node of node, indent:
                         when node is { kind: "Call" }:
                           give canonical-of-call of node, indent
                         else:
-                          fail "no canonical form for node kind '" + node.kind + "'" as unknown-node-kind
+                          when node is { kind: "Assign" }:
+                            expr-part = canonical-of-node of node.expr, (indent + "    ")
+                            header = indent + "Assign\n" + indent + "  name: " + (render-string of node.name)
+                            with-expr = header + "\n" + indent + "  expr:\n" + expr-part
+                            with-let = with-expr + "\n" + indent + "  is_let: " + (render-bool of node.is-let)
+                            give with-let + "\n" + indent + "  annotation: nothing"
+                          else:
+                            when node is { kind: "Show" }:
+                              expr-part = canonical-of-node of node.expr, (indent + "    ")
+                              header = indent + "Show\n" + indent + "  expr:\n" + expr-part
+                              give header + "\n" + indent + "  line: " + (text of node.line)
+                            else:
+                              fail "no canonical form for node kind '" + node.kind + "'" as unknown-node-kind
 
 # ================================================================ the cursor
 #
@@ -597,10 +609,81 @@ to parse-or of cursor:
   left = parse-and of cursor
   give continue-or of left.node, left.cursor
 
-# ================================================================ entry point
+# ================================================================ the statement walker (Phase 3)
+#
+# Iterative, not recursive-descent, for the SEQUENCE of statements at one
+# level (capability 4: a for-each pass over the token list costs zero
+# Planes-level recursion regardless of length; recursing once per
+# statement in a long sequence would scale with file size and hit the
+# ~140 ceiling -- #14's own recursion-too-deep fix exists for exactly
+# this shape of mistake). `tokens`, the ORIGINAL plain list, drives the
+# loop purely as a safe upper bound on iteration count (every statement
+# consumes at least one token, so token-count iterations is always
+# enough) -- its values are ignored; `program-step` reads the real
+# position from `state.cursor`. Ladder so far: assignment, show.
+
+to program-step of state, ignored-token:
+  if state.done:
+    give state
+  else:
+    t = current of state.cursor
+    if t.kind == "EOF":
+      give { out: state.out, cursor: state.cursor, done: true }
+    else:
+      is-skippable = t.kind == "EOL" or t.kind == "END" or (t.kind == "OP" and t.text == ";")
+      if is-skippable:
+        give { out: state.out, cursor: (advance of state.cursor), done: false }
+      else:
+        result = parse-statement of state.cursor
+        give { out: (state.out plus result.node), cursor: result.cursor, done: false }
+
+to run-program of state, tokens:
+  result = state
+  for each t in tokens:
+    result = program-step of result, t
+  give result
+
+to parse-statement of cursor:
+  t = current of cursor
+  next = peek-at of cursor, 1
+  is-assign = t.kind == "NAME" and next.kind == "OP" and next.text == "="
+  if is-assign:
+    give parse-assign of t.text, cursor
+  else:
+    if t.kind == "SHOW":
+      give parse-show of t.line, cursor
+    else:
+      msg = "line " + (text of t.line) + ": unsupported statement (Phase 3 ladder not yet reached), found '" + t.text + "'"
+      fail msg as parse-error
+
+to parse-assign of name, cursor:
+  after-eq = advance of (advance of cursor)
+  result = parse-or of after-eq
+  node = { kind: "Assign", name: name, expr: result.node, is-let: false }
+  give { node: node, cursor: result.cursor }
+
+to parse-show of line, cursor:
+  result = parse-or of (advance of cursor)
+  node = { kind: "Show", expr: result.node, line: line }
+  give { node: node, cursor: result.cursor }
+
+# ================================================================ entry points
 
 to canonical-of-expr-source of src:
   toks = tokenize of src
   cursor = to-cons of toks
   result = parse-or of cursor
   give canonical-of-node of result.node, ""
+
+to canonical-of-program of nodes:
+  lines = []
+  for each node in nodes:
+    lines = lines plus (canonical-of-node of node, "")
+  give join-with-newlines of lines
+
+to canonical-of-program-source of src:
+  toks = tokenize of src
+  cursor = to-cons of toks
+  initial = { out: [], cursor: cursor, done: false }
+  final = run-program of initial, toks
+  give canonical-of-program of final.out
