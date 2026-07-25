@@ -82,10 +82,16 @@ to step of state, c:
         when state.pending is { kind: "number" }:
           give step-number of state, c
         else:
-          when state.pending is { kind: "op-lookahead" }:
-            give step-op-lookahead of state, c
+          when state.pending is { kind: "number-maybe-dot" }:
+            give step-number-maybe-dot of state, c
           else:
-            give step-fresh of state, c
+            when state.pending is { kind: "fingerprint" }:
+              give step-fingerprint of state, c
+            else:
+              when state.pending is { kind: "op-lookahead" }:
+                give step-op-lookahead of state, c
+              else:
+                give step-fresh of state, c
 
 to step-fresh of state, c:
   if c == " ":
@@ -97,8 +103,15 @@ to step-fresh of state, c:
       give step-fresh-nonspace of state, c
 
 to step-fresh-nonspace of state, c:
+  if c == "@":
+    give { out: state.out, pending: { kind: "fingerprint", collected: "" }, line: state.line }
+  else:
+    give step-fresh-not-fingerprint of state, c
+
+to step-fresh-not-fingerprint of state, c:
   if is-digit of c:
-    give { out: state.out, pending: { kind: "number", text: c }, line: state.line }
+    new-pending = { kind: "number", text: c, seen-dot: false }
+    give { out: state.out, pending: new-pending, line: state.line }
   else:
     if is-name-start of c:
       give { out: state.out, pending: { kind: "name", text: c }, line: state.line }
@@ -149,12 +162,50 @@ to step-name-hyphen of state, c:
 
 to step-number of state, c:
   if is-digit of c:
-    new-pending = { kind: "number", text: state.pending.text + c }
+    new-pending = { kind: "number", text: state.pending.text + c, seen-dot: state.pending.seen-dot }
+    give { out: state.out, pending: new-pending, line: state.line }
+  else:
+    if c == "." and not state.pending.seen-dot:
+      new-pending = { kind: "number-maybe-dot", text: state.pending.text }
+      give { out: state.out, pending: new-pending, line: state.line }
+    else:
+      tok = { kind: "NUMBER", text: state.pending.text, line: state.line }
+      flushed = { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+      give step of flushed, c
+
+to step-number-maybe-dot of state, c:
+  if is-digit of c:
+    new-text = state.pending.text + "." + c
+    new-pending = { kind: "number", text: new-text, seen-dot: true }
     give { out: state.out, pending: new-pending, line: state.line }
   else:
     tok = { kind: "NUMBER", text: state.pending.text, line: state.line }
     flushed = { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
-    give step of flushed, c
+    leftover = "." + c
+    give run-chars of flushed, leftover
+
+to step-fingerprint of state, c:
+  if is-hex-digit of c:
+    new-collected = state.pending.collected + c
+    give step-fingerprint-collected of state, new-collected
+  else:
+    give fail-fingerprint of state, c
+
+to step-fingerprint-collected of state, new-collected:
+  n = count of new-collected
+  if n == 6:
+    fp-text = "@" + new-collected
+    tok = { kind: "FINGERPRINT", text: fp-text, line: state.line }
+    give { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
+  else:
+    new-pending = { kind: "fingerprint", collected: new-collected }
+    give { out: state.out, pending: new-pending, line: state.line }
+
+to fail-fingerprint of state, c:
+  at-tok = { kind: "OP", text: "@", line: state.line }
+  flushed = { out: state.out plus at-tok, pending: { kind: "none" }, line: state.line }
+  leftover = state.pending.collected + c
+  give run-chars of flushed, leftover
 
 to is-standalone-op of c:
   give c == "-" or c == "=" or c == "<" or c == ">"
@@ -192,10 +243,22 @@ to flush-pending of state:
         tok = { kind: "NUMBER", text: state.pending.text, line: state.line }
         give { out: state.out plus tok, pending: { kind: "none" }, line: state.line }
       else:
-        when state.pending is { kind: "op-lookahead" }:
-          give flush-op-lookahead of state
+        when state.pending is { kind: "number-maybe-dot" }:
+          tok = { kind: "NUMBER", text: state.pending.text, line: state.line }
+          with-number = state.out plus tok
+          dot-tok = { kind: "OP", text: ".", line: state.line }
+          give { out: with-number plus dot-tok, pending: { kind: "none" }, line: state.line }
         else:
-          give state
+          when state.pending is { kind: "fingerprint" }:
+            at-tok = { kind: "OP", text: "@", line: state.line }
+            with-at = state.out plus at-tok
+            reprocessed = run-chars of { out: with-at, pending: { kind: "none" }, line: state.line }, state.pending.collected
+            give flush-pending of reprocessed
+          else:
+            when state.pending is { kind: "op-lookahead" }:
+              give flush-op-lookahead of state
+            else:
+              give state
 
 to flush-op-lookahead of state:
   first-char = state.pending.first
