@@ -879,9 +879,9 @@ class Parser:
         readings = [
             (f"{name}({paren_src}) {rest_src}".strip(),
              f"one call to `{name}`, argument = everything up to and including `{rest_src}`"),
-            (f"{name}({paren_src})  then  {rest_src}".strip(),
+            (f"({name}({paren_src})) {rest_src}".strip(),
              f"one call to `{name}`, argument = `{paren_src}` alone; "
-             f"`{rest_src}` applies outside the call"),
+             f"`{rest_src}` applies to the call's result, not inside it"),
         ]
         msg = render_amber("amber.paren_arglist", t.line, readings,
                            head=name, paren_expr=paren_src)
