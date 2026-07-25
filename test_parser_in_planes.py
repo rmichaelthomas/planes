@@ -24,12 +24,15 @@ import sys
 from interp import Deriv, Interpreter, Traced
 from lexer import (
     Assign,
+    Because,
     BinOp,
     Bool,
     Builtin,
     Call,
+    Fail,
     Field,
     ForEach,
+    Foreign,
     FuncDef,
     Give,
     If,
@@ -37,14 +40,21 @@ from lexer import (
     ListLit,
     ListPlus,
     Not,
+    Note,
     Nothing,
     Num,
+    OrFail,
     RecordLit,
+    RecordUpdate,
     Round,
+    Rule,
     Show,
     Str,
     Use,
     Var,
+    When,
+    Why,
+    WriteTo,
 )
 from parser import parse
 from planes_text import escape_string_literal
@@ -54,11 +64,18 @@ from planes_text import escape_string_literal
 # Every AST node class this harness knows how to render, in the order
 # fields print (dataclasses.fields() preserves declaration order, so this
 # set exists only to recognize a node -- field order comes from lexer.py
-# itself, not duplicated here).
+# itself, not duplicated here). Completed in S3a so the canonical form is
+# fully structural: a node type NOT listed here was previously rendered by
+# str(node) -- its Python dataclass repr -- when it appeared as a field
+# value, which is not reproducible from another implementation (Python's
+# repr even switches quote style around an embedded apostrophe). Every AST
+# node kind now expands structurally, which is what makes cross-
+# implementation agreement a property of the ASTs and not of Python's repr.
 AST_NODE_TYPES = (
     Num, Str, Bool, Nothing, Var, ListLit, ListPlus, BinOp, Not, IsNothing,
     Field, Assign, FuncDef, Call, Give, Show, If, Round, Builtin, ForEach, Use,
-    RecordLit,
+    RecordLit, RecordUpdate, OrFail, When, Rule, Foreign, WriteTo, Why, Fail,
+    Note, Because,
 )
 
 
@@ -108,8 +125,24 @@ def _render_list_item(item, indent, out):
         key, val = item
         out.append(f"{indent}- \"{escape_string_literal(str(key))}\":")
         _render_node(val, indent + "  ", out)
+    elif (isinstance(item, tuple) and len(item) == 2
+          and isinstance(item[1], tuple) and len(item[1]) == 2):
+        # A (key, (tag, payload)) pair, where the payload may itself be a
+        # node -- When.pattern's ("field", ("match", <expr>) | ("bind",
+        # name)) and Foreign.effects's ("kind", ("literal"|"param",
+        # target)). Rendered structurally so the payload expands rather than
+        # printing as a Python tuple repr.
+        key, (tag, payload) = item
+        head = f"{indent}- \"{escape_string_literal(str(key))}\" {tag}:"
+        if _is_node(payload):
+            out.append(head)
+            _render_node(payload, indent + "  ", out)
+        else:
+            out.append(f"{head} {_render_scalar(payload)}")
     elif isinstance(item, tuple) and len(item) == 2:
-        # A plain (str, str)-shaped pair -- Use.renames's (old, new).
+        # A plain (str, str)-shaped pair -- Use.renames's (old, new),
+        # Note.entries's ("from", "..."), and a Foreign effect with no
+        # target: ("kind", None).
         key, val = item
         out.append(f"{indent}- ({_render_scalar(key)}, {_render_scalar(val)})")
     else:
@@ -162,9 +195,18 @@ def planes_canonical_expr(src):
     return i.call("canonical-of-expr-source", [_traced(src)], i.env).value
 
 
-def planes_canonical_program(src):
-    """Canonical form of a whole program, parsed by grammar/parser.planes."""
+def planes_canonical_program(src, known=None):
+    """Canonical form of a whole program, parsed by grammar/parser.planes.
+
+    `known` (a {name: arity} mapping of cross-file function names) is passed
+    only for a file that calls a sibling module's function and so cannot be
+    parsed standalone; parser.py takes the same mapping via parse(src, known).
+    """
     i = _get_interp()
+    if known:
+        extra = [{"name": n, "arity": a} for n, a in known.items()]
+        return i.call("canonical-of-program-source-with-known",
+                      [_traced(src), _traced(extra)], i.env).value
     return i.call("canonical-of-program-source", [_traced(src)], i.env).value
 
 
@@ -456,18 +498,34 @@ def test_list_and_record_literals_and_let_agree():
 
 # ================================================================ Phase 4: corpus agreement
 #
-# scripts/parser_corpus_agreement.py runs the full classified scan
+# scripts/parser_corpus_agreement.py runs the full scan
 # (parser-in-planes-verification.md carries the per-file table this
-# guards). A regression floor, not a target: falling short of 30 PASS is
-# an explicit, reported, non-failing outcome of this build (section 9) --
-# but a PASS count that goes DOWN from a later change is a real
-# regression this test exists to catch.
+# guards). S3a Phase 4 reached FULL agreement: every corpus file's AST
+# matches parser.py's, so the floor is now the whole corpus, not a subset.
+# A single non-PASS is a real regression this test exists to catch. The one
+# file that calls a sibling module's function (demo/app/net.planes) is
+# parsed with the same cross-file `known` on both sides, so it too agrees.
 
-def test_corpus_agreement_does_not_regress():
+def test_corpus_agreement_is_full():
     from scripts.parser_corpus_agreement import run
     results = run()
-    passing = [f for f, status, _ in results if status == "PASS"]
-    assert len(passing) >= 4, f"corpus PASS count regressed: {passing}"
+    not_passing = [(f, status, detail) for f, status, detail in results if status != "PASS"]
+    assert not not_passing, f"corpus agreement regressed: {not_passing}"
+    assert len(results) == 31, f"corpus size changed: {len(results)} files"
+
+
+def test_self_parse_vocabulary_agrees():
+    """The second bootstrap assertion: grammar/parser.planes parsing a
+    grammar source file, its AST byte-identical to parser.py's. Guarded here
+    on the cheapest of the three (grammar/vocabulary.planes, ~0.3s).
+    grammar/lexer.planes (156K-char canonical form) and grammar/parser.planes
+    itself (748K) also self-parse in full agreement -- verified out of band
+    and recorded in parser-in-planes-verification.md; they are too slow
+    (11s / minutes through the tree-walking interp) to run in the suite."""
+    src = open("grammar/vocabulary.planes", encoding="utf-8").read()
+    py = canonical_program(parse(src))
+    pl = planes_canonical_program(src)
+    assert py == pl, "grammar/vocabulary.planes self-parse diverged"
 
 
 if __name__ == "__main__":
