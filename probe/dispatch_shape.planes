@@ -1,0 +1,5 @@
+tok = { kind: "OP", text: "+" }
+when tok is { kind: "OP" }:
+  show "operator"
+else:
+  show "other"

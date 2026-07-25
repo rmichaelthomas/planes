@@ -1,0 +1,4 @@
+c = "a"
+show c == "a"
+d = "5"
+show d >= "0" and d <= "9"

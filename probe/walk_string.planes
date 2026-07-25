@@ -1,0 +1,3 @@
+s = "abc"
+for each c in s:
+  show c

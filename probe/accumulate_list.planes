@@ -1,0 +1,5 @@
+tokens = []
+new-token = "x"
+tokens = tokens plus new-token
+tokens = tokens plus "y"
+show tokens

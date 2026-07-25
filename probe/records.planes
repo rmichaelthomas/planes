@@ -1,0 +1,3 @@
+tok = { kind: "NAME", text: "total" }
+show tok.kind
+show tok.text
