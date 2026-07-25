@@ -1,20 +1,80 @@
 """Planes parser — turns tokens into AST."""
+import json
+import os
+
 from lexer import *
+from lexer import _VOCAB, GrammarDataError
 from planes_num import Number
 
 # Builtins are ordinary functions, not keywords. The parser only needs their
 # names so a bare `count of xs` is read as a call rather than a variable; it
 # does not need to know what they do. A user may define a function with the
-# same name, and theirs is the one that runs.
-BUILTIN_NAMES = {"count", "lower", "upper", "text", "whole", "ask", "read", "normalize"}
+# same name, and theirs is the one that runs. Source of truth is
+# grammar/vocabulary.json, loaded by lexer.py as _VOCAB.
+BUILTIN_NAMES = {b["name"] for b in _VOCAB["builtins"]}
 
 
 class PlanesSyntaxError(Exception):
     pass
 
 
+class PlanesAmbiguity(PlanesSyntaxError):
+    """Two or more readings of the same source, and nothing says which.
+
+    Not a malformed program — a program the name table cannot resolve.
+    The remedy is different (rename or parenthesise, not fix a typo), so
+    the class is distinct even though the base is shared: every existing
+    `except PlanesSyntaxError` still catches it. Parse-time only — this
+    never interacts with `or fail as`, which is a runtime mechanism.
+    """
+    pass
+
+
+_AMBER_TEMPLATES = None
+
+
+def _load_amber_templates():
+    """grammar/messages/amber.json — amber's refusal text, as data (§69.5
+    ruling D5). No amber message text lives inline in this file."""
+    global _AMBER_TEMPLATES
+    if _AMBER_TEMPLATES is not None:
+        return _AMBER_TEMPLATES
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "grammar", "messages", "amber.json")
+    fix = "reinstall planes, or regenerate with python3 grammar_gen.py"
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+    except OSError as e:
+        raise GrammarDataError(
+            "grammar-data-missing", f"{path} could not be read ({e.strerror or e})", fix) from e
+    except json.JSONDecodeError as e:
+        raise GrammarDataError(
+            "grammar-data-missing", f"{path} is not valid JSON ({e})", fix) from e
+    _AMBER_TEMPLATES = {t["id"]: t for t in doc["templates"]}
+    return _AMBER_TEMPLATES
+
+
+def render_amber(template_id, line, readings, **slots):
+    """Render one of amber's refusal messages from grammar/messages/amber.json.
+
+    `readings` is a list of (source, gloss) pairs, one per candidate
+    reading — lettered A, B, C, ... in order. `slots` fills every other
+    `{...}` placeholder the template uses.
+    """
+    t = _load_amber_templates()[template_id]
+    lines = [t["headline"].format(line=line, **slots), ""]
+    for i, (source, gloss) in enumerate(readings):
+        letter = chr(ord("A") + i)
+        lines.append(t["readings"].format(letter=letter, source=source, gloss=gloss))
+    lines.append("")
+    lines.append(t["reason"].format(line=line, **slots))
+    lines.append(t["fix"].format(line=line, **slots))
+    return "\n".join(lines)
+
+
 class Parser:
-    known_funcs: set = set()
+    known_funcs: dict = {}
 
     def __init__(self, tokens):
         self.toks = tokens
@@ -94,15 +154,25 @@ class Parser:
         if self.accept("USE"):
             module = self.expect("NAME").value
             renames = []
-            while self.accept("WITH"):
+            with_tok = self.accept("WITH")
+            while with_tok:
                 # `use cache with load record as load cached`
-                # Names are multi-word, so read until `as`, then to the end
-                # of the clause. `as` is reserved, so it cannot be part of
-                # either name.
-                old = self.read_name_until("AS")
+                # Names are multi-word, so read consecutive NAME tokens on
+                # both sides of `as`. `as` and `with` are reserved words, so
+                # neither can be part of either name. Only `old` is checked
+                # for amber (§69.5 site 4): it is a lookup against the used
+                # module's exported names, so a shorter exported prefix is
+                # a real second reading. `new` is not a lookup — it is the
+                # alias being introduced right here — and names_in_graph
+                # already registers it as a known name for the rest of this
+                # file, so checking it the same way would flag every rename
+                # whose alias happens to start with the name it replaces.
+                old = self.read_multiword_name()
+                self.check_rename_name_ambiguity(old, with_tok)
                 self.expect("AS")
-                new = self.read_name_until("WITH")
+                new = self.read_multiword_name()
                 renames.append((old, new))
+                with_tok = self.accept("WITH")
             return Use(module, tuple(renames))
 
         if self.at("FOREIGN"):
@@ -506,9 +576,9 @@ class Parser:
 
     # Field names a with-clause or when-pattern entry may use — the same
     # keyword-as-field-name exception parse_record_field grants, since
-    # both are naming a record field, not opening a new construct.
-    FIELD_NAME_KINDS = ("NAME", "SHOW", "WRITE", "FIRST", "ROUND", "TO", "IN",
-                        "WHERE", "FROM", "AS", "OF", "USE", "WHY", "GIVE")
+    # both are naming a record field, not opening a new construct. Source
+    # of truth is grammar/vocabulary.json's field_name_token_kinds.
+    FIELD_NAME_KINDS = tuple(_VOCAB["field_name_token_kinds"])
 
     def at_field_start(self, ahead=0):
         t = self.peek(ahead)
@@ -639,13 +709,17 @@ class Parser:
             node = Field(node, self.next().value)
         return node
 
-    def read_name_until(self, *stops):
-        """Read a multi-word name, stopping before a reserved terminator.
+    def read_multiword_name(self):
+        """Read a multi-word name: every consecutive NAME token, stopping
+        at the first non-NAME.
 
         Names are several NAME tokens, so a clause like `load record as
-        load cached` needs a rule for where one name ends. The terminators
-        are reserved words, which is exactly why they can serve as the
-        boundary.
+        load cached` needs a rule for where one name ends. This works only
+        because both of this method's callers' terminators (`as`, `with`)
+        are reserved words and therefore never arrive as NAME — there is
+        no lookahead for a specific stop word here, despite what an
+        earlier version of this docstring (and an unused `*stops`
+        parameter) implied.
         """
         parts = []
         while self.at("NAME"):
@@ -656,6 +730,162 @@ class Parser:
                 f"line {g.line}: expected a name, "
                 f"found '{g.value or 'end of line'}'")
         return " ".join(parts)
+
+    def check_rename_name_ambiguity(self, name, tok):
+        """Amber site 4 (§69.5). `name` (the `old` half of a rename — a
+        lookup against the used module's exported names, via parse()'s
+        `known`) was just consumed whole by read_multiword_name, with no
+        table consulted. Check every prefix of it against known_funcs —
+        two or more matching prefixes means the greedy full consumption
+        was not the only viable reading.
+        """
+        parts = name.split(" ")
+        hits = [k for k in range(1, len(parts) + 1)
+                if " ".join(parts[:k]) in Parser.known_funcs]
+        if len(hits) < 2:
+            return
+        readings = []
+        for k in hits:
+            prefix = " ".join(parts[:k])
+            rest = " ".join(parts[k:])
+            gloss = (f"`{prefix}` alone" if not rest
+                     else f"`{prefix}`, leaving `{rest}` unaccounted for")
+            readings.append((prefix if not rest else f"{prefix} | {rest}", gloss))
+        msg = render_amber("amber.rename_clause", tok.line, readings, source=name)
+        raise PlanesAmbiguity(msg)
+
+    # ---- amber (§69.5): message construction helpers, never consuming
+
+    def _peek_text(self, start, end):
+        """Token values from offset `start` (inclusive) to `end`
+        (exclusive), space-joined — a best-effort source reconstruction
+        for an amber message, not a claim about original spacing."""
+        return " ".join(self.peek(k).value or self.peek(k).kind for k in range(start, end))
+
+    def _peek_trailer(self, offset, limit=4):
+        """Up to `limit` tokens starting at `offset`, for an amber
+        message. Stops at a statement boundary so the trailer reads as a
+        fragment, not a runaway scan."""
+        end = offset
+        for i in range(limit):
+            tok = self.peek(offset + i)
+            if tok.kind in ("EOL", "EOF", "END", "BEGIN"):
+                break
+            end = offset + i + 1
+            if tok.kind == "OP" and tok.value in (":", ";"):
+                break
+        return self._peek_text(offset, end)
+
+    def _matching_close_paren_offset(self, open_offset):
+        """Offset of the token just after the `)` matching the `(` at
+        `open_offset`. Never consumes — paren_is_arglist does the same
+        scan for its own decision; this is the read-only twin used only
+        to build an amber message."""
+        depth, k = 0, open_offset
+        while True:
+            tok = self.peek(k)
+            if tok.kind == "OP" and tok.value == "(":
+                depth += 1
+            elif tok.kind == "OP" and tok.value == ")":
+                depth -= 1
+                if depth == 0:
+                    return k + 1
+            k += 1
+
+    def raise_amber_multiword(self, t, name, bare_hit, ext_hits):
+        readings = []
+        labels = []
+        if bare_hit:
+            trailer = self._peek_trailer(0)
+            source = name if not trailer else f"{name}  then  {trailer}"
+            readings.append((source, f"the value `{name}`, then whatever parses next on its own"))
+            labels.append(f"`{name}`")
+        for k, probe in ext_hits:
+            trailer = self._peek_trailer(k)
+            source = probe if not trailer else f"{probe}  {trailer}"
+            readings.append((source, f"one call to `{probe}`"))
+            labels.append(f"`{probe}`")
+        names_txt = labels[0] if len(labels) == 1 else \
+            ", ".join(labels[:-1]) + f", and {labels[-1]}" if len(labels) > 2 else \
+            f"{labels[0]} and {labels[1]}"
+        suggestion = f"({ext_hits[-1][1]})" if ext_hits else f"({name})"
+        msg = render_amber("amber.multiword", t.line, readings,
+                           names=names_txt, suggestion=suggestion)
+        raise PlanesAmbiguity(msg)
+
+    def raise_amber_juxtaposition(self, t, head, next_name):
+        readings = [
+            (f"{head} ({next_name})",
+             f"one call to `{head}`, passing the result of calling `{next_name}`"),
+            (f"{head}  then  {next_name}",
+             f"`{head}` with no argument, then a separate call to `{next_name}`"),
+        ]
+        msg = render_amber("amber.juxtaposition", t.line, readings, head=head, next=next_name)
+        raise PlanesAmbiguity(msg)
+
+    def raise_amber_juxtaposition_unknown(self, t, subject):
+        readings = [
+            (f"{subject}(...)",
+             f"if `{subject}` takes an argument here, one call using what follows"),
+            (f"{subject}  then  ...",
+             f"if `{subject}` takes no argument here, a separate statement follows"),
+        ]
+        msg = render_amber("amber.juxtaposition.unknown_arity", t.line, readings, subject=subject)
+        raise PlanesAmbiguity(msg)
+
+    def check_juxtaposition_ambiguity(self, name, t):
+        """Amber site 2 (§69.5). `name` is a known function directly
+        followed by a bare NAME, with nothing else in the token stream
+        deciding whether that NAME is the argument or the start of the
+        next statement. Returns whether the following NAME should be
+        consumed as the argument; raises when both readings fit."""
+        arity = Parser.known_funcs.get(name)
+        if arity is None:
+            self.raise_amber_juxtaposition_unknown(t, name)
+        if arity == 0:
+            return False
+        next_name = self.peek().value
+        if next_name not in Parser.known_funcs:
+            return True
+        next_arity = Parser.known_funcs.get(next_name)
+        if next_arity is None:
+            self.raise_amber_juxtaposition_unknown(t, next_name)
+        if next_arity == 0:
+            self.raise_amber_juxtaposition(t, name, next_name)
+        return True
+
+    def check_paren_arglist_ambiguity(self, name, t):
+        """Amber site 3 (§69.5). paren_is_arglist already decided an
+        operator after the close paren means the parens were a
+        sub-expression, not an argument list — a lookahead rule, not a
+        name-table decision. Arity is what turns it into one: called with
+        `self` positioned at the `(`, right after paren_is_arglist
+        returned False for it."""
+        arity = Parser.known_funcs.get(name)
+        close = self._matching_close_paren_offset(0)
+        paren_src = self._peek_text(1, close - 1)
+        rest_src = self._peek_trailer(close)
+        if arity is None:
+            readings = [
+                (f"{name}({paren_src})",
+                 f"if `{name}` takes one argument here, this call alone"),
+                (f"{name}({paren_src}) {rest_src}".strip(),
+                 "if not, the whole expression including what follows"),
+            ]
+            msg = render_amber("amber.paren_arglist.unknown_arity", t.line, readings, head=name)
+            raise PlanesAmbiguity(msg)
+        if arity != 1:
+            return
+        readings = [
+            (f"{name}({paren_src}) {rest_src}".strip(),
+             f"one call to `{name}`, argument = everything up to and including `{rest_src}`"),
+            (f"({name}({paren_src})) {rest_src}".strip(),
+             f"one call to `{name}`, argument = `{paren_src}` alone; "
+             f"`{rest_src}` applies to the call's result, not inside it"),
+        ]
+        msg = render_amber("amber.paren_arglist", t.line, readings,
+                           head=name, paren_expr=paren_src)
+        raise PlanesAmbiguity(msg)
 
     def paren_is_arglist(self):
         """Looking at `(`: is this an argument list, or a parenthesised
@@ -688,8 +918,7 @@ class Parser:
         t = self.peek()
         if t.kind == "NAME":
             key = self.next().value
-        elif t.kind in ("SHOW", "WRITE", "FIRST", "ROUND", "TO", "IN",
-                        "WHERE", "FROM", "AS", "OF", "USE", "WHY", "GIVE"):
+        elif t.kind in self.FIELD_NAME_KINDS:
             # A field name is not a position where a keyword can be
             # structural. `{ to: "x", from: "y" }` must work.
             key = self.next().value
@@ -852,6 +1081,7 @@ class Parser:
                 # what follows it: an operator means the parens were part of
                 # a larger expression, not the whole argument list.
                 if not self.paren_is_arglist():
+                    self.check_paren_arglist_ambiguity(name, t)
                     return Call(name, [self.parse_additive()], t.line)
                 self.next()
                 args = []
@@ -863,15 +1093,24 @@ class Parser:
                 return Call(name, args, t.line)
             # multi-word name, longest match against known functions.
             # Handles both `fetch stories` and `phone home of settings`.
+            # Amber site 1 (§69.5): collect EVERY k (including k=0, the
+            # bare name itself) whose joined text is a known function —
+            # two or more means the parser will not silently prefer the
+            # longest.
             if self.at("NAME"):
-                probe, best, j = name, None, 0
+                ext_hits = []
+                probe = name
                 k = 0
                 while self.peek(k).kind == "NAME":
                     probe += " " + self.peek(k).value
                     k += 1
                     if probe in Parser.known_funcs:
-                        best, j = probe, k
-                if best:
+                        ext_hits.append((k, probe))
+                bare_hit = name in Parser.known_funcs
+                if (1 if bare_hit else 0) + len(ext_hits) >= 2:
+                    self.raise_amber_multiword(t, name, bare_hit, ext_hits)
+                if ext_hits:
+                    j, best = ext_hits[0]
                     for _ in range(j):
                         self.next()
                     if self.accept("OF"):
@@ -893,8 +1132,10 @@ class Parser:
                 if not takes_arg and self.at("NAME"):
                     # A bare name only counts as an argument when it is not
                     # itself the start of a call — otherwise `main` followed
-                    # by a statement would absorb it.
-                    takes_arg = self.peek().value not in Parser.known_funcs
+                    # by a statement would absorb it. Amber site 2 (§69.5):
+                    # when both readings have a shape that fits, the parser
+                    # refuses instead of guessing which one was meant.
+                    takes_arg = self.check_juxtaposition_ambiguity(name, t)
                 if takes_arg:
                     return Call(name, [self.parse_additive()], t.line)
                 return Call(name, [], t.line)
@@ -904,13 +1145,30 @@ class Parser:
             f"line {t.line}: expected a value, found '{t.value or 'end of line'}'")
 
 
+def _param_arity(tokens, j):
+    """Count comma-separated NAME parameters starting at index `j`, which
+    points at the token right after `of`. Zero when there is no parameter
+    there at all (a bare `of` never occurs; this only fires when `of`
+    itself was absent, handled by the caller)."""
+    if tokens[j].kind != "NAME":
+        return 0
+    count = 1
+    j += 1
+    while tokens[j].kind == "OP" and tokens[j].value == "," and tokens[j + 1].kind == "NAME":
+        count += 1
+        j += 2
+    return count
+
+
 def prescan_funcs(tokens):
-    """Function names, read before the real parse.
+    """Function names and arities, read before the real parse.
 
     A multi-word call is several NAME tokens; only a name table can tell the
-    parser they are one call. So names have to be collected first.
+    parser they are one call. So names have to be collected first. Arity is
+    the number of comma-separated parameters after `of` — 0 when there is no
+    `of` clause at all (`to main:`). Returns {name: arity}.
     """
-    names = set()
+    names = {}
     for i, t in enumerate(tokens):
         if t.kind == "FOREIGN":
             # A foreign declaration names a callable, same as `to`.
@@ -919,7 +1177,8 @@ def prescan_funcs(tokens):
                 parts.append(tokens[j].value)
                 j += 1
             if parts:
-                names.add(" ".join(parts))
+                arity = _param_arity(tokens, j + 1) if tokens[j].kind == "OF" else 0
+                names[" ".join(parts)] = arity
             continue
         if t.kind != "TO":
             continue
@@ -946,21 +1205,40 @@ def prescan_funcs(tokens):
                 f"appear in the function name "
                 f"'{' '.join(parts)} {tokens[j].value}'\n"
                 f"  reserved: {', '.join(sorted(KEYWORDS))}")
-        names.add(" ".join(parts))
+        arity = _param_arity(tokens, j + 1) if tokens[j].kind == "OF" else 0
+        names[" ".join(parts)] = arity
     return names
 
 
 def parse(src, known=None):
     """Parse a program.
 
-    `known` supplies function names defined elsewhere. Multi-word names must
-    be known before a call site can be parsed — `api base` is two NAME
-    tokens, and only a name table can say it is one call. Without this a
-    file could not call a multi-word function from a module it uses.
+    `known` supplies function names defined elsewhere — either a mapping of
+    name to arity, or a bare set/iterable of names, in which case arity is
+    `None` (unknown) for each. Multi-word names must be known before a call
+    site can be parsed — `api base` is two NAME tokens, and only a name
+    table can say it is one call. Without this a file could not call a
+    multi-word function from a module it uses.
+
+    When the same name appears more than once, this file's own definitions
+    win over `known` (another file in the graph), which wins over a
+    builtin of the same name — matching how shadowing already works at
+    runtime (interp.py resolves a user function before a builtin). `None`
+    (unknown arity) is never treated as a match or a non-match by anything
+    that reads it later; it is reported.
     """
     toks = tokenize(src)
-    Parser.known_funcs = (prescan_funcs(toks) | set(known or ())
-                          | BUILTIN_NAMES)
+    if known is None:
+        known_map = {}
+    elif isinstance(known, dict):
+        known_map = known
+    else:
+        known_map = {name: None for name in known}
+    builtins_map = {b["name"]: b.get("arity", 1) for b in _VOCAB["builtins"]}
+    merged = dict(builtins_map)
+    merged.update(known_map)
+    merged.update(prescan_funcs(toks))
+    Parser.known_funcs = merged
     return Parser(toks).parse_program()
 
 

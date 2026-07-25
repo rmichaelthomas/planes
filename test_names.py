@@ -171,7 +171,14 @@ def test_of_binds_tightly_but_juxtaposition_does_not():
 
 
 def test_parenthesised_argument_continuing_an_expression():
-    """`ask (base) + "/x"` is one argument, not an argument list."""
+    """`ask ((base) + "/x")` is one argument, not an argument list.
+
+    Without the outer parens this is amber (§69.5 site 3): `ask` takes
+    exactly one argument, so `ask((base) + "/x.json")` and
+    `ask(base) + "/x.json"` are both shaped like a valid call, and
+    nothing in the source says which was meant. The outer parens pick
+    the first reading explicitly.
+    """
     import json
     seen = []
 
@@ -182,7 +189,7 @@ def test_parenthesised_argument_continuing_an_expression():
     run('use http\n'
         'to base:\n'
         '  give "https://example.com"\n\n'
-        'x = ask (base) + "/x.json"', http=stub)
+        'x = ask ((base) + "/x.json")', http=stub)
     assert seen == ["https://example.com/x.json"]
 
 

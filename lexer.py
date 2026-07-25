@@ -5,28 +5,83 @@ comprehensions, and the effects the HN scraper needs.
 
 Gate: does this help run `x = 5; y = 3; z = x + y; why z`?
 """
+import json
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Optional
 
+# ================================================================ grammar as data
+#
+# The language's vocabulary — token classes, reserved words, builtin names,
+# effect kinds, and the field-name token set — is loadable data, not code an
+# agent has to recall (grammar/README.md, addendum v4.2 section 69.1).
+# grammar/vocabulary.json is the single source of truth; this module and
+# parser.py both load it rather than each carrying their own literal.
+
+GRAMMAR_FORMAT_VERSION = 1
+_REQUIRED_VOCAB_KEYS = ("token_classes", "keywords", "builtins",
+                        "effect_kinds", "field_name_token_kinds")
+
+
+class GrammarDataError(Exception):
+    """The vocabulary file could not be loaded — refuse, don't guess.
+
+    lexer.py cannot import interp.py's PlanesError (interp.py imports
+    lexer.py; the reverse would be a cycle), so this is a small standalone
+    exception in the same tag/detail/fix shape, matching the refuse-don't-
+    guess contract records_from_json already keeps for the record format.
+    """
+    def __init__(self, tag, detail="", fix=""):
+        self.tag = tag
+        self.detail = detail
+        self.fix = fix
+        msg = tag
+        if detail:
+            msg += f": {detail}"
+        if fix:
+            msg += f"\n  try: {fix}"
+        super().__init__(msg)
+
+
+def _load_vocabulary():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "grammar", "vocabulary.json")
+    fix = "reinstall planes, or regenerate with python3 grammar_gen.py"
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError as e:
+        raise GrammarDataError(
+            "grammar-data-missing",
+            f"{path} could not be read ({e.strerror or e})", fix) from e
+    try:
+        doc = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise GrammarDataError(
+            "grammar-data-missing", f"{path} is not valid JSON ({e})", fix) from e
+    version = doc.get("format")
+    if version != GRAMMAR_FORMAT_VERSION:
+        raise GrammarDataError(
+            "grammar-data-missing",
+            f"{path} format {version!r} is not {GRAMMAR_FORMAT_VERSION}",
+            "regenerate with a matching version of planes")
+    missing = [k for k in _REQUIRED_VOCAB_KEYS if k not in doc]
+    if missing:
+        raise GrammarDataError(
+            "grammar-data-missing",
+            f"{path} is missing: {', '.join(missing)}", fix)
+    return doc
+
+
+_VOCAB = _load_vocabulary()
+
 # ================================================================ tokens
 
-TOKEN_SPEC = [
-    ("COMMENT",     r"#[^\n]*"),
-    # A rule fingerprint — @ plus exactly six hex characters — has to be
-    # its own token, ahead of NUMBER and NAME: most fingerprints start
-    # with a digit, and NUMBER would otherwise split "@3f9c2d" into a
-    # number and a name at the first letter.
-    ("FINGERPRINT", r"@[0-9a-fA-F]{6}"),
-    ("NUMBER",      r"\d+(\.\d+)?"),
-    ("STRING",      r'"[^"]*"'),
-    ("NAME",        r"[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*"),
-    # `@` also appears in OP, as a fallback: a malformed fingerprint (wrong
-    # length, non-hex characters) then tokenizes as a lone '@' the parser
-    # can catch and name the fix for, rather than silently vanishing.
-    ("OP",          r"->|==|!=|<=|>=|[+\-*/=<>().,;:\[\]{}@]"),
-    ("WS",          r"[ \t]+"),
-]
+# Order is load-bearing — FINGERPRINT must precede NUMBER, OP must follow
+# NAME — and grammar/vocabulary.json preserves it (test_grammar_data.py
+# asserts this); JSON array order is what this list trusts.
+TOKEN_SPEC = [(t["name"], t["pattern"]) for t in _VOCAB["token_classes"]]
 TOKEN_RE = re.compile("|".join(f"(?P<{n}>{p})" for n, p in TOKEN_SPEC))
 
 # Reserved words are only those that carry structure: a word the parser must
@@ -38,21 +93,12 @@ TOKEN_RE = re.compile("|".join(f"(?P<{n}>{p})" for n, p in TOKEN_SPEC))
 # The test is in test_names.py: every word NOT in this set must work as a
 # function name. In a language whose names read as prose, `count` and `text`
 # and `read` are words people reach for.
-KEYWORDS = {
-    # statement shape
-    "to", "give", "let", "use", "show", "write", "why",
-    # control flow
-    "if", "else", "for", "each", "in", "where", "when",
-    # operators and connectives
-    "and", "or", "not", "of", "as", "fail", "with", "plus",
-    "foreign", "from", "doing",
-    # literals
-    "true", "false", "nothing",
-    # operations with distinctive syntax the parser must recognise
-    "first", "round", "places",
-    # rule plane — a compile-time-only constraint, never executed
-    "rule",
-}
+#
+# grammar/vocabulary.json is where the six-category grouping this comment
+# used to carry now lives, as data (`keyword_categories`) — the comment
+# groupings were real structure, and the JSON file is the only other place
+# that structure is recorded.
+KEYWORDS = {e["word"] for e in _VOCAB["keywords"]}
 
 
 @dataclass
@@ -102,16 +148,8 @@ def tokenize(src):
 # cannot import shapes.py (shapes.py imports parser.py; the reverse would be
 # a cycle). Closed is the point: an open vocabulary cannot be searched or
 # diffed across packages, and duplicating it in two files would let the two
-# copies drift.
-EFFECT_KINDS = {
-    "ask":    "network",     # request-with-response
-    "read":   "file",
-    "write":  "file",
-    "show":   "console",
-    "clock":  "ambient",     # the current time
-    "random": "ambient",     # entropy
-    "env":    "ambient",     # environment variables, process arguments
-}
+# copies drift. Source of truth is grammar/vocabulary.json.
+EFFECT_KINDS = {e["kind"]: e["boundary"] for e in _VOCAB["effect_kinds"]}
 
 
 # ================================================================ AST
