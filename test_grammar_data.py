@@ -15,6 +15,7 @@ import sys
 
 import lexer
 import parser as parser_mod
+from parser import Parser, parse, prescan_funcs, scan_names, tokenize
 
 VOCAB_PATH = "grammar/vocabulary.json"
 
@@ -137,6 +138,72 @@ def test_wrong_format_version_fails_loudly():
         with open(VOCAB_PATH, "w", encoding="utf-8") as f:
             f.write(original)
     del os
+
+
+# ================================================================ arity in the name table (Phase B)
+
+def test_prescan_funcs_returns_arity_from_the_of_clause():
+    src = ("to fetch stories of source, limit:\n  give 1\n\n"
+           "to main:\n  give 1\n")
+    names = prescan_funcs(tokenize(src))
+    assert names == {"fetch stories": 2, "main": 0}
+
+
+def test_prescan_funcs_returns_arity_for_a_foreign_declaration():
+    names = prescan_funcs(tokenize('foreign sort of xs from "builtins.sorted"'))
+    assert names == {"sort": 1}
+
+
+def test_parse_known_accepts_a_bare_set_with_unknown_arity():
+    parse("r = 1", known={"foo bar"})
+    assert Parser.known_funcs["foo bar"] is None
+
+
+def test_parse_known_accepts_a_mapping_and_keeps_its_arity():
+    parse("r = 1", known={"foo bar": 2})
+    assert Parser.known_funcs["foo bar"] == 2
+
+
+def test_local_definition_overrides_a_builtin_arity_in_known_funcs():
+    """A local zero-arg redefinition of a builtin must be visible as arity
+    0 to the parser, not the builtin's arity 1 -- shadowing (test_names.py)
+    has to hold for parsing decisions, not just at call time."""
+    parse("to count:\n  give 7\n\nr = count")
+    assert Parser.known_funcs["count"] == 0
+
+
+def test_every_builtin_has_arity_one_in_the_vocabulary():
+    doc = load_vocab_doc()
+    for b in doc["builtins"]:
+        assert b["arity"] == 1, f"{b['name']!r} has arity {b['arity']}, expected 1"
+
+
+def test_scan_names_is_still_dict_membership_compatible():
+    names = scan_names('rule [readings-stay-local] readings may not ask')
+    assert "readings-stay-local" not in names
+
+
+# ================================================================ read_multiword_name (defect fix)
+
+def test_read_name_until_is_gone():
+    assert not hasattr(Parser, "read_name_until")
+    assert hasattr(Parser, "read_multiword_name")
+
+
+def test_use_rename_clause_still_reads_multiword_names_both_sides():
+    from lexer import Use
+    prog = parse("use cache with load record as load cached")
+    assert prog == [Use("cache", (("load record", "load cached"),))]
+
+
+def test_read_multiword_name_consumes_every_consecutive_name_token():
+    """Pins the mechanism the old docstring implied but the code never
+    implemented: it does not look for a specific stop word, it just reads
+    NAME tokens until a non-NAME. A reserved word ends it even if that
+    word was never named as a 'stop' anywhere."""
+    p = Parser(tokenize("alpha beta gamma if"))
+    assert p.read_multiword_name() == "alpha beta gamma"
+    assert p.at("IF")
 
 
 # ================================================================ anti-drift

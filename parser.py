@@ -16,7 +16,7 @@ class PlanesSyntaxError(Exception):
 
 
 class Parser:
-    known_funcs: set = set()
+    known_funcs: dict = {}
 
     def __init__(self, tokens):
         self.toks = tokens
@@ -98,12 +98,12 @@ class Parser:
             renames = []
             while self.accept("WITH"):
                 # `use cache with load record as load cached`
-                # Names are multi-word, so read until `as`, then to the end
-                # of the clause. `as` is reserved, so it cannot be part of
-                # either name.
-                old = self.read_name_until("AS")
+                # Names are multi-word, so read consecutive NAME tokens on
+                # both sides of `as`. `as` and `with` are reserved words, so
+                # neither can be part of either name.
+                old = self.read_multiword_name()
                 self.expect("AS")
-                new = self.read_name_until("WITH")
+                new = self.read_multiword_name()
                 renames.append((old, new))
             return Use(module, tuple(renames))
 
@@ -641,13 +641,17 @@ class Parser:
             node = Field(node, self.next().value)
         return node
 
-    def read_name_until(self, *stops):
-        """Read a multi-word name, stopping before a reserved terminator.
+    def read_multiword_name(self):
+        """Read a multi-word name: every consecutive NAME token, stopping
+        at the first non-NAME.
 
         Names are several NAME tokens, so a clause like `load record as
-        load cached` needs a rule for where one name ends. The terminators
-        are reserved words, which is exactly why they can serve as the
-        boundary.
+        load cached` needs a rule for where one name ends. This works only
+        because both of this method's callers' terminators (`as`, `with`)
+        are reserved words and therefore never arrive as NAME — there is
+        no lookahead for a specific stop word here, despite what an
+        earlier version of this docstring (and an unused `*stops`
+        parameter) implied.
         """
         parts = []
         while self.at("NAME"):
@@ -905,13 +909,30 @@ class Parser:
             f"line {t.line}: expected a value, found '{t.value or 'end of line'}'")
 
 
+def _param_arity(tokens, j):
+    """Count comma-separated NAME parameters starting at index `j`, which
+    points at the token right after `of`. Zero when there is no parameter
+    there at all (a bare `of` never occurs; this only fires when `of`
+    itself was absent, handled by the caller)."""
+    if tokens[j].kind != "NAME":
+        return 0
+    count = 1
+    j += 1
+    while tokens[j].kind == "OP" and tokens[j].value == "," and tokens[j + 1].kind == "NAME":
+        count += 1
+        j += 2
+    return count
+
+
 def prescan_funcs(tokens):
-    """Function names, read before the real parse.
+    """Function names and arities, read before the real parse.
 
     A multi-word call is several NAME tokens; only a name table can tell the
-    parser they are one call. So names have to be collected first.
+    parser they are one call. So names have to be collected first. Arity is
+    the number of comma-separated parameters after `of` — 0 when there is no
+    `of` clause at all (`to main:`). Returns {name: arity}.
     """
-    names = set()
+    names = {}
     for i, t in enumerate(tokens):
         if t.kind == "FOREIGN":
             # A foreign declaration names a callable, same as `to`.
@@ -920,7 +941,8 @@ def prescan_funcs(tokens):
                 parts.append(tokens[j].value)
                 j += 1
             if parts:
-                names.add(" ".join(parts))
+                arity = _param_arity(tokens, j + 1) if tokens[j].kind == "OF" else 0
+                names[" ".join(parts)] = arity
             continue
         if t.kind != "TO":
             continue
@@ -947,21 +969,40 @@ def prescan_funcs(tokens):
                 f"appear in the function name "
                 f"'{' '.join(parts)} {tokens[j].value}'\n"
                 f"  reserved: {', '.join(sorted(KEYWORDS))}")
-        names.add(" ".join(parts))
+        arity = _param_arity(tokens, j + 1) if tokens[j].kind == "OF" else 0
+        names[" ".join(parts)] = arity
     return names
 
 
 def parse(src, known=None):
     """Parse a program.
 
-    `known` supplies function names defined elsewhere. Multi-word names must
-    be known before a call site can be parsed — `api base` is two NAME
-    tokens, and only a name table can say it is one call. Without this a
-    file could not call a multi-word function from a module it uses.
+    `known` supplies function names defined elsewhere — either a mapping of
+    name to arity, or a bare set/iterable of names, in which case arity is
+    `None` (unknown) for each. Multi-word names must be known before a call
+    site can be parsed — `api base` is two NAME tokens, and only a name
+    table can say it is one call. Without this a file could not call a
+    multi-word function from a module it uses.
+
+    When the same name appears more than once, this file's own definitions
+    win over `known` (another file in the graph), which wins over a
+    builtin of the same name — matching how shadowing already works at
+    runtime (interp.py resolves a user function before a builtin). `None`
+    (unknown arity) is never treated as a match or a non-match by anything
+    that reads it later; it is reported.
     """
     toks = tokenize(src)
-    Parser.known_funcs = (prescan_funcs(toks) | set(known or ())
-                          | BUILTIN_NAMES)
+    if known is None:
+        known_map = {}
+    elif isinstance(known, dict):
+        known_map = known
+    else:
+        known_map = {name: None for name in known}
+    builtins_map = {b["name"]: b.get("arity", 1) for b in _VOCAB["builtins"]}
+    merged = dict(builtins_map)
+    merged.update(known_map)
+    merged.update(prescan_funcs(toks))
+    Parser.known_funcs = merged
     return Parser(toks).parse_program()
 
 
