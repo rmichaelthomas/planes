@@ -166,6 +166,21 @@ def test_for_each_over_a_string_counts_code_points_not_utf8_bytes():
     assert v == ["h", "\u00e9", "l", "l", "o"]
 
 
+def test_rebinding_outside_the_loop_accumulates_across_iterations():
+    """The fold-lexer design (probe/fold_tokens.planes) rests on `acc =
+    acc plus c` inside a for-each *statement* body reaching out to rebind
+    the outer `acc`, on every iteration, via v4.0 §58's scope-walking
+    assignment (Env.set walks parent scopes to find where a name already
+    lives) -- not the comprehension form's own automatic result list,
+    which is a different mechanism and already covered elsewhere. This
+    was untested until probe/accumulate_in_loop.planes exercised it."""
+    n = val('acc = []\nfor each c in "abc":\n  acc = acc plus c\nx = count of acc',
+            "x").value
+    assert n == 3
+    acc = val('acc = []\nfor each c in "abc":\n  acc = acc plus c\nx = acc', "x").value
+    assert acc == ["a", "b", "c"]
+
+
 def test_for_each_over_a_number_still_raises_not_a_collection():
     try:
         run("for each c in 5:\n  show c\n")
