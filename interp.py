@@ -803,6 +803,30 @@ class Interpreter:
                         "convert each item first — e.g. text of n")
             v = "".join(arg.value)
             return Traced(v, Deriv("op", "join of", v, [arg.node]))
+        if node.name == "rest":
+            # The list without its first element (S2 §A.3). Lists only — a
+            # string wants `first n of` (#11's declined `rest n of x` for text
+            # stands). The rest of an empty list is an error, not a silent
+            # empty list: a tail taken past the end is a bug at the call site,
+            # and the empty result would hide it. `arg.node` rides in the
+            # Deriv, so origins() traces the tail back to the source list.
+            if isinstance(arg.value, str):
+                raise PlanesError(
+                    "not-a-list",
+                    f"cannot take the rest of text {fmt(arg.value)}",
+                    "rest is for lists; for a text prefix use `first n of`")
+            if not isinstance(arg.value, list):
+                raise PlanesError(
+                    "not-a-list",
+                    f"cannot take the rest of {fmt(arg.value)}",
+                    "rest takes a list; check the value is a list")
+            if not arg.value:
+                raise PlanesError(
+                    "empty-list",
+                    "cannot take the rest of an empty list",
+                    "check it is not empty first, e.g. `if count of xs > 0:`")
+            v = arg.value[1:]
+            return Traced(v, Deriv("op", "rest of", v, [arg.node]))
 
         raise PlanesError("unknown-builtin", node.name)
 

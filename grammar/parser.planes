@@ -596,9 +596,9 @@ to parse-list-literal of cursor:
     give { node: { kind: "ListLit", items: [] }, cursor: (advance of after-open) }
   else:
     first-result = parse-or of after-open
-    rest = collect-list-items of first-result.cursor, [first-result.node]
-    closed = expect-op of rest.cursor, "]"
-    give { node: { kind: "ListLit", items: rest.items }, cursor: closed.cursor }
+    remaining = collect-list-items of first-result.cursor, [first-result.node]
+    closed = expect-op of remaining.cursor, "]"
+    give { node: { kind: "ListLit", items: remaining.items }, cursor: closed.cursor }
 
 to parse-record-field of cursor:
   after-ws = skip-bracket-ws of cursor
@@ -626,9 +626,9 @@ to parse-record-literal of cursor:
     give { node: { kind: "RecordLit", fields: [] }, cursor: (advance of after-open) }
   else:
     first-field = parse-record-field of after-open
-    rest = collect-record-fields of first-field.cursor, [{ key: first-field.key, value: first-field.value }]
-    closed = expect-op of rest.cursor, "}"
-    give { node: { kind: "RecordLit", fields: rest.fields }, cursor: closed.cursor }
+    remaining = collect-record-fields of first-field.cursor, [{ key: first-field.key, value: first-field.value }]
+    closed = expect-op of remaining.cursor, "}"
+    give { node: { kind: "RecordLit", fields: remaining.fields }, cursor: closed.cursor }
 
 to parse-primary of cursor:
   t = current of cursor
@@ -973,14 +973,14 @@ to collect-params of cursor:
 
 to parse-funcdef of cursor, tokens:
   first-name = expect-kind of (advance of cursor), "NAME"
-  rest = collect-name-parts of first-name.cursor, [first-name.token.text]
-  name = join-with-spaces of rest.parts
-  of-try = try-accept of rest.cursor, "OF"
+  remaining = collect-name-parts of first-name.cursor, [first-name.token.text]
+  name = join-with-spaces of remaining.parts
+  of-try = try-accept of remaining.cursor, "OF"
   if of-try.matched:
     params-result = collect-params of of-try.cursor
     give finish-funcdef of name, params-result.params, params-result.cursor, tokens
   else:
-    give finish-funcdef of name, [], rest.cursor, tokens
+    give finish-funcdef of name, [], remaining.cursor, tokens
 
 to finish-funcdef of name, params, cursor, tokens:
   colon-expect = expect-op of cursor, ":"

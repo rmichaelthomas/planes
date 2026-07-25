@@ -8,7 +8,7 @@ sequence).
 """
 import sys
 
-from interp import Interpreter, PlanesError, why_tree
+from interp import Interpreter, PlanesError, origins, why_tree
 from lexer import PlanesSyntaxError
 from shapes import analyse
 
@@ -192,6 +192,78 @@ def test_join_is_shadowable_by_a_user_function():
     # A builtin is an ordinary function name; a user's own definition wins.
     src = "to join of xs:\n  give 42\n\nx = join of [\"a\", \"b\"]"
     assert val(src, "x").value == 42
+
+
+# ================================================================ S2 A.3 -- rest
+
+def test_rest_returns_the_list_without_its_first_element():
+    assert val("x = rest of [1, 2, 3]", "x").value == [2, 3]
+
+
+def test_rest_of_a_single_element_is_the_empty_list():
+    assert val("x = rest of [9]", "x").value == []
+
+
+def test_rest_of_an_empty_list_raises_naming_the_fix():
+    # A.3 ruling 1: a tail past the end is a bug at the call site, not a
+    # silent empty list. The fix clause names the guard construct.
+    try:
+        run("x = rest of []")
+        assert False, "rest of [] must raise"
+    except PlanesError as e:
+        assert e.tag == "empty-list"
+        assert "count of" in e.fix, f"fix must name the guard, got: {e.fix!r}"
+
+
+def test_rest_of_a_string_raises_naming_first_n_of():
+    # A.3 ruling 2: lists only; #11's declined `rest n of` for text stands.
+    try:
+        run('x = rest of "ab"')
+        assert False, "rest of a string must raise"
+    except PlanesError as e:
+        assert e.tag == "not-a-list"
+        assert "first n of" in e.fix
+
+
+def test_rest_of_a_non_list_raises():
+    try:
+        run("x = rest of 5")
+        assert False, "rest of a number must raise"
+    except PlanesError as e:
+        assert e.tag == "not-a-list"
+
+
+def test_shapes_stays_total_and_folds_rest():
+    # A.3 ruling 3: the analyser sees through rest exactly as through first.
+    s = analyse('xs = ["a", "b", "c"]\nys = rest of xs\nshow ys')
+    assert s.kinds() == ["show"], "rest contributes no effect and stays total"
+
+
+def test_origins_of_traces_a_rest_value_back_to_the_list():
+    # A.3 ruling 3, static: a value flowing through rest into an effect
+    # traces back through the derivation graph to the original list name.
+    s = analyse('xs = ["u1.com", "u2.com"]\ntail = rest of xs\n'
+                'use http\nr = ask (join of tail)')
+    ask = [e for e in s.effects if e.kind == "ask"][0]
+    labels = [lbl for lbl, _ in s.origins_of(ask)]
+    assert "xs" in labels, f"origins_of should trace back to xs, got {labels}"
+
+
+def test_origins_traces_a_rest_value_back_to_its_source_at_runtime():
+    # A.3 ruling 3, runtime: rest of a boundary-fetched list keeps its origin.
+    i = interp('use http\nxs = ask "http://x/list"\nys = rest of xs',
+               http={"http://x/list": '["a", "b", "c"]'})
+    assert "network:http://x/list" in origins(i.env.get("ys"))
+
+
+def test_rest_is_not_an_effect_kind():
+    from lexer import EFFECT_KINDS
+    assert "rest" not in EFFECT_KINDS
+
+
+def test_rest_is_shadowable_by_a_user_function():
+    src = "to rest of xs:\n  give 7\n\nx = rest of [1, 2, 3]"
+    assert val(src, "x").value == 7
 
 
 # ================================================================ A.4 -- text is iterable

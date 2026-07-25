@@ -193,6 +193,7 @@ CHECKS = [
     ("plus (list append)",      "§72",       [("plus_operator", None)]),
     ("normalize builtin",       "§107",      [("builtin", "normalize")]),
     ("join builtin",            "S2 §A.2",   [("builtin", "join")]),
+    ("rest builtin",            "S2 §A.3",   [("builtin", "rest")]),
 ]
 
 
