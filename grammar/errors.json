@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generated_by": "grammar_gen.py",
-  "count": 87,
+  "count": 88,
   "entries": [
     {
       "id": "interp.not-a-yes-no",
@@ -503,7 +503,18 @@
       "id": "lexer.planessyntaxerror-site-2",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "lexer.py:184",
+      "source": "lexer.py:202",
+      "raised_in": "tokenize",
+      "template": "line {lineno}: unterminated string literal -- no closing quote found before the end of the line (a Planes string cannot span multiple lines)",
+      "slots": [
+        "lineno"
+      ]
+    },
+    {
+      "id": "lexer.planessyntaxerror-site-3",
+      "class": "PlanesSyntaxError",
+      "tag": null,
+      "source": "lexer.py:195",
       "raised_in": "tokenize",
       "template": "line {lineno}: unterminated string literal -- a backslash right before the closing quote escapes that quote (\\\") instead of ending the string; the four recognized escapes are \\\" \\\\ \\n \\t -- write \\\\ for a literal trailing backslash",
       "slots": [
@@ -1165,7 +1176,10 @@
       "lexer.py:147"
     ],
     "lexer.planessyntaxerror-site-2": [
-      "lexer.py:184"
+      "lexer.py:202"
+    ],
+    "lexer.planessyntaxerror-site-3": [
+      "lexer.py:195"
     ],
     "parser.planessyntaxerror-site-1": [
       "parser.py:309"

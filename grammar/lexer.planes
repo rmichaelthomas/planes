@@ -132,7 +132,8 @@ to step-fresh-nonspace of state, c:
 
 to step-fresh-not-fingerprint of state, c:
   if c == "\"":
-    give { out: state.out, pending: { kind: "string", text: "" }, line: state.line }
+    fresh-string = { kind: "string", text: "", ends-in-escaped-quote: false }
+    give { out: state.out, pending: fresh-string, line: state.line }
   else:
     give step-fresh-not-string of state, c
 
@@ -286,11 +287,14 @@ to flush-pending of state:
             when state.pending is { kind: "op-lookahead" }:
               give flush-op-lookahead of state
             else:
-              is-unterminated = state.pending.kind == "string" or state.pending.kind == "string-escape"
-              if is-unterminated:
+              when state.pending is { kind: "string", ends-in-escaped-quote: true }:
                 fail unterminated-string-message of state.line as unterminated-string
               else:
-                give state
+                is-plain-unterminated = state.pending.kind == "string" or state.pending.kind == "string-escape"
+                if is-plain-unterminated:
+                  fail unterminated-string-no-quote-message of state.line as unterminated-string
+                else:
+                  give state
 
 to flush-op-lookahead of state:
   first-char = state.pending.first
@@ -333,7 +337,7 @@ to step-string of state, c:
     if c == "\\":
       give { out: state.out, pending: { kind: "string-escape", text: state.pending.text }, line: state.line }
     else:
-      new-pending = { kind: "string", text: state.pending.text + c }
+      new-pending = { kind: "string", text: state.pending.text + c, ends-in-escaped-quote: false }
       give { out: state.out, pending: new-pending, line: state.line }
 
 # Both errors lexer.py *raises* on malformed input -- an unrecognized
@@ -365,23 +369,44 @@ to unrecognized-escape-message of info:
   opening = "line " + text of info.line + ": unrecognized escape '" + one-backslash + info.char
   give opening + "' in a string literal -- the four recognized escapes are " + four-escapes-display
 
+# Two distinct unterminated-string messages, not one -- lexer.py raises
+# the same PlanesSyntaxError from a single code path regardless of
+# *why* the string never closed, and that used to say "a backslash
+# right before the closing quote" even for a plain "abc with no
+# backslash anywhere on the line (verified directly against lexer.py:
+# it does). Fixed there and mirrored here, not just here: a literal
+# quote character can only ever enter `text` via the escaped-quote path
+# below (a raw `"` closes the token immediately, in step-string, rather
+# than ever joining `text`), so `ends-in-escaped-quote` -- true only
+# immediately after resolving \" -- says precisely whether the string's
+# last character came from an escape that could be mistaken for a
+# closer, without needing a "last character of a string" operation this
+# language does not have (capability 2, still MISSING).
 to unterminated-string-message of line-no:
   opening = "line " + text of line-no + ": unterminated string literal -- a backslash right before the closing quote escapes that quote (" + one-backslash + "\""
   middle = opening + ") instead of ending the string; the four recognized escapes are " + four-escapes-display
   give middle + " -- write " + one-backslash + one-backslash + " for a literal trailing backslash"
 
+to unterminated-string-no-quote-message of line-no:
+  opening = "line " + text of line-no + ": unterminated string literal -- no closing quote found before the end of the line"
+  give opening + " (a Planes string cannot span multiple lines)"
+
 to step-string-escape of state, c:
   if c == "\"":
-    give { out: state.out, pending: { kind: "string", text: state.pending.text + "\"" }, line: state.line }
+    resolved = { kind: "string", text: state.pending.text + "\"", ends-in-escaped-quote: true }
+    give { out: state.out, pending: resolved, line: state.line }
   else:
     if c == "\\":
-      give { out: state.out, pending: { kind: "string", text: state.pending.text + "\\" }, line: state.line }
+      resolved = { kind: "string", text: state.pending.text + "\\", ends-in-escaped-quote: false }
+      give { out: state.out, pending: resolved, line: state.line }
     else:
       if c == "n":
-        give { out: state.out, pending: { kind: "string", text: state.pending.text + "\n" }, line: state.line }
+        resolved = { kind: "string", text: state.pending.text + "\n", ends-in-escaped-quote: false }
+        give { out: state.out, pending: resolved, line: state.line }
       else:
         if c == "t":
-          give { out: state.out, pending: { kind: "string", text: state.pending.text + "\t" }, line: state.line }
+          resolved = { kind: "string", text: state.pending.text + "\t", ends-in-escaped-quote: false }
+          give { out: state.out, pending: resolved, line: state.line }
         else:
           fail unrecognized-escape-message of { char: c, line: state.line } as unrecognized-escape
 

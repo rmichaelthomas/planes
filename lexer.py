@@ -181,13 +181,28 @@ def tokenize(src):
             m = TOKEN_RE.match(stripped, pos)
             if m is None:
                 if stripped[pos] == '"':
+                    # STRING's own regex is anchored at pos and already
+                    # failed, so if the remainder ends in a quote, an odd
+                    # count of backslashes must precede it (an even count
+                    # would have let the regex match normally) -- that
+                    # quote was consumed as an escape, not left to close
+                    # the string. If the remainder does not end in a
+                    # quote at all, nothing closed it; saying a backslash
+                    # is to blame would be inventing one that may not be
+                    # there (verified: "abc, with no backslash anywhere,
+                    # hits this same branch).
+                    if stripped[pos:].endswith('"'):
+                        raise PlanesSyntaxError(
+                            f"line {lineno}: unterminated string literal -- a "
+                            f"backslash right before the closing quote escapes "
+                            f'that quote (\\") instead of ending the string; '
+                            f"the four recognized escapes are "
+                            f'\\" \\\\ \\n \\t -- write \\\\ for a literal '
+                            f"trailing backslash")
                     raise PlanesSyntaxError(
-                        f"line {lineno}: unterminated string literal -- a "
-                        f"backslash right before the closing quote escapes "
-                        f'that quote (\\") instead of ending the string; '
-                        f"the four recognized escapes are "
-                        f'\\" \\\\ \\n \\t -- write \\\\ for a literal '
-                        f"trailing backslash")
+                        f"line {lineno}: unterminated string literal -- no "
+                        f"closing quote found before the end of the line "
+                        f"(a Planes string cannot span multiple lines)")
                 pos += 1
                 continue
             kind, val = m.lastgroup, m.group()

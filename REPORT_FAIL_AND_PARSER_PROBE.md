@@ -2,7 +2,7 @@
 
 **Build:** feat/fail-primitive-and-parser-probe
 **Base:** `main` at `d7687f7`
-**Result:** 602/602 tests passing (573 baseline + 29 new), ruff/mypy/
+**Result:** 603/603 tests passing (573 baseline + 30 new), ruff/mypy/
 `audit_locked_vs_built.py`/`grammar_gen.py --check` all clean at every
 commit, amber fire rate zero throughout, reserved-word ceiling unchanged
 at 32/8/7/8.
@@ -27,6 +27,23 @@ at 32/8/7/8.
   and unterminated-string errors — closing `REPORT_STRING_ESCAPES.md`'s
   gap 1, at the exact site that reported it. The two implementations'
   messages agree exactly (tested directly, not assumed from shared code).
+- **A bug found and fixed while running this build's own §7.2 gate
+  self-check, not deferred to review.** `lexer.py`'s unterminated-string
+  message (unchanged since PR #12) said *"a backslash right before the
+  closing quote escapes that quote"* even for a plain forgotten closing
+  quote with no backslash anywhere on the line — inventing an
+  explanation that never occurred. Fixed at the root (`lexer.py`
+  distinguishes the two cases by whether the unmatched remainder ends in
+  a quote — an odd backslash count precedes one only if a backslash is
+  actually there) and mirrored in `grammar/lexer.planes` (a new
+  `ends-in-escaped-quote` flag, true only immediately after resolving
+  `\"` — the one path a literal quote can enter accumulated text by,
+  since a raw `"` closes the token immediately rather than joining it).
+  Both cases verified to agree between the two implementations, not just
+  the one this build originally wrote. This is exactly the standing
+  instruction this project's build prompts carry throughout — a closable
+  finding gets fixed, not just recorded — applied to a self-check gate
+  result rather than to a phase's own primary work.
 - **Phase 3**: `PROBE_PARSER.md` — seven capability probes, all either
   WORKS or WORKS WITH FRICTION, no outright MISSING. Three findings
   beyond what the seven questions asked for directly (see below).

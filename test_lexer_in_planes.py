@@ -163,13 +163,42 @@ def test_unrecognized_escape_messages_agree():
         assert e.detail == py_msg, f"planes: {e.detail!r}\npython: {py_msg!r}"
 
 
-def test_unterminated_string_messages_agree():
+def test_unterminated_string_messages_agree_trailing_backslash():
+    """The backslash consumed what looked like the closing quote --
+    both implementations correctly blame the backslash."""
     src = 'x = "a\\"'
     try:
         pylexer.tokenize(src)
         assert False, "lexer.py should have raised"
     except pylexer.PlanesSyntaxError as e:
         py_msg = str(e)
+
+    try:
+        planes_tokenize(src)
+        assert False, "lexer.planes should have raised"
+    except PlanesError as e:
+        assert e.detail == py_msg, f"planes: {e.detail!r}\npython: {py_msg!r}"
+
+
+def test_unterminated_string_messages_agree_no_backslash_at_all():
+    """A plain forgotten closing quote, no backslash anywhere on the
+    line. Found during this build's own gate self-check (self-run, not
+    deferred): the message used to say "a backslash right before the
+    closing quote" even here, inventing one that never occurred --
+    lexer.py distinguishes the two cases now (stripped[pos:].endswith
+    ('"') -- an odd backslash count precedes a trailing quote only if
+    one is actually there), and lexer.planes mirrors the distinction via
+    ends-in-escaped-quote, a flag only ever true right after resolving
+    \\" (the one path a literal quote can enter `text` by, since a raw
+    `"` closes the token immediately rather than joining it)."""
+    src = 'x = "abc'
+    try:
+        pylexer.tokenize(src)
+        assert False, "lexer.py should have raised"
+    except pylexer.PlanesSyntaxError as e:
+        py_msg = str(e)
+    assert "backslash" not in py_msg, \
+        f"no backslash occurred in the source; message must not blame one: {py_msg!r}"
 
     try:
         planes_tokenize(src)
