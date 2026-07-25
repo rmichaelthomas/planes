@@ -454,6 +454,22 @@ def test_list_and_record_literals_and_let_agree():
         assert_program_agrees(src)
 
 
+# ================================================================ Phase 4: corpus agreement
+#
+# scripts/parser_corpus_agreement.py runs the full classified scan
+# (parser-in-planes-verification.md carries the per-file table this
+# guards). A regression floor, not a target: falling short of 30 PASS is
+# an explicit, reported, non-failing outcome of this build (section 9) --
+# but a PASS count that goes DOWN from a later change is a real
+# regression this test exists to catch.
+
+def test_corpus_agreement_does_not_regress():
+    from scripts.parser_corpus_agreement import run
+    results = run()
+    passing = [f for f, status, _ in results if status == "PASS"]
+    assert len(passing) >= 4, f"corpus PASS count regressed: {passing}"
+
+
 if __name__ == "__main__":
     fails = []
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
