@@ -362,6 +362,23 @@ def test_show_statements_agree():
         assert_program_agrees(src)
 
 
+IF_PROGRAMS = [
+    'if x < 5:\n  show "small"\n',
+    'if x < 5:\n  show "small"\nelse:\n  show "big"\n',
+    "if x < 5: show x\n",
+    "if x < 5: show x\nelse: show 0\n",
+    'if x < 5:\n  y = 1\n  show y\nelse:\n  y = 2\n  show y\n',
+    ('if x < 5:\n  if y < 5:\n    show "both small"\n  else:\n    show "x small only"\n'
+     'else:\n  show "x big"\n'),
+    'x = 1\nif x == 1:\n  show "one"\nshow "done"\n',
+]
+
+
+def test_if_else_statements_agree():
+    for src in IF_PROGRAMS:
+        assert_program_agrees(src)
+
+
 if __name__ == "__main__":
     fails = []
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
