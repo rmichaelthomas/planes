@@ -491,7 +491,52 @@ class Interpreter:
             c = self.eval(stmt.cond, env)
             return self.exec_block(stmt.then if condition(c.value) else stmt.els, env)
 
+        if isinstance(stmt, When):
+            return self.exec_when(stmt, env)
+
         return self.eval(stmt, env)
+
+    def exec_when(self, stmt, env):
+        """Dispatch on record shape, with field binding (v5.0 §74) — not
+        type tags, not a type system. A missing field is simply no match;
+        a present field with the wrong shape raises through the same
+        guarded equal() `==` uses (§59), so a mismatch is an honest error
+        rather than a silent non-match. Bindings land directly in `env`,
+        the same no-child-scope choice `if`/`else` and the or-fail handler
+        already make in this interpreter.
+        """
+        subject = self.eval(stmt.subject, env)
+        if not isinstance(subject.value, dict):
+            raise PlanesError(
+                "not-a-record",
+                f"cannot match {fmt(subject.value)} against a shape",
+                "when matches record shapes only")
+
+        matched, bindings = True, []
+        for fname, (kind, arg) in stmt.pattern:
+            if fname not in subject.value:
+                matched = False
+                break
+            field_val = subject.value[fname]
+            if kind == "match":
+                want = self.eval(arg, env)
+                if not equal(field_val, want.value):
+                    matched = False
+                    break
+            else:
+                bindings.append((fname, field_val))
+
+        if matched:
+            for name, val in bindings:
+                env.bind_local(name, Traced(
+                    val, Deriv("field", f".{name}", val, [subject.node])))
+
+        result = self.exec_block(stmt.body if matched else stmt.els, env)
+        fields = ", ".join(f for f, _ in stmt.pattern)
+        label = f"when {{{fields}}} " + ("matched" if matched else "did not match")
+        rv = result.value if result is not None else None
+        rn = result.node if result is not None else Deriv("literal", "nothing", None)
+        return Traced(rv, Deriv("op", label, rv, [subject.node, rn]))
 
     # ---- expressions
 
@@ -521,6 +566,29 @@ class Interpreter:
             vals = [i.value for i in items]
             return Traced(vals, Deriv("list", f"[{len(vals)} items]", vals,
                                       [i.node for i in items]))
+
+        if isinstance(node, RecordUpdate):
+            base = self.eval(node.base, env)
+            if not isinstance(base.value, dict):
+                raise PlanesError(
+                    "not-a-record",
+                    f"cannot update {fmt(base.value)} with with",
+                    "with updates a record; check the base is one")
+            parts = [(k, self.eval(v, env)) for k, v in node.fields]
+            new = {**base.value, **{k: t.value for k, t in parts}}
+            return Traced(new, Deriv("op", "with", new,
+                                     [base.node] + [t.node for _, t in parts]))
+
+        if isinstance(node, ListPlus):
+            base = self.eval(node.base, env)
+            if not isinstance(base.value, list):
+                raise PlanesError(
+                    "not-a-list",
+                    f"cannot append to {fmt(base.value)} with plus",
+                    "plus appends to a list; check the base is one")
+            item = self.eval(node.item, env)
+            new = base.value + [item.value]
+            return Traced(new, Deriv("op", "plus", new, [base.node, item.node]))
 
         if isinstance(node, Not):
             v = self.eval(node.expr, env)

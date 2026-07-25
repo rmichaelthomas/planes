@@ -73,7 +73,7 @@ def test_reserved_list_is_only_structural_words():
     """A word stays reserved only if the parser must see it to know the
     shape of a statement.
 
-    The ceiling is 30, and every rise is argued for in a report:
+    The ceiling is 32, and every rise is argued for in a report:
 
     - 25 after the vocabulary was cut from 32.
     - 26 with `with`, for rename-on-import: a consumer of two colliding
@@ -90,11 +90,22 @@ def test_reserved_list_is_only_structural_words():
       `not` already carried logical negation and needed no new grant, and
       `may` is read positionally inside `parse_rule` only, so a program that
       never writes `rule` still has `may` free as an ordinary name.
+    - 32 with `plus` and `when`, closing the two constructs v5.0 §72/§74
+      locked but never built. `plus` is not spellable as `+`: `+` on two
+      lists concatenates (v9.0 A.1's homogeneity rule requires both sides
+      the same type), but `xs plus item` appends a bare item without first
+      wrapping it in a list — a different operation, not a stylistic
+      choice. `when` is not spellable as `if`: `if` branches on a boolean
+      condition the program already computed; `when` computes the
+      condition itself, testing a record's shape and binding its fields in
+      the same step (§74) — folding that into `if` would need pattern
+      syntax inside a condition expression, which is the same new grammar
+      either way.
 
     A rise is only legitimate when the word has no other spelling. If the
     argument is weaker than that, drop the feature instead.
     """
-    assert len(KEYWORDS) <= 30, f"reserved list has grown to {len(KEYWORDS)}"
+    assert len(KEYWORDS) <= 32, f"reserved list has grown to {len(KEYWORDS)}"
     for word in FORMER_KEYWORDS:
         assert word not in KEYWORDS, f"{word!r} should no longer be reserved"
 

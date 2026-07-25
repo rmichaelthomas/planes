@@ -42,9 +42,9 @@ KEYWORDS = {
     # statement shape
     "to", "give", "let", "use", "show", "write", "why",
     # control flow
-    "if", "else", "for", "each", "in", "where",
+    "if", "else", "for", "each", "in", "where", "when",
     # operators and connectives
-    "and", "or", "not", "of", "as", "fail", "with",
+    "and", "or", "not", "of", "as", "fail", "with", "plus",
     "foreign", "from", "doing",
     # literals
     "true", "false", "nothing",
@@ -132,6 +132,20 @@ class ListLit:  items: list
 class RecordLit:
     fields: list   # list of (name, expr) pairs, source order preserved
 @dataclass
+class RecordUpdate:
+    """`base with name: expr, ...` (v5.0 §72) — a new record differing in
+    the named fields; the base is untouched. Distinct from the `with` in
+    `use x with a as b`, which the Use statement parses entirely on its
+    own and never reaches expression parsing."""
+    base: Any
+    fields: list   # list of (name, expr) pairs, same shape as RecordLit
+@dataclass
+class ListPlus:
+    """`base plus item` (v5.0 §72) — a new list with item appended; the
+    base is untouched."""
+    base: Any
+    item: Any
+@dataclass
 class BinOp:
     op: str
     left: Any
@@ -186,6 +200,20 @@ class ForEach:
 class If:
     cond: Any
     then: list
+    els: list
+@dataclass
+class When:
+    """`when subject is { field: expr, bindname, ... }: ... else: ...`
+    (v5.0 §74) — dispatch on record shape and field binding, never on a
+    type tag. `pattern` is a list of (field, matcher) pairs; a matcher is
+    either ("match", expr) — the field must equal this value — or
+    ("bind", name) — bind the field's value into the branch. A missing
+    field is simply no match, not an error; a present-but-wrong-type
+    match constraint raises through the same guarded equal() as `==`
+    (§59) — no separate, silently-lenient comparison path."""
+    subject: Any
+    pattern: list
+    body: list
     els: list
 @dataclass
 class OrFail:
