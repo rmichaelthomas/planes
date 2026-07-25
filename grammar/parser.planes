@@ -42,6 +42,105 @@ to render-bool of b:
   else:
     give "false"
 
+# ================================================================ number-literal text, parsed by hand
+#
+# Number.parse (planes_num.py) has no Planes-side equivalent, and none of
+# the 8 builtins converts text to a number -- `whole` truncates an
+# EXISTING number, it does not parse one. Rather than spend a 9th builtin
+# on this (declined on the same grounds `chr of n` was, REPORT_STRING_
+# ESCAPES.md's ruling: a magic conversion builtin reintroduces exactly
+# the opacity the closed vocabulary exists to avoid), a NUMBER token's
+# text is parsed digit by digit, the same character-by-character idiom
+# is-digit/is-alpha already use for classification -- built entirely from
+# already-proven capabilities (comparison, arithmetic, for each), not a
+# language change. Whole and fractional parts both accumulate as exact
+# integers; the fractional part becomes value/10^digits via ordinary `/`,
+# matching Number's own exact-rational semantics for a decimal literal.
+
+to digit-value of c:
+  if c == "0":
+    give 0
+  else:
+    if c == "1":
+      give 1
+    else:
+      if c == "2":
+        give 2
+      else:
+        if c == "3":
+          give 3
+        else:
+          if c == "4":
+            give 4
+          else:
+            if c == "5":
+              give 5
+            else:
+              if c == "6":
+                give 6
+              else:
+                if c == "7":
+                  give 7
+                else:
+                  if c == "8":
+                    give 8
+                  else:
+                    if c == "9":
+                      give 9
+                    else:
+                      fail "not a digit: '" + c + "'" as parse-error
+
+to parse-number-step of state, c:
+  if c == ".":
+    give { whole-part: state.whole-part, frac-part: state.frac-part, frac-divisor: state.frac-divisor, seen-dot: true }
+  else:
+    d = digit-value of c
+    if state.seen-dot:
+      new-frac = state.frac-part * 10 + d
+      new-divisor = state.frac-divisor * 10
+      give { whole-part: state.whole-part, frac-part: new-frac, frac-divisor: new-divisor, seen-dot: true }
+    else:
+      new-whole = state.whole-part * 10 + d
+      give { whole-part: new-whole, frac-part: state.frac-part, frac-divisor: state.frac-divisor, seen-dot: false }
+
+to parse-number-text of raw:
+  initial = { whole-part: 0, frac-part: 0, frac-divisor: 1, seen-dot: false }
+  result = initial
+  for each c in raw:
+    result = parse-number-step of result, c
+  if result.seen-dot:
+    give result.whole-part + (result.frac-part / result.frac-divisor)
+  else:
+    give result.whole-part
+
+# ================================================================ STRING token text, quotes stripped
+#
+# A STRING token's text already carries escape-resolved content between
+# two literal quote characters (lexer.planes's step-string, matching
+# lexer.py's own token.value exactly -- REPORT_STRING_ESCAPES.md's
+# ruling 1). parser.py strips them with `.value[1:-1]`; Planes has no
+# slice syntax (#11) and no "drop first/last" for a string, so this walks
+# every character once, counting position, and keeps everything except
+# position 0 and the last position -- the same counted-fold idiom
+# leading-whitespace-count already uses in lexer.planes, not indexing.
+
+to strip-quotes-step of state, c:
+  is-first = state.i == 0
+  is-last = state.i == (state.n - 1)
+  new-result = state.result
+  keep = not (is-first or is-last)
+  if keep:
+    new-result = state.result + c
+  give { result: new-result, i: (state.i + 1), n: state.n }
+
+to strip-quotes of s:
+  n = count of s
+  initial = { result: "", i: 0, n: n }
+  result = initial
+  for each c in s:
+    result = strip-quotes-step of result, c
+  give result.result
+
 # ================================================================ the canonical form
 #
 # One node per line, indentation for depth, node kind then its fields in
@@ -53,6 +152,39 @@ to render-bool of b:
 # as a literal string, grown by "  " per recursive level, rather than a
 # depth number -- one fewer arithmetic op per level, and it is what the
 # recursive call sites read directly.
+
+to join-with-newlines of lines:
+  result = ""
+  seen-one = false
+  for each line in lines:
+    if seen-one:
+      result = result + "\n" + line
+    else:
+      result = line
+      seen-one = true
+  give result
+
+# The body of a `field: [N]` list of AST nodes -- just the "- \n <node>"
+# blocks, newline-joined; "" for an empty list. The caller composes the
+# "fieldname: [N]" header itself, since the field name and count vary
+# per call site and this function has no way to know either generically
+# (same reason canonical-of-node is hand-dispatched, not introspected).
+to canonical-of-node-list of items, indent:
+  lines = []
+  for each item in items:
+    entry = indent + "-\n" + (canonical-of-node of item, (indent + "  "))
+    lines = lines plus entry
+  give join-with-newlines of lines
+
+to canonical-of-call of node, indent:
+  header = indent + "Call\n" + indent + "  name: " + (render-string of node.name)
+  n = count of node.args
+  with-header = header + "\n" + indent + "  args: [" + (text of n) + "]"
+  result = with-header
+  if n > 0:
+    body = canonical-of-node-list of node.args, (indent + "    ")
+    result = with-header + "\n" + body
+  give result + "\n" + indent + "  line: " + (text of node.line)
 
 to canonical-of-node of node, indent:
   when node is { kind: "Num" }:
@@ -77,4 +209,398 @@ to canonical-of-node of node, indent:
               with-left = header + "\n" + indent + "  left:\n" + left-part
               give with-left + "\n" + indent + "  right:\n" + right-part
             else:
-              fail "no canonical form for node kind '" + node.kind + "'" as unknown-node-kind
+              when node is { kind: "ListPlus" }:
+                base-part = canonical-of-node of node.base, (indent + "    ")
+                item-part = canonical-of-node of node.item, (indent + "    ")
+                header = indent + "ListPlus\n" + indent + "  base:\n" + base-part
+                give header + "\n" + indent + "  item:\n" + item-part
+              else:
+                when node is { kind: "Not" }:
+                  inner = canonical-of-node of node.expr, (indent + "    ")
+                  give indent + "Not\n" + indent + "  expr:\n" + inner
+                else:
+                  when node is { kind: "IsNothing" }:
+                    inner = canonical-of-node of node.expr, (indent + "    ")
+                    give indent + "IsNothing\n" + indent + "  expr:\n" + inner
+                  else:
+                    when node is { kind: "Field" }:
+                      obj-part = canonical-of-node of node.obj, (indent + "    ")
+                      header = indent + "Field\n" + indent + "  obj:\n" + obj-part
+                      give header + "\n" + indent + "  name: " + (render-string of node.name)
+                    else:
+                      when node is { kind: "Round" }:
+                        value-part = canonical-of-node of node.value, (indent + "    ")
+                        places-part = canonical-of-node of node.places-value, (indent + "    ")
+                        header = indent + "Round\n" + indent + "  value:\n" + value-part
+                        give header + "\n" + indent + "  places:\n" + places-part
+                      else:
+                        when node is { kind: "Call" }:
+                          give canonical-of-call of node, indent
+                        else:
+                          fail "no canonical form for node kind '" + node.kind + "'" as unknown-node-kind
+
+# ================================================================ the cursor
+#
+# capability 4 (PROBE_PARSER.md): no `rest`/`drop`/index exists for a
+# Planes list (#11), so a forward-walking cursor is a cons-list of
+# records built once via to-cons -- `.rest` is plain field access, not
+# indexing. Safe at fragment scale (well under the ~140-deep ceiling
+# unreverse recurses at, per-item); Phase 3/4 revisit whether it stays
+# safe at whole-file scale.
+
+to reverse-into of items, acc:
+  result = acc
+  for each x in items:
+    result = { head: x, rest: result }
+  give unreverse of result, nothing
+
+to unreverse of node, acc:
+  if node is nothing:
+    give acc
+  else:
+    give unreverse of node.rest, { head: node.head, rest: acc }
+
+to to-cons of items:
+  give reverse-into of items, nothing
+
+to current of cursor:
+  give cursor.head
+
+to advance of cursor:
+  give cursor.rest
+
+to peek-at of cursor, k:
+  if k == 0:
+    give current of cursor
+  else:
+    give peek-at of (advance of cursor), (k - 1)
+
+to tok-at of cursor, kind:
+  t = current of cursor
+  give t.kind == kind
+
+to tok-at-value of cursor, kind, value:
+  t = current of cursor
+  give t.kind == kind and t.text == value
+
+to try-accept of cursor, kind:
+  if tok-at of cursor, kind:
+    give { matched: true, token: (current of cursor), cursor: (advance of cursor) }
+  else:
+    give { matched: false, token: (current of cursor), cursor: cursor }
+
+to try-accept-value of cursor, kind, value:
+  if tok-at-value of cursor, kind, value:
+    give { matched: true, token: (current of cursor), cursor: (advance of cursor) }
+  else:
+    give { matched: false, token: (current of cursor), cursor: cursor }
+
+to expect-kind of cursor, kind:
+  if tok-at of cursor, kind:
+    give { token: (current of cursor), cursor: (advance of cursor) }
+  else:
+    t = current of cursor
+    fail "line " + (text of t.line) + ": expected " + kind + ", found '" + t.text + "'" as parse-error
+
+to expect-op of cursor, value:
+  if tok-at-value of cursor, "OP", value:
+    give { token: (current of cursor), cursor: (advance of cursor) }
+  else:
+    t = current of cursor
+    fail "line " + (text of t.line) + ": expected '" + value + "', found '" + t.text + "'" as parse-error
+
+# ================================================================ paren-is-arglist lookahead
+#
+# parser.py's own lookahead, not amber (amber is Build 5, out of scope --
+# section 7 invariant 3): scan to the matching close paren; an operator
+# right after it means the parens were a sub-expression, not the whole
+# argument list. Recurses once per token between the parens -- bounded
+# by one call's argument-list size, not file length.
+
+to is-additive-or-comparison-op of txt:
+  group-a = txt == "+" or txt == "-" or txt == "*" or txt == "/"
+  group-b = txt == "<" or txt == ">" or txt == "<=" or txt == ">=" or txt == "==" or txt == "!="
+  give group-a or group-b
+
+to scan-to-matching-paren of cursor, depth:
+  t = current of cursor
+  if t.kind == "EOF":
+    give cursor
+  else:
+    if t.kind == "OP" and t.text == "(":
+      give scan-to-matching-paren of (advance of cursor), (depth + 1)
+    else:
+      if t.kind == "OP" and t.text == ")":
+        new-depth = depth - 1
+        if new-depth == 0:
+          give advance of cursor
+        else:
+          give scan-to-matching-paren of (advance of cursor), new-depth
+      else:
+        give scan-to-matching-paren of (advance of cursor), depth
+
+to paren-is-arglist of cursor:
+  after-close = scan-to-matching-paren of (advance of cursor), 1
+  t = current of after-close
+  if t.kind == "OP" and (is-additive-or-comparison-op of t.text):
+    give false
+  else:
+    give true
+
+# ================================================================ the expression precedence chain
+#
+# parser.py's own levels, read directly from parser.py (not inferred
+# from this prompt or PROBE_PARSER.md's illustrative example -- section
+# 0 step 5): parse_or -> parse_and -> parse_not -> parse_comparison ->
+# parse_plus -> parse_additive -> parse_multiplicative -> parse_unary ->
+# parse_postfix -> parse_primary. Amber's own four sites (multiword
+# names, juxtaposition calls) are out of scope (Build 5) -- a bare NAME
+# not immediately followed by `of` or `(` is always a Var here, never a
+# juxtaposition call, which is this build's stated scope limit, not an
+# oversight. Every parse function returns { node, cursor }, mirroring
+# capability 3's proven { node, index } shape with `cursor` standing in
+# for the index -- a cons-list cursor rather than an integer, since
+# Planes has no way to index a token list by position (#11).
+
+to parse-call-of-args of cursor:
+  first-arg = parse-unary of cursor
+  give collect-of-args of first-arg.cursor, [first-arg.node]
+
+to collect-of-args of cursor, acc:
+  comma = try-accept-value of cursor, "OP", ","
+  if comma.matched:
+    next-arg = parse-unary of comma.cursor
+    give collect-of-args of next-arg.cursor, (acc plus next-arg.node)
+  else:
+    give { nodes: acc, cursor: cursor }
+
+to parse-call-paren-args of cursor:
+  first-arg = parse-or of cursor
+  give collect-paren-args of first-arg.cursor, [first-arg.node]
+
+to collect-paren-args of cursor, acc:
+  comma = try-accept-value of cursor, "OP", ","
+  if comma.matched:
+    next-arg = parse-or of comma.cursor
+    give collect-paren-args of next-arg.cursor, (acc plus next-arg.node)
+  else:
+    give { nodes: acc, cursor: cursor }
+
+to parse-name-primary of t, cursor:
+  name = t.text
+  line = t.line
+  after-name = advance of cursor
+  of-try = try-accept of after-name, "OF"
+  if of-try.matched:
+    args = parse-call-of-args of of-try.cursor
+    give { node: { kind: "Call", name: name, args: args.nodes, line: line }, cursor: args.cursor }
+  else:
+    at-paren = tok-at-value of after-name, "OP", "("
+    if at-paren:
+      give parse-name-paren-call of name, line, after-name
+    else:
+      give { node: { kind: "Var", name: name }, cursor: after-name }
+
+to parse-name-paren-call of name, line, cursor:
+  is-arglist = paren-is-arglist of cursor
+  if is-arglist:
+    give parse-name-real-arglist of name, line, cursor
+  else:
+    single = parse-additive of cursor
+    give { node: { kind: "Call", name: name, args: [single.node], line: line }, cursor: single.cursor }
+
+to parse-name-real-arglist of name, line, cursor:
+  open-consumed = advance of cursor
+  at-close = tok-at-value of open-consumed, "OP", ")"
+  if at-close:
+    give { node: { kind: "Call", name: name, args: [], line: line }, cursor: (advance of open-consumed) }
+  else:
+    args = parse-call-paren-args of open-consumed
+    closed = expect-op of args.cursor, ")"
+    give { node: { kind: "Call", name: name, args: args.nodes, line: line }, cursor: closed.cursor }
+
+to parse-primary of cursor:
+  t = current of cursor
+  when t is { kind: "FIRST" }:
+    after-first = advance of cursor
+    n-result = parse-unary of after-first
+    of-expect = expect-kind of n-result.cursor, "OF"
+    x-result = parse-unary of of-expect.cursor
+    node = { kind: "BinOp", op: "first", left: n-result.node, right: x-result.node }
+    give { node: node, cursor: x-result.cursor }
+  else:
+    when t is { kind: "ROUND" }:
+      after-round = advance of cursor
+      value-result = parse-unary of after-round
+      to-expect = expect-kind of value-result.cursor, "TO"
+      places-result = parse-unary of to-expect.cursor
+      places-try = try-accept of places-result.cursor, "PLACES"
+      node = { kind: "Round", value: value-result.node, places-value: places-result.node }
+      give { node: node, cursor: places-try.cursor }
+    else:
+      when t is { kind: "NUMBER" }:
+        n = parse-number-text of t.text
+        give { node: { kind: "Num", value: n }, cursor: (advance of cursor) }
+      else:
+        when t is { kind: "STRING" }:
+          s = strip-quotes of t.text
+          give { node: { kind: "Str", value: s }, cursor: (advance of cursor) }
+        else:
+          when t is { kind: "TRUE" }:
+            give { node: { kind: "Bool", value: true }, cursor: (advance of cursor) }
+          else:
+            when t is { kind: "FALSE" }:
+              give { node: { kind: "Bool", value: false }, cursor: (advance of cursor) }
+            else:
+              when t is { kind: "NOTHING" }:
+                give { node: { kind: "Nothing" }, cursor: (advance of cursor) }
+              else:
+                is-open-paren = t.kind == "OP" and t.text == "("
+                if is-open-paren:
+                  inner = parse-or of (advance of cursor)
+                  closed = expect-op of inner.cursor, ")"
+                  give { node: inner.node, cursor: closed.cursor }
+                else:
+                  if t.kind == "NAME":
+                    give parse-name-primary of t, cursor
+                  else:
+                    fail "line " + (text of t.line) + ": expected a value, found '" + t.text + "'" as parse-error
+
+to continue-postfix of node, cursor:
+  t = current of cursor
+  is-dot = t.kind == "OP" and t.text == "."
+  if is-dot:
+    after-dot = advance of cursor
+    name-tok = current of after-dot
+    new-node = { kind: "Field", obj: node, name: name-tok.text }
+    give continue-postfix of new-node, (advance of after-dot)
+  else:
+    is-bracket = t.kind == "OP" and t.text == "["
+    if is-bracket:
+      msg = "line " + (text of t.line) + ": '[' has no meaning here -- Planes has no index or slice syntax"
+      fail msg as parse-error
+    else:
+      give { node: node, cursor: cursor }
+
+to parse-postfix of cursor:
+  primary = parse-primary of cursor
+  give continue-postfix of primary.node, primary.cursor
+
+to parse-unary of cursor:
+  is-minus = tok-at-value of cursor, "OP", "-"
+  if is-minus:
+    inner = parse-unary of (advance of cursor)
+    zero-node = { kind: "Num", value: 0 }
+    node = { kind: "BinOp", op: "-", left: zero-node, right: inner.node }
+    give { node: node, cursor: inner.cursor }
+  else:
+    give parse-postfix of cursor
+
+to continue-multiplicative of node, cursor:
+  t = current of cursor
+  is-op = t.kind == "OP" and (t.text == "*" or t.text == "/")
+  if is-op:
+    right = parse-unary of (advance of cursor)
+    new-node = { kind: "BinOp", op: t.text, left: node, right: right.node }
+    give continue-multiplicative of new-node, right.cursor
+  else:
+    give { node: node, cursor: cursor }
+
+to parse-multiplicative of cursor:
+  left = parse-unary of cursor
+  give continue-multiplicative of left.node, left.cursor
+
+to continue-additive of node, cursor:
+  t = current of cursor
+  is-op = t.kind == "OP" and (t.text == "+" or t.text == "-")
+  if is-op:
+    right = parse-multiplicative of (advance of cursor)
+    new-node = { kind: "BinOp", op: t.text, left: node, right: right.node }
+    give continue-additive of new-node, right.cursor
+  else:
+    give { node: node, cursor: cursor }
+
+to parse-additive of cursor:
+  left = parse-multiplicative of cursor
+  give continue-additive of left.node, left.cursor
+
+to continue-plus of node, cursor:
+  t = current of cursor
+  if t.kind == "PLUS":
+    right = parse-additive of (advance of cursor)
+    new-node = { kind: "ListPlus", base: node, item: right.node }
+    give continue-plus of new-node, right.cursor
+  else:
+    give { node: node, cursor: cursor }
+
+to parse-plus of cursor:
+  left = parse-additive of cursor
+  give continue-plus of left.node, left.cursor
+
+to continue-comparison of node, cursor:
+  t = current of cursor
+  is-cmp = t.kind == "OP" and (is-additive-or-comparison-op of t.text) and not (is-additive-op of t.text)
+  if is-cmp:
+    right = parse-plus of (advance of cursor)
+    new-node = { kind: "BinOp", op: t.text, left: node, right: right.node }
+    give continue-comparison of new-node, right.cursor
+  else:
+    if t.kind == "IN":
+      right = parse-plus of (advance of cursor)
+      new-node = { kind: "BinOp", op: "in", left: node, right: right.node }
+      give continue-comparison of new-node, right.cursor
+    else:
+      is-is-nothing = t.kind == "NAME" and t.text == "is" and (peek-at of cursor, 1).kind == "NOTHING"
+      if is-is-nothing:
+        after-is = advance of cursor
+        after-nothing = advance of after-is
+        new-node = { kind: "IsNothing", expr: node }
+        give continue-comparison of new-node, after-nothing
+      else:
+        give { node: node, cursor: cursor }
+
+to is-additive-op of txt:
+  give txt == "+" or txt == "-"
+
+to parse-comparison of cursor:
+  left = parse-plus of cursor
+  give continue-comparison of left.node, left.cursor
+
+to parse-not of cursor:
+  if tok-at of cursor, "NOT":
+    inner = parse-not of (advance of cursor)
+    give { node: { kind: "Not", expr: inner.node }, cursor: inner.cursor }
+  else:
+    give parse-comparison of cursor
+
+to continue-and of node, cursor:
+  if tok-at of cursor, "AND":
+    right = parse-not of (advance of cursor)
+    new-node = { kind: "BinOp", op: "and", left: node, right: right.node }
+    give continue-and of new-node, right.cursor
+  else:
+    give { node: node, cursor: cursor }
+
+to parse-and of cursor:
+  left = parse-not of cursor
+  give continue-and of left.node, left.cursor
+
+to continue-or of node, cursor:
+  if tok-at of cursor, "OR":
+    right = parse-and of (advance of cursor)
+    new-node = { kind: "BinOp", op: "or", left: node, right: right.node }
+    give continue-or of new-node, right.cursor
+  else:
+    give { node: node, cursor: cursor }
+
+to parse-or of cursor:
+  left = parse-and of cursor
+  give continue-or of left.node, left.cursor
+
+# ================================================================ entry point
+
+to canonical-of-expr-source of src:
+  toks = tokenize of src
+  cursor = to-cons of toks
+  result = parse-or of cursor
+  give canonical-of-node of result.node, ""

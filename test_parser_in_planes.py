@@ -43,6 +43,7 @@ from lexer import (
     Str,
     Var,
 )
+from parser import parse
 from planes_text import escape_string_literal
 
 # ================================================================ the canonical form (Python side)
@@ -143,6 +144,12 @@ def _traced(v):
     return Traced(v, Deriv("literal", repr(v), v, []))
 
 
+def planes_canonical_expr(src):
+    """Canonical form of one expression, parsed by grammar/parser.planes."""
+    i = _get_interp()
+    return i.call("canonical-of-expr-source", [_traced(src)], i.env).value
+
+
 def planes_canonical_node(record_src):
     """Canonical form of a hand-built Planes AST record (a `{ kind: ...
     }` literal, not parsed from program source) -- used by Phase 1's
@@ -181,6 +188,120 @@ def test_fixture_both_emitters_agree():
                      'right: { kind: "Num", value: 2 } }')
     planes_form = planes_canonical_node(planes_record)
     assert planes_form == py_form, f"planes:\n{planes_form!r}\npython:\n{py_form!r}"
+
+
+# ================================================================ Phase 2: expressions
+#
+# The recursive precedence chain, checked fragment by fragment against
+# parser.py's own parse() -- one program per fragment, exactly one
+# top-level statement, compared via the same canonical form the fixture
+# proved agrees.
+
+def assert_expr_agrees(src):
+    prog = parse(src + "\n")
+    assert len(prog) == 1, f"expected exactly one statement, got {len(prog)}: {prog}"
+    py_form = canonical(prog[0])
+    planes_form = planes_canonical_expr(src)
+    assert planes_form == py_form, (
+        f"\nsrc: {src!r}\n--- planes ---\n{planes_form}\n--- python ---\n{py_form}")
+
+
+LITERAL_FRAGMENTS = ["1", "42", "0.1", "3.14", '"hello"', '"a \\"quoted\\" word"',
+                    "true", "false", "nothing"]
+VARIABLE_FRAGMENTS = ["x", "my-var", "state"]
+FIELD_ACCESS_FRAGMENTS = ["r.x", "r.x.y", "node.left.right"]
+CALL_OF_FRAGMENTS = ["f of x", "f of x, y", "f of x, y, z", "count of xs", "text of n"]
+CALL_PAREN_FRAGMENTS = ["f(x)", "f(x, y)", "f()", "f(x, y, z)"]
+PAREN_FRAGMENTS = ["(1 + 2)", "(x)", "((1 + 2) * 3)"]
+UNARY_FRAGMENTS = ["-x", "-5", "-(1 + 2)"]
+MULTIPLICATIVE_FRAGMENTS = ["2 * 3", "10 / 2", "2 * 3 / 4", "a * b * c"]
+ADDITIVE_FRAGMENTS = ["1 + 2", "1 - 2", "1 + 2 - 3", "2 + 3 * 4", "(2 + 3) * 4"]
+PLUS_FRAGMENTS = ["xs plus 1", "xs plus a + b"]
+COMPARISON_FRAGMENTS = ["1 < 2", "1 <= 2", "1 > 2", "1 >= 2", "1 == 2", "1 != 2",
+                        "x in xs", "x is nothing", "detail of id + 1"]
+NOT_FRAGMENTS = ["not true", "not x == y"]
+AND_OR_FRAGMENTS = ["true and false", "true or false", "a and b or c",
+                    "is-digit of c or is-lower-hex or is-upper-hex"]
+BUILTIN_FORM_FRAGMENTS = ["first 2 of xs", "first (n) of x",
+                          "round total to 2 places", "round total to n"]
+COMPLEX_FRAGMENTS = ["1 + 2 * 3 == 7 and not false",
+                     '"read " + text of size + " bytes"',
+                     "is-name-start of c or is-digit of c"]
+
+
+def test_literals_agree():
+    for src in LITERAL_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_variables_agree():
+    for src in VARIABLE_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_field_access_agrees():
+    for src in FIELD_ACCESS_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_calls_with_of_agree():
+    for src in CALL_OF_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_calls_with_parens_agree():
+    for src in CALL_PAREN_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_parenthesised_expressions_agree():
+    for src in PAREN_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_unary_operators_agree():
+    for src in UNARY_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_multiplicative_agrees():
+    for src in MULTIPLICATIVE_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_additive_agrees():
+    for src in ADDITIVE_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_plus_connective_agrees():
+    for src in PLUS_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_comparison_agrees():
+    for src in COMPARISON_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_not_agrees():
+    for src in NOT_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_and_or_agree():
+    for src in AND_OR_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_first_and_round_builtin_forms_agree():
+    for src in BUILTIN_FORM_FRAGMENTS:
+        assert_expr_agrees(src)
+
+
+def test_complex_expressions_agree():
+    for src in COMPLEX_FRAGMENTS:
+        assert_expr_agrees(src)
 
 
 if __name__ == "__main__":
