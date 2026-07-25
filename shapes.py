@@ -515,6 +515,45 @@ class Analyser:
                 out |= self.walk(i, fn_effects, consts)
             return out
 
+        if isinstance(node, RecordLit):
+            # Pre-existing gap, found while walking RecordUpdate below: a
+            # record literal's field expressions were never walked at all,
+            # so an effect hidden in one (`{ x: ask "..." }`) was silently
+            # absent from the static surface while still running for real
+            # — an oracle-soundness hole this fixes rather than reproduces.
+            for _, v in node.fields:
+                out |= self.walk(v, fn_effects, consts)
+            return out
+
+        if isinstance(node, RecordUpdate):
+            out |= self.walk(node.base, fn_effects, consts)
+            for _, v in node.fields:
+                out |= self.walk(v, fn_effects, consts)
+            return out
+
+        if isinstance(node, ListPlus):
+            return (self.walk(node.base, fn_effects, consts)
+                    | self.walk(node.item, fn_effects, consts))
+
+        if isinstance(node, When):
+            out |= self.walk(node.subject, fn_effects, consts)
+            for _, (kind, arg) in node.pattern:
+                if kind == "match":
+                    out |= self.walk(arg, fn_effects, consts)
+            # Both branches, like If's then + els: a static surface is
+            # what the program CAN do, not what one run's match decided.
+            inner = consts.child()
+            for field, (kind, _) in node.pattern:
+                if kind == "bind":
+                    inner.set(field, UNKNOWN,
+                             StaticDeriv("unknown", field, file=self.current_file))
+            for s in node.body + node.els:
+                out |= self.walk(s, fn_effects, inner)
+            for name in self.assigned_in(node.body + node.els):
+                consts.set(name, UNKNOWN,
+                          StaticDeriv("unknown", name, file=self.current_file))
+            return out
+
         if isinstance(node, OrFail):
             out |= self.walk(node.expr, fn_effects, consts)
             if node.handler is not None:
@@ -731,6 +770,9 @@ class Analyser:
                 scan(n.expr)
                 for s in n.handler or ():
                     scan(s)
+            elif isinstance(n, When):
+                for s in n.body + n.els:
+                    scan(s)
 
         for s in stmts:
             scan(s)
@@ -783,6 +825,26 @@ class Analyser:
             elif isinstance(n, FuncDef):
                 for s in n.body:
                     scan(s)
+            elif isinstance(n, RecordLit):
+                # Same pre-existing gap as walk()'s: a call hidden in a
+                # record literal field went undetected for recursion
+                # purposes. Fixed alongside it.
+                for _, v in n.fields:
+                    scan(v)
+            elif isinstance(n, RecordUpdate):
+                scan(n.base)
+                for _, v in n.fields:
+                    scan(v)
+            elif isinstance(n, ListPlus):
+                scan(n.base)
+                scan(n.item)
+            elif isinstance(n, When):
+                scan(n.subject)
+                for _, (kind, arg) in n.pattern:
+                    if kind == "match":
+                        scan(arg)
+                for s in n.body + n.els:
+                    scan(s)
 
         for s in stmts:
             scan(s)
@@ -817,6 +879,53 @@ class Analyser:
             value, stored = consts.get(node.name)
             return value, StaticDeriv("name", node.name, inputs=(stored,),
                                       file=self.current_file)
+
+        if isinstance(node, RecordLit):
+            # Pre-existing gap, found alongside RecordUpdate's: a record
+            # literal never folded here, only Str/Num/Bool did — so `{ a:
+            # 1 } with x: 2`'s base could never resolve even when every
+            # field was a plain literal. Fixed so with/plus folding (below)
+            # is not dead code in the common case of a fresh literal base.
+            pairs = [(k, self.const(v, consts)) for k, v in node.fields]
+            inputs = tuple(n for _, (_, n) in pairs)
+            if any(v is UNKNOWN for _, (v, _) in pairs):
+                return UNKNOWN, StaticDeriv("unknown", "{record}", inputs=inputs,
+                                            file=self.current_file)
+            val = {k: v for k, (v, _) in pairs}
+            return val, StaticDeriv("literal", "{record}", inputs=inputs,
+                                    file=self.current_file)
+
+        if isinstance(node, ListLit):
+            items = [self.const(i, consts) for i in node.items]
+            inputs = tuple(n for _, n in items)
+            if any(v is UNKNOWN for v, _ in items):
+                return UNKNOWN, StaticDeriv("unknown", "[list]", inputs=inputs,
+                                            file=self.current_file)
+            val = [v for v, _ in items]
+            return val, StaticDeriv("literal", "[list]", inputs=inputs,
+                                    file=self.current_file)
+
+        if isinstance(node, RecordUpdate):
+            base, base_n = self.const(node.base, consts)
+            pairs = [(k, self.const(v, consts)) for k, v in node.fields]
+            inputs = (base_n,) + tuple(n for _, (_, n) in pairs)
+            if base is UNKNOWN or not isinstance(base, dict) \
+                    or any(v is UNKNOWN for _, (v, _) in pairs):
+                return UNKNOWN, StaticDeriv("unknown", "with", inputs=inputs,
+                                            file=self.current_file)
+            updated = {**base, **{k: v for k, (v, _) in pairs}}
+            return updated, StaticDeriv("op", "with", inputs=inputs,
+                                        file=self.current_file)
+
+        if isinstance(node, ListPlus):
+            base, base_n = self.const(node.base, consts)
+            item, item_n = self.const(node.item, consts)
+            if base is UNKNOWN or not isinstance(base, list) or item is UNKNOWN:
+                return UNKNOWN, StaticDeriv("unknown", "plus",
+                                            inputs=(base_n, item_n),
+                                            file=self.current_file)
+            return base + [item], StaticDeriv("op", "plus", inputs=(base_n, item_n),
+                                              file=self.current_file)
 
         if isinstance(node, OrFail):
             if node.handler is not None:

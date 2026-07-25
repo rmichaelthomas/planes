@@ -8,13 +8,14 @@ only dev deps are ruff/mypy/coverage), so each property below is a
 hand-rolled generator over a `random.Random` with a fixed seed -- runs are
 deterministic and reproducible, matching TestHost's deterministic clock.
 
-Immutability (v9.0 Phase B lists `r with f: v` / `xs plus item`): neither
-`with` nor `plus` exists anywhere in this language yet (grep confirms --
-`with` is reserved only for `use x with old as new` renames). There is no
-mutation syntax of any kind, so the properties below test what is actually
-true today: no operation available in the language ever changes what a
-previously-bound name evaluates to. That is the substance of section 72's
-"immutability" claim in a language with zero mutation operators.
+Immutability (section 72): `r with f: v` and `xs plus item` (built in
+v9.0's with/plus/when session) each produce a new value and leave the
+original untouched -- tested directly below. Between the record-plane
+session that first added this file and that one, neither construct
+existed yet, so this file could only test the property's weakest,
+vacuous form (no mutation operator existed at all, so nothing could have
+mutated anything). That version is gone now that the real one is
+possible.
 """
 import random
 import sys
@@ -161,25 +162,57 @@ def rand_literal_record(rng, depth=0):
 
 
 def rand_literal_value(rng, depth=0):
+    """Bug found while adding v9.0's with/plus tests: the three calls
+    below used to invoke rand_literal_list/rand_literal_record with no
+    depth argument, silently resetting to their depth=0 default on every
+    recursive step -- the >= 2 guard below never actually fired, so
+    nesting was unbounded. A wide enough draw hit Python's recursion
+    limit; fixed by threading depth through explicitly."""
     if depth >= 2:
         return rand_literal_scalar(rng)
-    return rng.choice([rand_literal_scalar, rand_literal_list, rand_literal_record])(rng)
+    return rng.choice([
+        lambda: rand_literal_scalar(rng),
+        lambda: rand_literal_list(rng, depth),
+        lambda: rand_literal_record(rng, depth),
+    ])()
 
 
-def test_rebinding_a_name_does_not_alias_another():
-    """No mutation operator exists (grep-confirmed: no with/plus for
-    functional update). Rebinding `x` must never change what `y` -- bound
-    earlier to 'the same' record or list -- evaluates to."""
+def test_with_leaves_the_original_record_unchanged():
+    """The real form of section 72's immutability claim, now that `with`
+    exists (v9.0 §3.1): `r with f: v` is a new record where that field
+    equals `v`, and `r` itself is unchanged -- its original field value
+    still holds. Supersedes the pre-with version of this test, which
+    could only test the property in its weakest, vacuous form (no
+    mutation operator existed at all, so the only thing to check was that
+    rebinding one name didn't alias another)."""
     rng = random.Random(SEED + 3)
     for _ in range(50):
-        first = rand_literal_record(rng) if rng.random() < 0.5 else rand_literal_list(rng)
-        second = rand_literal_record(rng) if rng.random() < 0.5 else rand_literal_list(rng)
+        base = rand_literal_record(rng) or {"a": rand_literal_scalar(rng)}
+        field = rng.choice(list(base))
+        original_value = base[field]
+        new_value = rand_literal_scalar(rng)
+        src = (_planes_assign("r", base) + "\n"
+               f"q = r with {field}: {_planes_source_literal(new_value)}\n")
         i = Interpreter(fs={})
-        i.run(_planes_assign("x", first) + "\n" +
-              "y = x\n" +
-              _planes_assign("x", second))
-        assert i.env.get("x").value == _to_planes_value(second)
-        assert i.env.get("y").value == _to_planes_value(first)
+        i.run(src)
+        assert i.env.get("q").value[field] == _to_planes_value(new_value)
+        assert i.env.get("r").value[field] == _to_planes_value(original_value)
+        assert i.env.get("r").value == _to_planes_value(base)
+
+
+def test_plus_leaves_the_original_list_unchanged():
+    """The list half of the same invariant: `xs plus it` is `xs` with
+    `it` appended, and `xs` itself is unchanged."""
+    rng = random.Random(SEED + 11)
+    for _ in range(50):
+        base = rand_literal_list(rng)
+        item = rand_literal_scalar(rng)
+        src = (_planes_assign("xs", base) + "\n"
+               f"ys = xs plus {_planes_source_literal(item)}\n")
+        i = Interpreter(fs={})
+        i.run(src)
+        assert i.env.get("ys").value == _to_planes_value(base) + [_to_planes_value(item)]
+        assert i.env.get("xs").value == _to_planes_value(base)
 
 
 def _planes_source_literal(v):

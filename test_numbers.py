@@ -154,8 +154,8 @@ def test_foreign_floats_become_exact_on_entry():
     i = interp('use http\n'
                'item = ask "https://x/y.json"\n'
                'line = item.price * item.qty\n'
-               'plus = line + 0.2\n'
-               'show text of plus', http=stub)
+               'total = line + 0.2\n'
+               'show text of total', http=stub)
     assert i.output == ["0.5"], "0.1 * 3 + 0.2 is exactly 0.5"
 
 

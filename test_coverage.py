@@ -42,6 +42,13 @@ COVERAGE = {
     "Var":     'use file\nx = 1\ny = x\nwrite [y] to "o.json"',
     "ListLit": 'use file\nxs = [1, 2]\nwrite xs to "o.json"',
     "RecordLit": 'use file\nr = { a: 1 }\nwrite [r] to "o.json"',
+    "RecordUpdate": 'use file\nr = { a: 1 }\nq = r with a: 2\nwrite [q.a] to "o.json"',
+    "ListPlus": 'use file\nxs = [1, 2]\nys = xs plus 3\nwrite ys to "o.json"',
+    "When":    'use file\nr = { kind: "op" }\n'
+               'when r is { kind: "op" }:\n'
+               '  write [1] to "a.json"\n'
+               'else:\n'
+               '  write [2] to "b.json"',
     "BinOp":   'use file\nx = 1 + 2\nwrite [x] to "o.json"',
     "Not":     'use file\nb = not false\nwrite [b] to "o.json"',
     "IsNothing": 'use file\nn = nothing\nb = n is nothing\nwrite [b] to "o.json"',

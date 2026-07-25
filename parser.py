@@ -148,6 +148,9 @@ class Parser:
                 self.i = save
             return If(cond, then, els)
 
+        if self.accept("WHEN"):
+            return self.parse_when()
+
         if self.at("FOR"):
             return self.parse_foreach(as_expr=False)
 
@@ -499,7 +502,62 @@ class Parser:
     # ---- expressions
 
     def parse_expr(self):
-        return self.trailing_or_fail(self.parse_or())
+        return self.trailing_or_fail(self.trailing_with(self.parse_or()))
+
+    # Field names a with-clause or when-pattern entry may use — the same
+    # keyword-as-field-name exception parse_record_field grants, since
+    # both are naming a record field, not opening a new construct.
+    FIELD_NAME_KINDS = ("NAME", "SHOW", "WRITE", "FIRST", "ROUND", "TO", "IN",
+                        "WHERE", "FROM", "AS", "OF", "USE", "WHY", "GIVE")
+
+    def at_field_start(self, ahead=0):
+        t = self.peek(ahead)
+        nxt = self.peek(ahead + 1)
+        return (t.kind in self.FIELD_NAME_KINDS
+                and nxt.kind == "OP" and nxt.value == ":")
+
+    def trailing_with(self, node):
+        """`<expr> with name: expr, name: expr, ...` — record update
+        (v5.0 §72), never braced (that is RecordLit). Distinct from the
+        module-rename `with` (`use x with a as b`), which parse_statement's
+        Use branch parses entirely on its own and never reaches here.
+        Chains: `p with a: 1 with b: 2` is two nested RecordUpdate nodes,
+        left to right — "compose like any other expression" (§72).
+        """
+        while self.at("WITH") and self.at_field_start(1):
+            self.next()
+            fields = [self.parse_with_field()]
+            while self.accept("OP", ","):
+                if not self.at_field_start(0):
+                    self.i -= 1     # this comma belongs to an outer
+                                    # context (a call's argument list, a
+                                    # list literal, ...), not another field
+                    break
+                fields.append(self.parse_with_field())
+            node = RecordUpdate(node, fields)
+        return node
+
+    def parse_with_field(self):
+        """`name: expr` inside a with-clause. Not parse_record_field: that
+        one reads its value through parse_expr, which would re-enter
+        trailing_with and let a *following* with-clause attach to this
+        field's value instead of to the RecordUpdate as a whole —
+        `p with a: 1 with b: 2` must chain onto `p with a: 1`, not parse
+        as `p with a: (1 with b: 2)`. Everything parse_expr does except
+        the with-chain itself, since that part is precisely what must not
+        recurse here.
+        """
+        self.skip_bracket_ws()
+        t = self.peek()
+        if t.kind in self.FIELD_NAME_KINDS:
+            key = self.next().value
+        else:
+            raise PlanesSyntaxError(
+                f"line {t.line}: expected a field name, "
+                f"found '{t.value or 'end of line'}'\n"
+                f"  try: with name: value")
+        self.expect("OP", ":")
+        return (key, self.trailing_or_fail(self.parse_or()))
 
     def parse_or(self):
         left = self.parse_and()
@@ -520,22 +578,35 @@ class Parser:
         return self.parse_comparison()
 
     def parse_comparison(self):
-        left = self.parse_additive()
+        left = self.parse_plus()
         while (self.at("OP") and self.peek().value in
                ("<", ">", "<=", ">=", "==", "!=")) or self.at("IN") \
-                or self.at("NAME", "is"):
+                or (self.at("NAME", "is") and self.peek(1).kind == "NOTHING"):
             # `is` is read positionally, right here, only — like `may` in
             # parse_rule — so a program that never writes `is nothing`
             # still has `is` free as an ordinary name (test_names.py's
-            # reserved-word ceiling).
+            # reserved-word ceiling). Requiring NOTHING to follow (rather
+            # than accepting bare `is` unconditionally) is what lets
+            # `when subject is { ... }` use the same word positionally,
+            # one level up in parse_when, without this loop swallowing it
+            # first and demanding a NOTHING that was never coming.
             if self.accept("NAME", "is"):
                 self.expect("NOTHING")
                 left = IsNothing(left)
                 continue
             if self.accept("IN"):
-                left = BinOp("in", left, self.parse_additive())
+                left = BinOp("in", left, self.parse_plus())
             else:
-                left = BinOp(self.next().value, left, self.parse_additive())
+                left = BinOp(self.next().value, left, self.parse_plus())
+        return left
+
+    def parse_plus(self):
+        """`base plus item` (v5.0 §72) — a named binary connective, bound
+        below arithmetic so `xs plus a + b` reads as `xs plus (a + b)`."""
+        left = self.parse_additive()
+        while self.at("PLUS"):
+            self.next()
+            left = ListPlus(left, self.parse_additive())
         return left
 
     def parse_additive(self):
@@ -629,6 +700,59 @@ class Parser:
                 f"  try: {{ name: value }}")
         self.expect("OP", ":")
         return (key, self.parse_expr())
+
+    def parse_when(self):
+        """`when subject is { field: expr, bindname, ... }: body
+        [else: els]` (v5.0 §74). `WHEN` is already consumed by the caller.
+        A chained dispatch ladder (`when ... else: when ... else: ...`)
+        needs no dedicated grammar — the else block is an ordinary block,
+        and a `When` is an ordinary statement, so nesting one inside the
+        other falls out of parse_block for free, the same way `if / else:
+        if` already forms an if-elif-else chain in this language."""
+        subject = self.parse_expr()
+        self.expect("NAME", "is")
+        self.expect("OP", "{")
+        pattern = []
+        self.skip_bracket_ws()
+        if not self.at("OP", "}"):
+            pattern.append(self.parse_when_pattern_entry())
+            while self.accept("OP", ","):
+                self.skip_bracket_ws()
+                if self.at("OP", "}"):
+                    break
+                pattern.append(self.parse_when_pattern_entry())
+        self.skip_bracket_ws()
+        self.expect("OP", "}")
+        self.expect("OP", ":")
+        body = self.parse_block()
+        els = []
+        save = self.i
+        self.skip_blank()
+        if self.accept("ELSE"):
+            self.expect("OP", ":")
+            els = self.parse_block()
+        else:
+            self.i = save
+        return When(subject, pattern, body, els)
+
+    def parse_when_pattern_entry(self):
+        """`name: expr` (a match constraint) or a bare `name` (a binding).
+        Same field-name recognition as parse_record_field — a pattern
+        entry names a field, so a keyword like `to` or `from` must work
+        here exactly as it does in a record literal."""
+        self.skip_bracket_ws()
+        t = self.peek()
+        if t.kind == "NAME" or t.kind in self.FIELD_NAME_KINDS:
+            name = self.next().value
+        else:
+            raise PlanesSyntaxError(
+                f"line {t.line}: expected a field name, "
+                f"found '{t.value or 'end of line'}'\n"
+                f"  try: {{ name: value }}  or  {{ name }}")
+        if self.at("OP", ":"):
+            self.next()
+            return (name, ("match", self.parse_expr()))
+        return (name, ("bind", name))
 
     def parse_primary(self):
         t = self.peek()

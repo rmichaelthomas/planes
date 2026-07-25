@@ -350,7 +350,7 @@ def test_reserved_word_ceiling_unchanged():
     from lexer import KEYWORDS
     assert "because" not in KEYWORDS
     assert "note" not in KEYWORDS
-    assert len(KEYWORDS) == 30
+    assert len(KEYWORDS) == 32
 
 
 if __name__ == "__main__":

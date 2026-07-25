@@ -68,8 +68,8 @@ def test_foreign_result_is_traceable():
     from interp import origins, why_tree
     src = ('foreign biggest of xs from "builtins.max" doing nothing\n'
            'top = biggest of [1, 9, 4]\n'
-           'plus = top + 1')
-    v = val(src, "plus")
+           'total = top + 1')
+    v = val(src, "total")
     assert v.value == 10
     assert "foreign:builtins.max" in origins(v)
     assert "entered at foreign:builtins.max" in why_tree(v)
