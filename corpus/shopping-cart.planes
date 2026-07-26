@@ -1,0 +1,30 @@
+# A shopping cart: line totals, a subtotal, and a bulk discount that applies
+# only once the subtotal clears a threshold. Prices stay exact through the
+# arithmetic and are rounded to the cent only at the end, on the figure a
+# customer actually pays.
+
+use file
+
+items = [
+  { name: "notebook", price: 3.50, qty: 4 },
+  { name: "pen", price: 1.25, qty: 10 },
+  { name: "folder", price: 2.00, qty: 3 }
+]
+
+subtotal = 0
+for each item in items:
+  subtotal = subtotal + (item.price * item.qty)
+
+let discount-rate = 0.1 because "orders over fifty earn the bulk rate; finance owns both the threshold and the ten percent"
+discount = 0
+if subtotal > 50:
+  discount = subtotal * discount-rate
+
+let due = round (subtotal - discount) to 2 places
+
+show "subtotal " + text of subtotal
+show "discount " + text of discount
+show "due      " + text of due
+
+let cart = { subtotal: subtotal, discount: discount, due: due }
+write cart to "cart.json"

@@ -1,0 +1,22 @@
+# A running balance over a day's transactions. Each entry credits or debits the
+# account, and the balance is one number carried down the list — the closing
+# figure is simply the last value the loop leaves behind, with no separate total
+# to keep in step.
+
+transactions = [
+  { kind: "credit", amount: 500 },
+  { kind: "debit", amount: 120 },
+  { kind: "debit", amount: 90 },
+  { kind: "credit", amount: 60 }
+]
+
+balance = 0
+for each t in transactions:
+  if t.kind == "credit":
+    balance = balance + t.amount
+  else:
+    balance = balance - t.amount
+  show t.kind + " " + text of t.amount + "  ->  balance " + text of balance
+
+let closing = balance because "the closing balance is the last value the loop left behind; there is nothing else to reconcile it against"
+show "closing balance: " + text of closing

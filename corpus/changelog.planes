@@ -1,0 +1,18 @@
+# Assemble a changelog from a list of version entries and write it. Each entry
+# has a version and a one-line summary; the lines are formatted, newest first,
+# and joined into a single Markdown document — which is exactly what ships in
+# the release, so the program's output is the artifact, not a description of it.
+
+use file
+
+entries = [
+  { version: "1.2.0", summary: "faster startup" },
+  { version: "1.1.0", summary: "dark mode" },
+  { version: "1.0.0", summary: "first release" }
+]
+
+body-lines = for each e in entries: "## " + e.version + " — " + e.summary + "\n"
+let document = "# Changelog\n\n" + (join of body-lines) because "the entries are listed newest first, because a reader opening the changelog wants the latest release at the top rather than having to scroll past history to reach it"
+
+show "changelog assembled: " + text of (count of entries) + " versions"
+write document to "CHANGELOG.md"

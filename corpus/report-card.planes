@@ -1,0 +1,27 @@
+# Letter grades from numeric scores. The thresholds are a plain if/else ladder,
+# read top down the way a rubric is, and every student's grade comes out of one
+# pass over the roll.
+
+to grade of score:
+  if score >= 90:
+    give "A"
+  else:
+    if score >= 80:
+      give "B"
+    else:
+      if score >= 70:
+        give "C"
+      else:
+        give "F"
+
+students = [
+  { name: "Ada", score: 94 },
+  { name: "Alan", score: 82 },
+  { name: "Grace", score: 68 }
+]
+
+for each s in students:
+  show s.name + ": " + (grade of s.score)
+
+let scale = "ninety is an A, then down by tens" because "the ladder states the cutoffs in the order a reader checks them, which is clearer here than a table of four bands"
+show scale

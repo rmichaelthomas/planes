@@ -1,0 +1,19 @@
+# Decide whether each client is within the rate limit for this window. The
+# limit is a maximum number of requests; a client at or under it is allowed,
+# over it is throttled. Stating the ceiling once, with the reason, keeps the
+# policy in one place instead of scattered across the call sites that enforce it.
+
+let max-per-window = 100 because "the documented public-API ceiling per window; being over it is throttled, which is a policy decision rather than an error"
+
+clients = [
+  { id: "web", requests: 42 },
+  { id: "mobile", requests: 118 },
+  { id: "batch", requests: 100 }
+]
+
+for each c in clients:
+  let allowed = c.requests <= max-per-window
+  if allowed:
+    show c.id + ": allowed (" + text of c.requests + ")"
+  else:
+    show c.id + ": throttled (" + text of c.requests + ")"
