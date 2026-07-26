@@ -1,0 +1,88 @@
+note: from "interp.py, written in Planes -- Route B stage three, build 1: the expression evaluator. Evaluates Planes expressions to values, checked by agreement with interp.py's own eval() through a canonical value-text form (test_interp_in_planes.py). Consumes the AST grammar/parser.planes already produces (A.4); statements, control flow, and effects are builds 2 and 3. Values carry a deriv slot, `nothing` throughout build 1 (A.3) -- provenance is a later build's fill, not a rewrite."
+
+use parser
+
+# ================================================================ value representation
+#
+# A value is a tagged record: `kind` names the type, and the payload rides
+# in `value` (number / text / boolean / nothing), in `items` (list), or in
+# `fields` (record -- a list of { key, value } pairs, because Planes cannot
+# build a record with runtime field names, so a record value is never a
+# native record but always this tagged list-of-pairs). Every value carries a
+# `deriv` slot, `nothing` throughout build 1 (A.3). The tag is what lets the
+# renderer and every operator dispatch flatly on a value's type (A.1) without
+# a dynamic type probe -- Planes has none that does not itself raise.
+
+to make-number of n:
+  give { kind: "number", value: n, deriv: nothing }
+
+to make-text of s:
+  give { kind: "text", value: s, deriv: nothing }
+
+to make-boolean of b:
+  give { kind: "boolean", value: b, deriv: nothing }
+
+to make-nothing:
+  give { kind: "nothing", value: nothing, deriv: nothing }
+
+to make-list of items:
+  give { kind: "list", items: items, deriv: nothing }
+
+to make-record of fields:
+  give { kind: "record", fields: fields, deriv: nothing }
+
+# ================================================================ the canonical value form (A.5)
+#
+# Both sides render an evaluated value to this exact text and the test
+# compares strings. Numbers render through `text of` -- interp.py's own
+# Number.text(), an exact-rational form that never shows a float: 2 / 3 is
+# `~0.666666666666`, 0.1 + 0.2 is `0.3`. Strings are escaped and quoted via
+# escape-string-literal (the same four escapes interp.py's escaper uses, so
+# a quote or newline survives the comparison). Records render their fields in
+# stored order. `1`, `"1"`, and `true` render distinctly, so the form names
+# the type as well as the value.
+
+to canonical-of-value of v:
+  if v.kind == "number":
+    give text of v.value
+  if v.kind == "text":
+    give "\"" + (escape-string-literal of v.value) + "\""
+  if v.kind == "boolean":
+    if v.value:
+      give "true"
+    give "false"
+  if v.kind == "nothing":
+    give "nothing"
+  if v.kind == "list":
+    give "[" + (canonical-of-items of v.items) + "]"
+  if v.kind == "record":
+    give "{" + (canonical-of-fields of v.fields) + "}"
+  fail "cannot render a value of kind '" + v.kind + "'" as cannot-render
+
+# One pass over the items, comma-joined (the join-comma shape, inlined with
+# the per-item render so there is no intermediate list and no per-item
+# recursion). An empty list renders its items as "" -- so `[]` and `{}` fall
+# out with no special case.
+to canonical-of-items of items:
+  result = ""
+  seen = false
+  for each item in items:
+    piece = canonical-of-value of item
+    if seen:
+      result = result + ", " + piece
+    else:
+      result = piece
+      seen = true
+  give result
+
+to canonical-of-fields of fields:
+  result = ""
+  seen = false
+  for each f in fields:
+    piece = f.key + ": " + (canonical-of-value of f.value)
+    if seen:
+      result = result + ", " + piece
+    else:
+      result = piece
+      seen = true
+  give result
