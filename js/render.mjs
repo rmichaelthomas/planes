@@ -23,9 +23,28 @@ import { check } from "./rules.mjs";
 
 const INDENT = "  ";
 
-// Sub-expressions that need parens wherever they are not the outermost
-// expression of their statement.
-const COMPOUND = new Set(["BinOp", "Not", "IsNothing"]);
+// Sub-expressions that need parens wherever they are read at less than full
+// precedence. BinOp/Not/IsNothing were the original set; S6's composition
+// generator showed it was incomplete — ListPlus, OrFail, RecordUpdate, and
+// ForEach are all low-precedence and are otherwise split, or swallow a following
+// token, when embedded. (`first` and `round` render as primaries.)
+const COMPOUND = new Set([
+  "BinOp", "Not", "IsNothing", "ListPlus", "OrFail", "RecordUpdate", "ForEach",
+]);
+
+// Expressions whose own trailing structure swallows a following keyword or `:`
+// delimiter: an or-fail's `as tag[:...]`, a record update's `with` fields, a
+// for-each's `: body`. Distinct from COMPOUND — a BinOp before `:` (`if x > 0:`)
+// does not collide, so these positions must NOT wrap it.
+const OPEN_TRAILING = new Set(["OrFail", "RecordUpdate", "ForEach"]);
+
+// An expression read up to a trailing keyword or `:` delimiter — a for-each
+// source or where, an if/when subject, a write value or dest, a fail message, an
+// or-fail inner (S6). Parenthesise the kinds whose trailing structure would
+// otherwise swallow that delimiter.
+function delimited(node) {
+  return OPEN_TRAILING.has(node.__node) ? `(${renderExpr(node)})` : renderExpr(node);
+}
 
 // Expression node kinds that may stand alone as a statement. Listed explicitly
 // so renderStmt raises on a node that is neither a known statement nor a
@@ -182,21 +201,21 @@ function renderCall(node) {
 
 function renderForeachExpr(node) {
   const where = node.where !== null && node.where !== undefined
-    ? ` where ${renderExpr(node.where)}`
+    ? ` where ${delimited(node.where)}`
     : "";
   const body = renderExpr(node.body[0]);
-  return `for each ${node.var} in ${renderExpr(node.source)}${where}: ${body}`;
+  return `for each ${node.var} in ${delimited(node.source)}${where}: ${body}`;
 }
 
 function renderWritetoInline(node) {
-  return `write ${renderExpr(node.value)} to ${renderExpr(node.dest)}`;
+  return `write ${delimited(node.value)} to ${delimited(node.dest)}`;
 }
 
 function renderOrfail(node) {
   const inner =
     node.expr.__node === "WriteTo"
       ? renderWritetoInline(node.expr)
-      : renderExpr(node.expr);
+      : delimited(node.expr);
   return `${inner} or fail as ${node.tag}`;
 }
 
@@ -284,7 +303,7 @@ function renderFuncdef(node, indent, markers) {
 }
 
 function renderIf(node, indent, markers) {
-  const lines = [indent + `if ${renderExpr(node.cond)}:`];
+  const lines = [indent + `if ${delimited(node.cond)}:`];
   lines.push(renderBlock(node.then, indent + INDENT, markers));
   if (node.els.length) {
     lines.push(indent + "else:");
@@ -295,21 +314,23 @@ function renderIf(node, indent, markers) {
 
 function renderForeachStmt(node, indent, markers) {
   const where = node.where !== null && node.where !== undefined
-    ? ` where ${renderExpr(node.where)}`
+    ? ` where ${delimited(node.where)}`
     : "";
-  const header = indent + `for each ${node.var} in ${renderExpr(node.source)}${where}:`;
+  const header = indent + `for each ${node.var} in ${delimited(node.source)}${where}:`;
   const body = renderBlock(node.body, indent + INDENT, markers);
   return header + "\n" + body;
 }
 
 function renderWhen(node, indent, markers) {
+  // A match value is a record-field position (comma-separated `name: expr`), so
+  // it parenthesises a greedy tail the same way a record literal's does (S6).
   const entries = [];
   for (const p of node.pattern) {
     const [fname, inner] = p.items;
     const [kind, arg] = inner.items;
-    entries.push(kind === "match" ? `${fname}: ${renderExpr(arg)}` : fname);
+    entries.push(kind === "match" ? `${fname}: ${commaElement(arg, "record")}` : fname);
   }
-  const header = indent + `when ${renderExpr(node.subject)} is { ${entries.join(", ")} }:`;
+  const header = indent + `when ${delimited(node.subject)} is { ${entries.join(", ")} }:`;
   const lines = [header, renderBlock(node.body, indent + INDENT, markers)];
   if (node.els.length) {
     lines.push(indent + "else:");
@@ -381,7 +402,7 @@ export function renderStmt(node, indent, markers) {
     case "OrFail":
       return indent + renderOrfail(node);
     case "Fail":
-      return indent + `fail ${renderExpr(node.message)} as ${node.tag}`;
+      return indent + `fail ${delimited(node.message)} as ${node.tag}`;
     case "If":
       return renderIf(node, indent, markers);
     case "ForEach":

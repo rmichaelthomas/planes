@@ -75,9 +75,14 @@ from rules import check
 
 INDENT = "  "
 
-# Sub-expressions that need parens wherever they are not the outermost
-# expression of their statement (see module docstring).
-_COMPOUND = (BinOp, Not, IsNothing)
+# Sub-expressions that need parens wherever they are read at less than full
+# precedence -- i.e. anywhere but as the outermost expression of a statement.
+# BinOp/Not/IsNothing were the original set; S6's composition generator showed
+# it was incomplete -- ListPlus (`x plus y`), OrFail (`x or fail as t`),
+# RecordUpdate (`b with ...`), and ForEach (`for each ...: body`) are all
+# low-precedence and are otherwise split, or swallow a following token, when
+# embedded. (`first` and `round` render as primaries and need no grouping.)
+_COMPOUND = (BinOp, Not, IsNothing, ListPlus, OrFail, RecordUpdate, ForEach)
 
 # Expression node kinds that may stand alone as a statement (parse_statement's
 # final `return self.parse_expr()`). Listed explicitly so render_stmt raises
@@ -168,6 +173,24 @@ def _field_base(node):
     return render_expr(node)
 
 
+# Expressions whose own trailing structure swallows a following keyword or `:`
+# delimiter: an or-fail's `as tag[:...]`, a record update's `with` fields, a
+# for-each's `: body`. Distinct from _COMPOUND -- a BinOp before `:` (`if x > 0:`)
+# does NOT collide, so these positions must NOT wrap it, or every comparison
+# condition would gain needless parens.
+_OPEN_TRAILING = (OrFail, RecordUpdate, ForEach)
+
+
+def _delimited(node):
+    """An expression read up to a trailing keyword or `:` delimiter -- a for-each
+    source or `where`, an `if`/`when` subject, a `write` value or destination, a
+    `fail` message, an or-fail inner (S6). Parenthesise the kinds whose trailing
+    structure would otherwise swallow that delimiter."""
+    if isinstance(node, _OPEN_TRAILING):
+        return f"({render_expr(node)})"
+    return render_expr(node)
+
+
 # ================================================================ expressions
 
 def render_operand(node):
@@ -252,18 +275,18 @@ def render_call(node):
 
 
 def render_foreach_expr(node):
-    where = f" where {render_expr(node.where)}" if node.where is not None else ""
+    where = f" where {_delimited(node.where)}" if node.where is not None else ""
     body = render_expr(node.body[0])
-    return f"for each {node.var} in {render_expr(node.source)}{where}: {body}"
+    return f"for each {node.var} in {_delimited(node.source)}{where}: {body}"
 
 
 def render_writeto_inline(node):
-    return f"write {render_expr(node.value)} to {render_expr(node.dest)}"
+    return f"write {_delimited(node.value)} to {_delimited(node.dest)}"
 
 
 def render_orfail(node):
     inner = (render_writeto_inline(node.expr) if isinstance(node.expr, WriteTo)
-             else render_expr(node.expr))
+             else _delimited(node.expr))
     return f"{inner} or fail as {node.tag}"
 
 
@@ -340,7 +363,7 @@ def render_funcdef(node, indent, markers):
 
 
 def render_if(node, indent, markers):
-    lines = [indent + f"if {render_expr(node.cond)}:"]
+    lines = [indent + f"if {_delimited(node.cond)}:"]
     lines.append(render_block(node.then, indent + INDENT, markers))
     if node.els:
         lines.append(indent + "else:")
@@ -349,21 +372,24 @@ def render_if(node, indent, markers):
 
 
 def render_foreach_stmt(node, indent, markers):
-    where = f" where {render_expr(node.where)}" if node.where is not None else ""
-    header = indent + f"for each {node.var} in {render_expr(node.source)}{where}:"
+    where = f" where {_delimited(node.where)}" if node.where is not None else ""
+    header = indent + f"for each {node.var} in {_delimited(node.source)}{where}:"
     body = render_block(node.body, indent + INDENT, markers)
     return header + "\n" + body
 
 
 def render_when(node, indent, markers):
     # `when SUBJECT is { field: expr, bindname, ... }:` — a match entry
-    # renders as `field: expr`, a binding entry as the bare field name. The
-    # else block, when present, is an ordinary block (a nested when there is
-    # how an if-elif ladder is written). Mirrors render_if.
+    # renders as `field: expr`, a binding entry as the bare field name. A match
+    # value is a record-field position (comma-separated `name: expr`), so it
+    # parenthesises a greedy tail the same way a record literal's does (S6). The
+    # else block, when present, is an ordinary block (a nested when there is how
+    # an if-elif ladder is written). Mirrors render_if.
     entries = []
     for fname, (kind, arg) in node.pattern:
-        entries.append(f"{fname}: {render_expr(arg)}" if kind == "match" else fname)
-    header = indent + f"when {render_expr(node.subject)} is {{ {', '.join(entries)} }}:"
+        entries.append(f"{fname}: {_comma_element(arg, 'record')}"
+                       if kind == "match" else fname)
+    header = indent + f"when {_delimited(node.subject)} is {{ {', '.join(entries)} }}:"
     lines = [header, render_block(node.body, indent + INDENT, markers)]
     if node.els:
         lines.append(indent + "else:")
@@ -430,7 +456,7 @@ def render_stmt(node, indent, markers):
     if isinstance(node, OrFail):
         return indent + render_orfail(node)
     if isinstance(node, Fail):
-        return indent + f"fail {render_expr(node.message)} as {node.tag}"
+        return indent + f"fail {_delimited(node.message)} as {node.tag}"
     if isinstance(node, If):
         return render_if(node, indent, markers)
     if isinstance(node, ForEach):
