@@ -321,6 +321,36 @@ switch (sub) {
     );
     break;
   }
+  case "shapes": {
+    // shapes <file> [--no-follow] — the published effect surface (as_json),
+    // the effect-surface oracle against shapes_cli.as_json.
+    loadGrammar();
+    const { asJson } = await import("./shapes.mjs");
+    const { analyseFile } = await import("./shapes_node.mjs");
+    const follow = !rest.includes("--no-follow");
+    const surface = analyseFile(rest[0], follow);
+    out(JSON.stringify(asJson(surface, rest[0])));
+    break;
+  }
+  case "shapes-fn": {
+    // shapes-fn <file> [--no-follow] — the per-function effect breakdown.
+    loadGrammar();
+    const { functionsBreakdown } = await import("./shapes.mjs");
+    const { analyseFile } = await import("./shapes_node.mjs");
+    const follow = !rest.includes("--no-follow");
+    out(JSON.stringify(functionsBreakdown(analyseFile(rest[0], follow))));
+    break;
+  }
+  case "shapes-deriv": {
+    // shapes-deriv <file> — the derivation + origins form, computed from this
+    // file's own source with analyse(src) (file=null), so derivation `file`
+    // fields are null on both sides and only structure is compared.
+    loadGrammar();
+    const { analyse, derivationForm } = await import("./shapes.mjs");
+    const src = fs.readFileSync(rest[0], "utf-8");
+    out(JSON.stringify(derivationForm(analyse(src))));
+    break;
+  }
   case "meta": {
     // meta <stage> <corpusfile...> — the metacircular conformance run (A.1):
     // load grammar/<stage>.planes into a JS Interpreter (a Planes
