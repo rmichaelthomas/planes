@@ -168,6 +168,43 @@ function numOp(op) {
   }
 }
 
+// One program, run against a fresh TestHost. Shared verbatim by `run` and
+// `run-batch` so the two cannot answer differently: batching changes how many
+// node processes the caller pays for, never what a case reports.
+//
+// A TestHost captures show (into itp.output) instead of printing, so the
+// program's output cannot pollute this command's JSON on stdout. Effect tests
+// pass responses/files; a bare run gets an empty one.
+function runOne(src, cfg) {
+  const host = new TestHost({
+    responses: cfg.responses ?? {},
+    files: cfg.files ?? {},
+    now: cfg.now ?? 1000000.0,
+  });
+  const itp = new Interpreter({ host });
+  let tag = null;
+  // C2: the rendered message too, not only the tag. Asserting that a runtime
+  // message is identical in both implementations needs the text, and the tag
+  // is deliberately the same across many different messages.
+  let message = null;
+  try {
+    itp.run(src);
+  } catch (e) {
+    if (e instanceof PlanesError) tag = e.tag;
+    else if (e instanceof PlanesSyntaxError) tag = "PARSE";
+    else if (e instanceof RangeError) tag = "recursion-too-deep";
+    else throw e;
+    message = String(e.message);
+  }
+  return {
+    output: itp.output,
+    tag,
+    message,
+    effects: itp.effects,
+    files: itp.host.files ?? {},
+  };
+}
+
 function textOp(op) {
   const [name, ...a] = op;
   switch (name) {
@@ -257,40 +294,36 @@ switch (sub) {
     // effects/files for effect agreement. A parse failure reports tag "PARSE".
     loadGrammar();
     const src = fs.readFileSync(rest[0], "utf-8");
-    // A TestHost captures show (into itp.output) instead of printing, so the
-    // program's output cannot pollute this command's JSON on stdout. Effect
-    // tests pass responses/files; a bare run gets an empty one.
     const cfg =
       rest[1] !== undefined && rest[1] !== "" ? JSON.parse(rest[1]) : {};
-    const host = new TestHost({
-      responses: cfg.responses ?? {},
-      files: cfg.files ?? {},
-      now: cfg.now ?? 1000000.0,
+    out(JSON.stringify(runOne(src, cfg)));
+    break;
+  }
+  case "run-batch": {
+    // run-batch <cases-json>. `cases-json` is either inline JSON or, when it
+    // starts with '@', the path of a file holding it — an argv big enough to
+    // hit the platform limit is otherwise the one thing a batch mode would
+    // reintroduce. Each case is {id, src, config?}; the result array carries
+    // one entry per case, keyed by id, so order is irrelevant.
+    //
+    // A.1: `run` spawns one node process per case, and at ~130 ms of cold
+    // start each that dominated the gate. This runs the identical code path
+    // (runOne, shared with `run` above — not a reimplementation of it) over
+    // every case in one process. A case that crashes the interpreter reports
+    // {id, crash} and the other cases still answer; losing 347 results to one
+    // bad case is exactly what the per-case form could not do.
+    loadGrammar();
+    const raw = rest[0].startsWith("@")
+      ? fs.readFileSync(rest[0].slice(1), "utf-8")
+      : rest[0];
+    const results = JSON.parse(raw).map((c) => {
+      try {
+        return { id: c.id, ...runOne(c.src, c.config ?? {}) };
+      } catch (e) {
+        return { id: c.id, crash: String((e && e.message) || e) };
+      }
     });
-    const itp = new Interpreter({ host });
-    let tag = null;
-    // C2: the rendered message too, not only the tag. Asserting that a runtime
-    // message is identical in both implementations needs the text, and the tag
-    // is deliberately the same across many different messages.
-    let message = null;
-    try {
-      itp.run(src);
-    } catch (e) {
-      if (e instanceof PlanesError) tag = e.tag;
-      else if (e instanceof PlanesSyntaxError) tag = "PARSE";
-      else if (e instanceof RangeError) tag = "recursion-too-deep";
-      else throw e;
-      message = String(e.message);
-    }
-    out(
-      JSON.stringify({
-        output: itp.output,
-        tag,
-        message,
-        effects: itp.effects,
-        files: itp.host.files ?? {},
-      }),
-    );
+    out(JSON.stringify(results));
     break;
   }
   case "run-file": {

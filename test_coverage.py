@@ -215,28 +215,68 @@ def test_the_suite_does_not_touch_the_real_world():
     That is the argument for the seam in miniature. An implicit host lets
     'what actually happens' drift away from 'what the test says happens',
     and nothing fails. An explicit one makes the drift a test failure.
+
+    A.2: the observation this needs — did a suite write a real file while it
+    ran — is one `scripts/run_suites.py` already makes, because it is already
+    running every suite. Re-running them all here made the gate execute the
+    whole suite twice, 248.9 s of a 488.7 s run, measured. So when the runner
+    hands over its record the check reads it; run standalone, with no record,
+    it re-runs the suites itself exactly as before.
+
+    The assertion is the same either way, and the record is the stronger of the
+    two observations: it watches the gate's real run rather than a second
+    synthetic one. The handshake is an environment variable the runner sets on
+    the children it spawns, so a stale record on disk can never stand in for a
+    fresh one, and an incomplete record falls back rather than passing quietly.
     """
     import glob
+    import json
     import subprocess
 
     suites = sorted(glob.glob("test_*.py"))
-    before = set(glob.glob("*.json"))
-    leaks = {}
-    for suite in suites:
-        if suite == os.path.basename(__file__):
-            continue
-        subprocess.run([sys.executable, suite],
-                       capture_output=True, timeout=300)
-        now = set(glob.glob("*.json")) - before
-        if now:
-            leaks[suite] = sorted(now)
-            for f in now:
-                os.remove(f)
+    expected = [s for s in suites if s != os.path.basename(__file__)]
+
+    record_path = os.environ.get("PLANES_LEAK_RECORD")
+    record = None
+    if record_path and os.path.exists(record_path):
+        with open(record_path, encoding="utf-8") as fh:
+            record = json.load(fh)
+        watched = set(record["suites"]) - {os.path.basename(__file__)}
+        missing = sorted(set(expected) - watched)
+        if missing and record.get("complete"):
+            # The runner claims it watched every suite and did not. That is a
+            # broken handshake, not a partial run, and it must fail rather
+            # than quietly check less than it says it does.
+            raise AssertionError(
+                "the runner's leak record claims to be complete but does not "
+                f"cover every suite; unwatched: {', '.join(missing)}")
+        if missing:
+            # `--fast` skipped some suites, so this is a partial check by
+            # construction. Say which, and never let it read as a full one.
+            print(f"  note  leak check partial — {len(missing)} suite(s) "
+                  f"not run this pass: {', '.join(missing)}")
+
+    if record is not None:
+        leaks = {k: v for k, v in record["leaks"].items()
+                 if k != os.path.basename(__file__)}
+    else:
+        before = set(glob.glob("*.json"))
+        leaks = {}
+        for suite in expected:
+            subprocess.run([sys.executable, suite],
+                           capture_output=True, timeout=300)
+            now = set(glob.glob("*.json")) - before
+            if now:
+                leaks[suite] = sorted(now)
+                for f in now:
+                    os.remove(f)
 
     assert not leaks, (
         "these suites wrote real files:\n  "
         + "\n  ".join(f"{k}: {', '.join(v)}" for k, v in leaks.items())
-        + "\nPass an in-memory host, e.g. `interp(src, fs={})`.")
+        + "\nPass an in-memory host, e.g. `interp(src, fs={})`."
+        + "\n(Under PLANES_JOBS>1 attribution is approximate — the concurrent"
+          " suites are listed. Re-run with PLANES_JOBS=1 for the exact one.)")
 
 
 def test_coverage_is_derived_not_listed():
