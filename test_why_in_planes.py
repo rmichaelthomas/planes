@@ -238,8 +238,7 @@ EFFECT_CASES = [
      dict(files=[{"path": "notes.txt", "body": "hello"}]),
      dict(files={"notes.txt": "hello"})),
     ('use http\nr = ask "https://x/a.json"\nwhy r\n',
-     dict(responses=[{"url": "https://x/a.json",
-                      "value": {"kind": "text", "value": "ok", "deriv": None}}]),
+     dict(responses=[{"url": "https://x/a.json", "body": '"ok"'}]),
      dict(responses={"https://x/a.json": '"ok"'})),
 ]
 
@@ -261,8 +260,7 @@ ORIGIN_CASES = [
     ('use file\nuse http\na = read "a.txt"\nb = ask "https://x/b.json"\n'
      'c = a + b\n', "c",
      dict(files=[{"path": "a.txt", "body": "p"}],
-          responses=[{"url": "https://x/b.json",
-                      "value": {"kind": "text", "value": "q", "deriv": None}}]),
+          responses=[{"url": "https://x/b.json", "body": '"q"'}]),
      dict(files={"a.txt": "p"}, responses={"https://x/b.json": '"q"'})),
     ("x = 1 + 2\n", "x", {}, {}),
     ('foreign now from "time.time" doing clock\nt = now\nu = t + 1\n', "u",

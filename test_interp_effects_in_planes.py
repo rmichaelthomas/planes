@@ -15,8 +15,15 @@ the same canonical form the build-1/build-2 harnesses use.
 
 Grows phase by phase: Phase 1 `show`; Phase 2 adds `write`; Phase 3 adds `ask`,
 `read`, `clock`, `random`, `env`; Phase 4 adds `foreign` and the corpus.
+
+C1 gave this file the `__main__` runner every other suite here has. It had none,
+and `scripts/ci.sh` runs each suite as `python3 test_*.py` — so importing the
+module was the whole of what the gate did with it and none of these tests ran.
+That is also why the one `pytest.mark.parametrize` is now a plain loop: nothing
+else in this repo needs pytest, and a suite the gate cannot run is not a gate.
 """
-import pytest
+import json
+import sys
 
 from host import TestHost as _TestHost  # (aliased: not a test class)
 from interp import Deriv, Interpreter, Number, Traced
@@ -42,8 +49,13 @@ def _inert_io(*, clock=0, randoms=None, files=None, responses=None,
 
     The input tables are association lists of the shape `interp.planes` scans:
     files/responses/envs/foreigns as { key, ... } pairs, randoms as a bare list
-    drawn head-first. `value` fields are already-wrapped tagged interp.planes
-    values (a pure interpreted value never needs the host to build it).
+    drawn head-first.
+
+    A file and a response both carry `body` — RAW TEXT, what a host's read or
+    ask actually hands back, which `interp.planes` then parses itself (C1). An
+    env or foreign carries `value`, an already-wrapped tagged interp.planes
+    value: those return a host value rather than a serialised one, so there is
+    nothing to parse.
     """
     return {
         "mode": "inert",
@@ -162,14 +174,12 @@ def test_show_effect_threads_through_nested_expression_positions():
                            ("show", "then")]
 
 
-@pytest.mark.parametrize("src", [
-    'show "a"\n',
-    'show text of 42\nshow "b"\n',
-    'to f of n: show text of n\nx = f of 7\ny = f of 8\n',
-    'for each w in ["p", "q"]:\n  show w\n',
-])
-def test_show_log_agrees_with_interp_py(src):
-    assert_show_log_agrees(src)
+def test_show_log_agrees_with_interp_py():
+    for src in ('show "a"\n',
+                'show text of 42\nshow "b"\n',
+                'to f of n: show text of n\nx = f of 7\ny = f of 8\n',
+                'for each w in ["p", "q"]:\n  show w\n'):
+        assert_show_log_agrees(src)
 
 
 def test_number_import_is_available():
@@ -258,6 +268,33 @@ def test_write_real_mode_bytes_match_interp_py():
     assert ho.files.get("out.json") is not None
 
 
+def test_write_real_mode_of_a_record_carries_the_json_one_layer_encoded():
+    """The residual real-mode limit, pinned so it cannot drift.
+
+    interp.planes performs a real write by executing a Planes `write`, and the
+    OUTER host JSON-encodes whatever it is handed. A record cannot be handed
+    over AS a record — Planes records take static field names — so it goes over
+    serialised, and arrives one layer deep. What C1 changed is what that layer
+    contains: the reference's exact bytes, where it used to be canonical Planes
+    text. Closing the last layer needs a raw-write host method (a ninth,
+    proposed in REPORT_HOST_BOUNDARY.md and not built).
+    """
+    src = 'use file\nwrite { a: 1, b: "x" } to "out.json"\n'
+    ho = _TestHost(files={})
+    ir = Interpreter(host=ho)
+    ir.run_file(INTERP_PLANES)
+    ir.call("execute-program", [_t(src)], ir.env)
+    hp = _TestHost(files={})
+    ip = Interpreter(host=hp)
+    ip.run(src)
+    theirs, mine = hp.files["out.json"], ho.files["out.json"]
+    # the payload IS the reference's bytes, exactly ...
+    assert json.loads(mine) == theirs
+    # ... one JSON layer too deep, which is the whole of what remains
+    assert mine != theirs
+    assert json.loads(theirs) == {"a": 1, "b": "x"}
+
+
 def test_write_dest_from_a_variable_and_a_show_of_a_read_shape():
     # write's destination resolved from a binding, threaded through the log.
     src = ('use file\n'
@@ -306,16 +343,70 @@ def test_ask_inert_returns_supplied_response_and_logs_agree():
     # log agreement (interp.py logs the same ask regardless of the body)
     state = assert_effect_log_agrees(
         src,
-        responses=[{"url": "https://api.example.com/x", "value": _txt("ok")}],
+        responses=[{"url": "https://api.example.com/x", "body": '"ok"'}],
         py_responses={"https://api.example.com/x": '"ok"'})
     assert _log(state) == [("ask", "https://api.example.com/x")]
     r = next(b["value"] for b in state["env"] if b["name"] == "r")
     assert _bare(r) == _txt("ok")
 
 
+def test_ask_inert_parses_a_json_response_like_interp_py():
+    # C1: the inert response table carries the RAW body, and interp.planes
+    # parses it with grammar/json.planes — no host parse_json on this path. The
+    # oracle is interp.py given the same raw body, so the two sides now share
+    # one stub instead of one holding a pre-parsed value.
+    body = '{"n": 7, "who": "ada", "tags": ["a", "b"], "ok": true, "gone": null}'
+    src = ('use http\n'
+           'r = ask "https://api/x"\n'
+           'show r.who\n'
+           'show text of r.n\n'
+           'show text of (count of r.tags)\n'
+           'show text of r.ok\n')
+    state = assert_effect_log_agrees(
+        src,
+        responses=[{"url": "https://api/x", "body": body}],
+        py_responses={"https://api/x": body})
+    shown = [t for (k, t) in _log(state) if k == "show"]
+    assert shown == ["ada", "7", "2", "true"], shown
+    r = next(b["value"] for b in state["env"] if b["name"] == "r")
+    assert r["kind"] == "record"
+    assert [f["key"] for f in r["fields"]] == ["n", "who", "tags", "ok", "gone"]
+
+
+def test_ask_inert_parses_an_exact_number_out_of_a_response():
+    # A JSON number arrives as an exact number, not a float — the same
+    # guarantee from_foreign gives interp.py, reached without a host.
+    body = '{"rate": 0.1, "count": 3}'
+    src = ('use http\n'
+           'r = ask "https://api/x"\n'
+           'show text of (r.rate + r.rate + r.rate)\n')
+    state = assert_effect_log_agrees(
+        src,
+        responses=[{"url": "https://api/x", "body": body}],
+        py_responses={"https://api/x": body})
+    # three tenths exactly, not 0.30000000000000004
+    assert [t for (k, t) in _log(state) if k == "show"] == ["0.3"]
+
+
+def test_ask_inert_falls_back_to_the_text_when_the_body_is_not_json():
+    # interp.py's `try: from_foreign(parse_json(body)) except: body`, reproduced
+    # with json.planes's refusal standing in for the raise.
+    body = "not json at all"
+    src = ('use http\n'
+           'r = ask "https://api/x"\n'
+           'show r\n')
+    state = assert_effect_log_agrees(
+        src,
+        responses=[{"url": "https://api/x", "body": body}],
+        py_responses={"https://api/x": body})
+    assert [t for (k, t) in _log(state) if k == "show"] == [body]
+    r = next(b["value"] for b in state["env"] if b["name"] == "r")
+    assert _bare(r) == _txt(body)
+
+
 def test_ask_without_use_http_fails_module_check():
     state = run_inert('r = ask "https://x"\n',
-                      responses=[{"url": "https://x", "value": _txt("y")}])
+                      responses=[{"url": "https://x", "body": '"y"'}])
     assert state["status"] == "fail"
     assert state["error"]["tag"] == "module-not-used"
 
@@ -392,7 +483,7 @@ def test_all_seven_effect_kinds_in_one_inert_program_agree():
     state = assert_effect_log_agrees(
         src,
         files=[{"path": "in.txt", "body": "data"}],
-        responses=[{"url": "https://api/x", "value": _txt("ok")}],
+        responses=[{"url": "https://api/x", "body": '"ok"'}],
         py_responses={"https://api/x": '"ok"'},
         clock=1234, randoms=[9],
         envs=[{"name": "home", "value": _txt("/w")}])
@@ -480,3 +571,21 @@ def test_effect_surface_analyser_stays_total_and_origins_do_not_crash():
     for e in surface.declared:
         origins = surface.origins_of(e)
         assert isinstance(origins, list)
+
+
+if __name__ == "__main__":
+    fails = []
+    tests = [(k, f) for k, f in sorted(globals().items())
+             if k.startswith("test_")]
+    for name, fn in tests:
+        try:
+            fn()
+            print(f"  ok    {name}")
+        except AssertionError as e:
+            print(f"  FAIL  {name}: {e}")
+            fails.append(name)
+        except Exception as e:  # noqa: BLE001
+            print(f"  ERROR {name}: {type(e).__name__}: {e}")
+            fails.append(name)
+    print(f"\n{len(tests) - len(fails)}/{len(tests)} passing")
+    sys.exit(1 if fails else 0)

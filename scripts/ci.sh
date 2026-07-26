@@ -27,6 +27,9 @@ python3 grammar_gen.py --check
 
 echo "== core_check.py (interp.planes stays inside the declared core) =="
 python3 core_check.py
+# C1: interp.planes now `use`s grammar/json.planes, so that file is part of the
+# port surface a second host must implement and is held to the same core.
+python3 core_check.py grammar/json.planes
 
 echo "== errors coverage (S8 — every catalogued error names its fix; a report) =="
 # A.5 / invariant 6: `errors name the fix` is measured, never enforced. A
