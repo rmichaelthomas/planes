@@ -431,6 +431,67 @@ switch (sub) {
     out(JSON.stringify(derivationForm(analyse(src))));
     break;
   }
+  case "rules":
+  case "rules-src": {
+    // rules <file>      — shapes_cli.py --rules: surface via analyseFile(follow),
+    //                     check with declaringFile = abspath(file).
+    // rules-src <file>  — rule_violations(src): surface via analyse(src)
+    //                     (file=null), check with declaringFile=null.
+    // Both emit each violation's render text + is_violation + vacuous, the
+    // resolved subjects, and the exit category — or {error, message} on a
+    // conflict / unsupported subject. The rule-results oracle (A.3).
+    loadGrammar();
+    const { check, RuleConflict, RuleNotSupported } = await import("./rules.mjs");
+    const src = fs.readFileSync(rest[0], "utf-8");
+    const found = parse(src).filter((s) => s.__node === "Rule");
+    let surface;
+    let declaringFile = null;
+    if (sub === "rules") {
+      const pathmod = await import("node:path");
+      const { analyseFile } = await import("./shapes_node.mjs");
+      surface = analyseFile(rest[0], true);
+      declaringFile = pathmod.resolve(rest[0]);
+    } else {
+      const { analyse } = await import("./shapes.mjs");
+      surface = analyse(src);
+    }
+    try {
+      const results = check(found, surface, declaringFile);
+      out(
+        JSON.stringify({
+          violations: results.map((v) => ({
+            render: v.render(),
+            is_violation: v.is_violation,
+            vacuous: v.vacuous,
+          })),
+          resolved_subjects: results.resolvedSubjects,
+          exit: results.some((v) => v.is_violation)
+            ? 1
+            : results.some((v) => v.vacuous)
+              ? 2
+              : 0,
+        }),
+      );
+    } catch (e) {
+      if (e instanceof RuleConflict) {
+        out(JSON.stringify({ error: "RuleConflict", message: e.message }));
+      } else if (e instanceof RuleNotSupported) {
+        out(JSON.stringify({ error: "RuleNotSupported", message: e.message }));
+      } else throw e;
+    }
+    break;
+  }
+  case "fingerprints": {
+    // fingerprints <file> — [name, fingerprint] per rule, for byte-identity
+    // against rules.py's fingerprint() (which the FINGERPRINT token embeds).
+    loadGrammar();
+    const { fingerprint } = await import("./rules.mjs");
+    const found = parse(fs.readFileSync(rest[0], "utf-8")).filter(
+      (s) => s.__node === "Rule",
+    );
+    out(JSON.stringify(found.map((r) => [r.name, fingerprint(r)])));
+    break;
+  }
   case "meta": {
     // meta <stage> <corpusfile...> — the metacircular conformance run (A.1):
     // load grammar/<stage>.planes into a JS Interpreter (a Planes
