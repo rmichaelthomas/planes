@@ -240,7 +240,7 @@ def test_the_generic_token_gate_still_names_nothing_and_says_why():
     assert FIX_CLAUSE not in msg, f"the generic gate should stay bare:\n{msg}"
     ec = _coverage()
     generic = [e for e in ec.coverage()["deliberate"]
-               if e["id"] == "parser.planessyntaxerror-site-4"]
+               if e["id"] == "parser.planessyntaxerror-site.expect-3"]
     assert generic, "expect's generic path is not marked deliberate"
     assert "generic token gate" in generic[0]["no_fix"], generic
 
@@ -300,8 +300,8 @@ def test_the_interpreter_invariants_tell_the_author_it_is_not_their_fault():
     cov = ec.coverage()
     cat = json.load(open(os.path.join(REPO, "grammar", "errors.json"),
                          encoding="utf-8"))
-    ids = {"interp.cannot-evaluate", "interp.unknown-builtin",
-           "interp.unknown-operator-1", "interp.unknown-operator-2"}
+    ids = {"interp.cannot-evaluate.eval", "interp.unknown-builtin.builtin",
+           "interp.unknown-operator.apply_op", "interp.unknown-operator.arith"}
     found = [e for e in cat["entries"] if e["id"] in ids]
     assert len(found) == 4, sorted(e["id"] for e in found)
     for e in found:
@@ -429,6 +429,62 @@ def test_the_inclusion_rule_is_stated_and_the_reports_are_not_measured():
     ec = _coverage()
     cov = ec.coverage()
     assert {e["id"] for e in cov["reports"]} == {e["id"] for e in reports}
+
+
+def test_a_catalogue_id_names_the_function_it_is_raised_in():
+    """C2 reported that an id was unstable: the running-count suffix was
+    assigned across a whole file, so adding one raise site renumbered every
+    later site sharing its tag — `whole of` silently moved from
+    `interp.not-a-number-3` to `-4`. The disambiguator is the enclosing function
+    first, which is data the entry already carried, and a count only where that
+    still collides.
+
+    Not a guarantee, and the test says which part is: two raises with the same
+    tag in the same function still fall back to a count, and inserting a raise
+    above one of those still renumbers it. Nothing short of a hand-assigned key
+    makes an id permanent, and ruling D1 exists to refuse a hand-assigned key."""
+    cat = json.load(open(os.path.join(REPO, "grammar", "errors.json"),
+                         encoding="utf-8"))
+    ids = [e["id"] for e in cat["entries"]]
+    assert len(ids) == len(set(ids)), "ids are not unique"
+    for e in cat["entries"]:
+        if not e.get("raised_in"):
+            continue
+        if e["kind"] == "report":
+            # A report entry already named its method before C2 — its id is
+            # `rules.<method>.branch-<n>`, so the method is the middle segment.
+            assert e["id"].startswith(f"rules.{e['raised_in']}.branch-"), e["id"]
+            continue
+        stem = e["id"].rsplit("-", 1)[0] if e["id"].rsplit(
+            "-", 1)[-1].isdigit() else e["id"]
+        assert stem.endswith("." + e["raised_in"]), e["id"]
+    # The four this build's other tests pin, by their meaningful names.
+    for wanted in ("interp.unknown-operator.apply_op",
+                   "interp.unknown-operator.arith",
+                   "interp.cannot-evaluate.eval",
+                   "interp.unknown-builtin.builtin"):
+        assert wanted in ids, wanted
+
+
+def test_the_running_count_follows_source_order():
+    """`ast.walk` is breadth-first, so the suffix did not even follow the file —
+    `expect`'s three raises came out in walk order, which is unpredictable from
+    reading the source. Entries are sorted by line before numbering, so `-1`
+    is the first one written."""
+    cat = json.load(open(os.path.join(REPO, "grammar", "errors.json"),
+                         encoding="utf-8"))
+    def line(e):
+        return int(e["source"].rsplit(":", 1)[1].split("-")[0])
+    by_file = {}
+    for e in cat["entries"]:
+        by_file.setdefault(e["source"].split(":")[0], []).append(e)
+    for fname, entries in by_file.items():
+        lines = [line(e) for e in entries]
+        assert lines == sorted(lines), f"{fname} is not in source order"
+    expect = [e for e in cat["entries"] if e.get("raised_in") == "expect"]
+    assert len(expect) == 3, len(expect)
+    assert expect[0]["id"].endswith("expect-1")
+    assert "is a keyword" in expect[0]["template"], expect[0]["template"]
 
 
 def test_the_two_error_classes_the_rule_added_are_measured():
