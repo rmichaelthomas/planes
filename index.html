@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Planes — running in a browser</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        max-width: 820px; margin: 2rem auto; padding: 0 1rem;
+      }
+      h1 { font-size: 1.4rem; margin-bottom: 0.2rem; }
+      p.sub { color: #666; margin-top: 0; }
+      textarea, pre {
+        font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        width: 100%; box-sizing: border-box;
+      }
+      textarea {
+        min-height: 15rem; padding: 0.75rem; border: 1px solid #ccc;
+        border-radius: 6px; resize: vertical;
+      }
+      button {
+        margin: 0.75rem 0; padding: 0.5rem 1.1rem; font-size: 14px;
+        border: 0; border-radius: 6px; background: #2d6cdf; color: #fff; cursor: pointer;
+      }
+      button:hover { background: #245ac0; }
+      .hint { color: #888; font-size: 12px; }
+      pre#output {
+        background: #f6f7f9; padding: 0.75rem; border-radius: 6px;
+        min-height: 3rem; overflow-x: auto; white-space: pre-wrap;
+      }
+      pre#output.error { color: #b00020; }
+      @media (prefers-color-scheme: dark) {
+        textarea { background: #1b1d22; border-color: #333; color: #e6e6e6; }
+        pre#output { background: #16181d; color: #e6e6e6; }
+        p.sub, .hint { color: #999; }
+      }
+      footer { margin-top: 2rem; color: #888; font-size: 12px; }
+      code { background: rgba(128,128,128,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>Planes, in JavaScript</h1>
+    <p class="sub">
+      This page is a complete Planes implementation — lexer, parser, and
+      interpreter — running in your browser, with no Python and no build step.
+    </p>
+
+    <textarea id="source" spellcheck="false">
+# Planes runs here — in your browser, on JavaScript.
+# Numbers are exact: no floating-point surprises.
+price = 0.1 + 0.2
+show "0.1 + 0.2 = " + text of price
+
+third = 1 / 3
+show "1 / 3   = " + text of third
+
+# Lists and records, with the language's own prose calls.
+readings = [23, 8, 41, 15, 4]
+show "readings: " + text of count of readings + " values"
+
+# Every value remembers how it was made — ask `why`.
+x = 5
+y = 3
+z = x * y + 2
+why z
+</textarea>
+
+    <div>
+      <button id="run">Run ▸</button>
+      <span class="hint">or press ⌘/Ctrl + Enter</span>
+    </div>
+
+    <pre id="output">(no output yet)</pre>
+
+    <footer>
+      Opens directly in Safari or Firefox. Chrome blocks ES-module loading over
+      <code>file://</code> as a security policy — for Chrome, serve the folder
+      with <code>python3 -m http.server</code> and open
+      <code>http://localhost:8000/</code>. No bundler, no transpiler: the page
+      loads the real <code>js/*.mjs</code> modules and the real
+      <code>grammar/*.json</code> as JSON modules.
+    </footer>
+
+    <script type="module" src="./js/browser_main.mjs"></script>
+  </body>
+</html>
