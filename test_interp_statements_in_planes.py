@@ -681,3 +681,52 @@ def test_recursion_and_show_together():
            "  give countdown of (n - 1)\n"
            "done = countdown of 3\n")
     assert_output_agrees(src)
+
+
+# ============================================================ Phase 8: whole corpus programs
+
+import os  # noqa: E402
+
+# Representative build-1+2 corpus programs (no modules, no effects but show),
+# each run end to end through the three Planes stages and checked against
+# interp.py. scripts/run_corpus_through_planes.py runs the whole corpus; this
+# pins a sample in the suite so a regression is caught here too.
+CORPUS_RUNNABLE = [
+    "gate.planes",
+    "probe/fold_tokens.planes",
+    "probe/accumulate_in_loop.planes",
+    "probe/walk_string.planes",
+    "probe/dispatch_shape.planes",
+    "probe/selfhost/phase4_fixpoint.planes",
+    "probe/parser/mutual_recursion.planes",
+    "probe/parser/nested_tree.planes",
+    "demo/association.planes",
+]
+
+
+def test_corpus_programs_run_through_three_planes_stages():
+    root = os.path.dirname(os.path.abspath(__file__))
+    for rel in CORPUS_RUNNABLE:
+        with open(os.path.join(root, rel)) as f:
+            src = f.read()
+        planes = planes_output(src)
+        py = interp_output(src)
+        assert planes == py, (
+            f"\n{rel}\n--- planes ---\n{planes}\n--- python ---\n{py}")
+
+
+def test_deliberately_failing_program_agrees_on_the_tag():
+    # A program that ends in a fail (the nested_fail_propagation shape) fails the
+    # same way on both -- runnable includes agreeing on the failure.
+    root = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(root, "probe/parser/nested_fail_propagation.planes")) as f:
+        src = f.read()
+    state = planes_execute(src)
+    assert state["status"] == "fail"
+    assert state["error"]["tag"] == "parse-error"
+    itp = Interpreter()
+    try:
+        itp.run(src)
+        raise AssertionError("interp.py did not fail")
+    except PlanesError as e:
+        assert e.tag == "parse-error"

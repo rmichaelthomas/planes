@@ -138,13 +138,13 @@ def measure_env_at_depth():
     orig = Interpreter.call
 
     def traced(self, name, args, env):
-        # On each Planes-level `apply-function`, read the length of the
-        # call-env argument (3rd positional). Args are still AST nodes here, so
-        # evaluate it — it is a plain Var lookup, side-effect-free — and unwrap
-        # to the underlying list of { name, value } bindings.
-        if name == "apply-function" and len(args) >= 3:
+        # On each Planes-level `run-body`, read the length of the callee-env
+        # argument (2nd positional: fn, callee-env, globals, call-env). Args are
+        # still AST nodes here, so evaluate it — a plain Var lookup, side-effect-
+        # free — and unwrap to the list of { name, value } bindings.
+        if name == "run-body" and len(args) >= 2:
             try:
-                a = args[2]
+                a = args[1]
                 ev = a if isinstance(a, Traced) else self.eval(a, env)
                 lst = ev.value if isinstance(ev, Traced) else ev
                 if isinstance(lst, list):
@@ -163,19 +163,143 @@ def measure_env_at_depth():
     return max_env[0], depth
 
 
+# ---------------------------------------------------------------- interpreted recursion (build 2)
+
+COUNTDOWN = (
+    "to cd of k:\n"
+    "  if k <= 0:\n"
+    "    give 0\n"
+    "  give cd of (k - 1)\n"
+    "done = cd of DEPTH\n"
+)
+
+
+def program_ok(i, src):
+    try:
+        state = i.call("execute-program", [_traced(src)], i.env).value
+        if state["status"] == "fail":
+            return state["error"]["tag"] != "recursion-too-deep"
+        return True
+    except PlanesError as e:
+        if e.tag == "recursion-too-deep":
+            return False
+        raise
+    except RecursionError:
+        return False
+
+
+def _bsearch(pred):
+    lo, hi = 1, 8
+    while pred(hi):
+        hi *= 2
+        if hi > 100000:
+            break
+    while lo + 1 < hi:
+        mid = (lo + hi) // 2
+        if pred(mid):
+            lo = mid
+        else:
+            hi = mid
+    return lo
+
+
+def measure_recursion_depth():
+    i = _fresh()
+    return _bsearch(lambda n: program_ok(i, COUNTDOWN.replace("DEPTH", str(n))))
+
+
+def measure_frames_per_interpreted_call():
+    """Python frames the host spends per one interpreted function call: the
+    stack-depth gap between consecutive Planes-level apply-function-node entries
+    while an interpreted function recurses."""
+    i = _fresh()
+    depths = []
+    orig = Interpreter.call
+
+    def traced(self, name, args, env):
+        if name == "apply-function-node":
+            d = 0
+            f = sys._getframe()
+            while f is not None:
+                d += 1
+                f = f.f_back
+            depths.append(d)
+        return orig(self, name, args, env)
+
+    Interpreter.call = traced
+    try:
+        i.call("execute-program", [_traced(COUNTDOWN.replace("DEPTH", "20"))], i.env)
+    finally:
+        Interpreter.call = orig
+    diffs = [b - a for a, b in zip(depths, depths[1:]) if b > a]
+    return diffs[len(diffs) // 2] if diffs else 0
+
+
+def measure_statement_nesting():
+    """How deep blocks nest within blocks before the ceiling: N nested ifs."""
+    i = _fresh()
+
+    def src(n):
+        lines = ["marker = 0"]
+        for d in range(n):
+            lines.append("  " * d + "if true:")
+        lines.append("  " * n + "marker = 1")
+        return "\n".join(lines) + "\n"
+
+    return _bsearch(lambda n: program_ok(i, src(n)))
+
+
+def measure_env_at_recursion():
+    """Max env length observed at any interpreted apply-function-node while a
+    recursive function runs deep -- confirms A.1 holds under real control flow
+    (params + the fixed function set, flat with depth)."""
+    i = _fresh()
+    max_env = [0]
+    orig = Interpreter.call
+
+    def traced(self, name, args, env):
+        if name == "run-body" and len(args) >= 2:
+            try:
+                a = args[1]  # callee-env
+                ev = a if isinstance(a, Traced) else self.eval(a, env)
+                lst = ev.value if isinstance(ev, Traced) else ev
+                if isinstance(lst, list):
+                    max_env[0] = max(max_env[0], len(lst))
+            except Exception:
+                pass
+        return orig(self, name, args, env)
+
+    Interpreter.call = traced
+    try:
+        i.call("execute-program", [_traced(COUNTDOWN.replace("DEPTH", "120"))], i.env)
+    except (PlanesError, RecursionError):
+        pass
+    finally:
+        Interpreter.call = orig
+    return max_env[0]
+
+
 def main():
-    print("# grammar/interp.planes — interpreted-depth baseline")
+    print("# grammar/interp.planes — interpreted-depth measurements (S3c build 2)")
     print(f"# python {sys.version.split()[0]}, recursionlimit "
           f"{sys.getrecursionlimit()}")
     ed = measure_eval_depth()
-    print(f"INTERPRETED_EVAL_NESTING_DEPTH = {ed}")
+    print(f"INTERPRETED_EVAL_NESTING_DEPTH   = {ed}")
+    rd = measure_recursion_depth()
+    fpc = measure_frames_per_interpreted_call()
+    print(f"INTERPRETED_RECURSION_DEPTH      = {rd}   "
+          f"(frames per interpreted call = {fpc})")
+    sn = measure_statement_nesting()
+    print(f"INTERPRETED_STATEMENT_NESTING    = {sn}")
     pd = measure_pipeline_depth()
-    print(f"FULL_PIPELINE_NESTING_DEPTH   = {pd}")
+    print(f"FULL_PIPELINE_NESTING_DEPTH      = {pd}")
+    er = measure_env_at_recursion()
+    print(f"MAX_ENV_LEN_AT_RECURSION_DEPTH   = {er}  (recursion depth 120)")
     try:
         env, depth = measure_env_at_depth()
-        print(f"MAX_ENV_LEN_AT_CALL_CHAIN     = {env}  (chain depth {depth})")
+        print(f"MAX_ENV_LEN_AT_CALL_CHAIN        = {env}  (chain depth {depth})")
     except PlanesError as e:
-        print(f"MAX_ENV_LEN_AT_CALL_CHAIN     = blocked: {e.tag}")
+        print(f"MAX_ENV_LEN_AT_CALL_CHAIN        = blocked: {e.tag}")
 
 
 if __name__ == "__main__":

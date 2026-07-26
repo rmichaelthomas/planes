@@ -275,6 +275,10 @@ to reraise of err:
     fail d as build-2-statements
   if t == "build-3-effect":
     fail d as build-3-effect
+  if t == "recursion-too-deep":
+    fail d as recursion-too-deep
+  if t == "fail-message-not-text":
+    fail d as fail-message-not-text
   fail d as interp-error
 
 # ================================================================ source -> node (consumes parser.planes, A.4)
