@@ -29,7 +29,7 @@ import sys
 import tempfile
 
 from host import TestHost as _TestHost  # (aliased: not a test class)
-from interp import Deriv, Interpreter, Number, Traced
+from interp import Deriv, Interpreter, Number, PlanesError, Traced
 
 INTERP_PLANES = "grammar/interp.planes"
 
@@ -684,6 +684,82 @@ def test_foreign_ask_declared_effect_logs_and_returns_supplied():
                            ("show", "ok")]
     sent = next(b["value"] for b in state["env"] if b["name"] == "sent")
     assert _bare(sent) == _txt("done")
+
+
+# ============================ C1: the real-mode foreign-resolution limit (A.4)
+#
+# `foreign-needs-host` was investigated rather than assumed fixable. These
+# assertions are the argument, machine-checked, so REPORT_HOST_BOUNDARY.md's
+# §A.4 conclusion rests on measurement: real-mode resolution of an ARBITRARY
+# foreign needs two things the language deliberately does not have, and the
+# second holds even if the first were granted.
+
+def test_a_foreign_target_must_be_a_literal_so_dynamic_resolution_is_ungrammatical():
+    """The first half. `foreign f of xs from target` is a SYNTAX error, not an
+    unimplemented feature: the grammar requires a string literal. That is what
+    keeps the static analyser able to name every host function a program can
+    reach — the property `origins_of` and the effect surface both rest on."""
+    from parser import PlanesSyntaxError, parse
+    try:
+        parse('target = "builtins.sorted"\n'
+              'foreign f of xs from target doing nothing\n')
+        raise AssertionError("a name as a foreign target should not parse")
+    except PlanesSyntaxError as e:
+        assert "expected string" in str(e), str(e)
+    # the literal form parses, and is what interp.planes itself writes
+    parse('foreign f of xs from "builtins.sorted" doing nothing\n')
+
+
+def test_a_records_field_names_cannot_be_enumerated():
+    """The second half, and the decisive one. Even given the target, an
+    arbitrary foreign's RESULT cannot be put into interp.planes's tagged model:
+    a record's field names are unreachable. `count of` a record gives the field
+    count, but nothing yields the names — looping over a record is
+    not-a-collection and joining it is refused. Reading a field needs a name
+    known when the source was written."""
+    itp = Interpreter(host=_TestHost())
+    assert itp.run("show text of (count of { a: 1, b: 2 })\n") == ["2"]
+    for src, tag in (("for each f in { a: 1 }:\n  show text of f\n",
+                      "not-a-collection"),
+                     ("show join of { a: 1 }\n", "cannot-join")):
+        try:
+            Interpreter(host=_TestHost()).run(src)
+            raise AssertionError(f"{src!r} should fail {tag}")
+        except PlanesError as e:
+            assert e.tag == tag, (src, e.tag)
+
+
+def test_a_trial_probe_separates_a_number_but_not_a_list_from_text():
+    """Why a type probe by trial does not rescue it either: `count of` is the
+    only discriminator available, and it separates a number from the rest while
+    leaving list, text, and record indistinguishable."""
+    itp = Interpreter(host=_TestHost())
+    assert itp.run('show text of (count of "ab")\n') == ["2"]
+    assert Interpreter(host=_TestHost()).run("show text of (count of [1, 2])\n") == ["2"]
+    assert Interpreter(host=_TestHost()).run("show text of (count of { a: 1, b: 2 })\n") == ["2"]
+    # ... and on a number it does not produce a Planes error at all on this
+    # implementation, which is a separate finding reported in
+    # REPORT_HOST_BOUNDARY.md (js/interp.mjs raises not-a-collection here).
+    try:
+        Interpreter(host=_TestHost()).run("show text of (count of 5)\n")
+        raise AssertionError("count of a number should not succeed")
+    except PlanesError:
+        pass
+    except TypeError:
+        pass
+
+
+def test_real_mode_still_refuses_an_arbitrary_foreign_and_names_why():
+    """The refusal is the correct behaviour, not a gap left open: interp.planes
+    declines to guess a value it cannot construct. Both sides refuse
+    demo/fdiff/v1.planes, whose target no host can load; foreign.planes names
+    targets interp.py's host CAN load, and interp.planes refuses it."""
+    src = open("foreign.planes", encoding="utf-8").read()
+    state, _out = run_real(src)
+    assert state["status"] == "fail"
+    assert state["error"]["tag"] == "foreign-needs-host"
+    detail = state["error"]["detail"]
+    assert "needs a host that can load it" in detail, detail
 
 
 # =========================================== Phase 5: the effect surface (A.3)
