@@ -1,0 +1,21 @@
+# Turn a title into a URL slug. Each word is normalized to a single canonical
+# form — so visually identical letters compare equal — and lower-cased. Then
+# the words are joined with hyphens by folding: the first word starts the slug,
+# and each next one is added after a hyphen, which leaves no stray hyphen at
+# either end.
+
+words = ["The", "Quick", "Brown", "Fox"]
+
+cleaned = for each w in words: lower of (normalize of w)
+
+slug = ""
+for each w in cleaned:
+  if slug == "":
+    slug = w
+  else:
+    slug = slug + "-" + w
+
+let why-fold = "hyphens go between, never at the ends" because "join has no separator by design, so the separator is the loop's job — and folding from the first word avoids a leading or trailing hyphen"
+
+show "slug: " + slug
+show why-fold

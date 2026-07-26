@@ -1,0 +1,19 @@
+# Check stock levels for a set of SKUs against a live inventory service. Each
+# lookup is guarded, so an unreachable service fails with a named tag instead of
+# reporting zero stock — which would read as a real shortage and could trigger a
+# needless reorder.
+
+use http
+
+let care = "an offline service is not zero stock" because "failing with a named tag keeps 'we could not check' distinct from 'there is none left', which mean very different things to a buyer"
+
+skus = ["A1", "B2", "C3"]
+
+to level of sku:
+  give ask "https://inventory.example.com/stock/" + sku
+    or fail as inventory-offline
+
+readings = for each sku in skus: level of sku
+
+show "checked " + text of (count of readings) + " skus"
+show care

@@ -1,0 +1,21 @@
+# Watch sensor readings and raise an alert for anything outside its safe range.
+# Each sensor carries its own bounds, so the check is per-record — a reading is
+# out of range when it falls below the low bound OR above the high one — and the
+# alerts are filed for an operator to act on, not only printed.
+
+use file
+
+sensors = [
+  { id: "boiler", value: 82, low: 60, high: 90 },
+  { id: "pump", value: 175, low: 100, high: 160 },
+  { id: "cabin", value: 21, low: 18, high: 24 }
+]
+
+alerts = for each s in sensors where s.value < s.low or s.value > s.high: s
+
+let headline = count of alerts because "the count leads so an operator sees how many sensors need attention before reading which ones they are"
+show text of headline + " sensor(s) out of range"
+for each s in alerts:
+  show "  " + s.id + " reading " + text of s.value
+
+write alerts to "alerts.json"

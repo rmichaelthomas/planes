@@ -1,0 +1,24 @@
+# A daily summary, computed, filed, and traceable. Sales are totalled, the
+# average order is derived, and the whole summary is written as one record. Then
+# `why average` prints the figure's provenance — back through the division to the
+# total and the count it was built from — which is the point of carrying
+# derivation: the number on disk can always be traced to the orders behind it.
+
+use file
+
+orders = [120, 80, 200, 60, 140]
+
+total = 0
+for each amount in orders:
+  total = total + amount
+
+let n = count of orders
+let average = round (total / n) to 2 places because "the average order is the total over the count; carrying the derivation means the filed figure can always be traced back to the orders that produced it"
+
+let summary = { orders: n, total: total, average: average }
+write summary to "summary.json"
+
+show "orders:  " + text of n
+show "total:   " + text of total
+show "average: " + text of average
+why average

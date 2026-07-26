@@ -1,0 +1,11 @@
+# Layer a user's settings on top of the defaults. `with` builds a new record
+# that differs only in the named fields, so the defaults themselves are never
+# touched — the same defaults record can serve the next user unchanged.
+
+defaults = { theme: "light", page-size: 20, notify: true }
+
+let mine = defaults with theme: "dark", page-size: 50 because "a user overrides only what they care about; every other setting falls through to the default, which is exactly what `with` leaves alone"
+
+show "theme     " + mine.theme
+show "page-size " + text of mine.page-size
+show "notify    " + text of mine.notify

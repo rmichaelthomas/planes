@@ -1,0 +1,23 @@
+# League points, and who is on top. Each team's points come from its wins and
+# draws — three for a win, one for a draw — and the leader is tracked the way a
+# maximum is: seeded at nothing, then corrected whenever a team beats the best
+# seen so far, so one pass gives both the table and its top.
+
+teams = [
+  { name: "North", wins: 5, draws: 2 },
+  { name: "South", wins: 3, draws: 3 },
+  { name: "East", wins: 6, draws: 0 }
+]
+
+leader = nothing
+best = nothing
+for each t in teams:
+  let points = (t.wins * 3) + t.draws
+  show t.name + ": " + text of points
+  if best is nothing or points > best:
+    best = points
+    leader = t.name
+
+let call = "three for a win, one for a draw" because "the scoring rule is stated once, in the arithmetic, rather than pre-computed into each team's record where it could drift"
+show "leader: " + leader + " (" + text of best + ")"
+show call

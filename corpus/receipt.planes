@@ -1,0 +1,27 @@
+# Turn a list of line items into a receipt and file it. The receipt is a
+# record — the lines, how many there are, and the total — so whatever reads
+# receipt.json later gets structure back, not a formatted string it would have
+# to pull apart again.
+
+use file
+
+items = [
+  { name: "coffee", price: 4.50 },
+  { name: "bagel", price: 3.25 },
+  { name: "juice", price: 5.00 }
+]
+
+total = 0
+for each item in items:
+  total = total + item.price
+
+let line-count = count of items
+let receipt = {
+  lines: items,
+  count: line-count,
+  total: total
+} because "one record carries the whole receipt; the file stores the record, not a rendering of it that would have to be parsed back"
+
+show "receipt: " + text of line-count + " items, " + text of total
+
+write receipt to "receipt.json"

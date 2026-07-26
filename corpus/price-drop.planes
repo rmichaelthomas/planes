@@ -1,0 +1,22 @@
+# Flag price drops between yesterday and today, and file the alerts. Each
+# product carries both prices; a drop is when today's is lower, and the alert
+# records how much came off — so a notifier can say by how much, not merely that
+# something changed.
+
+use file
+
+products = [
+  { name: "lamp", was: 40, now: 32 },
+  { name: "desk", was: 120, now: 120 },
+  { name: "chair", was: 85, now: 70 }
+]
+
+dropped = for each p in products where p.now < p.was: p
+alerts = for each p in dropped: { name: p.name, saved: (p.was - p.now) }
+
+let headline = count of dropped because "the summary leads with how many dropped, so a reader takes in the size of the change before the individual lines"
+show text of headline + " price drop(s)"
+for each a in alerts:
+  show "  " + a.name + ": -" + text of a.saved
+
+write alerts to "price-alerts.json"

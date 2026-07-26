@@ -1,0 +1,14 @@
+# Feature flags, resolved. The defaults are conservative — most things off —
+# and a rollout record turns specific ones on with `with`. A feature counts as
+# live only when its flag is on AND the kill-switch is not thrown, so one switch
+# can shut everything without editing each flag by hand.
+
+defaults = { dark-mode: false, beta-search: false, kill-switch: false }
+
+let rollout = defaults with beta-search: true because "beta-search ships to everyone this week; every other flag stays at its conservative default, which is what `with` leaves untouched"
+
+let search-live = rollout.beta-search and not rollout.kill-switch
+let dark-live = rollout.dark-mode and not rollout.kill-switch
+
+show "beta-search live: " + text of search-live
+show "dark-mode live:   " + text of dark-live

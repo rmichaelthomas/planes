@@ -1,0 +1,23 @@
+# Sum a week's logged hours and flag overtime. Each day carries its hours; the
+# total is one pass down the list, and anything past the standard week is
+# overtime — computed, not eyeballed, so payroll acts on a number it can trace.
+
+days = [
+  { day: "Mon", hours: 8 },
+  { day: "Tue", hours: 9 },
+  { day: "Wed", hours: 8 },
+  { day: "Thu", hours: 10 },
+  { day: "Fri", hours: 7 }
+]
+
+total = 0
+for each d in days:
+  total = total + d.hours
+
+let standard = 40 because "the standard week; hours past it are overtime, paid at a different rate, so the boundary has to be explicit"
+overtime = 0
+if total > standard:
+  overtime = total - standard
+
+show "total hours: " + text of total
+show "overtime:    " + text of overtime

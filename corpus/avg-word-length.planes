@@ -1,0 +1,17 @@
+# The average word length in a paragraph. Sum the characters across the words,
+# count the words, and divide — kept exact until the final figure is rounded.
+# The paragraph is a list of words, and `count` measures a word's length and the
+# list's size with the same name.
+
+words = ["the", "quick", "brown", "fox", "jumped"]
+
+chars = 0
+for each w in words:
+  chars = chars + (count of w)
+
+let n = count of words
+let average = round (chars / n) to 2 places because "average length rarely divides evenly, and two places is enough to compare one paragraph's texture against another"
+
+show "words:   " + text of n
+show "chars:   " + text of chars
+show "avg len: " + text of average

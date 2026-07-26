@@ -1,0 +1,17 @@
+# Check that every order quantity is a whole number — you cannot ship half a
+# crate. `whole of` asks exactly that, and the ones that fail are collected so
+# the report can name them rather than just count them.
+
+orders = [
+  { item: "crate", quantity: 12 },
+  { item: "pallet", quantity: 3.5 },
+  { item: "drum", quantity: 8 }
+]
+
+flagged = for each o in orders where not (whole of o.quantity): o
+
+let all-whole = count of flagged == 0 because "the moment any quantity has a fractional part this turns false, and the flagged list carries which order to fix"
+
+show "all quantities whole: " + text of all-whole
+for each o in flagged:
+  show "  fractional: " + o.item + " (" + text of o.quantity + ")"

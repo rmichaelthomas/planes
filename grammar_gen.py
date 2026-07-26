@@ -27,6 +27,7 @@ import difflib
 import glob
 import json
 import os
+import re
 import sys
 
 from planes_text import STRING_ESCAPES
@@ -93,6 +94,64 @@ def check_escape_table_matches_vocabulary_note():
 def repo_py_files():
     """Every .py file in the repo root, in a stable order."""
     return sorted(os.path.basename(p) for p in glob.glob(os.path.join(REPO, "*.py")))
+
+
+# ================================================================ A.7: drift against the JS impl
+#
+# rules.json / errors.json / vocabulary.planes are projected from Python and
+# --check diffs them against Python, so the grammar artifacts are verified
+# against ONE implementation. The grammar is the single source of truth for TWO.
+# The most load-bearing shared surface is the AST node set: the productions both
+# parsers build and both interpreters consume. lexer.py defines it as
+# @dataclasses; js/nodes.mjs defines it as `__node: "<Name>"` constructors, in
+# the same order, by contract (js/nodes.mjs's own header). If a node is added to
+# one and not the other, a construct exists in one implementation and not the
+# other — invisible to every Python-only check here until now.
+
+def _py_ast_node_names():
+    """AST node class names in lexer.py — every @dataclass except Token (the
+    lexical token, not a tree node)."""
+    with open(os.path.join(REPO, "lexer.py"), encoding="utf-8") as f:
+        tree = ast.parse(f.read(), filename="lexer.py")
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name != "Token" and any(
+                isinstance(d, ast.Name) and d.id == "dataclass"
+                for d in node.decorator_list):
+            names.add(node.name)
+    return names
+
+
+def _js_ast_node_names():
+    """AST node kinds js/nodes.mjs constructs, read off its `__node: "<Name>"`
+    tags."""
+    path = os.path.join(REPO, "js", "nodes.mjs")
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        return set(re.findall(r'__node:\s*"(\w+)"', f.read()))
+
+
+def check_js_node_parity():
+    """The two implementations must define the same AST node set. Returns 0 when
+    they agree, 1 (and prints the divergence) when they drift — the JS-side drift
+    guard A.7 asks for. Zero code is generated here; this only compares."""
+    py = _py_ast_node_names()
+    js = _js_ast_node_names()
+    if js is None:
+        print("js AST node parity: js/nodes.mjs not found — cannot compare")
+        return 1
+    if py == js:
+        print(f"js AST node parity: up to date "
+              f"({len(py)} nodes in both lexer.py and js/nodes.mjs)")
+        return 0
+    print("js AST node parity: OUT OF SYNC — the grammar's node set differs "
+          "between the two implementations")
+    for n in sorted(py - js):
+        print(f"  in lexer.py, missing from js/nodes.mjs: {n}")
+    for n in sorted(js - py):
+        print(f"  in js/nodes.mjs, missing from lexer.py: {n}")
+    return 1
 
 
 # ================================================================ D.2: grammar/errors.json
@@ -557,8 +616,15 @@ def main():
                                     fromfile=f"{label} (committed)",
                                     tofile=f"{label} (generated)")
         sys.stdout.writelines(diff)
+
+    # A.7: guard the grammar's node set against the JavaScript implementation,
+    # not only against Python. This is a comparison, not a generated artifact —
+    # the grammar defines the productions; both AST definitions must realise the
+    # same set.
+    diffs += check_js_node_parity()
+
     if diffs:
-        print(f"\n{diffs} file(s) out of date.")
+        print(f"\n{diffs} check(s) failed.")
     return diffs
 
 

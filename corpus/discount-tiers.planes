@@ -1,0 +1,24 @@
+# Volume pricing: the more you buy, the lower the per-unit price. The tiers are a
+# ladder checked top down, so the first threshold a quantity clears sets its
+# rate. Stating them in order shows at a glance why sixty units pays the middle
+# rate and not the lowest.
+
+to rate of quantity:
+  if quantity >= 100:
+    give 0.80
+  else:
+    if quantity >= 50:
+      give 0.90
+    else:
+      give 1.00
+
+orders = [12, 60, 150]
+list-price = 4.00
+
+for each qty in orders:
+  let unit-price = list-price * (rate of qty)
+  let total = round (unit-price * qty) to 2 places
+  show text of qty + " units at " + text of unit-price + " ea = " + text of total
+
+let ladder = "the first tier a quantity clears wins" because "a top-down ladder gives every order exactly one rate, with no overlap to reconcile between tiers"
+show ladder

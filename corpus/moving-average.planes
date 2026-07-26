@@ -1,0 +1,25 @@
+# A three-point moving average over a series. Each point is the mean of a
+# reading and its two neighbours, so the series is walked with `first` taking
+# the window of three and `rest` sliding it forward by one. When fewer than
+# three readings remain the walk stops — the tail is not padded with invented
+# numbers.
+
+to total of xs:
+  sum = 0
+  for each x in xs:
+    sum = sum + x
+  give sum
+
+to walk of series:
+  if count of series < 3:
+    give "done"
+  else:
+    let window = first 3 of series
+    let point = round ((total of window) / 3) to 2 places
+    show "window average: " + text of point
+    give walk of (rest of series)
+
+readings = [10, 12, 14, 9, 20, 22]
+
+let outcome = walk of readings because "stopping at fewer-than-three keeps every average honest; a padded window would report a mean over data that was not there"
+show outcome

@@ -57,9 +57,11 @@ def _js_astequal(a, b):
 
 
 def _all_planes():
+    # S7: the canonical corpus joins the cross-implementation round-trip set.
     paths = sorted(glob.glob("*.planes")) + \
         sorted(glob.glob("demo/**/*.planes", recursive=True)) + \
-        sorted(glob.glob("grammar/*.planes"))
+        sorted(glob.glob("grammar/*.planes")) + \
+        sorted(glob.glob("corpus/**/*.planes", recursive=True))
     return [p for p in paths if p not in NOT_STANDALONE_PARSEABLE]
 
 

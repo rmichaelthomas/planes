@@ -1,0 +1,25 @@
+# Count the words across a set of messages and find the longest. Each message
+# arrives already split — a list of its words — so the total is a sum of list
+# lengths, and the longest word is tracked the way a maximum is: seeded at
+# nothing, because there is no natural "shortest possible" word to start from,
+# and corrected as the loop meets a longer one.
+
+messages = [
+  ["the", "quick", "brown", "fox"],
+  ["jumps", "over"],
+  ["the", "lazy", "dog"]
+]
+
+total = 0
+longest = nothing
+for each words in messages:
+  total = total + (count of words)
+  for each w in words:
+    if longest is nothing or (count of w) > (count of longest):
+      longest = w
+
+let both-counts = "count reads a list's length and a word's length alike" because "one builtin measures the size of a collection and of a string, so the same word does both jobs here without a second name"
+
+show "total words: " + text of total
+show "longest word: " + longest
+show both-counts

@@ -1,0 +1,29 @@
+# Decide what a user may do from their role. `when` dispatches on the role
+# record's shape: an admin matches the admin branch, an editor the editor
+# branch, and anything else falls through to a read-only default — so a role the
+# system was never taught fails safe instead of quietly inheriting write access.
+
+to may-write of user:
+  when user is { role: "admin" }:
+    give true
+  else:
+    when user is { role: "editor" }:
+      give true
+    else:
+      give false
+
+users = [
+  { name: "Ada", role: "admin" },
+  { name: "Bob", role: "viewer" },
+  { name: "Cy", role: "editor" }
+]
+
+for each u in users:
+  let allowed = may-write of u
+  if allowed:
+    show u.name + " may write"
+  else:
+    show u.name + " is read-only"
+
+let fail-safe = "an unknown role gets the least privilege" because "the final else is read-only, so a role nobody has taught the system about defaults to safe rather than inheriting a writer's rights"
+show fail-safe

@@ -1,0 +1,20 @@
+# Tidy a list of email addresses: normalize each to one canonical form,
+# lower-case it, and drop duplicates while keeping first-seen order. Two
+# addresses that differ only in case — or in how an accented character is
+# encoded — collapse to the same entry, which is what you want before counting
+# distinct people.
+
+raw = ["Ada@Example.com", "bob@example.com", "ada@example.com", "Bob@Example.com"]
+
+seen = []
+for each address in raw:
+  let key = lower of (normalize of address)
+  if not (key in seen):
+    seen = seen plus key
+
+let order-of-ops = "normalize first, then lower-case" because "case-folding alone would still count two encodings of the same accented letter as different people; normalizing before folding makes them one"
+
+show "distinct addresses: " + text of (count of seen)
+for each address in seen:
+  show "  " + address
+show order-of-ops

@@ -1,0 +1,26 @@
+# Build a query URL from a base and a list of parameters. The separator depends
+# on position — `?` before the first parameter, `&` before every one after — so
+# a flag tracks whether the first has been placed, the same trick the slug used
+# to keep its hyphens between the words.
+
+base = "https://search.example.com/results"
+
+params = [
+  { key: "q", value: "planes" },
+  { key: "page", value: "2" },
+  { key: "sort", value: "recent" }
+]
+
+url = base
+placed-first = false
+for each p in params:
+  if placed-first:
+    url = url + "&" + p.key + "=" + p.value
+  else:
+    url = url + "?" + p.key + "=" + p.value
+    placed-first = true
+
+show url
+
+let sep-rule = "? before the first, & before the rest" because "the separator is a function of position, so the fold carries a flag rather than special-casing an index"
+show sep-rule

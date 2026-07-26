@@ -1,0 +1,21 @@
+# A weighted final grade. Each component has a score and a weight; the grade is
+# the sum of score times weight. The weights are meant to add to one, so the
+# result stays on the same 0-100 scale as the scores — and the running weight
+# total is shown so that assumption can be checked, not just trusted.
+
+components = [
+  { name: "homework", score: 88, weight: 0.3 },
+  { name: "midterm", score: 74, weight: 0.3 },
+  { name: "final", score: 91, weight: 0.4 }
+]
+
+grade = 0
+weight-total = 0
+for each c in components:
+  grade = grade + (c.score * c.weight)
+  weight-total = weight-total + c.weight
+
+let final-grade = round grade to 2 places because "the weights sum to one, so the weighted grade stays on the 0-100 scale; rounding once at the end keeps the arithmetic exact until then"
+
+show "weighted grade: " + text of final-grade
+show "weights sum to: " + text of weight-total

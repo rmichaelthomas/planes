@@ -1,0 +1,23 @@
+# A deploy gate: every check must pass before the deploy is cleared. The checks
+# are records with a name and a pass flag; `all-clear` starts true and is ANDed
+# with each one, so a single failure turns it false — and the blocking check
+# names itself on the way past.
+
+checks = [
+  { name: "tests", passed: true },
+  { name: "lint", passed: true },
+  { name: "migrations", passed: false },
+  { name: "approvals", passed: true }
+]
+
+all-clear = true
+for each c in checks:
+  all-clear = all-clear and c.passed
+  if not c.passed:
+    show "blocked by: " + c.name
+
+let gate = all-clear because "one failing gate is enough to hold a deploy; anding the flags makes that the default rather than something each caller has to remember to check"
+if gate:
+  show "cleared to deploy"
+else:
+  show "deploy blocked"

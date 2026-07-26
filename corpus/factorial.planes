@@ -1,0 +1,16 @@
+# Factorial, the way recursion reads when the base case is stated first: at
+# zero the answer is one, and every step above multiplies down toward it. Each
+# call stands on its own — nothing is carried in a running variable — so the
+# definition is the whole explanation.
+
+to factorial of n:
+  if n <= 0:
+    give 1
+  else:
+    give n * (factorial of (n - 1))
+
+rows = [1, 2, 3, 4, 5, 6]
+
+for each k in rows:
+  let line = text of k + "! = " + text of (factorial of k) because "printed as a table so the growth from 1 to 720 is visible at a glance"
+  show line

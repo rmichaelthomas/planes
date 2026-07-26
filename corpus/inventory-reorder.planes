@@ -1,0 +1,21 @@
+# Flag inventory that has fallen below its reorder point and file the reorder
+# list. Each item knows its stock and its threshold; the ones under threshold
+# are collected in one pass, and the file is what a purchasing system reads
+# back — a list of records, not a printed report it would have to parse.
+
+use file
+
+items = [
+  { sku: "A1", stock: 3, reorder-at: 5 },
+  { sku: "B2", stock: 20, reorder-at: 10 },
+  { sku: "C3", stock: 0, reorder-at: 4 }
+]
+
+low = for each item in items where item.stock < item.reorder-at: item
+
+let count-low = count of low because "the header states how many need action before the detail lines, so a reader sees the size of the problem first"
+show "to reorder: " + text of count-low
+for each item in low:
+  show "  " + item.sku + " (" + text of item.stock + " in stock)"
+
+write low to "reorder.json"
