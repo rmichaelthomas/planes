@@ -146,6 +146,65 @@ to fail-of of error, env:
 to error-of of tag, detail:
   give { tag: tag, detail: detail }
 
+# ================================================================ the effect boundary (A.1, build 3)
+#
+# Effects thread as data. The interpreter's configuration -- the mode tag and,
+# in inert mode, the supplied input data -- rides in one `io` record together
+# with the output accumulator (`log`). That record is carried as a reserved
+# `__io__` binding in the environment, so it threads exactly as every binding
+# does (Rule 4: the env rides in the status record). This is why a
+# sub-expression's effect is never lost: wherever the env threads correctly --
+# which build 2 already exercises through lists, operators, calls, branches, and
+# loops -- the effect log threads with it, and an effect and a binding "happen"
+# at the same threaded moment. Two modes, dispatched flat on the tag (A.1, A.6):
+#
+#   "real"  -- interp.planes performs the effect by executing the corresponding
+#              Planes construct (show / write / ask / read / a foreign call), and
+#              the outer host performs it. The endpoint path.
+#   "inert" -- effects are data: an output effect appends to `log`, an input
+#              effect reads from the supplied data. Nothing is performed, so
+#              effect agreement is testable without touching a file, the clock,
+#              or the network. No record of callables anywhere (A.1): `io` holds
+#              only data -- lists of { path, text } / { url, value } / { name,
+#              value } pairs -- and dispatch is on the mode string, never a
+#              stored function.
+#
+# `log` accumulates { kind, target }; `modules` records `use`d module names for
+# the file/http module checks; `clock` is the fixed inert time; `randoms` is the
+# inert sequence, drawn head-first; `files` / `responses` / `envs` / `foreigns`
+# are the inert input tables scanned by read / ask / env / a pure foreign.
+
+to default-io:
+  give { mode: "inert", log: [], modules: [], clock: 0, randoms: [], files: [], responses: [], envs: [], foreigns: [] }
+
+to real-io:
+  give { mode: "real", log: [], modules: [], clock: 0, randoms: [], files: [], responses: [], envs: [], foreigns: [] }
+
+# The io record for the current environment: the reserved __io__ binding, or a
+# default inert record when none is present. A pure expression evaluated through
+# the build-1 adapter (`eval`) has no __io__ and performs no effect, so it never
+# reaches an effect site and never consults this -- pure evaluation is untouched.
+to io-of of env:
+  binding = env-find of env, "__io__"
+  if binding.found:
+    give binding.value
+  give default-io
+
+# Rebind the reserved __io__ binding in place (set-in-env prepends it if new),
+# threading the updated io forward in the environment.
+to with-io of env, io:
+  give set-in-env of env, "__io__", io
+
+# Whether a list of names includes one -- the module checks and the
+# effect-kind checks over a declaration's `doing` clause.
+to list-includes of names, name:
+  found = false
+  for each n in names:
+    if not found:
+      if n == name:
+        found = true
+  give found
+
 # ================================================================ eval-node (A.1: flat; A.3: status-threaded)
 #
 # The evaluation step. Dispatch on the parser's node kind with a flat if ...
@@ -859,7 +918,11 @@ to apply-function-node of fn, arg-nodes, call-env, globals, name:
   # function set threaded from the entry point, never the caller's locals. The
   # globals are computed once (globals-of the entry environment) and carried
   # unchanged, so a call is an O(1) prepend, not a per-call scan of the env.
-  callee-env = bound.value + globals
+  # The caller's current io (build 3) is injected as the callee's __io__ so an
+  # effect performed inside the callee accumulates to the one shared log, and it
+  # is prepended ahead of globals so it shadows any staler __io__ the frozen
+  # globals still carry from the top level.
+  callee-env = bound.value + ([{ name: "__io__", value: (io-of of call-env) }] + globals)
   give run-body of fn, callee-env, globals, call-env
 
 # Evaluate each argument in the calling environment, pairing it with its
@@ -886,11 +949,16 @@ to eval-args of params, arg-nodes, call-env, globals, acc:
 # ceiling (A.7) is met and must be flattened rather than raised.
 to run-body of fn, callee-env, globals, call-env:
   after = exec-block of fn.body, (normal-of of nothing, callee-env), globals
+  # Restore the caller's environment (the callee's locals do not escape) but
+  # carry the callee's final io back out (build 3): effects performed inside the
+  # body must survive into the caller's log, so the one thing that crosses the
+  # boundary out is the accumulated __io__.
+  out-env = with-io of call-env, (io-of of after.env)
   if after.status == "give":
-    give normal-of of after.value, call-env
+    give normal-of of after.value, out-env
   if after.status == "fail":
-    give fail-of of after.error, call-env
-  give normal-of of (make-nothing), call-env
+    give fail-of of after.error, out-env
+  give normal-of of (make-nothing), out-env
 
 # ================================================================ control flow as expressions (Phases 3, 5, 6)
 #
@@ -1118,7 +1186,11 @@ to run-stmt of stmt, state, globals:
   if k == "Note":
     give state
   if k == "Use":
-    give state
+    # A `use` only names a module here (module resolution stays out of scope),
+    # but build 3 records the name so the file/http module checks the effect
+    # sites make agree with interp.py's (`writing a file needs the file module`).
+    io = io-of of state.env
+    give normal-of of state.value, (with-io of state.env, (io with modules: (io.modules plus stmt.module)))
   if k == "Rule":
     give state
   if k == "Foreign":
@@ -1173,8 +1245,23 @@ to exec-show of stmt, state, globals:
     give r
   txt = (builtin-text of r.value) or fail as e:
     give fail-of of e, r.env
-  show (txt.value)
-  give normal-of of r.value, r.env
+  give perform-show of txt.value, r.value, r.env
+
+# show routed through the effect boundary (A.1). interp.py renders the value
+# with fmt (builtin-text here) and hands the text to the host, always appending
+# ("show", text) to its effect log. Both modes append the effect to `log` -- so
+# an inert run's log matches interp.py's self.effects -- and "real" additionally
+# performs it by executing the Planes `show`, which the outer host prints, the
+# same path build 2 used. Flat dispatch on the mode tag; the `show text` here is
+# what puts `show` on interp.planes's own static effect surface (Phase 5, A.3).
+to perform-show of shown, value, env:
+  io = io-of of env
+  logged = io with log: (io.log plus { kind: "show", target: shown })
+  env2 = with-io of env, logged
+  if io.mode == "inert":
+    give normal-of of value, env2
+  show shown
+  give normal-of of value, env2
 
 # `fail "message" as tag` (Phase 6, Rule 3). The tag is static (from the parser);
 # the message is evaluated and must be text (interp.py's fail-message-not-text),
@@ -1198,8 +1285,20 @@ to exec-fail of stmt, state, globals:
 
 to execute-program of src:
   nodes = program-nodes-of of src
-  globals = functions-env-of of src
-  start = { status: "normal", value: nothing, env: globals, error: nothing }
+  base = functions-env-of of src
+  start-env = [{ name: "__io__", value: (real-io) }] + base
+  start = { status: "normal", value: nothing, env: start-env, error: nothing }
+  give run-top-level of nodes, start
+
+# The same, under an explicit io configuration -- the mode tag and, in inert
+# mode, the supplied input data. The test harness drives effect agreement
+# through this: an inert run accumulates an effect log the harness compares
+# against interp.py's self.effects, and neither side performs an effect.
+to execute-program-with of src, io-config:
+  nodes = program-nodes-of of src
+  base = functions-env-of of src
+  start-env = [{ name: "__io__", value: io-config }] + base
+  start = { status: "normal", value: nothing, env: start-env, error: nothing }
   give run-top-level of nodes, start
 
 # The top level threads its status like any block, but the globals a called

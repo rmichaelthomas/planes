@@ -369,8 +369,13 @@ def test_reassignment_rebinds_in_place_env_stays_flat():
            "total = total + 3\n")
     assert_program_var_agrees(src, "total")
     state = planes_execute(src)
-    # exactly one binding for `total`, and no functions -> a single-entry env.
-    assert len(state["env"]) == 1, state["env"]
+    # exactly one binding for `total`, and no functions. Build 3 adds one
+    # reserved `__io__` binding (the effect configuration) to every program
+    # env; the flatness property this test pins -- reassignment rebinds in
+    # place and does not grow the env -- is unchanged, so count the user
+    # bindings only.
+    user = [b for b in state["env"] if b["name"] != "__io__"]
+    assert len(user) == 1, state["env"]
 
 
 def test_reassignment_of_shadowing_let():
@@ -379,7 +384,8 @@ def test_reassignment_of_shadowing_let():
            "x = x + 5\n")
     assert_program_var_agrees(src, "x")
     state = planes_execute(src)
-    assert len(state["env"]) == 1
+    user = [b for b in state["env"] if b["name"] != "__io__"]
+    assert len(user) == 1
 
 
 def test_non_show_effects_fail_naming_build_3():
