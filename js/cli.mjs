@@ -321,6 +321,86 @@ switch (sub) {
     );
     break;
   }
+  case "render": {
+    // render <file> — canonical source, byte-for-byte against render.py.
+    loadGrammar();
+    const { render } = await import("./render.mjs");
+    const src = fs.readFileSync(rest[0], "utf-8");
+    out(render(parse(src)));
+    break;
+  }
+  case "render-rules": {
+    // render-rules <file> — canonical source with the generated rule markers,
+    // like shapes_cli.py --render: single-file, unfollowed, so a rule subject
+    // resolves against a surface whose nodes all carry file=null.
+    loadGrammar();
+    const { render } = await import("./render.mjs");
+    const { analyse } = await import("./shapes.mjs");
+    const src = fs.readFileSync(rest[0], "utf-8");
+    const prog = parse(src);
+    const found = prog.filter((s) => s.__node === "Rule");
+    out(found.length ? render(prog, found, analyse(src)) : render(prog));
+    break;
+  }
+  case "roundtrip": {
+    // roundtrip <file> — parse -> render -> reparse -> astEqual, and the set of
+    // AST node kinds the program contains (A.4 per-kind coverage). JS-side.
+    loadGrammar();
+    const { render, astEqual } = await import("./render.mjs");
+    const src = fs.readFileSync(rest[0], "utf-8");
+    const prog = parse(src);
+    let ok;
+    let reparseFailed = false;
+    try {
+      const prog2 = parse(render(prog));
+      ok =
+        prog.length === prog2.length &&
+        prog.every((a, i) => astEqual(a, prog2[i]));
+    } catch (e) {
+      // render.py has a construct it renders but cannot reparse (a multi-arg
+      // call as a record-field value); the JS port reproduces that exactly, so
+      // a reparse failure is a reported result, not a crash.
+      if (e instanceof PlanesSyntaxError) {
+        ok = false;
+        reparseFailed = true;
+      } else throw e;
+    }
+    const kinds = new Set();
+    const walk = (v) => {
+      if (v && typeof v === "object" && "__node" in v) {
+        kinds.add(v.__node);
+        for (const k of Object.keys(v)) if (k !== "__node") walk(v[k]);
+      } else if (v && v.items !== undefined && Array.isArray(v.items)) {
+        for (const x of v.items) walk(x); // Tup
+      } else if (Array.isArray(v)) {
+        for (const x of v) walk(x);
+      }
+    };
+    for (const s of prog) walk(s);
+    out(JSON.stringify({ ok, reparseFailed, kinds: [...kinds].sort() }));
+    break;
+  }
+  case "astequal": {
+    // astequal <fileA> <fileB> — whether parse(A) and parse(B) are astEqual
+    // (line-insensitive). Drives the cross-implementation round-trip: Python
+    // renders, JS reparses, and this checks it against JS's parse of the source.
+    // A parse failure is reported, not thrown, so the caller can assert JS
+    // reproduces render.py's non-reparseable output.
+    loadGrammar();
+    const { astEqual } = await import("./render.mjs");
+    try {
+      const a = parse(fs.readFileSync(rest[0], "utf-8"));
+      const b = parse(fs.readFileSync(rest[1], "utf-8"));
+      const equal =
+        a.length === b.length && a.every((x, i) => astEqual(x, b[i]));
+      out(JSON.stringify({ equal, parseFailed: false }));
+    } catch (e) {
+      if (e instanceof PlanesSyntaxError) {
+        out(JSON.stringify({ equal: false, parseFailed: true }));
+      } else throw e;
+    }
+    break;
+  }
   case "shapes": {
     // shapes <file> [--no-follow] — the published effect surface (as_json),
     // the effect-surface oracle against shapes_cli.as_json.
