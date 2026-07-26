@@ -579,12 +579,15 @@ def test_eval_builtin_errors_same_tag():
     assert_eval_fails('whole of "x"', "not-a-number")
 
 
-def test_eval_effects_fail_naming_build_3():
-    # A.6: ask and read are effects (build 3). interp.py fully implements them,
-    # so its tag legitimately differs (module-not-used); the Planes side must
-    # reach a case that fails naming build 3, never a silent stub.
-    assert_planes_fails('ask "http://example.com"', "build-3-effect")
-    assert_planes_fails('read "notes.txt"', "build-3-effect")
+def test_eval_effects_reach_the_module_check_in_build_3():
+    # ask and read are effects, implemented in build 3 (phase 3). Evaluated as
+    # a bare expression through the build-1 adapter -- no `use http` / `use
+    # file` -- they now fail the very module check interp.py raises, not a
+    # build-3 stub. The Planes side agreeing on `module-not-used` is stronger
+    # than the build-1/2 refusal it replaces (invariant 8: named where a phase
+    # changes what is correct).
+    assert_planes_fails('ask "http://example.com"', "module-not-used")
+    assert_planes_fails('read "notes.txt"', "module-not-used")
 
 
 # ============================================== Phase 6: the pipeline, connected
