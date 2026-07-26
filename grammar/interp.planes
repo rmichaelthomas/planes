@@ -480,7 +480,9 @@ to eval-binop-node of node, env, globals:
     give rs
   v = (apply-op of op, ls.value, rs.value) or fail as e:
     give fail-of of e, rs.env
-  give normal-of of v, rs.env
+  # apply-op has no idea derivation exists (interp.py's rule); the caller says
+  # where the answer came from.
+  give normal-of of (derived of v, "op", op, [ls.value.deriv, rs.value.deriv]), rs.env
 
 # `not` / `is nothing`, threaded. `not` requires a yes/no value (interp.py's
 # condition()), so a non-boolean operand becomes a fail status at the leaf.
@@ -490,13 +492,13 @@ to eval-not-node of node, env, globals:
     give v
   c = (as-condition of v.value) or fail as e:
     give fail-of of e, v.env
-  give normal-of of (make-boolean of (not c)), v.env
+  give normal-of of (derived of (make-boolean of (not c)), "op", "not", [v.value.deriv]), v.env
 
 to eval-isnothing-node of node, env, globals:
   v = eval-node of node.expr, env, globals
   if not (v.status == "normal"):
     give v
-  give normal-of of (make-boolean of (v.value.kind == "nothing")), v.env
+  give normal-of of (derived of (make-boolean of (v.value.kind == "nothing")), "op", "is nothing", [v.value.deriv]), v.env
 
 # `and` / `or` short-circuit, and -- like interp.py -- require both operands
 # to be yes/no values, returning the second operand's condition, not the
@@ -508,13 +510,13 @@ to eval-and-node of node, env, globals:
   lc = (as-condition of ls.value) or fail as e:
     give fail-of of e, ls.env
   if not lc:
-    give normal-of of (make-boolean of false), ls.env
+    give normal-of of (derived of (make-boolean of false), "op", "and", [ls.value.deriv]), ls.env
   rs = eval-node of node.right, ls.env, globals
   if not (rs.status == "normal"):
     give rs
   rc = (as-condition of rs.value) or fail as e2:
     give fail-of of e2, rs.env
-  give normal-of of (make-boolean of rc), rs.env
+  give normal-of of (derived of (make-boolean of rc), "op", "and", [ls.value.deriv, rs.value.deriv]), rs.env
 
 to eval-or-node of node, env, globals:
   ls = eval-node of node.left, env, globals
@@ -523,13 +525,13 @@ to eval-or-node of node, env, globals:
   lc = (as-condition of ls.value) or fail as e:
     give fail-of of e, ls.env
   if lc:
-    give normal-of of (make-boolean of true), ls.env
+    give normal-of of (derived of (make-boolean of true), "op", "or", [ls.value.deriv]), ls.env
   rs = eval-node of node.right, ls.env, globals
   if not (rs.status == "normal"):
     give rs
   rc = (as-condition of rs.value) or fail as e2:
     give fail-of of e2, rs.env
-  give normal-of of (make-boolean of rc), rs.env
+  give normal-of of (derived of (make-boolean of rc), "op", "or", [ls.value.deriv, rs.value.deriv]), rs.env
 
 # `first n of x`: a list's first n items, or a text's first n code points.
 # interp.py takes `src.value[:int(n.value)]`; the native `first` operator is
@@ -542,15 +544,30 @@ to eval-first-node of node, env, globals:
   src = eval-node of node.right, n.env, globals
   if not (src.status == "normal"):
     give src
+  label = "first " + (text of (truncate-of of n.value.value)) + " of"
   if src.value.kind == "list":
     r = (first (n.value.value) of src.value.items) or fail as e:
       give fail-of of e, src.env
-    give normal-of of (make-list of r), src.env
+    give normal-of of (derived of (make-list of r), "op", label, [src.value.deriv]), src.env
   if src.value.kind == "text":
     r2 = (first (n.value.value) of src.value.value) or fail as e2:
       give fail-of of e2, src.env
-    give normal-of of (make-text of r2), src.env
+    give normal-of of (derived of (make-text of r2), "op", label, [src.value.deriv]), src.env
   give fail-of of (error-of of "not-a-collection", ("cannot take the first n of " + (canonical-of-value of src.value))), src.env
+
+# interp.py labels a `first` step with `int(n.value)` -- truncation toward
+# zero, not rounding. Planes rounds half away from zero (`whole of`) and has no
+# truncation builtin, so the toward-zero correction is made here rather than
+# letting a fractional count label a step with the wrong number.
+to truncate-of of n:
+  w = whole of n
+  if n < 0:
+    if w < n:
+      give w + 1
+    give w
+  if w > n:
+    give w - 1
+  give w
 
 to apply-op of op, a, b:
   if op == "+":
@@ -727,16 +744,18 @@ to member-of of a, b:
 # pass and takes no per-item recursion frame).
 to eval-list-node of node, env, globals:
   items = []
+  derivs = []
   state = normal-of of nothing, env
   for each n in node.items:
     if state.status == "normal":
       r = eval-node of n, state.env, globals
       if r.status == "normal":
         items = items plus r.value
+        derivs = derivs plus r.value.deriv
       state = r
   if not (state.status == "normal"):
     give state
-  give normal-of of (make-list of items), state.env
+  give normal-of of (derived of (make-list of items), "list", ("[" + (text of (count of items)) + " items]"), derivs), state.env
 
 # interp.py builds a record as a Python dict, so a repeated field keeps its
 # first position and its last value. eval-record-node reproduces that by
@@ -744,16 +763,20 @@ to eval-list-node of node, env, globals:
 # status as the list literal does.
 to eval-record-node of node, env, globals:
   fields = []
+  derivs = []
   state = normal-of of nothing, env
   for each fn in node.fields:
     if state.status == "normal":
       r = eval-node of fn.value, state.env, globals
       if r.status == "normal":
         fields = upsert-field of fields, fn.key, r.value
+        # Source order, and a repeated field contributes twice -- interp.py
+        # builds its input list from the field expressions, not the dict.
+        derivs = derivs plus r.value.deriv
       state = r
   if not (state.status == "normal"):
     give state
-  give normal-of of (make-record of fields), state.env
+  give normal-of of (derived of (make-record of fields), "record", "{record}", derivs), state.env
 
 to upsert-field of fields, key, val:
   if (field-in of fields, key).found:
@@ -779,16 +802,18 @@ to eval-record-update-node of node, env, globals:
   if not (base.value.kind == "record"):
     give fail-of of (error-of of "not-a-record", ("cannot update " + (canonical-of-value of base.value) + " with with")), base.env
   fields = base.value.fields
+  derivs = [base.value.deriv]
   state = base
   for each fn in node.fields:
     if state.status == "normal":
       r = eval-node of fn.value, state.env, globals
       if r.status == "normal":
         fields = upsert-field of fields, fn.key, r.value
+        derivs = derivs plus r.value.deriv
       state = r
   if not (state.status == "normal"):
     give state
-  give normal-of of (make-record of fields), state.env
+  give normal-of of (derived of (make-record of fields), "op", "with", derivs), state.env
 
 # `base plus item` -- a new list with item appended, the base untouched.
 to eval-list-plus-node of node, env, globals:
@@ -800,7 +825,7 @@ to eval-list-plus-node of node, env, globals:
   item = eval-node of node.item, base.env, globals
   if not (item.status == "normal"):
     give item
-  give normal-of of (make-list of (base.value.items plus item.value)), item.env
+  give normal-of of (derived of (make-list of (base.value.items plus item.value)), "op", "plus", [base.value.deriv, item.value.deriv]), item.env
 
 # Field access. interp.py reads obj.value.get(name) -- a missing field is
 # `nothing`, not an error; only a non-record base is refused.
@@ -810,10 +835,11 @@ to eval-field-node of node, env, globals:
     give obj
   if not (obj.value.kind == "record"):
     give fail-of of (error-of of "not-a-record", ("cannot read ." + node.name + " from " + (canonical-of-value of obj.value))), obj.env
+  label = "." + node.name
   match = field-in of obj.value.fields, node.name
   if match.found:
-    give normal-of of match.value, obj.env
-  give normal-of of (make-nothing), obj.env
+    give normal-of of (derived of match.value, "field", label, [obj.value.deriv]), obj.env
+  give normal-of of (derived of (make-nothing), "field", label, [obj.value.deriv]), obj.env
 
 # `round x to n places` -- reproduced metacircularly: the host's own round,
 # on the raw number, is interp.py's Number.round_to. Only a non-number base
@@ -829,7 +855,7 @@ to eval-round-node of node, env, globals:
     give fail-of of (error-of of "not-a-number", ("cannot round " + (canonical-of-value of v.value))), p.env
   r = (round (v.value.value) to (p.value.value) places) or fail as e:
     give fail-of of e, p.env
-  give normal-of of (make-number of r), p.env
+  give normal-of of (derived of (make-number of r), "op", ("round to " + (fmt-of of p.value) + " places"), [v.value.deriv]), p.env
 
 # ================================================================ builtins (Phase 4)
 #
@@ -877,7 +903,7 @@ to eval-call-node of node, env, globals:
       give do-read of a.value, a.env
     v = (eval-builtin of name, a.value) or fail as e:
       give fail-of of e, a.env
-    give normal-of of v, a.env
+    give normal-of of (derived of v, "op", (name + " of"), [a.value.deriv]), a.env
   give fail-of of (error-of of "unknown-function", ("no function named '" + name + "'")), env
 
 to eval-builtin of name, arg:
