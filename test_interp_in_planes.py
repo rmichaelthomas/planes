@@ -26,7 +26,8 @@ control flow, and effects are builds 2 and 3 -- an effect-bearing node
 """
 import sys
 
-from interp import Deriv, Interpreter, Traced, is_num
+from interp import Deriv, Interpreter, PlanesError, Traced, is_num
+from parser import parse
 from planes_num import Number
 from planes_text import escape_string_literal
 
@@ -114,6 +115,63 @@ def planes_canonical_value(record_src):
     i.run(f"fixture = {record_src}\n")
     fixture = i.env.get("fixture")
     return i.call("canonical-of-value", [fixture], i.env).value
+
+
+# ============================================== evaluating an expression, both sides
+
+
+def _env_literal(bindings):
+    """A grammar/interp.planes environment literal (a flat list of
+    { name, value } bindings) for a {name: raw-value} mapping."""
+    parts = ['{ name: "%s", value: %s }' % (k, planes_lit(v))
+             for k, v in bindings.items()]
+    return "[%s]" % ", ".join(parts)
+
+
+def planes_eval(src, bindings=None):
+    """Evaluate one expression source through grammar/interp.planes against
+    an environment, returning the canonical text of the resulting value."""
+    i = _get_interp()
+    i.run(f"__env = {_env_literal(bindings or {})}\n")
+    env = i.env.get("__env")
+    node = i.call("node-of-source", [_traced(src)], i.env)
+    val = i.call("eval", [node, env], i.env)
+    return i.call("canonical-of-value", [val], i.env).value
+
+
+def interp_eval(src, bindings=None):
+    """The oracle: evaluate one expression source through interp.py's own
+    eval() against the same bindings, returning the raw value."""
+    itp = Interpreter()
+    env = itp.env
+    for k, v in (bindings or {}).items():
+        env.bind_local(k, Traced(v, Deriv("name", k, v, [])))
+    node = parse(src + "\n")[0]
+    return itp.eval(node, env).value
+
+
+def assert_eval_agrees(src, bindings=None):
+    """The Planes evaluation of an expression equals interp.py's, compared
+    through the canonical value form."""
+    py_form = canonical(interp_eval(src, bindings))
+    planes_form = planes_eval(src, bindings)
+    assert planes_form == py_form, (
+        f"\nsrc: {src!r}  bindings: {bindings!r}"
+        f"\n--- planes ---\n{planes_form!r}\n--- python ---\n{py_form!r}")
+
+
+def assert_eval_fails(src, tag, bindings=None):
+    """Both implementations refuse the expression with the same error tag."""
+    try:
+        interp_eval(src, bindings)
+        raise AssertionError(f"interp.py did not fail on {src!r}")
+    except PlanesError as e:
+        assert e.tag == tag, f"interp.py tag {e.tag!r} != {tag!r} for {src!r}"
+    try:
+        planes_eval(src, bindings)
+        raise AssertionError(f"grammar/interp.planes did not fail on {src!r}")
+    except PlanesError as e:
+        assert e.tag == tag, f"planes tag {e.tag!r} != {tag!r} for {src!r}"
 
 
 # ================================================================ Phase 1: the canonical-form proof
@@ -222,6 +280,62 @@ FIXTURES = [
 def test_canonical_fixture_battery_agrees():
     for v in FIXTURES:
         assert_value_agrees(v)
+
+
+# ============================================== Phase 2: literals and variables
+#
+# The evaluator's first four cases plus variable reference, each parsed by
+# grammar/parser.planes and evaluated by grammar/interp.planes, checked
+# against interp.py's own eval().
+
+
+def test_eval_number_literals():
+    for src in ["0", "42", "3.14", "0.1"]:
+        assert_eval_agrees(src)
+
+
+def test_eval_string_literals():
+    for src in ['"hello"', '""', '"a \\"quoted\\" word"', '"line\\nbreak"']:
+        assert_eval_agrees(src)
+
+
+def test_eval_boolean_and_nothing_literals():
+    for src in ["true", "false", "nothing"]:
+        assert_eval_agrees(src)
+
+
+def test_eval_variable_reference():
+    assert_eval_agrees("x", {"x": Number.of(5)})
+    assert_eval_agrees("greeting", {"greeting": "hi"})
+    assert_eval_agrees("flag", {"flag": True})
+    assert_eval_agrees("here", {"here": None})
+
+
+def test_eval_variable_among_several_bindings():
+    env = {"a": Number.of(1), "b": "two", "c": [Number.of(3)]}
+    assert_eval_agrees("a", env)
+    assert_eval_agrees("b", env)
+    assert_eval_agrees("c", env)
+
+
+def test_eval_unknown_name_fails_same_tag():
+    assert_eval_fails("missing", "unknown-name")
+
+
+def test_env_first_match_wins_shadowing():
+    # A.2: innermost bindings first, first match wins. interp.py's Env is a
+    # dict and cannot hold two bindings for one name, so this is checked
+    # Planes-side directly: an env with two `x` bindings resolves to the
+    # first, exactly as a function parameter shadows an outer binding.
+    i = _get_interp()
+    i.run('__shadow = [{ name: "x", value: '
+          '{ kind: "number", value: 1, deriv: nothing } }, '
+          '{ name: "x", value: '
+          '{ kind: "number", value: 2, deriv: nothing } }]\n')
+    env = i.env.get("__shadow")
+    node = i.call("node-of-source", [_traced("x")], i.env)
+    val = i.call("eval", [node, env], i.env)
+    assert i.call("canonical-of-value", [val], i.env).value == "1"
 
 
 if __name__ == "__main__":
