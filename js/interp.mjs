@@ -7,7 +7,7 @@
 // measurement (Phase 2). Checked against interp.py by canonical-output
 // agreement on the corpus (test_js_interp.py). interp.py is the specification.
 
-import { NodeHost, TestHost, HostError, pyJsonDumps } from "./host.mjs";
+import { MemoryHost, TestHost, HostError, pyJsonDumps } from "./host.mjs";
 import { PlanesNumber, Inexact } from "./planes_num.mjs";
 import {
   escapeStringLiteral,
@@ -235,7 +235,7 @@ export class Interpreter {
     if (host !== null) this.host = host;
     else if (http !== null || fs !== null) {
       this.host = new TestHost({ responses: http ?? {}, files: fs ?? {} });
-    } else this.host = new NodeHost();
+    } else this.host = new MemoryHost();
     this.record = record;
     this.records = [];
   }

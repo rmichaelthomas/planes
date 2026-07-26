@@ -1,24 +1,17 @@
-// js/host.js — the host: whatever actually performs an effect.
+// js/host.mjs — the host: whatever actually performs an effect (browser-safe).
 //
-// The JavaScript counterpart of host.py. The Python module's whole argument
-// carries over unchanged: almost nothing in Planes is host-shaped. The parser
-// reads a foreign target as an opaque string, the analyser never parses it,
-// and only the interpreter interprets it. So the host question is not "which
-// language should Planes be written in" but "what does a host have to
-// provide", and the answer is this file: the closed effect vocabulary's five
-// capabilities, a way to resolve a foreign name, and a JSON boundary.
+// The JavaScript counterpart of host.py's abstract surface plus the in-memory
+// hosts. This module imports nothing node-specific, so it — and everything that
+// imports it, including interp.mjs — loads unchanged in a browser tab. The
+// real-filesystem NodeHost lives in host_node.mjs; the browser VFS host in
+// host_browser.mjs.
 //
 // host.py names eight required methods (each raises NotImplementedError there):
-// ask, read, write, show, clock, resolve, parse_json, to_json. `record` is an
+// ask, read, write, show, clock, resolve, parseJson, toJson. `record` is an
 // optional no-op, not one of the eight. That count — eight — is the claim this
 // whole build tests; see REPORT_SECOND_HOST.md's seam verdict.
 
-import fs from "node:fs";
-import { execFileSync } from "node:child_process";
-
-// The host could not do what was asked. Distinct from a program error: this is
-// the machine failing, not the program being wrong. Mirrors host.py's
-// HostError.
+// The host could not do what was asked. Distinct from a program error.
 export class HostError extends Error {
   constructor(message) {
     super(message);
@@ -26,16 +19,12 @@ export class HostError extends Error {
   }
 }
 
-// What a host must provide. Five effect capabilities matching the closed effect
-// vocabulary, plus foreign resolution and a JSON boundary. A host that
-// implements these runs Planes; the language does not otherwise care what it is
-// written in.
+// What a host must provide: five effect capabilities, foreign resolution, and a
+// JSON boundary. A host that implements these runs Planes.
 export class Host {
   get name() {
     return "abstract";
   }
-
-  // ---- effects
   ask(_url) {
     throw new HostError("ask: not implemented on the abstract host");
   }
@@ -51,24 +40,15 @@ export class Host {
   clock() {
     throw new HostError("clock: not implemented on the abstract host");
   }
-
-  // ---- the record plane — a host capability, not a program effect. Optional,
-  // unlike the five above: a host that does nothing here is still a complete
-  // host, and the interpreter must not depend on it. The default is a no-op.
+  // The optional record plane — a no-op by default; a host that does nothing
+  // here is still complete.
   record(_entry) {}
-
-  // ---- foreign resolution. The target is opaque to the language; a Python
-  // host reads `builtins.sorted`, a JavaScript host reads whatever it chooses
-  // to recognise. The string is host-specific by design, which is why no
-  // syntax change is needed to move hosts.
   resolve(_target) {
     throw new HostError("resolve: not implemented on the abstract host");
   }
   targetHint() {
     return "a name this host understands";
   }
-
-  // ---- data at the boundary
   parseJson(_text) {
     throw new HostError("parseJson: not implemented on the abstract host");
   }
@@ -78,41 +58,31 @@ export class Host {
 }
 
 // json.dumps(..., indent=2) escapes non-ASCII (ensure_ascii=True); JSON
-// .stringify does not. Escape every UTF-16 code unit above 0x7e as \uXXXX so a
-// written file is byte-identical to interp.py's. Astral characters become a
-// surrogate pair of \uXXXX escapes on both sides, since Python emits the pair
-// too. Structural JSON characters are all ASCII, so post-processing the whole
-// string is safe.
-function ensureAscii(s) {
+// .stringify does not. Escape every UTF-16 unit above 0x7e as \uXXXX so a
+// written file is byte-identical to interp.py's; an astral char becomes a
+// surrogate pair on both sides.
+export function ensureAscii(s) {
   let out = "";
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
-    if (c > 0x7e) {
-      out += "\\u" + c.toString(16).padStart(4, "0");
-    } else {
-      out += s[i];
-    }
+    if (c > 0x7e) out += "\\u" + c.toString(16).padStart(4, "0");
+    else out += s[i];
   }
   return out;
 }
 
-// json.dumps(value, indent=2) with ensure_ascii — the serialisation the write
-// effect and PythonHost.to_json both use. Exported so interp.mjs's to_json
-// produces byte-identical output to interp.py's.
+// json.dumps(value, indent=2) with ensure_ascii — the write effect's and every
+// host's to_json serialisation.
 export function pyJsonDumps(value) {
   return ensureAscii(JSON.stringify(value, null, 2));
 }
 
-// Python's sorted/max/min over a homogeneous list. The corpus's foreign.planes
-// calls builtins.sorted / max / min; these reproduce their default ordering
-// (numeric for numbers, code-point-lexicographic for strings) so a resolved
-// foreign agrees with interp.py's. Numbers here are the marshalled foreign form
-// (plain JS numbers), not Planes value records — the interpreter marshals in
-// and out around the call.
-function pyCompare(a, b) {
+// Python's sorted/max/min ordering over a homogeneous list — foreign.planes
+// resolves builtins.sorted/max/min; these reproduce the default order so a
+// resolved foreign agrees with interp.py's.
+export function pyCompare(a, b) {
   if (typeof a === "number" && typeof b === "number") return a - b;
   if (typeof a === "string" && typeof b === "string") {
-    // Python compares strings by code point.
     const as = [...a];
     const bs = [...b];
     const n = Math.min(as.length, bs.length);
@@ -124,7 +94,6 @@ function pyCompare(a, b) {
   }
   throw new HostError("sorted: unorderable mixed types");
 }
-
 function pySorted(arr) {
   return [...arr].sort(pyCompare);
 }
@@ -137,144 +106,99 @@ function pyMin(arr) {
   return arr.reduce((m, x) => (pyCompare(x, m) < 0 ? x : m));
 }
 
-// The named targets the corpus actually resolves. A JS host cannot import an
-// arbitrary Python module.function the way PythonHost does with importlib, and
-// it does not need to: the whole corpus reaches only these. Everything else is
-// a bad target for this host, reported with the host's convention — which is
-// exactly host.resolve's job, the one non-effect method interp.planes cannot
-// stand in for.
-const NODE_TARGETS = {
-  "builtins.sorted": (arr) => pySorted(arr),
-  "builtins.max": (arr) => (Array.isArray(arr) ? pyMax(arr) : arr),
-  "builtins.min": (arr) => (Array.isArray(arr) ? pyMin(arr) : arr),
-  // Python str(): a string passes through; a whole number prints without a
-  // trailing .0 (the marshalled foreign form is already an integer where whole).
-  "builtins.str": (x) => (typeof x === "string" ? x : String(x)),
-  "time.time": () => Date.now() / 1000,
-  "random.random": () => Math.random(),
-  "os.getcwd": () => process.cwd(),
-};
-
-// The host Planes runs on under Node: the real filesystem, the real clock, a
-// resolver over the targets the corpus names, and JSON.parse/stringify for the
-// boundary. The JS analogue of PythonHost.
-export class NodeHost extends Host {
-  constructor() {
-    super();
-    this._resolved = {};
-  }
-
-  get name() {
-    return "node";
-  }
-
-  ask(url) {
-    // A synchronous GET, to match interp.py's synchronous ask. Node has no sync
-    // fetch, so shell out to curl. This is the endpoint path — the tested path
-    // is the stub host, exactly as host.py tests PythonHost.ask only via
-    // TestHost, never live.
-    try {
-      return execFileSync("curl", ["-sSL", "-A", "planes/0.1", url], {
-        encoding: "utf-8",
-        timeout: 20000,
-      });
-    } catch (e) {
-      throw new HostError(`ask failed: ${e.message}`);
-    }
-  }
-
-  read(path) {
-    try {
-      return fs.readFileSync(path, "utf-8");
-    } catch {
-      throw new HostError(`no such file: ${path}`);
-    }
-  }
-
-  write(path, text) {
-    fs.writeFileSync(path, text);
-  }
-
-  show(text) {
-    process.stdout.write(text + "\n");
-  }
-
-  clock() {
-    return Date.now() / 1000;
-  }
-
-  resolve(target) {
-    if (target in this._resolved) return this._resolved[target];
-    if (target in NODE_TARGETS) {
-      const fn = NODE_TARGETS[target];
-      this._resolved[target] = fn;
-      return fn;
-    }
-    if (!target.includes(".")) {
-      throw new HostError(`bad target: ${target}`);
-    }
-    throw new HostError(`cannot find '${target}'`);
-  }
-
-  targetHint() {
-    return "`module.function`, e.g. `builtins.sorted`";
-  }
-
-  parseJson(text) {
-    return JSON.parse(text);
-  }
-
-  toJson(value) {
-    return pyJsonDumps(value);
-  }
+// The host-independent foreign targets the corpus resolves. The ambient
+// os.getcwd is env-specific (process.cwd under Node, a VFS root in a browser),
+// so each host supplies it; everything else is shared.
+export function sharedTargets(getcwd) {
+  return {
+    "builtins.sorted": (arr) => pySorted(arr),
+    "builtins.max": (arr) => (Array.isArray(arr) ? pyMax(arr) : arr),
+    "builtins.min": (arr) => (Array.isArray(arr) ? pyMin(arr) : arr),
+    "builtins.str": (x) => (typeof x === "string" ? x : String(x)),
+    "time.time": () => Date.now() / 1000,
+    "random.random": () => Math.random(),
+    "os.getcwd": getcwd,
+  };
 }
 
-// A host with the outside world replaced — a host, not a mock, implementing the
-// same eight methods, so the whole agreement suite is hermetic by construction.
-// The JS analogue of host.py's TestHost: it stubs the five effects and inherits
-// resolve / parseJson / toJson from NodeHost, exactly as TestHost inherits them
-// from PythonHost.
-export class TestHost extends NodeHost {
-  constructor({ responses = {}, files = {}, now = 1000000.0 } = {}) {
+// resolve() shared by every host: a cache, the target table, then the two
+// refusals host.py makes — bad target (no dot) and not-found.
+export function resolveWith(table, cache, target) {
+  if (target in cache) return cache[target];
+  if (target in table) {
+    cache[target] = table[target];
+    return table[target];
+  }
+  if (!target.includes(".")) throw new HostError(`bad target: ${target}`);
+  throw new HostError(`cannot find '${target}'`);
+}
+
+// A host with the outside world replaced — an in-memory VFS for files, a
+// responses map for ask, and Math.random/Date.now (or a fixed clock) — the
+// browser-safe base for both TestHost (hermetic tests) and BrowserHost (the
+// browser backend). The JS analogue of host.py's TestHost, minus any Python
+// runtime.
+export class MemoryHost extends Host {
+  constructor({ responses = {}, files = {}, now = null, cwd = "/" } = {}) {
     super();
     this.responses = responses;
     this.files = { ...files };
     this.now = now;
+    this.cwd = cwd;
     this.shown = [];
     this.recorded = [];
+    this._resolved = {};
+    this._targets = sharedTargets(() => this.cwd);
   }
-
   get name() {
-    return "test";
+    return "memory";
   }
-
   ask(url) {
     const r = this.responses;
     if (typeof r === "function") return r(url);
     if (Object.prototype.hasOwnProperty.call(r, url)) return r[url];
     throw new HostError(`no stubbed response for ${url}`);
   }
-
   read(path) {
     if (!Object.prototype.hasOwnProperty.call(this.files, path)) {
       throw new HostError(`no such file: ${path}`);
     }
     return this.files[path];
   }
-
   write(path, text) {
     this.files[path] = text;
   }
-
   show(text) {
     this.shown.push(text);
   }
-
   clock() {
-    return this.now;
+    return this.now !== null ? this.now : Date.now() / 1000;
   }
-
   record(entry) {
     this.recorded.push(entry);
+  }
+  resolve(target) {
+    return resolveWith(this._targets, this._resolved, target);
+  }
+  targetHint() {
+    return "`module.function`, e.g. `builtins.sorted`";
+  }
+  parseJson(text) {
+    return JSON.parse(text);
+  }
+  toJson(value) {
+    return pyJsonDumps(value);
+  }
+}
+
+// The hermetic host the agreement suite uses — a MemoryHost with a fixed clock,
+// so a clock-reading program is reproducible. host.py's TestHost by another
+// route (in-memory, not a Python-runtime subclass).
+export class TestHost extends MemoryHost {
+  constructor({ responses = {}, files = {}, now = 1000000.0 } = {}) {
+    super({ responses, files, now });
+  }
+  get name() {
+    return "test";
   }
 }

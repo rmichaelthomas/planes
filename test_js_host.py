@@ -28,13 +28,17 @@ REQUIRED = ["ask", "read", "write", "show", "clock", "resolve",
             "parse_json", "to_json"]
 
 
-def _node(*args):
+def _probe(backend, *args):
     r = subprocess.run(
-        [NODE, "js/cli.mjs", "host", *args],
+        [NODE, "js/cli.mjs", backend, *args],
         cwd=REPO, capture_output=True, text=True)
     if r.returncode != 0:
         raise AssertionError(f"node failed ({r.returncode}): {r.stderr}")
     return r.stdout
+
+
+def _node(*args):
+    return _probe("host", *args)
 
 
 def _skip_if_no_node():
@@ -189,6 +193,28 @@ def test_record_is_an_optional_no_op_on_the_node_host():
     not throw, and it is not one of the eight required methods."""
     assert _node("record") == "ok"
     assert "record" not in REQUIRED
+
+
+# ============================================= A.4: the browser backend, the same interface
+
+def test_the_browser_backend_names_the_same_eight_methods():
+    assert json.loads(_probe("host-browser", "methods")) == json.loads(_node("methods"))
+
+
+def test_the_browser_backend_shares_the_json_boundary_and_resolver():
+    """A.4: one interface, two implementations. The browser VFS host and the
+    Node host produce identical JSON and resolve the same targets — the JSON
+    boundary is byte-identical to interp.py's on both."""
+    py = PythonHost()
+    for value in [[1, 2], {"a": 1, "b": [2, 3]}, "café", "😀"]:
+        js_value = json.dumps(value)
+        assert _probe("host-browser", "to_json", js_value) == \
+            _node("to_json", js_value) == py.to_json(value)
+    assert json.loads(_probe("host-browser", "resolve", "builtins.sorted", "[[3,1,2]]")) \
+        == [1, 2, 3]
+    got = _probe("host-browser", "resolve_bad", "nodots")
+    assert got.startswith("HOSTERROR:") and "bad target" in got
+    assert _probe("host-browser", "record") == "ok"    # optional no-op on both
 
 
 if __name__ == "__main__":

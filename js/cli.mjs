@@ -11,7 +11,8 @@
 // Later phases add: tokens, ast, run.
 
 import fs from "node:fs";
-import { NodeHost, HostError, Host } from "./host.mjs";
+import { HostError, Host } from "./host.mjs";
+import { NodeHost } from "./host_node.mjs";
 import { loadGrammar } from "./loader_node.mjs";
 import { tokenize, PlanesSyntaxError } from "./lexer.mjs";
 import { parse, PlanesAmbiguity } from "./parser.mjs";
@@ -33,9 +34,8 @@ function out(s) {
   process.stdout.write(s);
 }
 
-function hostCmd(argv) {
+function hostCmd(argv, host) {
   const op = argv[0];
-  const host = new NodeHost();
   switch (op) {
     case "methods": {
       // The eight methods a host must provide, as seen on the prototype.
@@ -192,8 +192,13 @@ function textOp(op) {
 
 switch (sub) {
   case "host":
-    hostCmd(rest);
+    hostCmd(rest, new NodeHost());
     break;
+  case "host-browser": {
+    const { BrowserHost } = await import("./host_browser.mjs");
+    hostCmd(rest, new BrowserHost());
+    break;
+  }
   case "num":
     out(JSON.stringify(JSON.parse(rest[0]).map(numOp)));
     break;

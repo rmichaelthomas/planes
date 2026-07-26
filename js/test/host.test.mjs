@@ -9,7 +9,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Host, NodeHost, TestHost, HostError } from "../host.mjs";
+import { Host, TestHost, HostError } from "../host.mjs";
+import { NodeHost } from "../host_node.mjs";
+import { BrowserHost } from "../host_browser.mjs";
 
 test("the abstract host throws on every effect until implemented", () => {
   const h = new Host();
@@ -47,11 +49,48 @@ test("TestHost raises HostError for an unstubbed response or missing file", () =
   assert.throws(() => h.read("gone.json"), HostError);
 });
 
-test("TestHost inherits resolve and the JSON boundary from NodeHost", () => {
+test("TestHost provides resolve and the JSON boundary (from MemoryHost)", () => {
   const h = new TestHost();
   assert.deepEqual(h.resolve("builtins.sorted")([3, 1, 2]), [1, 2, 3]);
   assert.equal(h.toJson([1, 2]), "[\n  1,\n  2\n]");
   assert.deepEqual(h.parseJson('{"n": 1}'), { n: 1 });
+});
+
+// A.4: both backends satisfy the same eight-method interface and the same
+// tests. The interface assertions run against each; the filesystem is a temp
+// dir for Node and the in-memory VFS for the browser, but both round-trip.
+for (const [name, make] of [
+  ["NodeHost", () => new NodeHost()],
+  ["BrowserHost", () => new BrowserHost()],
+]) {
+  test(`${name} satisfies the eight-method interface and the JSON boundary`, () => {
+    const h = make();
+    for (const m of ["ask", "read", "write", "show", "clock", "resolve", "parseJson", "toJson"]) {
+      assert.equal(typeof h[m], "function", m);
+    }
+    assert.equal(h.toJson([1, 2]), "[\n  1,\n  2\n]");
+    assert.deepEqual(h.parseJson('{"n": 1}'), { n: 1 });
+    assert.deepEqual(h.resolve("builtins.sorted")([3, 1, 2]), [1, 2, 3]);
+    assert.throws(() => h.resolve("nodots"), HostError);
+    assert.equal(typeof h.clock(), "number");
+    assert.doesNotThrow(() => h.record({ a: 1 }));
+  });
+}
+
+test("BrowserHost's in-memory VFS round-trips a write then a read", () => {
+  const h = new BrowserHost();
+  h.write("/doc.json", "[1, 2]");
+  assert.equal(h.read("/doc.json"), "[1, 2]");
+  assert.throws(() => h.read("/missing"), HostError);
+});
+
+test("BrowserHost.show captures and forwards to an onShow callback", () => {
+  const seen = [];
+  const h = new BrowserHost({ onShow: (t) => seen.push(t) });
+  h.show("line one");
+  h.show("line two");
+  assert.deepEqual(h.shown, ["line one", "line two"]);
+  assert.deepEqual(seen, ["line one", "line two"]);
 });
 
 test("NodeHost.show writes a line to stdout", () => {
