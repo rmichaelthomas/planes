@@ -293,3 +293,102 @@ def test_nested_if_inside_when():
            "  else:\n"
            '    msg = "near"\n')
     assert_program_var_agrees(src, "msg")
+
+
+# ============================================================ Phase 4: bindings and output
+
+
+def planes_output(src):
+    """The show output interp.planes produces running src (the interpreted
+    program's `show` delegates to the host, so it lands in interp.py's output)."""
+    i = _get()
+    before = len(i.output)
+    i.call("execute-program", [_t(src)], i.env)
+    return list(i.output[before:])
+
+
+def interp_output(src):
+    itp = Interpreter()
+    itp.run(src)
+    return list(itp.output)
+
+
+def assert_output_agrees(src):
+    planes = planes_output(src)
+    py = interp_output(src)
+    assert planes == py, f"\nsrc:\n{src}\n--- planes ---\n{planes}\n--- python ---\n{py}"
+
+
+def test_show_scalars():
+    src = ('show 42\n'
+           'show 2 / 3\n'
+           'show "hello"\n'
+           'show true\n'
+           'show false\n'
+           'show nothing\n')
+    assert_output_agrees(src)
+
+
+def test_show_uses_fmt_for_lists_and_records():
+    # fmt: a list shows as "[N items]", a record as "{record}", a string bare.
+    src = ('show [1, 2, 3]\n'
+           'show { x: 1, y: 2 }\n'
+           'show "plain string"\n')
+    assert_output_agrees(src)
+
+
+def test_show_computed_values():
+    src = ('total = 100\n'
+           'show "total is " + text of total\n'
+           'items = [1, 2, 3, 4]\n'
+           'show count of items\n')
+    assert_output_agrees(src)
+
+
+def test_show_returns_the_value_and_sequences():
+    src = ('x = 5\n'
+           'show x\n'
+           'y = x + 1\n'
+           'show y\n')
+    assert_output_agrees(src)
+    assert_program_var_agrees(src, "y")
+
+
+def test_let_binds_new_name():
+    src = ("let a = 1\n"
+           "let b = a + 1\n")
+    assert_program_var_agrees(src, "a")
+    assert_program_var_agrees(src, "b")
+
+
+def test_reassignment_rebinds_in_place_env_stays_flat():
+    # Reassignment rebinds where the name lives; the environment does not grow.
+    src = ("total = 0\n"
+           "total = total + 1\n"
+           "total = total + 2\n"
+           "total = total + 3\n")
+    assert_program_var_agrees(src, "total")
+    state = planes_execute(src)
+    # exactly one binding for `total`, and no functions -> a single-entry env.
+    assert len(state["env"]) == 1, state["env"]
+
+
+def test_reassignment_of_shadowing_let():
+    src = ("x = 10\n"
+           "x = 20\n"
+           "x = x + 5\n")
+    assert_program_var_agrees(src, "x")
+    state = planes_execute(src)
+    assert len(state["env"]) == 1
+
+
+def test_non_show_effects_fail_naming_build_3():
+    # A.5: show is in scope; every other effect fails naming build 3.
+    for src, _kind in [
+        ('write 5 to "out.txt"\n', "write"),
+        ('x = ask "http://example.com"\n', "ask"),
+        ('x = read "notes.txt"\n', "read"),
+    ]:
+        state = planes_execute(src)
+        assert state["status"] == "fail", (src, state["status"])
+        assert state["error"]["tag"] == "build-3-effect", (src, state["error"])

@@ -998,11 +998,15 @@ to run-stmt of stmt, state, globals:
     if not (r.status == "normal"):
       give r
     give give-of of r.value, r.env
+  if k == "Show":
+    give exec-show of stmt, state, globals
   if k == "Note":
     give state
   if k == "Use":
     give state
   if k == "Rule":
+    give state
+  if k == "Foreign":
     give state
   if k == "FuncDef":
     give state
@@ -1011,16 +1015,51 @@ to run-stmt of stmt, state, globals:
     give r
   give normal-of of r.value, r.env
 
-# Assignment. Phase 2 binds by prepending to the environment (innermost first,
-# first match wins, A.2); Phase 4 makes reassignment (is-let false) a
-# scope-walking rebind of an existing name instead. A binding value that fails
-# to evaluate propagates the fail status.
+# Assignment (Phase 4). `let` binds a new name in this scope (bind_local:
+# prepend, innermost first, A.2). Reassignment (is-let false) rebinds an
+# existing name where it lives rather than shadowing it -- interp.py's env.set:
+# the first matching binding is replaced in place, so the environment does not
+# grow on a rebind and a loop that reassigns an accumulator stays flat; a name
+# not yet bound is bound locally. A binding value that fails to evaluate
+# propagates the fail status.
 to exec-assign of stmt, state, globals:
   r = eval-node of stmt.expr, state.env, globals
   if not (r.status == "normal"):
     give r
-  new-env = [{ name: stmt.name, value: r.value }] + r.env
-  give normal-of of r.value, new-env
+  if stmt.is-let:
+    give normal-of of r.value, ([{ name: stmt.name, value: r.value }] + r.env)
+  give normal-of of r.value, (set-in-env of r.env, stmt.name, r.value)
+
+# Rebind the first binding of `name` in place, or prepend one if `name` is new
+# (interp.py's env.set over a single flat scope). One `for each` pass, no growth
+# on a rebind.
+to set-in-env of env, name, value:
+  found = false
+  result = []
+  for each binding in env:
+    if (not found) and (binding.name == name):
+      result = result plus { name: name, value: value }
+      found = true
+    else:
+      result = result plus binding
+  if found:
+    give result
+  give [{ name: name, value: value }] + env
+
+# `show x` (Phase 4, the one effect in scope, A.5). interp.py renders the value
+# with fmt -- a plain display form, the same one `text of` produces -- and hands
+# the text to the host. interp.planes reproduces that by delegating through its
+# own `show`: the text form is `builtin-text of the value` (fmt exactly), and
+# executing `show` here runs the host's show on the outermost interpreter. No
+# effect is invented; the path is the host's. show returns the shown value.
+to exec-show of stmt, state, globals:
+  r = eval-node of stmt.expr, state.env, globals
+  if not (r.status == "normal"):
+    give r
+  txt = (builtin-text of r.value) or fail as e:
+    give fail-of of e, r.env
+  show (txt.value)
+  give normal-of of r.value, r.env
 
 # ================================================================ whole-program execution (Phase 2 driver; Phase 8 finishes)
 #
