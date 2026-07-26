@@ -82,6 +82,18 @@ else
   timed "test suite" python3 scripts/run_suites.py
 fi
 
+echo "== js/test (node --test) =="
+# C4: these 47 tests existed and NOTHING ran them — not this script, not any
+# test_js_*.py, not any other script. Found while removing a dead host method
+# whose only remaining coverage lived here. Third instance in this build of the
+# same failure REPORT_HOST_BOUNDARY.md §5 records: a test that exists, passes,
+# and is never executed by the gate.
+if command -v node >/dev/null 2>&1; then
+  timed "js/test" node --test js/test/*.mjs
+else
+  echo "   (node not on PATH — skipped)"
+fi
+
 echo "== audit_locked_vs_built.py =="
 timed audit_locked_vs_built python3 audit_locked_vs_built.py
 

@@ -95,8 +95,6 @@ class Host:
     def parse_json(self, text):
         raise NotImplementedError
 
-    def to_json(self, value):
-        raise NotImplementedError
 
 
 class PythonHost(Host):
@@ -154,8 +152,6 @@ class PythonHost(Host):
     def parse_json(self, text):
         return json.loads(text)
 
-    def to_json(self, value):
-        return json.dumps(value, indent=2)
 
 
 class TestHost(PythonHost):

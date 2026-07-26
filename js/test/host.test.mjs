@@ -9,17 +9,17 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Host, TestHost, HostError } from "../host.mjs";
+import { Host, TestHost, HostError, pyJsonDumps } from "../host.mjs";
 import { NodeHost } from "../host_node.mjs";
 import { BrowserHost } from "../host_browser.mjs";
 
 test("the abstract host throws on every effect until implemented", () => {
   const h = new Host();
   for (const m of ["ask", "read", "write", "show", "clock", "resolve",
-    "parseJson", "toJson"]) {
+    "parseJson"]) {
     assert.throws(() => h[m]("x", "y"), HostError, m);
   }
-  // record is the optional no-op, not one of the eight — it must not throw.
+  // record is the optional no-op, not one of the seven — it must not throw.
   assert.doesNotThrow(() => h.record({ a: 1 }));
 });
 
@@ -52,23 +52,26 @@ test("TestHost raises HostError for an unstubbed response or missing file", () =
 test("TestHost provides resolve and the JSON boundary (from MemoryHost)", () => {
   const h = new TestHost();
   assert.deepEqual(h.resolve("builtins.sorted")([3, 1, 2]), [1, 2, 3]);
-  assert.equal(h.toJson([1, 2]), "[\n  1,\n  2\n]");
+  // pyJsonDumps, not a host method: the serialiser the write effect uses. A
+  // `toJson` sat on the host surface wrapping this until C4, uncalled.
+  assert.equal(pyJsonDumps([1, 2]), "[\n  1,\n  2\n]");
   assert.deepEqual(h.parseJson('{"n": 1}'), { n: 1 });
 });
 
-// A.4: both backends satisfy the same eight-method interface and the same
+// A.4: both backends satisfy the same seven-method interface and the same
 // tests. The interface assertions run against each; the filesystem is a temp
 // dir for Node and the in-memory VFS for the browser, but both round-trip.
 for (const [name, make] of [
   ["NodeHost", () => new NodeHost()],
   ["BrowserHost", () => new BrowserHost()],
 ]) {
-  test(`${name} satisfies the eight-method interface and the JSON boundary`, () => {
+  test(`${name} satisfies the seven-method interface and the JSON boundary`, () => {
     const h = make();
-    for (const m of ["ask", "read", "write", "show", "clock", "resolve", "parseJson", "toJson"]) {
+    for (const m of ["ask", "read", "write", "show", "clock", "resolve", "parseJson"]) {
       assert.equal(typeof h[m], "function", m);
     }
-    assert.equal(h.toJson([1, 2]), "[\n  1,\n  2\n]");
+    assert.equal(h.toJson, undefined, "toJson was removed as uncalled");
+    assert.equal(pyJsonDumps([1, 2]), "[\n  1,\n  2\n]");
     assert.deepEqual(h.parseJson('{"n": 1}'), { n: 1 });
     assert.deepEqual(h.resolve("builtins.sorted")([3, 1, 2]), [1, 2, 3]);
     assert.throws(() => h.resolve("nodots"), HostError);

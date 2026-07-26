@@ -1,7 +1,7 @@
 """S4, Phase 1 — the JS host seam, checked against host.py.
 
-js/host.mjs is the JavaScript counterpart of host.py: the eight-method Host
-interface and a NodeHost backend. This test pins each of the eight methods
+js/host.mjs is the JavaScript counterpart of host.py: the seven-method Host
+interface and a NodeHost backend. This test pins each of the seven methods
 directly against host.py's PythonHost behaviour for the same inputs — before
 any of the rest of the port exists to lean on it (A.4: report whether eight was
 the right number before the rest of the port makes it convenient to say yes).
@@ -22,10 +22,12 @@ from host import Host, PythonHost
 NODE = shutil.which("node")
 REPO = os.path.dirname(os.path.abspath(__file__))
 
-# The eight methods host.py requires (test_host.py's own list). random and env
+# The seven methods host.py requires (test_host.py's own list). random and env
 # are foreign-only, so they are not host methods — the surface is exactly these.
+# Seven since C4: `to_json` was declared and never called, and removing a dead
+# method is not a substitution — see REPORT_FAST_FOLLOW.md's call-site table.
 REQUIRED = ["ask", "read", "write", "show", "clock", "resolve",
-            "parse_json", "to_json"]
+            "parse_json"]
 
 
 def _probe(backend, *args):
@@ -48,29 +50,39 @@ def _skip_if_no_node():
     return False
 
 
-# ================================================================ the surface is eight
+# ================================================================ the surface is seven
 
-def test_the_js_host_names_exactly_the_eight_methods():
-    """The JS Host exposes the same eight methods as host.py's abstract Host —
-    ask, read, write, show, clock, resolve, and the JSON boundary. `record`
-    is optional on both and is not one of the eight."""
+def test_the_js_host_names_exactly_the_seven_methods():
+    """The JS Host exposes the same seven methods as host.py's abstract Host —
+    ask, read, write, show, clock, resolve, and reading JSON. `record` is
+    optional on both and is not one of the seven.
+
+    It was eight until C4 counted callers instead of declarations. Both
+    implementations dropped `toJson` together: the seam is two implementations
+    or it is not a seam."""
     present = json.loads(_node("methods"))
-    # camelCase on the JS side, snake_case on the Python side; same eight.
+    # camelCase on the JS side, snake_case on the Python side; same seven.
     assert present == ["ask", "read", "write", "show", "clock",
-                       "resolve", "parseJson", "toJson"], present
-    # The Python abstract Host has each of the eight too (test_host.py's line).
+                       "resolve", "parseJson"], present
+    # The Python abstract Host has each of the seven too (test_host.py's line).
     for name in REQUIRED:
         assert hasattr(Host, name), name
-    assert len(present) == len(REQUIRED) == 8
+    assert len(present) == len(REQUIRED) == 7
+    assert "toJson" not in present
 
 
 # ================================================================ the JSON boundary
 
-def test_to_json_is_byte_identical_to_python_json_dumps_indent_2():
-    """A.4: JSON is the one irreducible host capability, free in JS. It must be
-    byte-identical to interp.py's, or a written file diverges (failure mode 1's
-    sibling — the write effect's payload)."""
-    py = PythonHost()
+def test_json_serialisation_is_byte_identical_to_python_json_dumps_indent_2():
+    """A.4: it must be byte-identical to interp.py's, or a written file
+    diverges (failure mode 1's sibling — the write effect's payload).
+
+    C4 moved this off `host.toJson`, which nothing called, and onto
+    `pyJsonDumps` — the serialiser `js/interp.mjs`'s module-level `toJson`
+    actually hands its unwrapped value to on the write path. The assertion is
+    unchanged; it now checks the code that runs. The Python side stays
+    `json.dumps(v, indent=2)` written out, because that is exactly what
+    `interp.py`'s own module-level `to_json` ends with."""
     cases = [
         [1, 2],
         {"a": 1, "b": [2, 3], "c": "hi"},
@@ -81,19 +93,18 @@ def test_to_json_is_byte_identical_to_python_json_dumps_indent_2():
         [1.5, -2.25, 0],
     ]
     for value in cases:
-        got = _node("to_json", json.dumps(value))
-        want = py.to_json(value)
+        got = _probe("json-dumps", json.dumps(value))
+        want = json.dumps(value, indent=2)
         assert got == want, f"{value!r}\n got={got!r}\nwant={want!r}"
 
 
-def test_to_json_escapes_non_ascii_like_ensure_ascii():
+def test_json_serialisation_escapes_non_ascii_like_ensure_ascii():
     """json.dumps escapes non-ASCII (ensure_ascii=True); JSON.stringify does
-    not. The JS host must match — a BMP char to \\uXXXX, an astral char to a
+    not. The JS side must match — a BMP char to \\uXXXX, an astral char to a
     surrogate pair — or a written file with any non-ASCII text diverges."""
-    py = PythonHost()
     for value in ["café", "naïve", "😀", "a😀b", "Ω≈ç"]:
-        got = _node("to_json", json.dumps(value))
-        want = py.to_json(value)
+        got = _probe("json-dumps", json.dumps(value))
+        want = json.dumps(value, indent=2)
         assert got == want, f"{value!r}\n got={got!r}\nwant={want!r}"
 
 
@@ -197,19 +208,24 @@ def test_record_is_an_optional_no_op_on_the_node_host():
 
 # ============================================= A.4: the browser backend, the same interface
 
-def test_the_browser_backend_names_the_same_eight_methods():
+def test_the_browser_backend_names_the_same_seven_methods():
     assert json.loads(_probe("host-browser", "methods")) == json.loads(_node("methods"))
 
 
 def test_the_browser_backend_shares_the_json_boundary_and_resolver():
     """A.4: one interface, two implementations. The browser VFS host and the
-    Node host produce identical JSON and resolve the same targets — the JSON
-    boundary is byte-identical to interp.py's on both."""
+    Node host read the same JSON and resolve the same targets — the JSON
+    boundary is byte-identical to interp.py's on both.
+
+    C4: the *writing* half of that boundary was `host.toJson`, which nothing
+    called; the serialiser both hosts really share is `pyJsonDumps`, checked
+    above and independent of which host is installed. What is left here is the
+    half a host genuinely supplies — reading."""
     py = PythonHost()
     for value in [[1, 2], {"a": 1, "b": [2, 3]}, "café", "😀"]:
         js_value = json.dumps(value)
-        assert _probe("host-browser", "to_json", js_value) == \
-            _node("to_json", js_value) == py.to_json(value)
+        assert json.loads(_probe("host-browser", "parse_json", js_value)) == \
+            json.loads(_node("parse_json", js_value)) == py.parse_json(js_value)
     assert json.loads(_probe("host-browser", "resolve", "builtins.sorted", "[[3,1,2]]")) \
         == [1, 2, 3]
     got = _probe("host-browser", "resolve_bad", "nodots")

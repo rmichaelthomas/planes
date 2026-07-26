@@ -29,16 +29,32 @@ def interp(src, **kw):
 
 # ================================================================ the surface
 
-def test_a_host_is_five_capabilities_and_a_resolver():
+def test_a_host_is_five_capabilities_a_resolver_and_a_json_reader():
     """The whole requirement Planes places on a machine.
 
     It is this small because the effect vocabulary was closed early, for
     the analyser. A host cannot be asked for more than the language can name.
+
+    Seven, and the name of this test says which seven. It read "five
+    capabilities and a resolver" over a set of eight from the moment the JSON
+    pair was added, and nothing noticed, because `hasattr` cannot read a
+    docstring — nor, as C4 found, tell a live method from a dead one. `to_json`
+    was on this list and had no caller anywhere in the repo; it is gone, and
+    the arithmetic below is now *used*, not merely declared.
+
+    The check is still `hasattr`, because what a host must *provide* is a
+    declaration question. What the reference actually *calls* is a different
+    question, and it is asked by scripts/verify_fast_follow.py, which greps the
+    call sites — the check that would have caught this one.
     """
     required = {"ask", "read", "write", "show", "clock",
-                "resolve", "parse_json", "to_json"}
+                "resolve", "parse_json"}
+    assert len(required) == 7
     for name in required:
         assert hasattr(Host, name), f"a host must provide {name}"
+    assert not hasattr(Host, "to_json"), (
+        "to_json is back on the host surface; it had no caller when it was "
+        "removed, so a new one is a decision to make deliberately")
 
 
 def test_the_host_surface_matches_the_effect_vocabulary():

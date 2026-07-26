@@ -2,12 +2,18 @@ note: from "interp.py, written in Planes -- Route B stage three: the interpreter
 
 use parser
 
-# JSON at the boundary, in the language (C1). host.py supplies parse_json and
-# to_json and interp.py calls them at exactly two sites -- an `ask`'s response
-# and a `write`'s payload -- which is why JSON was called the one irreducible
-# host capability. grammar/json.planes reads and writes it in Planes instead,
-# so those two sites no longer reach past the language for their data. It is a
-# program, not a capability: the host surface is unchanged at eight methods.
+# JSON at the boundary, in the language (C1). host.py supplied parse_json and
+# to_json, which is why JSON was called the one irreducible host capability.
+# grammar/json.planes reads and writes it in Planes instead, so neither site
+# reaches past the language for its data. It is a program, not a capability.
+#
+# C4 corrects the arithmetic this comment used to state. It said interp.py
+# called the host pair "at exactly two sites -- an `ask`'s response and a
+# `write`'s payload". It called it at one: the `write` payload goes through a
+# module-level `to_json` in interp.py that unwraps the value model first, and
+# host.to_json took an already-plain value, so it could not have served that
+# site. The method had no caller anywhere and is gone. The host surface is
+# seven methods, and seven is the used count, not just the declared one.
 use json
 
 # The interpreter performs file and network effects in "real" mode (build 3):

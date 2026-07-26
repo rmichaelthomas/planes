@@ -58,7 +58,4 @@ export class NodeHost extends Host {
   parseJson(text) {
     return JSON.parse(text);
   }
-  toJson(value) {
-    return pyJsonDumps(value);
-  }
 }

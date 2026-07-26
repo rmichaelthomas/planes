@@ -2,7 +2,7 @@
 //
 // Per A.4, one Host interface, two implementations: NodeHost over the real
 // filesystem, and this over an in-memory VFS that a browser has instead of a
-// disk. Both satisfy the same eight-method interface and the same tests
+// disk. Both satisfy the same seven-method interface and the same tests
 // (test_js_host.py runs the interface tests against both). BrowserHost is a
 // MemoryHost — the in-memory VFS is exactly MemoryHost's `files` — plus an
 // optional onShow callback so a page can render show output as it happens.

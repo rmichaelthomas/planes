@@ -39,7 +39,8 @@ function hostCmd(argv, host) {
   const op = argv[0];
   switch (op) {
     case "methods": {
-      // The eight methods a host must provide, as seen on the prototype.
+      // The seven methods a host must provide, as seen on the prototype.
+      // Seven, not eight: C4 removed `toJson`, which nothing called.
       const required = [
         "ask",
         "read",
@@ -48,17 +49,11 @@ function hostCmd(argv, host) {
         "clock",
         "resolve",
         "parseJson",
-        "toJson",
       ];
       const present = required.filter(
         (m) => typeof Host.prototype[m] === "function",
       );
       out(JSON.stringify(present));
-      return;
-    }
-    case "to_json": {
-      const value = JSON.parse(argv[1]);
-      out(host.toJson(value));
       return;
     }
     case "parse_json": {
@@ -243,6 +238,21 @@ switch (sub) {
   case "text":
     out(JSON.stringify(JSON.parse(rest[0]).map(textOp)));
     break;
+  case "json-dumps": {
+    // json-dumps <json-value> — pyJsonDumps, i.e. json.dumps(v, indent=2) with
+    // ensure_ascii. This is the serialiser the `write` effect actually uses on
+    // both sides: interp.mjs's module-level toJson unwraps a Planes value and
+    // hands the result here, and interp.py's does the same.
+    //
+    // C4: these bytes used to be checked through `host to_json`, a host method
+    // that wrapped this one and that nothing else ever called. Removing the
+    // dead method must not lose the byte-identity check with it, so the check
+    // moved down onto the live code rather than being deleted alongside the
+    // dead code — which is the stronger place for it to have been all along.
+    const { pyJsonDumps } = await import("./host.mjs");
+    out(pyJsonDumps(JSON.parse(rest[0])));
+    break;
+  }
   case "hash": {
     // hash <json-array-of-strings> — the full 64-char SHA-256 hex digest of
     // each string's UTF-8 bytes, for byte-identity against hashlib (A.2).
