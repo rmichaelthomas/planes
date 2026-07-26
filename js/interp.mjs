@@ -63,10 +63,17 @@ export function fmt(v) {
 }
 
 // A caught error, as an ordinary record — discriminated by shape, never by type.
+//
+// `fix` (§158) is always present and `nothing` when the error names none —
+// the opposite convention to `path`, and deliberately: a missing field is no
+// match under `when`, so `when e is { fix: f }:` would silently skip every
+// error without one if `fix` were absent. A field a program is expected to
+// read has to be there to be read.
 function errorRecord(e) {
   const rec = new Map();
   rec.set("tag", e.tag);
   rec.set("detail", e.detail);
+  rec.set("fix", e.fix || null);
   if (e.path !== null && e.path !== undefined) {
     rec.set(
       "path",
@@ -428,14 +435,32 @@ export class Interpreter {
     if (k === "When") return this.exec_when(stmt, env);
     if (k === "Fail") {
       const v = this.eval(stmt.message, env);
-      if (typeof v.value !== "string") {
+      // §158: text, or a record naming the message and, optionally, the fix.
+      // `fail` is the one raise site whose message a program writes, and until
+      // now it had nowhere to put the continuation clause every other message
+      // in the language carries. No new syntax was needed — a record literal
+      // already parsed here; what refused it was this guard.
+      let message = v.value;
+      let fix = null;
+      if (isRecord(v.value)) {
+        message = v.value.has("message") ? v.value.get("message") : null;
+        fix = v.value.has("fix") ? v.value.get("fix") : null;
+      }
+      if (typeof message !== "string") {
         throw new PlanesError(
           "fail-message-not-text",
-          `fail's message must be text, found ${detailValue(v.value)}`,
-          "wrap it with text of",
+          `fail's message must be text, found ${detailValue(message)}`,
+          'use text of it, or a record: fail { message: "...", fix: "..." } as tag',
         );
       }
-      throw new PlanesError(stmt.tag, v.value);
+      if (fix !== null && typeof fix !== "string") {
+        throw new PlanesError(
+          "fail-message-not-text",
+          `fail's fix must be text, found ${detailValue(fix)}`,
+          "use text for the fix, or leave the field out",
+        );
+      }
+      throw new PlanesError(stmt.tag, message, fix || "");
     }
     return this.eval(stmt, env);
   }

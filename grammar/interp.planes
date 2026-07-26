@@ -235,10 +235,24 @@ to give-of of value, env:
 to fail-of of error, env:
   give { status: "fail", value: nothing, env: env, error: error }
 
-# An error is the same { tag, detail } record `or fail as` produces (A.3), so a
-# self-hosted failure is not a second kind of error.
+# An error is the same { tag, detail, fix } record `or fail as` produces (A.3),
+# so a self-hosted failure is not a second kind of error.
+#
+# C4 / §158: the third field. `fix` is always present and `nothing` when this
+# error names none -- the opposite convention to the `path` field, and
+# deliberately, because a missing field is no match under `when`, so
+# `when e is { fix: f }:` would skip every error without one. A field a program
+# is expected to read has to be there to be read.
+#
+# `error-of` keeps its two arguments so the ~20 sites that raise without a fix
+# read as they did; `error-fix-of` is the site that names one. Until this build
+# there was no such site anywhere in the self-hosted interpreter: the slot for
+# a fix did not exist, so no message could have filled it.
 to error-of of tag, detail:
-  give { tag: tag, detail: detail }
+  give { tag: tag, detail: detail, fix: nothing }
+
+to error-fix-of of tag, detail, fix:
+  give { tag: tag, detail: detail, fix: fix }
 
 # ================================================================ the effect boundary (A.1, build 3)
 #
@@ -1410,7 +1424,10 @@ to eval-orfail-node of node, env, globals:
   if r.status == "normal":
     give r
   if node.handler is nothing:
-    give fail-of of (error-of of node.tag, r.error.detail), r.env
+    # C2: the caught error's own fix is carried forward. An error that named a
+    # fix must not stop naming it because it crossed an `or fail`. Since §158
+    # the carried fix is also readable by the program, not only rendered.
+    give fail-of of (error-fix-of of node.tag, r.error.detail, r.error.fix), r.env
   err-value = derived of (make-error-value of r.error), "record", "{record}", []
   handler-env = [{ name: node.tag, value: err-value }] + env
   give exec-block of node.handler, (normal-of of nothing, handler-env), globals
@@ -1420,7 +1437,14 @@ to eval-orfail-node of node, env, globals:
 # carries on some errors is a derivation concern left to a later build; tag and
 # detail are what a handler reads.
 to make-error-value of err:
-  give make-record of [{ key: "tag", value: (make-text of err.tag) }, { key: "detail", value: (make-text of err.detail) }]
+  give make-record of [{ key: "tag", value: (make-text of err.tag) }, { key: "detail", value: (make-text of err.detail) }, { key: "fix", value: (make-fix-value of err.fix) }]
+
+# `fix` is text or `nothing`, and a value has to be one of the language's own
+# kinds either way -- an absent fix is the `nothing` value, not an absent field.
+to make-fix-value of fix:
+  if fix is nothing:
+    give make-nothing
+  give make-text of fix
 
 # ================================================================ statement execution (Phase 2, A.3)
 #
@@ -1921,13 +1945,41 @@ to foreign-result-real of decl, param-bindings, env:
 # the message is evaluated and must be text (interp.py's fail-message-not-text),
 # then becomes a fail status carrying { tag, detail: message } that propagates
 # outward until an `or fail` catches it or the program ends.
+# §158: text, or a record naming the message and, optionally, the fix. `fail`
+# is the one raise site whose message a program writes, and until now it had
+# nowhere to put the continuation clause every other message carries. No new
+# syntax was needed -- `fail <expr> as <tag>` already read any expression, so
+# grammar/parser.planes already produced a Fail node with a RecordLit message;
+# what refused it was this guard.
 to exec-fail of stmt, state, globals:
   m = eval-node of stmt.message, state.env, globals
   if not (m.status == "normal"):
     give m
+  if m.value.kind == "record":
+    give exec-fail-record of stmt, m
   if not (m.value.kind == "text"):
-    give fail-of of (error-of of "fail-message-not-text", ("fail's message must be text, found " + (detail-of-value of m.value))), m.env
+    give fail-of of (error-fix-of of "fail-message-not-text", ("fail's message must be text, found " + (detail-of-value of m.value)), "use text of it, or a record: fail { message: \"...\", fix: \"...\" } as tag"), m.env
   give fail-of of (error-of of stmt.tag, m.value.value), m.env
+
+# The record form. A missing `message` field reads as `nothing`, which is not
+# text, so it is refused by the same message the bare form is.
+to exec-fail-record of stmt, m:
+  msg = field-in of m.value.fields, "message"
+  fixf = field-in of m.value.fields, "fix"
+  message-value = value-or-nothing of msg
+  fix-value = value-or-nothing of fixf
+  if not (message-value.kind == "text"):
+    give fail-of of (error-fix-of of "fail-message-not-text", ("fail's message must be text, found " + (detail-of-value of message-value)), "use text of it, or a record: fail { message: \"...\", fix: \"...\" } as tag"), m.env
+  if fix-value.kind == "nothing":
+    give fail-of of (error-of of stmt.tag, message-value.value), m.env
+  if not (fix-value.kind == "text"):
+    give fail-of of (error-fix-of of "fail-message-not-text", ("fail's fix must be text, found " + (detail-of-value of fix-value)), "use text for the fix, or leave the field out"), m.env
+  give fail-of of (error-fix-of of stmt.tag, message-value.value, fix-value.value), m.env
+
+to value-or-nothing of match:
+  if match.found:
+    give match.value
+  give make-nothing
 
 # ================================================================ why -- reading a derivation back (build 4)
 #

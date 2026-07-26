@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generated_by": "grammar_gen.py",
-  "count": 114,
+  "count": 115,
   "entries": [
     {
       "id": "interp.cannot-compare.equal-1",
@@ -115,7 +115,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "unknown-name",
-      "source": "interp.py:352",
+      "source": "interp.py:361",
       "raised_in": "get",
       "template": "no name '{name}' here",
       "slots": [
@@ -128,7 +128,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "annotation-executed",
-      "source": "interp.py:544",
+      "source": "interp.py:553",
       "raised_in": "exec_stmt",
       "template": "an annotation reached the evaluator",
       "slots": [],
@@ -139,7 +139,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-record",
-      "source": "interp.py:613",
+      "source": "interp.py:622",
       "raised_in": "exec_stmt",
       "template": "cannot match {detail_value(subject.value)} against a shape",
       "slots": [
@@ -148,24 +148,37 @@
       "fix": "when matches record shapes only"
     },
     {
-      "id": "interp.fail-message-not-text.exec_stmt",
+      "id": "interp.fail-message-not-text.exec_stmt-1",
       "kind": "error",
       "class": "PlanesError",
       "tag": "fail-message-not-text",
-      "source": "interp.py:647",
+      "source": "interp.py:667",
       "raised_in": "exec_stmt",
-      "template": "fail's message must be text, found {detail_value(v.value)}",
+      "template": "fail's message must be text, found {detail_value(message)}",
       "slots": [
-        "detail_value(v.value)"
+        "detail_value(message)"
       ],
-      "fix": "wrap it with text of"
+      "fix": "use text of it, or a record: fail { message: \"...\", fix: \"...\" } as tag"
+    },
+    {
+      "id": "interp.fail-message-not-text.exec_stmt-2",
+      "kind": "error",
+      "class": "PlanesError",
+      "tag": "fail-message-not-text",
+      "source": "interp.py:673",
+      "raised_in": "exec_stmt",
+      "template": "fail's fix must be text, found {detail_value(fix)}",
+      "slots": [
+        "detail_value(fix)"
+      ],
+      "fix": "use text for the fix, or leave the field out"
     },
     {
       "id": "interp.planeserror-site.exec_stmt",
       "kind": "error",
       "class": "PlanesError",
       "tag": null,
-      "source": "interp.py:651",
+      "source": "interp.py:682",
       "raised_in": "exec_stmt",
       "template": null,
       "slots": [],
@@ -178,7 +191,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-record",
-      "source": "interp.py:692",
+      "source": "interp.py:723",
       "raised_in": "eval",
       "template": "cannot update {detail_value(base.value)} with with",
       "slots": [
@@ -191,7 +204,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-list",
-      "source": "interp.py:704",
+      "source": "interp.py:735",
       "raised_in": "eval",
       "template": "cannot append to {detail_value(base.value)} with plus",
       "slots": [
@@ -204,7 +217,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-record",
-      "source": "interp.py:728",
+      "source": "interp.py:759",
       "raised_in": "eval",
       "template": "cannot read .{node.name} from {detail_value(obj.value)}",
       "slots": [
@@ -218,7 +231,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-number",
-      "source": "interp.py:745",
+      "source": "interp.py:776",
       "raised_in": "eval",
       "template": "cannot round {detail_value(v.value)}",
       "slots": [
@@ -231,7 +244,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "module-not-used",
-      "source": "interp.py:756",
+      "source": "interp.py:787",
       "raised_in": "eval",
       "template": "writing a file needs the file module",
       "slots": [],
@@ -242,7 +255,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "write-failed",
-      "source": "interp.py:768",
+      "source": "interp.py:799",
       "raised_in": "eval",
       "template": "writing '{dest.value}' failed: {e}",
       "slots": [
@@ -256,7 +269,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": null,
-      "source": "interp.py:799",
+      "source": "interp.py:830",
       "raised_in": "eval",
       "template": null,
       "slots": [],
@@ -269,7 +282,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": null,
-      "source": "interp.py:808",
+      "source": "interp.py:839",
       "raised_in": "eval",
       "template": null,
       "slots": [],
@@ -282,7 +295,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": null,
-      "source": "interp.py:814",
+      "source": "interp.py:845",
       "raised_in": "eval",
       "template": null,
       "slots": [],
@@ -295,7 +308,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "cannot-evaluate",
-      "source": "interp.py:838",
+      "source": "interp.py:869",
       "raised_in": "eval",
       "template": "'{type(node).__name__}' has no value \u2014 it is a statement, not an expression",
       "slots": [
@@ -308,7 +321,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-number",
-      "source": "interp.py:871",
+      "source": "interp.py:902",
       "raised_in": "eval_binop",
       "template": "the count in `first n of` must be a number, found {detail_value(n.value)}",
       "slots": [
@@ -321,7 +334,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-collection",
-      "source": "interp.py:877",
+      "source": "interp.py:908",
       "raised_in": "eval_binop",
       "template": "cannot take the first {detail_value(n.value)} of {detail_value(src.value)}",
       "slots": [
@@ -335,7 +348,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "module-not-used",
-      "source": "interp.py:899",
+      "source": "interp.py:930",
       "raised_in": "builtin",
       "template": "asking a url needs the http module",
       "slots": [],
@@ -346,7 +359,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "ask-failed",
-      "source": "interp.py:911",
+      "source": "interp.py:942",
       "raised_in": "builtin",
       "template": "asking '{url}' failed: {e}",
       "slots": [
@@ -360,7 +373,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "module-not-used",
-      "source": "interp.py:926",
+      "source": "interp.py:957",
       "raised_in": "builtin",
       "template": "reading a file needs the file module",
       "slots": [],
@@ -371,7 +384,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "no-such-file",
-      "source": "interp.py:934",
+      "source": "interp.py:965",
       "raised_in": "builtin",
       "template": null,
       "slots": [],
@@ -384,7 +397,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-collection",
-      "source": "interp.py:948",
+      "source": "interp.py:979",
       "raised_in": "builtin",
       "template": "cannot count {detail_value(arg.value)}",
       "slots": [
@@ -397,7 +410,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-number",
-      "source": "interp.py:964",
+      "source": "interp.py:995",
       "raised_in": "builtin",
       "template": "cannot take the whole part of {detail_value(arg.value)}",
       "slots": [
@@ -410,7 +423,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "cannot-join",
-      "source": "interp.py:988",
+      "source": "interp.py:1019",
       "raised_in": "builtin",
       "template": "cannot join {detail_value(arg.value)}",
       "slots": [
@@ -423,7 +436,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "cannot-join",
-      "source": "interp.py:994",
+      "source": "interp.py:1025",
       "raised_in": "builtin",
       "template": "join needs a list of text, found {detail_value(x)}",
       "slots": [
@@ -436,7 +449,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-list",
-      "source": "interp.py:1008",
+      "source": "interp.py:1039",
       "raised_in": "builtin",
       "template": "cannot take the rest of text {detail_value(arg.value)}",
       "slots": [
@@ -449,7 +462,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-list",
-      "source": "interp.py:1013",
+      "source": "interp.py:1044",
       "raised_in": "builtin",
       "template": "cannot take the rest of {detail_value(arg.value)}",
       "slots": [
@@ -462,7 +475,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "empty-list",
-      "source": "interp.py:1018",
+      "source": "interp.py:1049",
       "raised_in": "builtin",
       "template": "cannot take the rest of an empty list",
       "slots": [],
@@ -473,7 +486,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "unknown-builtin",
-      "source": "interp.py:1025",
+      "source": "interp.py:1056",
       "raised_in": "builtin",
       "template": "no builtin is named '{node.name}'",
       "slots": [
@@ -486,7 +499,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-collection",
-      "source": "interp.py:1046",
+      "source": "interp.py:1077",
       "raised_in": "eval_foreach",
       "template": "cannot loop over {detail_value(source.value)}",
       "slots": [
@@ -499,7 +512,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "wrong-arity",
-      "source": "interp.py:1072",
+      "source": "interp.py:1103",
       "raised_in": "call",
       "template": "'{name}' takes 1 value, given {len(args)}",
       "slots": [
@@ -513,7 +526,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "unknown-function",
-      "source": "interp.py:1090",
+      "source": "interp.py:1121",
       "raised_in": "call",
       "template": "no function named '{name}'",
       "slots": [
@@ -526,7 +539,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "wrong-arity",
-      "source": "interp.py:1106",
+      "source": "interp.py:1137",
       "raised_in": "call",
       "template": "'{iname}' takes {len(fn.params)} {word}, given {len(args)}",
       "slots": [
@@ -542,7 +555,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "recursion-too-deep",
-      "source": "interp.py:1132",
+      "source": "interp.py:1163",
       "raised_in": "call",
       "template": "'{iname}' recursed past the depth this interpreter can follow",
       "slots": [
@@ -555,7 +568,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "wrong-arity",
-      "source": "interp.py:1151",
+      "source": "interp.py:1182",
       "raised_in": "call_foreign",
       "template": "'{decl.name}' takes {len(decl.params)} {word}, given {len(args)}",
       "slots": [
@@ -571,7 +584,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "bad-foreign-target",
-      "source": "interp.py:1166",
+      "source": "interp.py:1197",
       "raised_in": "call_foreign",
       "template": null,
       "slots": [],
@@ -584,7 +597,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "foreign-not-found",
-      "source": "interp.py:1169",
+      "source": "interp.py:1200",
       "raised_in": "call_foreign",
       "template": "cannot find '{decl.target}' in the host",
       "slots": [
@@ -597,7 +610,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "foreign-failed",
-      "source": "interp.py:1201",
+      "source": "interp.py:1232",
       "raised_in": "call_foreign",
       "template": "'{decl.name}' raised {type(e).__name__}: {e}",
       "slots": [
@@ -612,7 +625,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "cannot-combine",
-      "source": "interp.py:1221",
+      "source": "interp.py:1252",
       "raised_in": "apply_op",
       "template": "cannot combine {detail_value(a)} with {detail_value(b)} using +",
       "slots": [
@@ -626,7 +639,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "divided-by-zero",
-      "source": "interp.py:1229",
+      "source": "interp.py:1260",
       "raised_in": "apply_op",
       "template": "the right side of / was 0",
       "slots": [],
@@ -637,7 +650,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "unknown-operator",
-      "source": "interp.py:1239",
+      "source": "interp.py:1270",
       "raised_in": "apply_op",
       "template": "no operator is spelled '{op}'",
       "slots": [
@@ -650,7 +663,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-text",
-      "source": "interp.py:1291",
+      "source": "interp.py:1322",
       "raised_in": "membership",
       "template": "cannot look for {detail_value(a)} in text {detail_value(b)}",
       "slots": [
@@ -664,7 +677,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-collection",
-      "source": "interp.py:1304",
+      "source": "interp.py:1335",
       "raised_in": "membership",
       "template": "cannot look inside {detail_value(b)}",
       "slots": [
@@ -677,7 +690,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-number",
-      "source": "interp.py:1313",
+      "source": "interp.py:1344",
       "raised_in": "arith",
       "template": "cannot use '{op}' on {detail_value(v)}",
       "slots": [
@@ -691,7 +704,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "needs-rounding",
-      "source": "interp.py:1324",
+      "source": "interp.py:1355",
       "raised_in": "arith",
       "template": null,
       "slots": [],
@@ -704,7 +717,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "unknown-operator",
-      "source": "interp.py:1327",
+      "source": "interp.py:1358",
       "raised_in": "arith",
       "template": "'{op}' is not an arithmetic operator",
       "slots": [
@@ -717,7 +730,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "cannot-compare",
-      "source": "interp.py:1356",
+      "source": "interp.py:1387",
       "raised_in": "compare",
       "template": "cannot compare {detail_value(a)} with {detail_value(b)}",
       "slots": [
@@ -1536,7 +1549,7 @@
       "interp.py:91",
       "interp.py:100",
       "interp.py:119",
-      "interp.py:1356"
+      "interp.py:1387"
     ],
     "not-a-yes-no": [
       "interp.py:134"
@@ -1544,113 +1557,114 @@
     "not-text": [
       "interp.py:157",
       "interp.py:172",
-      "interp.py:1291"
+      "interp.py:1322"
     ],
     "unrecognized-record-format": [
       "interp.py:322"
     ],
     "unknown-name": [
-      "interp.py:352"
+      "interp.py:361"
     ],
     "annotation-executed": [
-      "interp.py:544"
+      "interp.py:553"
     ],
     "not-a-record": [
-      "interp.py:613",
-      "interp.py:692",
-      "interp.py:728"
+      "interp.py:622",
+      "interp.py:723",
+      "interp.py:759"
     ],
     "fail-message-not-text": [
-      "interp.py:647"
+      "interp.py:667",
+      "interp.py:673"
     ],
     "interp.planeserror-site.exec_stmt": [
-      "interp.py:651"
+      "interp.py:682"
     ],
     "not-a-list": [
-      "interp.py:704",
-      "interp.py:1008",
-      "interp.py:1013"
+      "interp.py:735",
+      "interp.py:1039",
+      "interp.py:1044"
     ],
     "not-a-number": [
-      "interp.py:745",
-      "interp.py:871",
-      "interp.py:964",
-      "interp.py:1313"
+      "interp.py:776",
+      "interp.py:902",
+      "interp.py:995",
+      "interp.py:1344"
     ],
     "module-not-used": [
-      "interp.py:756",
-      "interp.py:899",
-      "interp.py:926"
+      "interp.py:787",
+      "interp.py:930",
+      "interp.py:957"
     ],
     "write-failed": [
-      "interp.py:768"
-    ],
-    "interp.planeserror-site.eval-1": [
       "interp.py:799"
     ],
+    "interp.planeserror-site.eval-1": [
+      "interp.py:830"
+    ],
     "interp.planeserror-site.eval-2": [
-      "interp.py:808"
+      "interp.py:839"
     ],
     "interp.planeserror-site.eval-3": [
-      "interp.py:814"
+      "interp.py:845"
     ],
     "cannot-evaluate": [
-      "interp.py:838"
+      "interp.py:869"
     ],
     "not-a-collection": [
-      "interp.py:877",
-      "interp.py:948",
-      "interp.py:1046",
-      "interp.py:1304"
+      "interp.py:908",
+      "interp.py:979",
+      "interp.py:1077",
+      "interp.py:1335"
     ],
     "ask-failed": [
-      "interp.py:911"
+      "interp.py:942"
     ],
     "no-such-file": [
-      "interp.py:934"
+      "interp.py:965"
     ],
     "cannot-join": [
-      "interp.py:988",
-      "interp.py:994"
-    ],
-    "empty-list": [
-      "interp.py:1018"
-    ],
-    "unknown-builtin": [
+      "interp.py:1019",
       "interp.py:1025"
     ],
+    "empty-list": [
+      "interp.py:1049"
+    ],
+    "unknown-builtin": [
+      "interp.py:1056"
+    ],
     "wrong-arity": [
-      "interp.py:1072",
-      "interp.py:1106",
-      "interp.py:1151"
+      "interp.py:1103",
+      "interp.py:1137",
+      "interp.py:1182"
     ],
     "unknown-function": [
-      "interp.py:1090"
+      "interp.py:1121"
     ],
     "recursion-too-deep": [
-      "interp.py:1132"
+      "interp.py:1163"
     ],
     "bad-foreign-target": [
-      "interp.py:1166"
+      "interp.py:1197"
     ],
     "foreign-not-found": [
-      "interp.py:1169"
+      "interp.py:1200"
     ],
     "foreign-failed": [
-      "interp.py:1201"
+      "interp.py:1232"
     ],
     "cannot-combine": [
-      "interp.py:1221"
+      "interp.py:1252"
     ],
     "divided-by-zero": [
-      "interp.py:1229"
+      "interp.py:1260"
     ],
     "unknown-operator": [
-      "interp.py:1239",
-      "interp.py:1327"
+      "interp.py:1270",
+      "interp.py:1358"
     ],
     "needs-rounding": [
-      "interp.py:1324"
+      "interp.py:1355"
     ],
     "grammar-data-missing": [
       "lexer.py:82",
