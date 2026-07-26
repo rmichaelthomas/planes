@@ -174,6 +174,17 @@ def assert_eval_fails(src, tag, bindings=None):
         assert e.tag == tag, f"planes tag {e.tag!r} != {tag!r} for {src!r}"
 
 
+def assert_planes_fails(src, tag, bindings=None):
+    """Only grammar/interp.planes refuses the expression with this tag -- used
+    where interp.py fully implements the behaviour (effects) so the two tags
+    legitimately differ, and A.6 only requires the Planes side to name build 3."""
+    try:
+        planes_eval(src, bindings)
+        raise AssertionError(f"grammar/interp.planes did not fail on {src!r}")
+    except PlanesError as e:
+        assert e.tag == tag, f"planes tag {e.tag!r} != {tag!r} for {src!r}"
+
+
 # ================================================================ Phase 1: the canonical-form proof
 #
 # Hand-built value records, fed through both canonical emitters
@@ -435,6 +446,112 @@ def test_eval_operator_errors_same_tag():
     assert_eval_fails("1 == true", "cannot-compare")
     assert_eval_fails("1 and true", "not-a-yes-no")
     assert_eval_fails('"a" - "b"', "not-a-number")
+
+
+# ============================================== Phase 4: records, lists, field access, builtins
+
+
+def test_eval_list_literals():
+    for src in ["[]", "[1, 2, 3]", '[1, "two", true]', "[[1], [2, 3]]", "[nothing]"]:
+        assert_eval_agrees(src)
+
+
+def test_eval_record_literals():
+    for src in ["{}", "{ x: 1 }", "{ x: 1, y: 2 }", '{ name: "a", age: 3 }',
+                "{ a: { b: 1 } }", "{ items: [1, 2], ok: true }"]:
+        assert_eval_agrees(src)
+
+
+def test_eval_field_access():
+    r = {"x": Number.of(1), "y": Number.of(2)}
+    assert_eval_agrees("r.x", {"r": r})
+    assert_eval_agrees("r.y", {"r": r})
+    nested = {"outer": {"inner": Number.of(7)}}
+    assert_eval_agrees("r.outer.inner", {"r": nested})
+
+
+def test_eval_field_access_missing_is_nothing():
+    # interp.py's obj.value.get(name): a missing field is nothing, not an error.
+    assert_eval_agrees("r.z", {"r": {"x": Number.of(1)}})
+
+
+def test_eval_field_access_non_record_fails():
+    assert_eval_fails("r.x", "not-a-record", {"r": Number.of(5)})
+
+
+def test_eval_record_update_with():
+    r = {"x": Number.of(1), "y": Number.of(2)}
+    assert_eval_agrees("r with x: 9", {"r": r})           # existing key, in place
+    assert_eval_agrees("r with z: 5", {"r": r})           # new key, appended
+    assert_eval_agrees("r with x: 9, y: 8", {"r": r})
+
+
+def test_eval_list_plus():
+    assert_eval_agrees("xs plus 4", {"xs": [Number.of(1), Number.of(2)]})
+    assert_eval_agrees("xs plus 1", {"xs": []})
+
+
+def test_eval_round():
+    assert_eval_agrees("round 3.14159 to 2 places")
+    assert_eval_agrees("round total to 0 places", {"total": Number.parse("3.7")})
+    assert_eval_agrees("round (2 / 3) to 4 places")
+
+
+def test_eval_builtin_count():
+    assert_eval_agrees("count of xs", {"xs": [Number.of(1), Number.of(2), Number.of(3)]})
+    assert_eval_agrees('count of "hello"')
+    assert_eval_agrees("count of r", {"r": {"a": Number.of(1), "b": Number.of(2)}})
+    assert_eval_agrees("count of xs", {"xs": []})
+
+
+def test_eval_builtin_text():
+    assert_eval_agrees("text of 5")
+    assert_eval_agrees("text of (2 / 3)")
+    assert_eval_agrees("text of true")
+    assert_eval_agrees("text of nothing")
+    assert_eval_agrees("text of xs", {"xs": [Number.of(1), Number.of(2)]})
+    assert_eval_agrees("text of r", {"r": {"a": Number.of(1)}})
+    assert_eval_agrees('"read " + text of size + " bytes"', {"size": Number.of(42)})
+
+
+def test_eval_builtin_case_and_normalize():
+    assert_eval_agrees('lower of "HELLO"')
+    assert_eval_agrees('upper of "hi there"')
+    assert_eval_agrees('normalize of "abc"')
+    assert_eval_agrees("lower of s", {"s": "MixedCase"})
+
+
+def test_eval_builtin_whole():
+    assert_eval_agrees("whole of 3.7")
+    assert_eval_agrees("whole of x", {"x": Number.parse("2.4")})
+    assert_eval_agrees("whole of 5")
+
+
+def test_eval_builtin_join():
+    assert_eval_agrees("join of parts", {"parts": ["a", "b", "c"]})
+    assert_eval_agrees("join of parts", {"parts": []})
+    assert_eval_agrees('join of ["x", "y"]')
+
+
+def test_eval_builtin_rest():
+    assert_eval_agrees("rest of xs", {"xs": [Number.of(1), Number.of(2), Number.of(3)]})
+    assert_eval_agrees("rest of xs", {"xs": [Number.of(1)]})
+
+
+def test_eval_builtin_errors_same_tag():
+    assert_eval_fails("join of x", "cannot-join", {"x": Number.of(5)})
+    assert_eval_fails("join of xs", "cannot-join", {"xs": [Number.of(1)]})
+    assert_eval_fails("rest of xs", "empty-list", {"xs": []})
+    assert_eval_fails('rest of "hi"', "not-a-list")
+    assert_eval_fails('whole of "x"', "not-a-number")
+
+
+def test_eval_effects_fail_naming_build_3():
+    # A.6: ask and read are effects (build 3). interp.py fully implements them,
+    # so its tag legitimately differs (module-not-used); the Planes side must
+    # reach a case that fails naming build 3, never a silent stub.
+    assert_planes_fails('ask "http://example.com"', "build-3-effect")
+    assert_planes_fails('read "notes.txt"', "build-3-effect")
 
 
 def test_env_first_match_wins_shadowing():

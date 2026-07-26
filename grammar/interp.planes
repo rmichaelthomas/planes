@@ -138,6 +138,20 @@ to eval of node, env:
   if k == "IsNothing":
     v = eval of node.expr, env
     give make-boolean of (v.kind == "nothing")
+  if k == "ListLit":
+    give make-list of (list-items-from of node.items, env)
+  if k == "RecordLit":
+    give make-record of (record-fields-from of node.fields, env)
+  if k == "RecordUpdate":
+    give eval-record-update of node, env
+  if k == "ListPlus":
+    give eval-list-plus of node, env
+  if k == "Field":
+    give eval-field of node, env
+  if k == "Round":
+    give eval-round of node, env
+  if k == "Call":
+    give eval-call of node, env
   fail "cannot evaluate a node of kind '" + k + "'" as cannot-evaluate
 
 # ================================================================ source -> node (consumes parser.planes, A.4)
@@ -375,3 +389,197 @@ to member-of of a, b:
       give (a.value) in (b.value)
     fail "cannot look for " + (canonical-of-value of a) + " in text" as cannot-combine
   fail "cannot check membership in " + (canonical-of-value of b) as unknown-operator
+
+# ================================================================ lists, records, field access (Phase 4)
+
+to list-items-from of item-nodes, env:
+  items = []
+  for each n in item-nodes:
+    items = items plus (eval of n, env)
+  give items
+
+# interp.py builds a record as a Python dict, so a repeated field keeps its
+# first position and its last value. record-fields-from reproduces that by
+# upserting: a new key appends, a repeated key replaces in place.
+to record-fields-from of field-nodes, env:
+  fields = []
+  for each fn in field-nodes:
+    val = eval of fn.value, env
+    fields = upsert-field of fields, fn.key, val
+  give fields
+
+to upsert-field of fields, key, val:
+  if (field-in of fields, key).found:
+    give replace-field of fields, key, val
+  give fields plus { key: key, value: val }
+
+to replace-field of fields, key, val:
+  result = []
+  for each f in fields:
+    if f.key == key:
+      result = result plus { key: key, value: val }
+    else:
+      result = result plus f
+  give result
+
+# `base with f: v, ...` -- a new record differing in the named fields, the
+# base untouched. interp.py's {**base, **updates}: existing keys update in
+# place, new keys append in update order.
+to eval-record-update of node, env:
+  base = eval of node.base, env
+  if not (base.kind == "record"):
+    fail "cannot update " + (canonical-of-value of base) + " with with" as not-a-record
+  fields = base.fields
+  for each fn in node.fields:
+    val = eval of fn.value, env
+    fields = upsert-field of fields, fn.key, val
+  give make-record of fields
+
+# `base plus item` -- a new list with item appended, the base untouched.
+to eval-list-plus of node, env:
+  base = eval of node.base, env
+  if not (base.kind == "list"):
+    fail "cannot append to " + (canonical-of-value of base) + " with plus" as not-a-list
+  item = eval of node.item, env
+  give make-list of (base.items plus item)
+
+# Field access. interp.py reads obj.value.get(name) -- a missing field is
+# `nothing`, not an error; only a non-record base is refused.
+to eval-field of node, env:
+  obj = eval of node.obj, env
+  if not (obj.kind == "record"):
+    fail "cannot read ." + node.name + " from " + (canonical-of-value of obj) as not-a-record
+  match = field-in of obj.fields, node.name
+  if match.found:
+    give match.value
+  give make-nothing
+
+# `round x to n places` -- reproduced metacircularly: the host's own round,
+# on the raw number, is interp.py's Number.round_to. Only a non-number base
+# is refused here; the host handles the places argument.
+to eval-round of node, env:
+  v = eval of node.value, env
+  p = eval of node.places-value, env
+  if not (v.kind == "number"):
+    fail "cannot round " + (canonical-of-value of v) as not-a-number
+  give make-number of (round (v.value) to (p.value) places)
+
+# ================================================================ builtins (Phase 4)
+#
+# Ten builtins exist; the eight pure ones are expressions this build
+# evaluates -- count, text, lower, upper, whole, normalize, join, rest. The
+# two effect-bearing ones, ask and read, are builds 3: they reach a case that
+# fails naming build 3 (A.6), never a silent stub. A builtin is an ordinary
+# call in the parser (never a Builtin node), routed here by name.
+
+to is-builtin-name of name:
+  found = false
+  for each b in builtins:
+    if not found:
+      if b == name:
+        found = true
+  give found
+
+to eval-call of node, env:
+  name = node.name
+  args = node.args
+  if is-builtin-name of name:
+    if not ((count of args) == 1):
+      fail "'" + name + "' takes 1 value, given " + (text of (count of args)) as wrong-arity
+    arg = eval of (first-item of args), env
+    give eval-builtin of name, arg
+  fail "no function named '" + name + "'" as unknown-function
+
+to eval-builtin of name, arg:
+  if name == "count":
+    give builtin-count of arg
+  if name == "text":
+    give builtin-text of arg
+  if name == "lower":
+    give make-text of (lower of (text-form-of of arg))
+  if name == "upper":
+    give make-text of (upper of (text-form-of of arg))
+  if name == "normalize":
+    give make-text of (normalize of (text-form-of of arg))
+  if name == "whole":
+    give builtin-whole of arg
+  if name == "join":
+    give builtin-join of arg
+  if name == "rest":
+    give builtin-rest of arg
+  if name == "ask":
+    fail "ask is an effect -- effects are interp.planes build 3, not build 1" as build-3-effect
+  if name == "read":
+    fail "read is an effect -- effects are interp.planes build 3, not build 1" as build-3-effect
+  fail "unknown builtin '" + name + "'" as unknown-builtin
+
+# count of a list is its item count, of text its code-point count, of a
+# record its field count -- interp.py's len(arg.value) over each shape.
+to builtin-count of arg:
+  if arg.kind == "list":
+    give make-number of (count of arg.items)
+  if arg.kind == "text":
+    give make-number of (count of arg.value)
+  if arg.kind == "record":
+    give make-number of (count of arg.fields)
+  fail "cannot count " + (canonical-of-value of arg) as not-a-collection
+
+# `text of` is interp.py's fmt: a value's plain display form, distinct from
+# the canonical form (a list is "[n items]", a record is "{record}", a string
+# is itself with no quotes). Used everywhere a value is spliced into a
+# message, so it is exact here.
+to builtin-text of arg:
+  if arg.kind == "number":
+    give make-text of (text of arg.value)
+  if arg.kind == "text":
+    give make-text of arg.value
+  if arg.kind == "boolean":
+    if arg.value:
+      give make-text of "true"
+    give make-text of "false"
+  if arg.kind == "nothing":
+    give make-text of "nothing"
+  if arg.kind == "list":
+    give make-text of ("[" + (text of (count of arg.items)) + " items]")
+  if arg.kind == "record":
+    give make-text of "{record}"
+  fail "cannot render " + (canonical-of-value of arg) as cannot-render
+
+# The string form lower / upper / normalize operate on. interp.py coerces via
+# str(); reproduced for the sensible inputs (text and number). A non-text,
+# non-number argument is refused rather than leaking a host repr.
+to text-form-of of v:
+  if v.kind == "text":
+    give v.value
+  if v.kind == "number":
+    give text of v.value
+  fail "cannot take the text of " + (canonical-of-value of v) as not-text
+
+to builtin-whole of arg:
+  if arg.kind == "number":
+    give make-number of (whole of arg.value)
+  fail "cannot take the whole part of " + (canonical-of-value of arg) as not-a-number
+
+# Fold a list of text into one string. A non-list, or any non-text element,
+# is refused naming the fix -- the same refusal interp.py's join makes, not a
+# silent stringify. An empty list joins to the empty string.
+to builtin-join of arg:
+  if not (arg.kind == "list"):
+    fail "cannot join " + (canonical-of-value of arg) as cannot-join
+  strings = []
+  for each item in arg.items:
+    if not (item.kind == "text"):
+      fail "join needs a list of text, found " + (canonical-of-value of item) as cannot-join
+    strings = strings plus item.value
+  give make-text of (join of strings)
+
+# The list without its first element. Text wants `first n of`, not rest; the
+# rest of an empty list is an error, not a silent empty list.
+to builtin-rest of arg:
+  if arg.kind == "text":
+    fail "cannot take the rest of text " + (canonical-of-value of arg) as not-a-list
+  if not (arg.kind == "list"):
+    fail "cannot take the rest of " + (canonical-of-value of arg) as not-a-list
+  if (count of arg.items) == 0:
+    fail "cannot take the rest of an empty list" as empty-list
+  give make-list of (rest of arg.items)
