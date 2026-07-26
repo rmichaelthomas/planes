@@ -379,3 +379,60 @@ def test_all_seven_effect_kinds_in_one_inert_program_agree():
     kinds = [k for (k, _t) in _log(state)]
     assert kinds == ["show", "read", "ask", "write", "clock", "random", "env"]
     assert set(kinds) == {"show", "read", "ask", "write", "clock", "random", "env"}
+
+
+# ================================== Phase 4: foreign declarations + the corpus
+
+def test_foreign_pure_result_supplied_matches_the_real_builtin():
+    # A pure foreign (`doing nothing`) computed for real by interp.py
+    # (builtins.sorted) and supplied to interp.planes: same output, no effect
+    # logged on either side.
+    src = ('foreign srt of xs from "builtins.sorted" doing nothing\n'
+           'ordered = srt of [3, 1, 2]\n'
+           'show text of (count of ordered)\n'
+           'show text of ordered\n')
+    state = run_inert(src, foreigns=[{"name": "srt",
+                                      "value": _lst([_num(1), _num(2), _num(3)])}])
+    assert state["status"] == "normal"
+    # a pure foreign logs no effect; the shows are the whole log
+    assert [k for (k, _t) in _log(state)] == ["show", "show"]
+    # interp.py runs the real builtin (sorted [3,1,2] -> [1,2,3]); the supplied
+    # result matches, so the outputs agree exactly
+    _theirs, out = py_effects(src)
+    shown = [t for (k, t) in _log(state) if k == "show"]
+    assert shown == out
+
+
+def test_foreign_unloadable_target_refused_like_interp_py():
+    # demo/fdiff/*: a foreign to a target the host cannot load (mylib.post).
+    # interp.py refuses foreign-not-found; interp.planes refuses
+    # foreign-needs-host. Both refuse to run a foreign the host cannot provide.
+    src = open("demo/fdiff/v1.planes").read()
+    # interp.planes, real mode
+    ir = _fresh()
+    st = ir.call("execute-program", [_t(src)], ir.env).value
+    assert st["status"] == "fail"
+    assert st["error"]["tag"] == "foreign-needs-host"
+    # interp.py
+    from interp import PlanesError
+    ip = Interpreter()
+    try:
+        ip.run(src)
+        raise AssertionError("interp.py should refuse the missing target")
+    except PlanesError as e:
+        assert e.tag == "foreign-not-found"
+
+
+def test_foreign_ask_declared_effect_logs_and_returns_supplied():
+    # foreign.planes's shape: an ask-declaring foreign with a param destination,
+    # the destination resolved to the real url at the call, the effect logged,
+    # and the supplied result returned.
+    src = ('foreign report of endpoint from "builtins.str" doing ask endpoint\n'
+           'sent = report of "https://metrics.example.com/readings"\n'
+           'show "ok"\n')
+    state = run_inert(src, foreigns=[{"name": "report", "value": _txt("done")}])
+    assert state["status"] == "normal"
+    assert _log(state) == [("ask", "https://metrics.example.com/readings"),
+                           ("show", "ok")]
+    sent = next(b["value"] for b in state["env"] if b["name"] == "sent")
+    assert sent == _txt("done")

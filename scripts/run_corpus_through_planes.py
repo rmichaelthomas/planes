@@ -76,8 +76,11 @@ def interp_run(src):
         return [], "PARSE"
 
 
-BUILD3_TAGS = {"build-3-effect", "unknown-function", "foreign-not-found",
-               "module-not-used"}
+# A foreign call whose target the host cannot load: interp.py raises
+# foreign-not-found, interp.planes raises foreign-needs-host (it has no dynamic
+# host.resolve at all). Both are the same outcome -- a refusal to run a foreign
+# the host cannot provide -- so a program that hits this on both sides agrees.
+FOREIGN_REFUSALS = {"foreign-not-found", "foreign-needs-host"}
 
 
 def classify(path):
@@ -94,13 +97,19 @@ def classify(path):
     # same way with the same output up to the failure.
     if pl_out == py_out and pl_tag == py_tag:
         return "RUNNABLE", ("" if pl_tag is None else f"both fail: {pl_tag}")
-    if pl_tag in BUILD3_TAGS and py_tag is None:
-        return "BLOCKED", f"{pl_tag} (effect / foreign -- build 3)"
-    if py_tag == "foreign-not-found" or "foreign " in src:
-        # A foreign call is the host boundary -- build 3. interp.py stops at
-        # foreign-not-found (no target registered), interp.planes at
-        # unknown-function (it does not resolve foreign); both are build 3.
-        return "BLOCKED", "foreign call (host boundary -- build 3)"
+    # Both sides refuse a foreign whose target the host cannot load, with the
+    # same output up to the refusal -- agreement (build 3 closed the boundary:
+    # arity, declared effects, and refusal on an unresolvable target).
+    if (pl_tag in FOREIGN_REFUSALS and py_tag in FOREIGN_REFUSALS
+            and pl_out == py_out):
+        return "RUNNABLE", "both refuse the unloadable foreign target"
+    # interp.py runs a foreign for real (its host resolves the target); the
+    # Planes side cannot, because interp.planes has no dynamic host.resolve.
+    # This is the one remaining build-3 boundary, and it is the second host's
+    # single non-effect method (host.resolve / importlib), named precisely.
+    if pl_tag == "foreign-needs-host" and py_tag is None:
+        return "BLOCKED", ("arbitrary host-function resolution "
+                           "(dynamic host.resolve -- the second host)")
     if pl_tag == "recursion-too-deep" and py_tag != "recursion-too-deep":
         return "BLOCKED", "recursion-too-deep (interpreted recursion is shallower)"
     return "DIVERGENCE", (
