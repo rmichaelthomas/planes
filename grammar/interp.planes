@@ -130,6 +130,14 @@ to eval of node, env:
     give make-nothing
   if k == "Var":
     give env-lookup of env, node.name
+  if k == "BinOp":
+    give eval-binop of node, env
+  if k == "Not":
+    v = eval of node.expr, env
+    give make-boolean of (not (as-condition of v))
+  if k == "IsNothing":
+    v = eval of node.expr, env
+    give make-boolean of (v.kind == "nothing")
   fail "cannot evaluate a node of kind '" + k + "'" as cannot-evaluate
 
 # ================================================================ source -> node (consumes parser.planes, A.4)
@@ -143,3 +151,227 @@ to node-of-source of src:
   known = build-known of toks
   result = parse-expr of toks, known
   give result.node
+
+# ================================================================ operators (Phase 3)
+#
+# Every precedence level parser.py produces and interp.py evaluates.
+# interp.py's coercion and type guards are reproduced exactly, read from
+# interp.py, not taken from a specification: `+` does not coerce (it concats
+# text with text, appends list to list, adds number to number, and refuses
+# anything else); ordering comparison across types errors naming both
+# operands; equality across types errors rather than answering `false`.
+#
+# The arithmetic is metacircular and so exact for free (A.5): to add two
+# number values, interp.planes performs `a.value + b.value` in Planes, and
+# the host's own exact-rational `+` -- the very operator interp.py would use
+# -- produces the answer. 2 / 3 is one third here because it is one third
+# there; a float never enters.
+
+to eval-binop of node, env:
+  op = node.op
+  if op == "and":
+    give eval-and of node, env
+  if op == "or":
+    give eval-or of node, env
+  if op == "first":
+    give eval-first of node, env
+  left = eval of node.left, env
+  right = eval of node.right, env
+  give apply-op of op, left, right
+
+# `and` / `or` short-circuit, and -- like interp.py -- require both operands
+# to be yes/no values, returning the second operand's condition, not the
+# operand itself.
+to eval-and of node, env:
+  left = eval of node.left, env
+  if not (as-condition of left):
+    give make-boolean of false
+  right = eval of node.right, env
+  give make-boolean of (as-condition of right)
+
+to eval-or of node, env:
+  left = eval of node.left, env
+  if as-condition of left:
+    give make-boolean of true
+  right = eval of node.right, env
+  give make-boolean of (as-condition of right)
+
+# `first n of x`: a list's first n items, or a text's first n code points.
+# interp.py takes `src.value[:int(n.value)]`; the native `first` operator is
+# that same prefix, taken on the tagged items for a list and on the raw
+# string for text.
+to eval-first of node, env:
+  n = eval of node.left, env
+  src = eval of node.right, env
+  if src.kind == "list":
+    give make-list of (first (n.value) of src.items)
+  if src.kind == "text":
+    give make-text of (first (n.value) of src.value)
+  fail "cannot take the first n of " + (canonical-of-value of src) as not-a-collection
+
+to apply-op of op, a, b:
+  if op == "+":
+    give apply-plus of a, b
+  if op == "-":
+    give make-number of ((num-of of a) - (num-of of b))
+  if op == "*":
+    give make-number of ((num-of of a) * (num-of of b))
+  if op == "/":
+    give make-number of ((num-of of a) / (num-of of b))
+  if op == "<":
+    give make-boolean of ((cmp-of of a) < (cmp-of of b))
+  if op == ">":
+    give make-boolean of ((cmp-of of a) > (cmp-of of b))
+  if op == "<=":
+    give make-boolean of ((cmp-of of a) <= (cmp-of of b))
+  if op == ">=":
+    give make-boolean of ((cmp-of of a) >= (cmp-of of b))
+  if op == "==":
+    give make-boolean of (values-equal of a, b)
+  if op == "!=":
+    give make-boolean of (not (values-equal of a, b))
+  if op == "in":
+    give make-boolean of (member-of of a, b)
+  fail "unknown operator '" + op + "'" as unknown-operator
+
+# `+` is the one operator that reads the operand kinds, because its result
+# kind depends on them (text, list, or number). Everything else is one arm.
+to apply-plus of a, b:
+  if a.kind == "number" and b.kind == "number":
+    give make-number of (a.value + b.value)
+  if a.kind == "text" and b.kind == "text":
+    give make-text of (a.value + b.value)
+  if a.kind == "list" and b.kind == "list":
+    give make-list of (a.items + b.items)
+  fail "cannot combine " + (canonical-of-value of a) + " with " + (canonical-of-value of b) + " using +" as cannot-combine
+
+# The raw number under a number value, or interp.py's not-a-number refusal.
+# `-`, `*`, `/` then use the host's own exact arithmetic on the raw numbers,
+# so divide-by-zero and the exact-rational result are reproduced by
+# construction rather than reimplemented.
+to num-of of v:
+  if v.kind == "number":
+    give v.value
+  fail "cannot do arithmetic on " + (canonical-of-value of v) as not-a-number
+
+# The raw scalar an ordering comparison reads. A cross-type comparison is
+# left to the host's own guarded `<` (via the raw values), which refuses it
+# naming both operands -- interp.py's rule, not restated here.
+to cmp-of of v:
+  if v.kind == "number":
+    give v.value
+  if v.kind == "text":
+    give v.value
+  if v.kind == "boolean":
+    give v.value
+  fail "cannot order " + (canonical-of-value of v) as cannot-compare
+
+# interp.py's condition(): a yes/no value and nothing else.
+to as-condition of v:
+  if v.kind == "boolean":
+    give v.value
+  fail "a condition needs a yes/no value, found " + (canonical-of-value of v) as not-a-yes-no
+
+# ================================================================ equality and membership
+#
+# interp.py's equal() is guarded: nothing refuses comparison, a yes/no value
+# compares only with a yes/no value, and otherwise the two must be the same
+# type. Reproduced structurally here because two value records cannot be
+# handed to the host's `==` directly -- their `nothing` deriv slot would
+# itself trip the nothing-refusal.
+
+to values-equal of a, b:
+  if a.kind == "nothing":
+    fail "nothing cannot be compared with ==" as cannot-compare
+  if b.kind == "nothing":
+    fail "nothing cannot be compared with ==" as cannot-compare
+  if a.kind == "number" and b.kind == "number":
+    give a.value == b.value
+  a-bool = a.kind == "boolean"
+  b-bool = b.kind == "boolean"
+  if a-bool and not b-bool:
+    fail "cannot compare a yes/no value with " + (canonical-of-value of b) as cannot-compare
+  if b-bool and not a-bool:
+    fail "cannot compare " + (canonical-of-value of a) + " with a yes/no value" as cannot-compare
+  if a-bool and b-bool:
+    give a.value == b.value
+  if not (a.kind == b.kind):
+    fail "cannot compare " + (canonical-of-value of a) + " with " + (canonical-of-value of b) as cannot-compare
+  if a.kind == "text":
+    give a.value == b.value
+  if a.kind == "list":
+    give lists-equal of a.items, b.items
+  if a.kind == "record":
+    give records-equal of a.fields, b.fields
+  fail "cannot compare values of kind '" + a.kind + "'" as cannot-compare
+
+# Different lengths are unequal; same length compares element by element,
+# and a cross-type element mismatch raises through values-equal exactly as
+# interp.py's nested equal() does.
+to lists-equal of xs, ys:
+  if not ((count of xs) == (count of ys)):
+    give false
+  give lists-equal-walk of xs, ys
+
+to lists-equal-walk of xs, ys:
+  if (count of xs) == 0:
+    give true
+  x = first-item of xs
+  y = first-item of ys
+  if not (values-equal of x, y):
+    give false
+  give lists-equal-walk of (rest of xs), (rest of ys)
+
+# Records with different fields refuse comparison (interp.py: set(a) !=
+# set(b) raises); same field set compares field by field.
+to records-equal of af, bf:
+  if not ((count of af) == (count of bf)):
+    fail "records have different fields" as cannot-compare
+  give records-equal-walk of af, bf
+
+to records-equal-walk of af, bf:
+  if (count of af) == 0:
+    give true
+  f = first-item of af
+  match = field-in of bf, f.key
+  if not match.found:
+    fail "records have different fields" as cannot-compare
+  if not (values-equal of f.value, match.value):
+    give false
+  give records-equal-walk of (rest of af), bf
+
+# Find a field by name in a fields list: { found, value }. A list scan on
+# each pair's static `key` -- not a dynamic record lookup.
+to field-in of fields, name:
+  result = nothing
+  found = false
+  for each f in fields:
+    if not found:
+      if f.key == name:
+        result = f.value
+        found = true
+  give { found: found, value: result }
+
+# `in`: list membership by lenient equality (interp.py's `a in b` is Python's
+# `in`, which uses `==` and is false across types rather than raising), or
+# text substring. raw-eq is values-equal made lenient: a kind mismatch, or a
+# comparison values-equal would refuse, is simply false.
+to raw-eq of a, b:
+  if not (a.kind == b.kind):
+    give false
+  give (values-equal of a, b) or fail as err:
+    give false
+
+to member-of of a, b:
+  if b.kind == "list":
+    found = false
+    for each item in b.items:
+      if not found:
+        if raw-eq of a, item:
+          found = true
+    give found
+  if b.kind == "text":
+    if a.kind == "text":
+      give (a.value) in (b.value)
+    fail "cannot look for " + (canonical-of-value of a) + " in text" as cannot-combine
+  fail "cannot check membership in " + (canonical-of-value of b) as unknown-operator

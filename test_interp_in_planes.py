@@ -322,6 +322,121 @@ def test_eval_unknown_name_fails_same_tag():
     assert_eval_fails("missing", "unknown-name")
 
 
+# ============================================== Phase 3: operators
+#
+# Binary and unary, every precedence level parser.py produces and interp.py
+# evaluates, checked against interp.py's own eval() including its coercion
+# and type-guard behaviour.
+
+
+def test_eval_arithmetic():
+    for src in ["1 + 2", "10 - 3", "4 * 5", "2 + 3 * 4", "(2 + 3) * 4",
+                "100 - 40 - 10", "2 * 3 * 4"]:
+        assert_eval_agrees(src)
+
+
+def test_eval_unary_minus():
+    for src in ["-5", "-(1 + 2)", "0 - 7", "-x"]:
+        assert_eval_agrees(src, {"x": Number.of(9)})
+
+
+def test_eval_division_is_exact_rational_not_float():
+    # A.5 ruling 1, verified explicitly: division.
+    assert_eval_agrees("2 / 3")          # ~0.666666666666, never 0.666...667
+    assert_eval_agrees("1 / 3")
+    assert_eval_agrees("10 / 4")         # 2.5, terminating
+    assert_eval_agrees("22 / 7")
+    # The Planes result reads as an exact rational, not a float.
+    assert planes_eval("2 / 3") == "~0.666666666666"
+    assert planes_eval("10 / 4") == "2.5"
+
+
+def test_eval_repeated_addition_is_exact():
+    # A.5 ruling 1, verified explicitly: repeated addition where a float
+    # implementation visibly diverges. 1/3 + 1/3 + 1/3 is exactly 1 (a float
+    # gives 0.9999999999999999); 0.1 + 0.2 is exactly 0.3 (a float gives
+    # 0.30000000000000004).
+    assert_eval_agrees("1 / 3 + 1 / 3 + 1 / 3")
+    assert planes_eval("1 / 3 + 1 / 3 + 1 / 3") == "1"
+    assert_eval_agrees("0.1 + 0.2")
+    assert planes_eval("0.1 + 0.2") == "0.3"
+
+
+def test_eval_string_concatenation():
+    for src in ['"a" + "b"', '"read " + "bytes"', '"" + "x"']:
+        assert_eval_agrees(src)
+
+
+def test_eval_comparisons_numbers():
+    for src in ["1 < 2", "2 < 1", "2 <= 2", "3 > 5", "5 >= 5", "5 >= 6",
+                "1 == 1", "1 == 2", "1 != 2", "1 != 1"]:
+        assert_eval_agrees(src)
+
+
+def test_eval_comparisons_text():
+    for src in ['"a" < "b"', '"b" <= "b"', '"z" > "a"', '"x" == "x"', '"x" != "y"']:
+        assert_eval_agrees(src)
+
+
+def test_eval_boolean_equality():
+    for src in ["true == true", "true == false", "true != false", "false != false"]:
+        assert_eval_agrees(src)
+
+
+def test_eval_and_or_short_circuit():
+    for src in ["true and true", "true and false", "false and true",
+                "true or false", "false or true", "false or false",
+                "true and false or true", "1 == 1 and 2 == 2"]:
+        assert_eval_agrees(src)
+
+
+def test_eval_not():
+    for src in ["not true", "not false", "not (1 == 2)", "not (1 == 1)"]:
+        assert_eval_agrees(src)
+
+
+def test_eval_is_nothing():
+    assert_eval_agrees("nothing is nothing")
+    assert_eval_agrees("here is nothing", {"here": None})
+    assert_eval_agrees("here is nothing", {"here": Number.of(5)})
+
+
+def test_eval_first_of_list_and_text():
+    assert_eval_agrees("first 2 of xs", {"xs": [Number.of(1), Number.of(2), Number.of(3)]})
+    assert_eval_agrees("first 0 of xs", {"xs": [Number.of(1), Number.of(2)]})
+    assert_eval_agrees('first 3 of "hello"')
+    assert_eval_agrees('first 0 of "hello"')
+
+
+def test_eval_in_membership():
+    assert_eval_agrees("x in xs", {"x": Number.of(2), "xs": [Number.of(1), Number.of(2)]})
+    assert_eval_agrees("x in xs", {"x": Number.of(9), "xs": [Number.of(1), Number.of(2)]})
+    assert_eval_agrees('"b" in "abc"')
+    assert_eval_agrees('"z" in "abc"')
+    # lenient: a cross-type element is not a match, not an error (Python `in`).
+    assert_eval_agrees("x in xs", {"x": "1", "xs": [Number.of(1)]})
+
+
+def test_eval_list_equality_via_bindings():
+    same = {"xs": [Number.of(1), Number.of(2)], "ys": [Number.of(1), Number.of(2)]}
+    diff = {"xs": [Number.of(1), Number.of(2)], "ys": [Number.of(1), Number.of(3)]}
+    length = {"xs": [Number.of(1)], "ys": [Number.of(1), Number.of(2)]}
+    assert_eval_agrees("xs == ys", same)
+    assert_eval_agrees("xs == ys", diff)
+    assert_eval_agrees("xs == ys", length)
+    assert_eval_agrees("xs != ys", diff)
+
+
+def test_eval_operator_errors_same_tag():
+    assert_eval_fails("1 / 0", "divided-by-zero")
+    assert_eval_fails('1 + "a"', "cannot-combine")
+    assert_eval_fails('1 < "a"', "cannot-compare")
+    assert_eval_fails("nothing == 1", "cannot-compare")
+    assert_eval_fails("1 == true", "cannot-compare")
+    assert_eval_fails("1 and true", "not-a-yes-no")
+    assert_eval_fails('"a" - "b"', "not-a-number")
+
+
 def test_env_first_match_wins_shadowing():
     # A.2: innermost bindings first, first match wins. interp.py's Env is a
     # dict and cannot hold two bindings for one name, so this is checked
