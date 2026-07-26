@@ -363,18 +363,32 @@ export class Parser {
     return tup(kind, null);
   }
 
-  read_effect_word(after = "'doing'") {
+  // §160: the membership check lives HERE, so an unknown effect name is
+  // refused in every position that reads one. It used to live in parse_rule,
+  // after the call, and read_claim made no such check — so
+  // `foreign f of x from "m.f" doing frobnicate` parsed and silently widened a
+  // vocabulary closed at seven, while the same word in a rule was refused.
+  // `allowNothing` is explicit rather than inferred from `after`, so the
+  // grammar does not depend on the wording of a message.
+  read_effect_word(after = "'doing'", allowNothing = true) {
     const t = this.peek();
-    if (["NAME", "NOTHING", "SHOW", "WRITE"].includes(t.kind)) {
-      this.next();
-      return t.value || "nothing";
+    const word = ["NAME", "NOTHING", "SHOW", "WRITE"].includes(t.kind)
+      ? t.value || "nothing"
+      : null;
+    const known =
+      word !== null &&
+      (effectKinds().has(word) || (allowNothing && word === "nothing"));
+    if (!known) {
+      const found = word !== null ? word : t.value || "end of line";
+      throw new PlanesSyntaxError(
+        `line ${t.line}: expected an effect name after ${after}, ` +
+          `found '${found}'\n` +
+          `  valid kinds: ${[...effectKinds().keys()].sort().join(", ")} \u2014 and ` +
+          `'nothing' after 'doing', for a foreign that performs none`,
+      );
     }
-    throw new PlanesSyntaxError(
-      `line ${t.line}: expected an effect name after ${after}, ` +
-        `found '${t.value || "end of line"}'\n` +
-        `  valid kinds: ${[...effectKinds().keys()].sort().join(", ")} \u2014 and ` +
-        `'nothing' after 'doing', for a foreign that performs none`,
-    );
+    this.next();
+    return word;
   }
 
   parse_rule() {
@@ -414,15 +428,8 @@ export class Parser {
     const assertion = this.accept("NOT") ? "forbid" : "permit";
     const verb = assertion === "forbid" ? "may not" : "may";
     const form = `rule [${name}] ${subject} ${verb} effect-kind`;
-    const kind_tok = this.peek();
-    const kind = this.read_effect_word(`'${verb}'`);
-    if (!effectKinds().has(kind)) {
-      throw new PlanesSyntaxError(
-        `line ${kind_tok.line}: '${kind}' is not an effect kind a ` +
-          `rule can name\n` +
-          `  valid kinds: ${[...effectKinds().keys()].sort().join(", ")}`,
-      );
-    }
+    // §160: one check, in read_effect_word, for both positions.
+    const kind = this.read_effect_word(`'${verb}'`, false);
     let target = null;
     if (this.accept("TO")) target = this.expect("STRING").value.slice(1, -1);
     let supersedes = null;

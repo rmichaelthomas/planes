@@ -391,23 +391,46 @@ class Parser:
                 f"  parameters: {', '.join(params) or 'none'}")
         return (kind, None)
 
-    def read_effect_word(self, after="'doing'"):
+    def read_effect_word(self, after="'doing'", allow_nothing=True):
         """An effect name, after `doing` in a foreign claim or after `may
         not` in a rule.
 
         Effect names double as ordinary words, so most arrive as NAME. A few
         (`read`, `write`, `show`, `ask`) may be builtins or reserved words;
         accept whatever token carries the text.
+
+        §160: the membership check lives HERE, so an unknown effect name is
+        refused in every position that reads one. It used to live in
+        `parse_rule`, after the call — and `read_claim` made no such check, so
+        `foreign f of x from "m.f" doing frobnicate` parsed and silently
+        widened a vocabulary closed at seven, while the same word in a rule was
+        refused. A closed vocabulary that is only closed in one of the two
+        places that name it is not closed.
+
+        `allow_nothing` is an explicit parameter rather than an inference from
+        `after`: `nothing` is valid after `doing` (a foreign that performs
+        none) and not in a rule, and reading that off the message string would
+        tie the grammar to the wording of a message.
+
+        One message, not two. `parse_rule` used to raise its own, saying the
+        same thing in different words in three implementations — and the one
+        kept here is the more informative of the pair, because it names where
+        `nothing` is allowed as well as the seven kinds.
         """
         t = self.peek()
-        if t.kind in ("NAME", "NOTHING", "SHOW", "WRITE"):
-            self.next()
-            return t.value or "nothing"
-        raise PlanesSyntaxError(
-            f"line {t.line}: expected an effect name after {after}, "
-            f"found '{t.value or 'end of line'}'\n"
-            f"  valid kinds: {', '.join(sorted(EFFECT_KINDS))} — and "
-            f"'nothing' after 'doing', for a foreign that performs none")
+        word = (t.value or "nothing"
+                if t.kind in ("NAME", "NOTHING", "SHOW", "WRITE") else None)
+        known = word is not None and (
+            word in EFFECT_KINDS or (allow_nothing and word == "nothing"))
+        if not known:
+            found = word if word is not None else (t.value or "end of line")
+            raise PlanesSyntaxError(
+                f"line {t.line}: expected an effect name after {after}, "
+                f"found '{found}'\n"
+                f"  valid kinds: {', '.join(sorted(EFFECT_KINDS))} — and "
+                f"'nothing' after 'doing', for a foreign that performs none")
+        self.next()
+        return word
 
     def parse_rule(self):
         """`rule [name] subject may not kind` (forbid) or
@@ -455,13 +478,11 @@ class Parser:
         verb = "may not" if assertion == "forbid" else "may"
         form = f"rule [{name}] {subject} {verb} effect-kind"
 
-        kind_tok = self.peek()
-        kind = self.read_effect_word(after=f"'{verb}'")
-        if kind not in EFFECT_KINDS:
-            raise PlanesSyntaxError(
-                f"line {kind_tok.line}: '{kind}' is not an effect kind a "
-                f"rule can name\n"
-                f"  valid kinds: {', '.join(sorted(EFFECT_KINDS))}")
+        # §160: the membership check moved into read_effect_word, which is the
+        # only place that reads an effect name, so a rule and a `doing` clause
+        # are now refused by the same check and the same message. `nothing` is
+        # a foreign's way of claiming no effect and means nothing in a rule.
+        kind = self.read_effect_word(after=f"'{verb}'", allow_nothing=False)
 
         target = None
         if self.accept("TO"):
