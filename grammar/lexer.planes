@@ -367,7 +367,8 @@ to four-escapes-display:
 
 to unrecognized-escape-message of info:
   opening = "line " + text of info.line + ": unrecognized escape '" + one-backslash + info.char
-  give opening + "' in a string literal -- the four recognized escapes are " + four-escapes-display
+  middle = opening + "' in a string literal\n  the four recognized escapes are " + four-escapes-display
+  give middle + " -- for any other character, write the character itself"
 
 # Two distinct unterminated-string messages, not one -- lexer.py raises
 # the same PlanesSyntaxError from a single code path regardless of
@@ -384,12 +385,12 @@ to unrecognized-escape-message of info:
 # language does not have (capability 2, still MISSING).
 to unterminated-string-message of line-no:
   opening = "line " + text of line-no + ": unterminated string literal -- a backslash right before the closing quote escapes that quote (" + one-backslash + "\""
-  middle = opening + ") instead of ending the string; the four recognized escapes are " + four-escapes-display
+  middle = opening + ") instead of ending the string\n  the four recognized escapes are " + four-escapes-display
   give middle + " -- write " + one-backslash + one-backslash + " for a literal trailing backslash"
 
 to unterminated-string-no-quote-message of line-no:
   opening = "line " + text of line-no + ": unterminated string literal -- no closing quote found before the end of the line"
-  give opening + " (a Planes string cannot span multiple lines)"
+  give opening + "\n  add the closing quote; a Planes string cannot span multiple lines, so a long one has to be joined with + across lines"
 
 to step-string-escape of state, c:
   if c == "\"":

@@ -37,16 +37,21 @@ def _load_amber_templates():
         return _AMBER_TEMPLATES
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "grammar", "messages", "amber.json")
-    fix = "reinstall planes, or regenerate with python3 grammar_gen.py"
+    # Written out at each raise, not hoisted (C2, A.1) — see _load_vocabulary.
     try:
         with open(path, encoding="utf-8") as f:
             doc = json.load(f)
     except OSError as e:
         raise GrammarDataError(
-            "grammar-data-missing", f"{path} could not be read ({e.strerror or e})", fix) from e
+            "grammar-data-missing",
+            f"{path} could not be read ({e.strerror or e})",
+            "reinstall planes, or regenerate with "
+            "python3 grammar_gen.py") from e
     except json.JSONDecodeError as e:
         raise GrammarDataError(
-            "grammar-data-missing", f"{path} is not valid JSON ({e})", fix) from e
+            "grammar-data-missing", f"{path} is not valid JSON ({e})",
+            "reinstall planes, or regenerate with "
+            "python3 grammar_gen.py") from e
     _AMBER_TEMPLATES = {t["id"]: t for t in doc["templates"]}
     return _AMBER_TEMPLATES
 
@@ -142,7 +147,12 @@ class Parser:
                     f"found '{found}'\n  {fix}")
             raise PlanesSyntaxError(
                 f"line {g.line}: expected {value or kind.lower()}, "
-                f"found '{found}'")
+                f"found '{found}'",
+                no_fix="this is the generic token gate, reached from every "
+                       "form in the grammar; it knows which token was due and "
+                       "not what the author meant by writing another, so a "
+                       "call site that can say more passes `fix=` and a call "
+                       "site that cannot says nothing rather than guessing")
         return t
 
     def check_binding_name(self, name, line, what):
@@ -395,7 +405,9 @@ class Parser:
             return t.value or "nothing"
         raise PlanesSyntaxError(
             f"line {t.line}: expected an effect name after {after}, "
-            f"found '{t.value or 'end of line'}'")
+            f"found '{t.value or 'end of line'}'\n"
+            f"  valid kinds: {', '.join(sorted(EFFECT_KINDS))} — and "
+            f"'nothing' after 'doing', for a foreign that performs none")
 
     def parse_rule(self):
         """`rule [name] subject may not kind` (forbid) or
@@ -853,7 +865,11 @@ class Parser:
             g = self.peek()
             raise PlanesSyntaxError(
                 f"line {g.line}: expected a name, "
-                f"found '{g.value or 'end of line'}'")
+                f"found '{g.value or 'end of line'}'\n"
+                f"  a name here is one or more plain words — the old or the "
+                f"new spelling in a `use ... with <old> as <new>` rename; a "
+                f"quoted string, a number, or a punctuation mark cannot stand "
+                f"for one")
         return " ".join(parts)
 
     def check_rename_name_ambiguity(self, name, tok):
@@ -1178,7 +1194,10 @@ class Parser:
             for k, _ in fields:
                 if k in seen:
                     raise PlanesSyntaxError(
-                        f"line {t.line}: field '{k}' appears twice in this record")
+                        f"line {t.line}: field '{k}' appears twice in this "
+                        f"record\n  keep one of the two; to change a field's "
+                        f"value later, build a new record from this one — "
+                        f"`r with {k}: value`")
                 seen.add(k)
             return RecordLit(fields)
 
@@ -1279,7 +1298,12 @@ class Parser:
             return Var(name)
 
         raise PlanesSyntaxError(
-            f"line {t.line}: expected a value, found '{t.value or 'end of line'}'")
+            f"line {t.line}: expected a value, "
+            f"found '{t.value or 'end of line'}'\n"
+            f"  a value starts with a number, a quoted string, true, false, "
+            f"nothing, a name, `not`, a list, a record, or a parenthesised "
+            f"expression — a statement word like `show` or `write` cannot "
+            f"stand in for one")
 
 
 def _param_arity(tokens, j):

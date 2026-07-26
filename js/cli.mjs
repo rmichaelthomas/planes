@@ -269,6 +269,10 @@ switch (sub) {
     });
     const itp = new Interpreter({ host });
     let tag = null;
+    // C2: the rendered message too, not only the tag. Asserting that a runtime
+    // message is identical in both implementations needs the text, and the tag
+    // is deliberately the same across many different messages.
+    let message = null;
     try {
       itp.run(src);
     } catch (e) {
@@ -276,11 +280,13 @@ switch (sub) {
       else if (e instanceof PlanesSyntaxError) tag = "PARSE";
       else if (e instanceof RangeError) tag = "recursion-too-deep";
       else throw e;
+      message = String(e.message);
     }
     out(
       JSON.stringify({
         output: itp.output,
         tag,
+        message,
         effects: itp.effects,
         files: itp.host.files ?? {},
       }),

@@ -39,15 +39,62 @@ VOCAB_JSON_PATH = os.path.join(REPO, "grammar", "vocabulary.json")
 VOCAB_PLANES_PATH = os.path.join(REPO, "grammar", "vocabulary.planes")
 PARSER_PATH = os.path.join(REPO, "parser.py")
 
-TARGET_EXCEPTIONS = ("PlanesError", "PlanesSyntaxError", "PlanesAmbiguity",
-                     "RuleConflict", "RuleNotSupported")
+# ================================================================ the inclusion rule
+#
+# C2 (A.2 item 2). What makes an entry an error is a stated rule, not a
+# consequence of which files get scanned:
+#
+#   An entry is an ERROR iff it constructs one of the error classes the
+#   reference implementation defines. All seven are listed below, and the
+#   listing is the rule — including a class is a decision with a reason, and so
+#   is leaving one out.
+#
+#   An entry is a REPORT iff it is text a plane renders for a person without
+#   raising anything: rules.py's Violation.render and Violation._render_vacuous.
+#   The catalogue inventories both, because both are text a person reads. The
+#   fix-clause commitment is measured over errors only — an error stops a
+#   program and leaves its author needing a next move; a report does not.
+#
+# Three exception classes in the reference are deliberately NOT errors of the
+# language, each for a reason a reader can check:
+#
+#   HostError (host.py)      the machine failing, not the program being wrong.
+#                            Every one is converted to a PlanesError before it
+#                            can cross into a program — which is what C2's
+#                            constraint 6 asserts and test_builtin_guards.py
+#                            checks by sweep.
+#   Inexact (planes_num.py)  the same: caught in arith() and re-raised as
+#                            `needs-rounding`, so no program sees it.
+#   _Give (interp.py)        control flow for `give`, not a failure at all.
+#
+# Before C2 the tuple held five of the seven. ModuleError and GrammarDataError
+# were absent for no stated reason, and `planes.py` prints a ModuleError to the
+# same stderr as everything else — nine raise sites the commitment was never
+# measured over, four of which turned out to hold their fix clause in a local
+# variable where the catalogue could not see it.
+ERROR_CLASSES = {
+    # class              (tag arg, detail arg, fix arg) by position
+    "PlanesError":       (0, 1, 2),
+    "GrammarDataError":  (0, 1, 2),
+    "ModuleError":       (None, 1, 2),   # arg 0 is the module name, not a tag
+    "PlanesSyntaxError": (None, 0, None),
+    "PlanesAmbiguity":   (None, 0, None),
+    "RuleConflict":      (None, 0, None),
+    "RuleNotSupported":  (None, 0, None),
+}
+
+TARGET_EXCEPTIONS = tuple(ERROR_CLASSES)
+
+REPORT_KIND = "report"
+ERROR_KIND = "error"
 
 # rules.py's Violation.render and _render_vacuous build messages by
 # assembling several f-strings across branches rather than constructing one
 # of TARGET_EXCEPTIONS — D.2 asks for these as "assembled" entries by name,
 # since deriving a generic "this function assembles a message" detector
 # from arbitrary code is not what a form inventory can honestly claim to do
-# (the same honesty D.3 states outright for rules.json).
+# (the same honesty D.3 states outright for rules.json). C2 marks what they
+# produce a REPORT rather than an error, per the inclusion rule above.
 ASSEMBLED_MESSAGE_SITES = [("rules.py", "render"), ("rules.py", "_render_vacuous")]
 
 
@@ -211,25 +258,34 @@ def _extract_error_entries(fname, tree, src_lines):
         if not (isinstance(node.func, ast.Name) and node.func.id in TARGET_EXCEPTIONS):
             continue
         cls = node.func.id
+        tag_pos, detail_pos, fix_pos = ERROR_CLASSES[cls]
         args, kwargs = _call_args(node)
-        raised_in = _enclosing_function(tree, node.lineno)
 
-        if cls == "PlanesError":
-            tag_node = args[0] if len(args) > 0 else kwargs.get("tag")
-            detail_node = args[1] if len(args) > 1 else kwargs.get("detail")
-            fix_node = args[2] if len(args) > 2 else kwargs.get("fix")
-            tag = tag_node.value if isinstance(tag_node, ast.Constant) else None
-            template, slots = (None, []) if detail_node is None else _string_template(detail_node)
-            fix, _ = (None, []) if fix_node is None else _string_template(fix_node)
-        else:
-            tag = None
-            msg_node = args[0] if args else None
-            template, slots = (None, []) if msg_node is None else _string_template(msg_node)
-            fix = None
+        def at(pos, name):
+            """The argument at `pos`, or the keyword of that name. `pos` is
+            None for a class that has no such argument at all."""
+            if pos is None:
+                return None
+            return args[pos] if len(args) > pos else kwargs.get(name)
+
+        raised_in = _enclosing_function(tree, node.lineno)
+        tag_node = at(tag_pos, "tag")
+        detail_node = at(detail_pos, "detail" if tag_pos is not None else "message")
+        fix_node = at(fix_pos, "fix")
+        no_fix_node = kwargs.get("no_fix")
+
+        tag = tag_node.value if isinstance(tag_node, ast.Constant) else None
+        template, slots = (None, []) if detail_node is None else _string_template(detail_node)
+        fix, _ = (None, []) if fix_node is None else _string_template(fix_node)
+        # C2: the reason a site deliberately names no fix, read as a literal at
+        # the raise site — the same way the message is. A reason held in a
+        # variable is one the catalogue cannot see, so it does not count.
+        no_fix, _ = (None, []) if no_fix_node is None else _string_template(no_fix_node)
 
         id_tag = tag or f"{cls.lower()}-site"
         entry = {
             "id": f"{fname[:-3]}.{id_tag}",
+            "kind": ERROR_KIND,
             "class": cls,
             "tag": tag,
             "source": f"{fname}:{node.lineno}",
@@ -239,6 +295,8 @@ def _extract_error_entries(fname, tree, src_lines):
         }
         if fix:
             entry["fix"] = fix
+        if no_fix:
+            entry["no_fix"] = no_fix
         if template is None:
             entry["assembled"] = False
             if cls == "PlanesAmbiguity":
@@ -350,6 +408,7 @@ def _extract_assembled_entries(fname, tree, src_lines, method_name):
             start, end = _span(stmts)
             entries.append({
                 "id": f"{fname[:-3]}.{method_name}.branch-{i}",
+                "kind": REPORT_KIND,
                 "class": None,
                 "tag": None,
                 "source": f"{fname}:{start}-{end}" if end != start else f"{fname}:{start}",

@@ -152,10 +152,63 @@ function condition(v) {
   );
 }
 
+// The guard `lower`, `upper`, and `normalize` share — interp.py's require_text
+// (C2, A.6 family 2). Each of the three used to hand its argument to
+// `String()`, which is why the two implementations disagreed: `lower of [1, 2]`
+// answered '1,2' here and '[1, 2]' in Python. They refuse instead, naming
+// `text of`, in the same words on both sides.
+function requireText(name, verb, v) {
+  if (typeof v !== "string") {
+    throw new PlanesError(
+      "not-text",
+      `cannot ${verb} ${fmt(v)}`,
+      `${name} takes text; convert first — e.g. ${name} of (text of n)`,
+    );
+  }
+}
+
+// The guard on an effect's target — interp.py's require_target. `ask`, `read`,
+// and `write ... to` handed the value straight to the host, so a non-text
+// target failed in the host's words rather than the language's.
+function requireTarget(what, spelled, v) {
+  if (typeof v !== "string") {
+    throw new PlanesError(
+      "not-text",
+      `${what} must be text, found ${fmt(v)}`,
+      `wrap it with text of — \`${spelled}\``,
+    );
+  }
+}
+
+// A value in an error detail, with its kind named when the bare form would hide
+// it — interp.py's `kinded`. `fmt` renders text without quotes (it is what
+// `show` prints), so `whole of "5"` reported `5` and read as a number, which is
+// the one thing the message is about. Used at the two sites where a text value
+// is a realistic wrong input and the message turns on it being a number.
+function kinded(v) {
+  return typeof v === "string" ? `text "${escapeStringLiteral(v)}"` : fmt(v);
+}
+
+// The ` of a, b` tail of a declaration, and the call it wants — interp.py's
+// param_list and call_shape. The arity messages name the parameters rather than
+// only counting them.
+function paramList(params) {
+  return params.length ? ` of ${params.join(", ")}` : "";
+}
+
+function callShape(name, params) {
+  return params.length ? `${name} of ${params.join(", ")}` : name;
+}
+
 // ================================================================ errors
 
+// `noFix` mirrors interp.py's `no_fix` (C2): a reason, in words, why this raise
+// site names no fix clause. Never rendered, so a message stays byte-identical
+// across the two implementations. The catalogue is generated from the Python
+// side, so nothing here reads it — it is carried so the two constructors have
+// the same shape and a site marked deliberate in one is marked in both.
 export class PlanesError extends Error {
-  constructor(tag, detail = "", fix = "", path = null) {
+  constructor(tag, detail = "", fix = "", path = null, noFix = null) {
     let msg = tag;
     if (detail) msg += `: ${detail}`;
     if (fix) msg += `\n  try: ${fix}`;
@@ -165,6 +218,7 @@ export class PlanesError extends Error {
     this.detail = detail;
     this.fix = fix;
     this.path = path;
+    this.noFix = noFix;
   }
 }
 
@@ -540,8 +594,18 @@ export class Interpreter {
       if (!this.modules.has("file")) {
         throw new PlanesError("module-not-used", "writing a file needs the file module", "add `use file` at the top");
       }
+      requireTarget("a destination to write to", "write value to (text of p)", dest.value);
       const payload = toJson(value.value);
-      this.host.write(dest.value, payload);
+      try {
+        this.host.write(dest.value, payload);
+      } catch (e) {
+        if (e instanceof PlanesError) throw e;
+        throw new PlanesError(
+          "write-failed",
+          `writing '${dest.value}' failed: ${e.message ?? e}`,
+          "check the directory exists and is writable",
+        );
+      }
       this.effects.push(["write", dest.value, payload.length]);
       this.maybe_record("write", dest.value, this.host_anchor(), dest.node);
       return new Traced(
@@ -554,14 +618,32 @@ export class Interpreter {
         return this.eval(node.expr, env);
       } catch (e) {
         if (e instanceof GiveSignal) throw e;
+        // The three raises here name no fix of their own, deliberately: each
+        // re-tags a message somebody else wrote. The caught error's own `fix`
+        // is carried forward (C2) — an error that named a fix must not stop
+        // naming it because it crossed an `or fail`.
         if (e instanceof PlanesError) {
           if (node.handler !== null) return this.run_or_fail_handler(node, e, env);
-          throw new PlanesError(node.tag, e.detail || e.tag, "", e.path);
+          throw new PlanesError(
+            node.tag,
+            e.detail || e.tag,
+            e.fix,
+            e.path,
+            "re-tags a message this raise did not write; the fix belongs to whoever raised it, " +
+              "and is carried forward",
+          );
         }
+        const hostForwarded =
+          "re-tags a host exception this raise did not write; a host failure is not something " +
+          "the language can advise on";
         if (node.handler !== null) {
-          return this.run_or_fail_handler(node, new PlanesError(node.tag, String(e.message ?? e)), env);
+          return this.run_or_fail_handler(
+            node,
+            new PlanesError(node.tag, String(e.message ?? e), "", null, hostForwarded),
+            env,
+          );
         }
-        throw new PlanesError(node.tag, String(e.message ?? e));
+        throw new PlanesError(node.tag, String(e.message ?? e), "", null, hostForwarded);
       }
     }
     if (k === "ForEach") return this.eval_foreach(node, env);
@@ -573,7 +655,13 @@ export class Interpreter {
       }
       return result;
     }
-    throw new PlanesError("cannot-evaluate", k);
+    throw new PlanesError(
+      "cannot-evaluate",
+      `'${k}' has no value — it is a statement, not an expression`,
+      "write it on its own line; reaching this from a program the parser accepted is a defect " +
+        "in the interpreter, not in the program, and worth reporting with the source that " +
+        "produced it",
+    );
   }
 
   eval_binop(node, env) {
@@ -594,6 +682,24 @@ export class Interpreter {
     if (node.op === "first") {
       const n = this.eval(node.left, env);
       const src = this.eval(node.right, env);
+      // C2 (constraint 6): both guards. Neither implementation had them — a
+      // non-number count and a non-sequence source each reached a host
+      // primitive, and `first 1 of 5` crashed V8 here and raised a Python
+      // TypeError there.
+      if (!isNum(n.value)) {
+        throw new PlanesError(
+          "not-a-number",
+          `the count in \`first n of\` must be a number, found ${kinded(n.value)}`,
+          "write the count as a number — `first 3 of items`",
+        );
+      }
+      if (typeof src.value !== "string" && !Array.isArray(src.value)) {
+        throw new PlanesError(
+          "not-a-collection",
+          `cannot take the first ${fmt(n.value)} of ${fmt(src.value)}`,
+          "`first n of` takes a list or text; a record has no order to take a prefix of",
+        );
+      }
       const count = truncInt(n.value);
       const v =
         typeof src.value === "string"
@@ -613,11 +719,18 @@ export class Interpreter {
         throw new PlanesError("module-not-used", "asking a url needs the http module", "add `use http` at the top");
       }
       const url = arg.value;
+      requireTarget("a url to ask", "ask (text of u)", url);
       let body;
       try {
         body = this.host.ask(url);
       } catch (e) {
-        if (e instanceof HostError) throw new PlanesError("ask-failed", String(e.message));
+        if (e instanceof HostError)
+          throw new PlanesError(
+            "ask-failed",
+            `asking '${url}' failed: ${e.message}`,
+            "check the url is reachable and spelled right; a run without the network needs a " +
+              "stubbed response",
+          );
         throw e;
       }
       this.effects.push(["ask", url, body.length]);
@@ -635,6 +748,7 @@ export class Interpreter {
         throw new PlanesError("module-not-used", "reading a file needs the file module", "add `use file` at the top");
       }
       const path = arg.value;
+      requireTarget("a path to read", "read (text of p)", path);
       let body;
       try {
         body = this.host.read(path);
@@ -651,21 +765,34 @@ export class Interpreter {
       if (typeof arg.value === "string") n = codePointLength(arg.value);
       else if (Array.isArray(arg.value)) n = arg.value.length;
       else if (isRecord(arg.value)) n = arg.value.size;
-      else throw new PlanesError("not-a-collection", `cannot count ${fmt(arg.value)}`);
+      else
+        throw new PlanesError(
+          "not-a-collection",
+          `cannot count ${fmt(arg.value)}`,
+          "count takes a list, a record, or text — check which of those this value should be",
+        );
       const v = PlanesNumber.of(n);
       return new Traced(v, new Deriv("op", "count of", v, [arg.node]));
     }
     if (name === "lower") {
-      const v = String(arg.value).toLowerCase();
+      requireText("lower", "lowercase", arg.value);
+      const v = arg.value.toLowerCase();
       return new Traced(v, new Deriv("op", "lower of", v, [arg.node]));
     }
     if (name === "upper") {
-      const v = String(arg.value).toUpperCase();
+      requireText("upper", "uppercase", arg.value);
+      const v = arg.value.toUpperCase();
       return new Traced(v, new Deriv("op", "upper of", v, [arg.node]));
     }
     if (name === "whole") {
       if (!isNum(arg.value)) {
-        throw new PlanesError("not-a-number", `cannot take the whole part of ${fmt(arg.value)}`);
+        throw new PlanesError(
+          "not-a-number",
+          `cannot take the whole part of ${kinded(arg.value)}`,
+          "whole of rounds a number toward zero; Planes has no text-to-number builtin, so a " +
+            "number has to arrive as one — from a literal, from arithmetic, or from a field of " +
+            "something read as JSON",
+        );
       }
       const n = PlanesNumber.of(arg.value).roundTo(0);
       return new Traced(n, new Deriv("op", "whole of", n, [arg.node]));
@@ -675,7 +802,8 @@ export class Interpreter {
       return new Traced(v, new Deriv("op", "text of", v, [arg.node]));
     }
     if (name === "normalize") {
-      const v = String(arg.value).normalize("NFC");
+      requireText("normalize", "normalize", arg.value);
+      const v = arg.value.normalize("NFC");
       return new Traced(v, new Deriv("op", "normalize of", v, [arg.node]));
     }
     if (name === "join") {
@@ -703,7 +831,12 @@ export class Interpreter {
       const v = arg.value.slice(1);
       return new Traced(v, new Deriv("op", "rest of", v, [arg.node]));
     }
-    throw new PlanesError("unknown-builtin", name);
+    throw new PlanesError(
+      "unknown-builtin",
+      `no builtin is named '${name}'`,
+      "the ten builtins are fixed and the lexer recognises only those, so reaching this is a " +
+        "defect in the interpreter rather than in the program — worth reporting with the source",
+    );
   }
 
   run_or_fail_handler(node, error, env) {
@@ -775,7 +908,12 @@ export class Interpreter {
     }
     if (args.length !== fn.params.length) {
       const word = fn.params.length === 1 ? "value" : "values";
-      throw new PlanesError("wrong-arity", `'${iname}' takes ${fn.params.length} ${word}, given ${args.length}`);
+      throw new PlanesError(
+        "wrong-arity",
+        `'${iname}' takes ${fn.params.length} ${word}, given ${args.length}`,
+        `it is declared \`to ${iname}${paramList(fn.params)}\`, so call it as ` +
+          `\`${callShape(iname, fn.params)}\``,
+      );
     }
     const arg_vals = args.map((a) => (a instanceof Traced ? a : this.eval(a, env)));
     const inner = new Env(fn.env);
@@ -813,7 +951,12 @@ export class Interpreter {
   call_foreign(decl, args, env) {
     if (args.length !== decl.params.length) {
       const word = decl.params.length === 1 ? "value" : "values";
-      throw new PlanesError("wrong-arity", `'${decl.name}' takes ${decl.params.length} ${word}, given ${args.length}`);
+      throw new PlanesError(
+        "wrong-arity",
+        `'${decl.name}' takes ${decl.params.length} ${word}, given ${args.length}`,
+        `it is declared \`foreign ${decl.name}${paramList(decl.params)} from ` +
+          `"${decl.target}"\`, so call it as \`${callShape(decl.name, decl.params)}\``,
+      );
     }
     const arg_vals = args.map((a) => (a instanceof Traced ? a : this.eval(a, env)));
     let fn;
@@ -881,7 +1024,12 @@ function applyOp(op, a, b) {
   if (op === "==") return equal(a, b);
   if (op === "!=") return !equal(a, b);
   if (op === "in") return inOp(a, b);
-  throw new PlanesError("unknown-operator", op);
+  throw new PlanesError(
+    "unknown-operator",
+    `no operator is spelled '${op}'`,
+    "the parser builds only the operators the language defines, so reaching this is a defect " +
+      "in the interpreter rather than in the program — worth reporting with the source",
+  );
 }
 
 function arith(op, a, b) {
@@ -903,7 +1051,12 @@ function arith(op, a, b) {
     }
     throw e;
   }
-  throw new PlanesError("unknown-operator", op);
+  throw new PlanesError(
+    "unknown-operator",
+    `'${op}' is not an arithmetic operator`,
+    "arithmetic is + - * /; reaching this means apply_op routed an operator here that it does " +
+      "not itself arithmetic on, which is a defect in the interpreter rather than in the program",
+  );
 }
 
 function compareOp(op, a, b) {
@@ -940,13 +1093,30 @@ function strCmp(a, b) {
   return as.length - bs.length;
 }
 
-// `a in b` — the lenient membership Python's `in` performs (never raising on a
-// type mismatch, unlike guarded ==).
+// `a in b` — over a list, a record's field names, or text. Guarded on both
+// operands (C2, constraint 6): `b` had no guard, so `1 in 5` answered
+// `unknown-operator`, which named the wrong thing — `in` is an operator the
+// language defines; what was wrong was the value on the right. And text had no
+// guard on `a`, so `1 in "a1b"` coerced the 1 to "1" and answered true here
+// while Python raised a TypeError.
 function inOp(a, b) {
-  if (typeof b === "string") return b.includes(a);
+  if (typeof b === "string") {
+    if (typeof a !== "string") {
+      throw new PlanesError(
+        "not-text",
+        `cannot look for ${fmt(a)} in text ${fmt(b)}`,
+        "`in` over text looks for text — wrap the left side with text of",
+      );
+    }
+    return b.includes(a);
+  }
   if (Array.isArray(b)) return b.some((x) => looseEqual(a, x));
   if (isRecord(b)) return b.has(a);
-  throw new PlanesError("unknown-operator", "in");
+  throw new PlanesError(
+    "not-a-collection",
+    `cannot look inside ${fmt(b)}`,
+    "`in` looks inside a list, a record's field names, or text",
+  );
 }
 
 function looseEqual(a, b) {

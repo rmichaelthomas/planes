@@ -55,26 +55,42 @@ class PlanesSyntaxError(Exception):
     imports lexer.py, so the reverse import would cycle. parser.py picks
     this up via `from lexer import *` and keeps raising it exactly as
     before; PlanesAmbiguity still subclasses it there.
+
+    `no_fix` (C2) is the same annotation `PlanesError` carries: a reason, in
+    words, why this raise site names no fix clause. One site uses it — the
+    parser's generic token gate, which knows what was due and cannot know
+    what the author meant instead. Never rendered, so a message stays
+    byte-identical to the JavaScript implementation's.
     """
-    pass
+
+    def __init__(self, message, no_fix=None):
+        super().__init__(message)
+        self.no_fix = no_fix
 
 
 def _load_vocabulary():
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "grammar", "vocabulary.json")
-    fix = "reinstall planes, or regenerate with python3 grammar_gen.py"
+    # The fix clause is written out at each raise rather than hoisted into a
+    # local (C2, A.1): grammar_gen.py reads the catalogue off these call sites,
+    # and a clause held in a variable is one it records as absent — which is
+    # how four of these sites read as naming no fix while naming one.
     try:
         with open(path, encoding="utf-8") as f:
             text = f.read()
     except OSError as e:
         raise GrammarDataError(
             "grammar-data-missing",
-            f"{path} could not be read ({e.strerror or e})", fix) from e
+            f"{path} could not be read ({e.strerror or e})",
+            "reinstall planes, or regenerate with "
+            "python3 grammar_gen.py") from e
     try:
         doc = json.loads(text)
     except json.JSONDecodeError as e:
         raise GrammarDataError(
-            "grammar-data-missing", f"{path} is not valid JSON ({e})", fix) from e
+            "grammar-data-missing", f"{path} is not valid JSON ({e})",
+            "reinstall planes, or regenerate with "
+            "python3 grammar_gen.py") from e
     version = doc.get("format")
     if version != GRAMMAR_FORMAT_VERSION:
         raise GrammarDataError(
@@ -85,7 +101,8 @@ def _load_vocabulary():
     if missing:
         raise GrammarDataError(
             "grammar-data-missing",
-            f"{path} is missing: {', '.join(missing)}", fix)
+            f"{path} is missing: {', '.join(missing)}",
+            "reinstall planes, or regenerate with python3 grammar_gen.py")
     return doc
 
 
@@ -146,8 +163,10 @@ def _resolve_string_escapes(raw, lineno):
         nxt = e.args[0]
         raise PlanesSyntaxError(
             f"line {lineno}: unrecognized escape '\\{nxt}' in a "
-            f"string literal -- the four recognized escapes are "
-            f'\\" \\\\ \\n \\t') from e
+            f"string literal\n"
+            f"  the four recognized escapes are "
+            f'\\" \\\\ \\n \\t -- for any other character, write the '
+            f"character itself") from e
 
 
 def tokenize(src):
@@ -195,14 +214,16 @@ def tokenize(src):
                         raise PlanesSyntaxError(
                             f"line {lineno}: unterminated string literal -- a "
                             f"backslash right before the closing quote escapes "
-                            f'that quote (\\") instead of ending the string; '
-                            f"the four recognized escapes are "
+                            f'that quote (\\") instead of ending the string\n'
+                            f"  the four recognized escapes are "
                             f'\\" \\\\ \\n \\t -- write \\\\ for a literal '
                             f"trailing backslash")
                     raise PlanesSyntaxError(
                         f"line {lineno}: unterminated string literal -- no "
-                        f"closing quote found before the end of the line "
-                        f"(a Planes string cannot span multiple lines)")
+                        f"closing quote found before the end of the line\n"
+                        f"  add the closing quote; a Planes string cannot span "
+                        f"multiple lines, so a long one has to be joined with "
+                        f"+ across lines")
                 pos += 1
                 continue
             kind, val = m.lastgroup, m.group()
