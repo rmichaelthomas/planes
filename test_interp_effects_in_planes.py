@@ -15,11 +15,21 @@ the same canonical form the build-1/build-2 harnesses use.
 
 Grows phase by phase: Phase 1 `show`; Phase 2 adds `write`; Phase 3 adds `ask`,
 `read`, `clock`, `random`, `env`; Phase 4 adds `foreign` and the corpus.
+
+C1 gave this file the `__main__` runner every other suite here has. It had none,
+and `scripts/ci.sh` runs each suite as `python3 test_*.py` — so importing the
+module was the whole of what the gate did with it and none of these tests ran.
+That is also why the one `pytest.mark.parametrize` is now a plain loop: nothing
+else in this repo needs pytest, and a suite the gate cannot run is not a gate.
 """
-import pytest
+import glob
+import json
+import os
+import sys
+import tempfile
 
 from host import TestHost as _TestHost  # (aliased: not a test class)
-from interp import Deriv, Interpreter, Number, Traced
+from interp import Deriv, Interpreter, Number, PlanesError, Traced
 
 INTERP_PLANES = "grammar/interp.planes"
 
@@ -42,8 +52,13 @@ def _inert_io(*, clock=0, randoms=None, files=None, responses=None,
 
     The input tables are association lists of the shape `interp.planes` scans:
     files/responses/envs/foreigns as { key, ... } pairs, randoms as a bare list
-    drawn head-first. `value` fields are already-wrapped tagged interp.planes
-    values (a pure interpreted value never needs the host to build it).
+    drawn head-first.
+
+    A file and a response both carry `body` — RAW TEXT, what a host's read or
+    ask actually hands back, which `interp.planes` then parses itself (C1). An
+    env or foreign carries `value`, an already-wrapped tagged interp.planes
+    value: those return a host value rather than a serialised one, so there is
+    nothing to parse.
     """
     return {
         "mode": "inert",
@@ -162,14 +177,12 @@ def test_show_effect_threads_through_nested_expression_positions():
                            ("show", "then")]
 
 
-@pytest.mark.parametrize("src", [
-    'show "a"\n',
-    'show text of 42\nshow "b"\n',
-    'to f of n: show text of n\nx = f of 7\ny = f of 8\n',
-    'for each w in ["p", "q"]:\n  show w\n',
-])
-def test_show_log_agrees_with_interp_py(src):
-    assert_show_log_agrees(src)
+def test_show_log_agrees_with_interp_py():
+    for src in ('show "a"\n',
+                'show text of 42\nshow "b"\n',
+                'to f of n: show text of n\nx = f of 7\ny = f of 8\n',
+                'for each w in ["p", "q"]:\n  show w\n'):
+        assert_show_log_agrees(src)
 
 
 def test_number_import_is_available():
@@ -258,6 +271,101 @@ def test_write_real_mode_bytes_match_interp_py():
     assert ho.files.get("out.json") is not None
 
 
+def test_write_then_read_in_one_inert_run_sees_what_was_written():
+    # C1: the inert files table is read-write within a run. The reference
+    # already does this — TestHost.write fills its own files dict and
+    # TestHost.read serves it back — so the oracle needs no special setup.
+    src = ('use file\n'
+           'write { query: "2 + 2", result: 4 } to "cache/answer.json"\n'
+           'back = read "cache/answer.json"\n'
+           'show back\n')
+    state = assert_effect_log_agrees(src)
+    assert _log(state)[:2] == [("write", "cache/answer.json"),
+                               ("read", "cache/answer.json")]
+    shown = [t for (k, t) in _log(state) if k == "show"]
+    # the bytes read back are json.planes's, and they are to_json's
+    assert shown == ['{\n  "query": "2 + 2",\n  "result": 4\n}']
+    _theirs, out = py_effects(src)
+    assert shown == out
+
+
+def test_the_bytes_the_inert_table_holds_are_the_bytes_the_reference_holds():
+    src = ('use file\n'
+           'write [1, 2, 3] to "a.json"\n'
+           'write "text" to "b.json"\n'
+           'write { n: 5, xs: [1, 2] } to "c.json"\n')
+    state = run_inert(src)
+    assert state["status"] == "normal", state
+    mine = {f["path"]: f["body"] for f in _io_of(state)["files"]}
+    host = _TestHost(files={})
+    Interpreter(host=host).run(src)
+    assert mine == host.files, f"\nplanes: {mine}\nreference: {host.files}"
+
+
+def test_a_rewrite_of_the_same_path_is_what_a_later_read_sees():
+    src = ('use file\n'
+           'write "first" to "p.txt"\n'
+           'write "second" to "p.txt"\n'
+           'show read "p.txt"\n')
+    state = assert_effect_log_agrees(src)
+    assert [t for (k, t) in _log(state) if k == "show"] == ['"second"']
+
+
+def test_an_inert_write_reaches_no_real_filesystem():
+    """Constraint: inert mode reaches nothing real. The destination is an
+    absolute path in a fresh temp directory, so the check is not confounded by
+    anything already on disk."""
+    d = tempfile.mkdtemp(prefix="planes-inert-")
+    path = os.path.join(d, "must-not-exist.json")
+    src = (f'use file\nwrite {{ a: 1 }} to "{path}"\n'
+           f'show read "{path}"\n')
+    state = run_inert(src)
+    assert state["status"] == "normal", state
+    assert [t for (k, t) in _log(state) if k == "show"] == ['{\n  "a": 1\n}']
+    assert os.listdir(d) == [], os.listdir(d)
+
+
+def test_the_write_then_read_corpus_program_runs_self_hosted_and_agrees():
+    """corpus/cache-store.planes — the program the report named as unreachable
+    for exactly this reason. It now runs on interp.planes and produces the
+    reference's output, byte for byte."""
+    src = open("corpus/cache-store.planes", encoding="utf-8").read()
+    state = run_inert(src)
+    assert state["status"] == "normal", state
+    mine = _io_of(state)["output"]
+    host = _TestHost()
+    ip = Interpreter(host=host)
+    ip.run(src)
+    assert mine == ip.output, f"\nplanes: {mine}\nreference: {ip.output}"
+
+
+def test_write_real_mode_of_a_record_carries_the_json_one_layer_encoded():
+    """The residual real-mode limit, pinned so it cannot drift.
+
+    interp.planes performs a real write by executing a Planes `write`, and the
+    OUTER host JSON-encodes whatever it is handed. A record cannot be handed
+    over AS a record — Planes records take static field names — so it goes over
+    serialised, and arrives one layer deep. What C1 changed is what that layer
+    contains: the reference's exact bytes, where it used to be canonical Planes
+    text. Closing the last layer needs a raw-write host method (a ninth,
+    proposed in REPORT_HOST_BOUNDARY.md and not built).
+    """
+    src = 'use file\nwrite { a: 1, b: "x" } to "out.json"\n'
+    ho = _TestHost(files={})
+    ir = Interpreter(host=ho)
+    ir.run_file(INTERP_PLANES)
+    ir.call("execute-program", [_t(src)], ir.env)
+    hp = _TestHost(files={})
+    ip = Interpreter(host=hp)
+    ip.run(src)
+    theirs, mine = hp.files["out.json"], ho.files["out.json"]
+    # the payload IS the reference's bytes, exactly ...
+    assert json.loads(mine) == theirs
+    # ... one JSON layer too deep, which is the whole of what remains
+    assert mine != theirs
+    assert json.loads(theirs) == {"a": 1, "b": "x"}
+
+
 def test_write_dest_from_a_variable_and_a_show_of_a_read_shape():
     # write's destination resolved from a binding, threaded through the log.
     src = ('use file\n'
@@ -306,16 +414,70 @@ def test_ask_inert_returns_supplied_response_and_logs_agree():
     # log agreement (interp.py logs the same ask regardless of the body)
     state = assert_effect_log_agrees(
         src,
-        responses=[{"url": "https://api.example.com/x", "value": _txt("ok")}],
+        responses=[{"url": "https://api.example.com/x", "body": '"ok"'}],
         py_responses={"https://api.example.com/x": '"ok"'})
     assert _log(state) == [("ask", "https://api.example.com/x")]
     r = next(b["value"] for b in state["env"] if b["name"] == "r")
     assert _bare(r) == _txt("ok")
 
 
+def test_ask_inert_parses_a_json_response_like_interp_py():
+    # C1: the inert response table carries the RAW body, and interp.planes
+    # parses it with grammar/json.planes — no host parse_json on this path. The
+    # oracle is interp.py given the same raw body, so the two sides now share
+    # one stub instead of one holding a pre-parsed value.
+    body = '{"n": 7, "who": "ada", "tags": ["a", "b"], "ok": true, "gone": null}'
+    src = ('use http\n'
+           'r = ask "https://api/x"\n'
+           'show r.who\n'
+           'show text of r.n\n'
+           'show text of (count of r.tags)\n'
+           'show text of r.ok\n')
+    state = assert_effect_log_agrees(
+        src,
+        responses=[{"url": "https://api/x", "body": body}],
+        py_responses={"https://api/x": body})
+    shown = [t for (k, t) in _log(state) if k == "show"]
+    assert shown == ["ada", "7", "2", "true"], shown
+    r = next(b["value"] for b in state["env"] if b["name"] == "r")
+    assert r["kind"] == "record"
+    assert [f["key"] for f in r["fields"]] == ["n", "who", "tags", "ok", "gone"]
+
+
+def test_ask_inert_parses_an_exact_number_out_of_a_response():
+    # A JSON number arrives as an exact number, not a float — the same
+    # guarantee from_foreign gives interp.py, reached without a host.
+    body = '{"rate": 0.1, "count": 3}'
+    src = ('use http\n'
+           'r = ask "https://api/x"\n'
+           'show text of (r.rate + r.rate + r.rate)\n')
+    state = assert_effect_log_agrees(
+        src,
+        responses=[{"url": "https://api/x", "body": body}],
+        py_responses={"https://api/x": body})
+    # three tenths exactly, not 0.30000000000000004
+    assert [t for (k, t) in _log(state) if k == "show"] == ["0.3"]
+
+
+def test_ask_inert_falls_back_to_the_text_when_the_body_is_not_json():
+    # interp.py's `try: from_foreign(parse_json(body)) except: body`, reproduced
+    # with json.planes's refusal standing in for the raise.
+    body = "not json at all"
+    src = ('use http\n'
+           'r = ask "https://api/x"\n'
+           'show r\n')
+    state = assert_effect_log_agrees(
+        src,
+        responses=[{"url": "https://api/x", "body": body}],
+        py_responses={"https://api/x": body})
+    assert [t for (k, t) in _log(state) if k == "show"] == [body]
+    r = next(b["value"] for b in state["env"] if b["name"] == "r")
+    assert _bare(r) == _txt(body)
+
+
 def test_ask_without_use_http_fails_module_check():
     state = run_inert('r = ask "https://x"\n',
-                      responses=[{"url": "https://x", "value": _txt("y")}])
+                      responses=[{"url": "https://x", "body": '"y"'}])
     assert state["status"] == "fail"
     assert state["error"]["tag"] == "module-not-used"
 
@@ -392,7 +554,7 @@ def test_all_seven_effect_kinds_in_one_inert_program_agree():
     state = assert_effect_log_agrees(
         src,
         files=[{"path": "in.txt", "body": "data"}],
-        responses=[{"url": "https://api/x", "value": _txt("ok")}],
+        responses=[{"url": "https://api/x", "body": '"ok"'}],
         py_responses={"https://api/x": '"ok"'},
         clock=1234, randoms=[9],
         envs=[{"name": "home", "value": _txt("/w")}])
@@ -421,6 +583,72 @@ def test_foreign_pure_result_supplied_matches_the_real_builtin():
     _theirs, out = py_effects(src)
     shown = [t for (k, t) in _log(state) if k == "show"]
     assert shown == out
+
+
+def test_a_foreign_with_no_supplied_result_fails_naming_the_stub():
+    # C1: it used to return `nothing` and let the program carry on — a wrong
+    # value produced silently, which is the failure mode this language exists to
+    # prevent. An under-specified run now says so at the under-specified site.
+    src = ('foreign srt of xs from "builtins.sorted" doing nothing\n'
+           'ordered = srt of [3, 1, 2]\n'
+           'show text of (count of ordered)\n')
+    state = run_inert(src)
+    assert state["status"] == "fail", state
+    err = state["error"]
+    assert err["tag"] == "no-foreign-result", err
+    # names which foreign lacked a result, its target, and how to supply one
+    assert "'srt'" in err["detail"] and "builtins.sorted" in err["detail"]
+    assert "supply one as" in err["detail"], err["detail"]
+    assert '{ name: "srt", value: <the result> }' in err["detail"], err["detail"]
+    assert "foreigns table" in err["detail"], err["detail"]
+    # and nothing was shown: the failure lands before the downstream expression
+    assert [t for (k, t) in _log(state) if k == "show"] == []
+
+
+def test_an_env_foreign_with_nothing_supplied_names_its_own_table_too():
+    src = ('foreign home from "os.getcwd" doing env\n'
+           'h = home\n')
+    state = run_inert(src)
+    assert state["status"] == "fail"
+    assert state["error"]["tag"] == "no-foreign-result"
+    assert "envs table" in state["error"]["detail"], state["error"]["detail"]
+
+
+def test_the_pure_foreign_corpus_program_runs_with_a_supplied_result():
+    """corpus/fastest-responses.planes — the program the report named as
+    unreachable because a pure foreign returned `nothing`. Given the result its
+    foreign returns, it runs and agrees with the reference. The stub is computed
+    through the host's own builtins.sorted, so it cannot drift from what the
+    reference actually returns."""
+    from scripts.run_corpus_selfhosted import INERT_CONFIG
+    path = "corpus/fastest-responses.planes"
+    src = open(path, encoding="utf-8").read()
+    state = run_inert(src, **INERT_CONFIG[path])
+    assert state["status"] == "normal", state
+    host = _TestHost()
+    ip = Interpreter(host=host)
+    ip.run(src)
+    assert _io_of(state)["output"] == ip.output
+
+
+def test_every_corpus_program_runs_self_hosted_and_agrees_with_the_reference():
+    """C1 §6: the corpus runnable count through the self-hosted stack. The
+    measurement lives in scripts/run_corpus_selfhosted.py so it can be read as a
+    report; this asserts it. Baseline before C1, same instrument: 48 of 50 with
+    the default configuration (cache-store could not read back its own write,
+    fastest-responses got `nothing` from its foreign), 49 with the foreign stub
+    supplied."""
+    from scripts.run_corpus_selfhosted import classify
+    files = sorted(glob.glob("corpus/**/*.planes", recursive=True))
+    bad = []
+    for f in files:
+        status, detail = classify(f)
+        if status != "RUNNABLE":
+            bad.append(f"{f}: {status} — {detail}")
+    print(f"    [self-hosted corpus: {len(files) - len(bad)}/{len(files)} "
+          f"runnable, inert, agreeing with interp.py under a TestHost]")
+    assert not bad, "not runnable self-hosted:\n" + "\n".join(bad)
+    assert len(files) == 50, len(files)
 
 
 def test_foreign_unloadable_target_refused_like_interp_py():
@@ -458,6 +686,82 @@ def test_foreign_ask_declared_effect_logs_and_returns_supplied():
     assert _bare(sent) == _txt("done")
 
 
+# ============================ C1: the real-mode foreign-resolution limit (A.4)
+#
+# `foreign-needs-host` was investigated rather than assumed fixable. These
+# assertions are the argument, machine-checked, so REPORT_HOST_BOUNDARY.md's
+# §A.4 conclusion rests on measurement: real-mode resolution of an ARBITRARY
+# foreign needs two things the language deliberately does not have, and the
+# second holds even if the first were granted.
+
+def test_a_foreign_target_must_be_a_literal_so_dynamic_resolution_is_ungrammatical():
+    """The first half. `foreign f of xs from target` is a SYNTAX error, not an
+    unimplemented feature: the grammar requires a string literal. That is what
+    keeps the static analyser able to name every host function a program can
+    reach — the property `origins_of` and the effect surface both rest on."""
+    from parser import PlanesSyntaxError, parse
+    try:
+        parse('target = "builtins.sorted"\n'
+              'foreign f of xs from target doing nothing\n')
+        raise AssertionError("a name as a foreign target should not parse")
+    except PlanesSyntaxError as e:
+        assert "expected string" in str(e), str(e)
+    # the literal form parses, and is what interp.planes itself writes
+    parse('foreign f of xs from "builtins.sorted" doing nothing\n')
+
+
+def test_a_records_field_names_cannot_be_enumerated():
+    """The second half, and the decisive one. Even given the target, an
+    arbitrary foreign's RESULT cannot be put into interp.planes's tagged model:
+    a record's field names are unreachable. `count of` a record gives the field
+    count, but nothing yields the names — looping over a record is
+    not-a-collection and joining it is refused. Reading a field needs a name
+    known when the source was written."""
+    itp = Interpreter(host=_TestHost())
+    assert itp.run("show text of (count of { a: 1, b: 2 })\n") == ["2"]
+    for src, tag in (("for each f in { a: 1 }:\n  show text of f\n",
+                      "not-a-collection"),
+                     ("show join of { a: 1 }\n", "cannot-join")):
+        try:
+            Interpreter(host=_TestHost()).run(src)
+            raise AssertionError(f"{src!r} should fail {tag}")
+        except PlanesError as e:
+            assert e.tag == tag, (src, e.tag)
+
+
+def test_a_trial_probe_separates_a_number_but_not_a_list_from_text():
+    """Why a type probe by trial does not rescue it either: `count of` is the
+    only discriminator available, and it separates a number from the rest while
+    leaving list, text, and record indistinguishable."""
+    itp = Interpreter(host=_TestHost())
+    assert itp.run('show text of (count of "ab")\n') == ["2"]
+    assert Interpreter(host=_TestHost()).run("show text of (count of [1, 2])\n") == ["2"]
+    assert Interpreter(host=_TestHost()).run("show text of (count of { a: 1, b: 2 })\n") == ["2"]
+    # ... and on a number it does not produce a Planes error at all on this
+    # implementation, which is a separate finding reported in
+    # REPORT_HOST_BOUNDARY.md (js/interp.mjs raises not-a-collection here).
+    try:
+        Interpreter(host=_TestHost()).run("show text of (count of 5)\n")
+        raise AssertionError("count of a number should not succeed")
+    except PlanesError:
+        pass
+    except TypeError:
+        pass
+
+
+def test_real_mode_still_refuses_an_arbitrary_foreign_and_names_why():
+    """The refusal is the correct behaviour, not a gap left open: interp.planes
+    declines to guess a value it cannot construct. Both sides refuse
+    demo/fdiff/v1.planes, whose target no host can load; foreign.planes names
+    targets interp.py's host CAN load, and interp.planes refuses it."""
+    src = open("foreign.planes", encoding="utf-8").read()
+    state, _out = run_real(src)
+    assert state["status"] == "fail"
+    assert state["error"]["tag"] == "foreign-needs-host"
+    detail = state["error"]["detail"]
+    assert "needs a host that can load it" in detail, detail
+
+
 # =========================================== Phase 5: the effect surface (A.3)
 
 def test_effect_surface_of_interp_planes_is_all_seven_kinds():
@@ -480,3 +784,21 @@ def test_effect_surface_analyser_stays_total_and_origins_do_not_crash():
     for e in surface.declared:
         origins = surface.origins_of(e)
         assert isinstance(origins, list)
+
+
+if __name__ == "__main__":
+    fails = []
+    tests = [(k, f) for k, f in sorted(globals().items())
+             if k.startswith("test_")]
+    for name, fn in tests:
+        try:
+            fn()
+            print(f"  ok    {name}")
+        except AssertionError as e:
+            print(f"  FAIL  {name}: {e}")
+            fails.append(name)
+        except Exception as e:  # noqa: BLE001
+            print(f"  ERROR {name}: {type(e).__name__}: {e}")
+            fails.append(name)
+    print(f"\n{len(tests) - len(fails)}/{len(tests)} passing")
+    sys.exit(1 if fails else 0)

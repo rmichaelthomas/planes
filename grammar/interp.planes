@@ -2,6 +2,14 @@ note: from "interp.py, written in Planes -- Route B stage three: the interpreter
 
 use parser
 
+# JSON at the boundary, in the language (C1). host.py supplies parse_json and
+# to_json and interp.py calls them at exactly two sites -- an `ask`'s response
+# and a `write`'s payload -- which is why JSON was called the one irreducible
+# host capability. grammar/json.planes reads and writes it in Planes instead,
+# so those two sites no longer reach past the language for their data. It is a
+# program, not a capability: the host surface is unchanged at eight methods.
+use json
+
 # The interpreter performs file and network effects in "real" mode (build 3):
 # it executes a Planes `write` / `read` / `ask` directly and the outer host
 # carries it out, so interp.planes must itself declare the modules those
@@ -1505,10 +1513,21 @@ to exec-why of stmt, state, globals:
 # requires the file module (`use file`), serialises the value as JSON, hands it
 # to the host, and logs ("write", dest, len); the expression's value is nothing.
 # Reproduced: the module check names the same fix, the effect logs ("write",
-# dest), and dispatch on the mode tag is flat. In inert mode nothing is written;
-# in real mode the Planes `write` runs, and the outer host serialises the
-# unwrapped raw value exactly as interp.py's to_json does -- so a real write
-# from interp.planes and one from interp.py produce the same bytes.
+# dest), and dispatch on the mode tag is flat. In real mode the Planes `write`
+# runs, and the outer host serialises the unwrapped raw value exactly as
+# interp.py's to_json does -- so a real write from interp.planes and one from
+# interp.py produce the same bytes.
+#
+# In inert mode nothing reaches a filesystem, and the write is still not lost:
+# it UPDATES the files table, so a later `read` in the same run sees what was
+# written (C1). That is what the reference already does -- TestHost.write puts
+# the payload in its own files dict and TestHost.read serves it back -- and
+# until C1 the table here was input-only, which is the one reason
+# corpus/cache-store.planes could not run self-hosted. The bytes stored are
+# json.planes's, identical to to_json's, so the round trip agrees byte for byte.
+# The table stays per-run and starts from supplied data: hermetic either way.
+# A rewrite of the same path PREPENDS, because lookup-file takes the first
+# match -- appending would have a later read serve the older body.
 to eval-writeto-node of node, env, globals:
   v = eval-node of node.value, env, globals
   if not (v.status == "normal"):
@@ -1531,16 +1550,25 @@ to do-write of value, dest, env:
   # anything downstream names the file it went to.
   written = derived-at of (make-nothing), "effect", ("write to " + dest), [value.deriv], ("file:" + dest)
   if io.mode == "inert":
-    give normal-of of written, env2
+    payload = (json-text-of of value) or fail as e:
+      give fail-of of e, env2
+    stored = logged with files: ([{ path: dest, body: payload }] + logged.files)
+    give normal-of of written, (with-io of env, stored)
   write (unwrap-value of value) to dest
   give normal-of of written, env2
 
 # A tagged interp.planes value back to a raw Planes value, so the outer host's
 # `write`/JSON path sees `5`, not `{ kind: "number", value: 5 }`. Scalars and
-# lists unwrap cleanly; a record cannot be rebuilt with runtime field names in
-# Planes (records take static field names), so a record value falls back to its
-# canonical text -- a real-mode limitation named in the report, never reached by
-# the inert agreement path, which logs the destination and serialises nothing.
+# lists unwrap cleanly. A record cannot be rebuilt with runtime field names in
+# Planes (records take static field names), so it goes out SERIALISED -- its
+# JSON, written by json.planes -- where it used to go out as canonical Planes
+# text. That is what remains of the real-mode limit and it is now precisely
+# stated: the bytes are right and the encoding is one layer too deep, because
+# the outer host's `write` JSON-encodes whatever it is handed and no effect in
+# the language writes text raw. Reaching the reference's exact bytes here needs
+# either a raw-write host method (a ninth, proposed in REPORT_HOST_BOUNDARY.md
+# and not built) or a record with runtime field names (declined). Inert mode
+# does not go through here at all: it owns its bytes and they are identical.
 to unwrap-value of v:
   if v.kind == "number":
     give v.value
@@ -1555,7 +1583,7 @@ to unwrap-value of v:
     for each item in v.items:
       raw = raw plus (unwrap-value of item)
     give raw
-  give canonical-of-value of v
+  give json-text-of of v
 
 # ================================================================ input effects (Phase 3)
 #
@@ -1566,14 +1594,26 @@ to unwrap-value of v:
 # a url, a file's text for a path -- so agreement is checkable without a network
 # or a filesystem. In "real" mode the outer host performs the call.
 #
-# ask returns PARSED JSON in interp.py (host.parse_json then from_foreign). That
-# is the one place the host boundary is irreducible: Planes has no JSON parser
-# and no runtime type probe, so interp.planes cannot re-wrap a host-parsed value
-# into its tagged model on its own. In "real" mode it returns the result's text
-# form (the fetch happens, but the shape is flattened); in "inert" mode the
-# supplied response is already a tagged value, which is why inert is the tested
-# path. The answer to "can Planes parse JSON without a host" is no, and it shows
-# up exactly here (A.3, Phase 3).
+# ask returns PARSED JSON in interp.py (host.parse_json then from_foreign),
+# falling back to the response's raw text when the body is not JSON. This was
+# called the one irreducible host capability, on the grounds that Planes has no
+# JSON parser and no runtime type probe. C1 settles both halves:
+#
+#   * the parser is grammar/json.planes, so in "inert" mode the supplied
+#     response is RAW TEXT -- what a host's ask actually returns -- and
+#     interp.planes parses it itself, into its own tagged model, falling back to
+#     the text on a refusal exactly as interp.py falls back when json.loads
+#     raises. No host parse_json is reached on this path.
+#   * the "no runtime type probe" half was never a separate gap. A probe is
+#     needed only to re-wrap a value SOMEONE ELSE parsed; a parser that reads
+#     the text itself learns each value's type from the syntax. The probe is not
+#     worked around here, it is not needed.
+#
+# "real" mode is a different boundary and still flattens: interp.planes performs
+# the fetch by executing a Planes `ask`, which the OUTER host parses before
+# interp.planes ever sees it, so the raw body is gone and the parsed value
+# carries no tag this model can read. That is a delegation limit, not a JSON
+# one -- it would need the raw response, which no effect in the language returns.
 
 to do-ask of arg, env:
   io = io-of of env
@@ -1588,8 +1628,18 @@ to do-ask of arg, env:
     r = lookup-response of io.responses, url
     if not r.found:
       give fail-of of (error-of of "ask-failed", ("no stubbed response for " + url)), env2
-    give normal-of of (derived-at of r.value, "effect", label, [arg.deriv], origin), env2
+    give normal-of of (derived-at of (parsed-response-of of r.value), "effect", label, [arg.deriv], origin), env2
   give normal-of of (derived-at of (make-text of (text of (ask of url))), "effect", label, [arg.deriv], origin), env2
+
+# A response body, read as JSON when it is JSON and kept as text when it is not
+# -- interp.py's `try: from_foreign(parse_json(body)) except: body`, with
+# json.planes's refusal standing in for the raise. The tagged value json.planes
+# builds is this model's own, so nothing has to be re-wrapped.
+to parsed-response-of of body:
+  parsed = json-parse of body
+  if parsed.ok:
+    give parsed.value
+  give make-text of body
 
 to do-read of arg, env:
   io = io-of of env
@@ -1609,10 +1659,13 @@ to do-read of arg, env:
 
 # The inert input tables are association lists read by static field access -- no
 # dynamic record lookup (A.2). Each is a distinct shape with its own key field,
-# so each lookup names its field literally: responses keyed by `url`, files by
-# `path` (file text under `body`), envs and foreigns by `name`. `value` on a
-# response / env / foreign is an already-wrapped tagged value; `body` on a file
-# is the raw text read returns.
+# so each lookup names its field literally: responses keyed by `url` and files
+# by `path`, both with their content under `body`; envs and foreigns by `name`.
+# `body` is RAW TEXT, exactly what a host's read or ask hands back -- a response
+# was a pre-wrapped tagged value until C1, which was the shape the missing JSON
+# parser forced. `value` on an env or foreign is still an already-wrapped tagged
+# value: those return a host value, not a serialised one, so there is nothing to
+# parse.
 
 to lookup-response of responses, url:
   result = nothing
@@ -1620,7 +1673,7 @@ to lookup-response of responses, url:
   for each r in responses:
     if not found:
       if r.url == url:
-        result = r.value
+        result = r.body
         found = true
   give { found: found, value: result }
 
@@ -1659,10 +1712,13 @@ to lookup-by-name of pairs, name:
 # sequence, env reads the supplied table, and a pure foreign (`doing nothing`,
 # e.g. builtins.sorted) returns its supplied result -- because interp.planes has
 # no dynamic host.resolve, an arbitrary host function cannot be run, and the
-# supplied result is what stands in. In "real" mode the three ambient effects go
-# through interp.planes's own host-clock/host-random/host-getcwd foreigns
-# (resolved by the outer host); an arbitrary foreign's real resolution is the
-# one thing that needs a second host, and it fails naming that (Phase 4, A.7).
+# supplied result is what stands in. A foreign with NO supplied result fails
+# naming the stub (C1); it used to return `nothing`, which is a wrong value
+# produced silently. In "real" mode the three ambient effects go through
+# interp.planes's own host-clock/host-random/host-getcwd foreigns (resolved by
+# the outer host); an arbitrary foreign's real resolution is the one thing that
+# needs a host method the language cannot reach, and it fails naming that
+# (Phase 4, A.7 -- the argument is in REPORT_HOST_BOUNDARY.md).
 
 to make-foreign of decl:
   give { kind: "foreign", name: decl.name, params: decl.params, target: decl.target, effects: decl.effects, declared: decl.declared, deriv: nothing }
@@ -1740,17 +1796,31 @@ to foreign-result-inert of decl, param-bindings, env:
     r = lookup-by-name of io.envs, decl.name
     if r.found:
       give normal-of of r.value, env
-    give foreign-supplied-or-nothing of decl, io, env
-  give foreign-supplied-or-nothing of decl, io, env
+    give foreign-supplied-or-fail of decl, io, env
+  give foreign-supplied-or-fail of decl, io, env
 
 # A pure foreign (`doing nothing`, e.g. builtins.sorted) returns its supplied
-# result, keyed by the foreign's name. Absent a supplied result, nothing --
-# there is no host to compute it in inert mode.
-to foreign-supplied-or-nothing of decl, io, env:
+# result, keyed by the foreign's name. Absent a supplied result it FAILS, naming
+# the stub that is missing (C1). It used to return `nothing`, which is the one
+# thing this language exists to prevent: a wrong value produced silently, with
+# the program carrying on to do arithmetic on it and failing somewhere else
+# entirely -- corpus/fastest-responses.planes failed `not-a-collection` three
+# expressions downstream of the real problem. An under-specified test should say
+# so, at the site that is under-specified.
+to foreign-supplied-or-fail of decl, io, env:
   r = lookup-by-name of io.foreigns, decl.name
   if r.found:
     give normal-of of r.value, env
-  give normal-of of (make-nothing), env
+  give fail-of of (error-of of "no-foreign-result", (missing-foreign-result-message of decl)), env
+
+# The message names which foreign lacked a result and how to supply one -- and
+# for a foreign declaring `env`, that its own table is the more specific place.
+to missing-foreign-result-message of decl:
+  opening = "inert mode has no result supplied for foreign '" + decl.name + "' (" + decl.target + ")"
+  fix = " -- supply one as { name: \"" + decl.name + "\", value: <the result> } in the run's foreigns table"
+  if has-effect-kind of decl.effects, "env":
+    give opening + fix + ", or in its envs table, or run in real mode where the host reads it"
+  give opening + fix + ", or run in real mode where the host resolves the target"
 
 # The real return value. The three ambient effects call interp.planes's own
 # host foreigns (resolved by the outer host). An arbitrary foreign's resolution

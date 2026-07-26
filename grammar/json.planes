@@ -1,0 +1,539 @@
+note: from "host.py's parse_json / to_json and interp.py's from_foreign, written in Planes -- C1's centrepiece. JSON at the boundary was called the one IRREDUCIBLE host capability, on the grounds that Planes has no parser. That statement predates grammar/parser.planes, which parses a considerably harder grammar than this one. This file tests the claim: a JSON reader and writer built from the same already-proven capabilities the lexer and parser are built from -- code-point comparison, arithmetic, `for each`, records -- and no language addition. It has no `use` of its own, so nothing above it in the module chain is needed to read JSON."
+
+# ================================================================ what this file produces
+#
+# `json-parse of text` gives { ok, detail, value } where `value` is a TAGGED
+# interp.planes value -- the same { kind, value / items / fields, deriv } shape
+# grammar/interp.planes's make-number / make-text / make-list / make-record
+# build. That shape is restated below rather than imported: `use` resolves
+# downward (interp.planes uses this file, not the reverse), and a record value
+# in this model is a list of { key, value } pairs precisely BECAUSE Planes
+# cannot build a record with runtime field names. That is what makes a JSON
+# object expressible here at all: the keys ride as data, so no dynamic record
+# lookup is needed and the static analyser can still see every field access.
+#
+# `json-text-of` is interp.py's to_json: json.dumps(unwrap(v), indent=2) with
+# ensure_ascii. `unwrap` is folded in -- a whole number goes out as an integer
+# and a non-whole one as TEXT, so an exact value is never silently rounded on
+# the way to a file, exactly as the reference does it.
+#
+# Two things this file cannot do, both for the same already-ruled reason, and
+# both named rather than worked around:
+#
+#   * JSON's \r, \b, \f and \uXXXX escapes have no Planes spelling. A Planes
+#     string literal carries four escapes (\" \\ \n \t) and there is no
+#     code-point conversion -- `chr of n` was declined when the string escapes
+#     were settled, on the grounds that a magic conversion builtin reintroduces
+#     the opacity a closed vocabulary exists to avoid (the same ruling
+#     parser.planes cites for parsing a number by hand). So a JSON text
+#     carrying one of those four escapes is REFUSED, with a message naming why,
+#     rather than silently mangled.
+#   * The same absence means a non-ASCII character is written out as ITSELF
+#     rather than as \uXXXX. The result is valid JSON that any reader parses to
+#     the same value; it is not byte-identical to json.dumps(ensure_ascii=True).
+
+# ================================================================ character classes
+#
+# Code-point comparison only, the lexer's idiom. `c < " "` is every C0 control
+# character, which in JSON is exactly the insignificant whitespace (tab,
+# newline, carriage return) -- a control character inside a string is invalid
+# JSON, so treating the class as whitespace outside a string is complete.
+
+to json-is-digit of c:
+  give c >= "0" and c <= "9"
+
+to json-is-space of c:
+  give (c == " ") or (c < " ")
+
+to json-is-punct of c:
+  is-brace = (c == "{") or (c == "}")
+  is-bracket = (c == "[") or (c == "]")
+  give is-brace or is-bracket or (c == ":") or (c == ",")
+
+# One character class covers both numbers and the three bare words (true /
+# false / null): a run of these is an "atom", closed and classified when the
+# run ends. Deciding number-vs-word per character would need lookahead the
+# language does not have; deciding it at the close needs none.
+to json-is-atom-char of c:
+  is-lower = c >= "a" and c <= "z"
+  is-upper = c >= "A" and c <= "Z"
+  is-sign = (c == "-") or (c == "+")
+  give (json-is-digit of c) or is-lower or is-upper or is-sign or (c == ".")
+
+# ================================================================ the tagged value shape
+#
+# interp.planes's six constructors, restated (see the note above on why this
+# file cannot reach them). Every value carries a `deriv` slot left `nothing`:
+# a parsed value's provenance is attached by the caller, at the boundary where
+# it entered the program -- the constructors stay derivation-blind here for the
+# same reason they do there.
+
+to json-number-value of n:
+  give { kind: "number", value: n, deriv: nothing }
+
+to json-text-value of s:
+  give { kind: "text", value: s, deriv: nothing }
+
+to json-bool-value of b:
+  give { kind: "boolean", value: b, deriv: nothing }
+
+to json-nothing-value:
+  give { kind: "nothing", value: nothing, deriv: nothing }
+
+to json-list-value of items:
+  give { kind: "list", items: items, deriv: nothing }
+
+to json-record-value of fields:
+  give { kind: "record", fields: fields, deriv: nothing }
+
+# ================================================================ small helpers
+
+to json-first of xs:
+  result = nothing
+  for each x in (first 1 of xs):
+    result = x
+  give result
+
+to json-no-pending:
+  give { kind: "none", text: "" }
+
+# ok / detail live on every state record in this file, so one refusal helper
+# serves the tokenizer and the value-builder both.
+to json-fail-state of state, detail:
+  give state with ok: false, detail: detail
+
+to json-digit-value of c:
+  result = 0
+  i = 0
+  for each d in "0123456789":
+    if d == c:
+      result = i
+    i = i + 1
+  give result
+
+# ================================================================ numbers, read exactly
+#
+# The reference converts a JSON number in two steps: json.loads produces a
+# Python int (exact) or float (binary), and from_foreign turns that into an
+# exact number -- for a float, via the SHORTEST DECIMAL that round-trips it, so
+# a JSON 0.1 becomes one tenth rather than 0.1000000000000000055.
+#
+# This reads the decimal text directly, which agrees with the reference for
+# every JSON number whose decimal form round-trips a float64 -- that is, up to
+# 17 significant digits, which is every number JSON is ordinarily written with
+# and every number in the corpus. Past that the reference loses digits to the
+# float and this does not: the divergence is one-directional and this side is
+# the exact one, consistent with the language's own reader (Number.parse reads
+# a source `0.1` as one tenth, not as the nearest float, for the same reason).
+#
+# Whole and fractional parts accumulate as exact integers and the fraction
+# becomes frac/10^digits via ordinary `/` -- parser.planes's parse-number-text
+# idiom, extended with the sign and exponent JSON allows and Planes source
+# does not.
+
+# 10^d for a single digit, so the exponent never needs a loop whose bound is a
+# number rather than a collection (Planes iterates collections, not ranges).
+to json-pow10-small of d:
+  if d == 0:
+    give 1
+  if d == 1:
+    give 10
+  if d == 2:
+    give 100
+  if d == 3:
+    give 1000
+  if d == 4:
+    give 10000
+  if d == 5:
+    give 100000
+  if d == 6:
+    give 1000000
+  if d == 7:
+    give 10000000
+  if d == 8:
+    give 100000000
+  give 1000000000
+
+# 10^(the number those digits spell), folded over the digits themselves:
+# reading one more digit takes 10^k to (10^k)^10 * 10^d. The fold is over the
+# exponent's TEXT, so its length bounds the work -- no range loop, and no
+# recursion, so an exponent costs no interpreter depth.
+to json-pow10-of-digits of ds:
+  p = 1
+  for each c in ds:
+    d = json-digit-value of c
+    tenth = p * p * p * p * p * p * p * p * p * p
+    p = tenth * (json-pow10-small of d)
+  give p
+
+to json-number-start:
+  give { ok: true, detail: "", value: nothing, neg: false, phase: "int", whole: 0, frac: 0, divisor: 1, exp-neg: false, exp-digits: "", int-count: 0, frac-count: 0, started: false }
+
+to json-number-step of st, c:
+  if st.phase == "exp":
+    if json-is-digit of c:
+      give st with exp-digits: (st.exp-digits + c)
+    if (c == "-") and (st.exp-digits == ""):
+      give st with exp-neg: true
+    if (c == "+") and (st.exp-digits == ""):
+      give st
+    give json-fail-state of st, ("not a JSON number: '" + c + "' in the exponent")
+  if (c == "-") and (not st.started):
+    give st with neg: true, started: true
+  if c == ".":
+    if st.phase == "int":
+      give st with phase: "frac", started: true
+    give json-fail-state of st, "not a JSON number: a second '.'"
+  if (c == "e") or (c == "E"):
+    give st with phase: "exp"
+  if json-is-digit of c:
+    d = json-digit-value of c
+    if st.phase == "frac":
+      give st with frac: (st.frac * 10 + d), divisor: (st.divisor * 10), frac-count: (st.frac-count + 1), started: true
+    give st with whole: (st.whole * 10 + d), int-count: (st.int-count + 1), started: true
+  give json-fail-state of st, ("not a JSON number: '" + c + "'")
+
+to json-number-finish of st, raw:
+  if not st.ok:
+    give { ok: false, detail: st.detail, value: nothing }
+  if st.int-count == 0:
+    give { ok: false, detail: ("not a JSON value: '" + raw + "'"), value: nothing }
+  if (st.phase == "frac") and (st.frac-count == 0):
+    give { ok: false, detail: ("not a JSON number: '" + raw + "' has no digits after the '.'"), value: nothing }
+  if (st.phase == "exp") and (st.exp-digits == ""):
+    give { ok: false, detail: ("not a JSON number: '" + raw + "' has no digits in the exponent"), value: nothing }
+  magnitude = st.whole + (st.frac / st.divisor)
+  scaled = magnitude
+  if not (st.exp-digits == ""):
+    p = json-pow10-of-digits of st.exp-digits
+    if st.exp-neg:
+      scaled = magnitude / p
+    else:
+      scaled = magnitude * p
+  if st.neg:
+    give { ok: true, detail: "", value: (0 - scaled) }
+  give { ok: true, detail: "", value: scaled }
+
+to json-number-of-text of raw:
+  st = json-number-start
+  for each c in raw:
+    if st.ok:
+      st = json-number-step of st, c
+  give json-number-finish of st, raw
+
+# ================================================================ tokenizing
+#
+# A streaming fold over the source's code points, carrying one `pending` record
+# for whatever token is mid-flight -- lexer.planes's shape, with a smaller
+# vocabulary. No lookahead: a pending atom or string is closed by the character
+# that fails to extend it, and that character is then re-offered to the start
+# state.
+
+to json-emit-token of st, tok:
+  give st with out: (st.out plus tok)
+
+to json-step-string of st, c:
+  if c == "\"":
+    cleared = st with pending: (json-no-pending)
+    give json-emit-token of cleared, { kind: "string", text: st.pending.text, value: 0 }
+  if c == "\\":
+    give st with pending: { kind: "string-escape", text: st.pending.text }
+  give st with pending: { kind: "string", text: (st.pending.text + c) }
+
+# The four JSON escapes with a Planes spelling, plus the solidus (which JSON
+# permits escaped and Planes writes plainly). The other four -- \r, \b, \f and
+# \uXXXX -- are REFUSED by name: see the note at the top of this file. A refusal
+# names the fix, as every error in this language is expected to.
+to json-step-escape of st, c:
+  t = st.pending.text
+  if c == "\"":
+    give st with pending: { kind: "string", text: (t + "\"") }
+  if c == "\\":
+    give st with pending: { kind: "string", text: (t + "\\") }
+  if c == "/":
+    give st with pending: { kind: "string", text: (t + "/") }
+  if c == "n":
+    give st with pending: { kind: "string", text: (t + "\n") }
+  if c == "t":
+    give st with pending: { kind: "string", text: (t + "\t") }
+  give json-fail-state of st, (json-escape-refusal of c)
+
+to json-escape-refusal of c:
+  opening = "JSON escape '\\" + c + "' has no Planes spelling"
+  middle = " -- a Planes string carries four escapes (\\\" \\\\ \\n \\t) and no code-point escape"
+  give opening + middle + "; send the character itself instead of escaping it"
+
+to json-close-atom of st:
+  t = st.pending.text
+  cleared = st with pending: (json-no-pending)
+  if t == "true":
+    give json-emit-token of cleared, { kind: "true", text: t, value: 0 }
+  if t == "false":
+    give json-emit-token of cleared, { kind: "false", text: t, value: 0 }
+  if t == "null":
+    give json-emit-token of cleared, { kind: "null", text: t, value: 0 }
+  n = json-number-of-text of t
+  if not n.ok:
+    give json-fail-state of st, n.detail
+  give json-emit-token of cleared, { kind: "number", text: t, value: n.value }
+
+to json-tok-start of st, c:
+  if c == "\"":
+    give st with pending: { kind: "string", text: "" }
+  if json-is-space of c:
+    give st
+  if json-is-punct of c:
+    give json-emit-token of st, { kind: "punct", text: c, value: 0 }
+  if json-is-atom-char of c:
+    give st with pending: { kind: "atom", text: c }
+  give json-fail-state of st, ("unexpected character in JSON: '" + c + "'")
+
+to json-tok-step of st, c:
+  p = st.pending
+  if p.kind == "string":
+    give json-step-string of st, c
+  if p.kind == "string-escape":
+    give json-step-escape of st, c
+  if p.kind == "atom":
+    if json-is-atom-char of c:
+      give st with pending: { kind: "atom", text: (p.text + c) }
+    closed = json-close-atom of st
+    if not closed.ok:
+      give closed
+    give json-tok-start of closed, c
+  give json-tok-start of st, c
+
+to json-tok-finish of st:
+  if not st.ok:
+    give st
+  if st.pending.kind == "atom":
+    give json-close-atom of st
+  if st.pending.kind == "string":
+    give json-fail-state of st, "unterminated JSON string: no closing quote"
+  if st.pending.kind == "string-escape":
+    give json-fail-state of st, "unterminated JSON string: the text ends inside an escape"
+  give st
+
+to json-tokens of src:
+  st = { ok: true, detail: "", out: [], pending: (json-no-pending) }
+  for each c in src:
+    if st.ok:
+      st = json-tok-step of st, c
+  give json-tok-finish of st
+
+# ================================================================ building the value
+#
+# A shift/reduce fold over the tokens, carrying an explicit stack of open
+# containers. NOT recursive descent: nesting costs a stack entry rather than an
+# interpreter frame, so a deeply nested document costs no depth at all -- the
+# thing that matters when this runs three levels of interpretation down. The
+# recursion ceiling is spent on the WRITER (below), where the output's shape
+# follows the value's, and not here.
+#
+# A frame is one open container: an array accumulating `items`, or an object
+# accumulating `fields` with the key it is waiting to pair. Both shapes carry
+# both fields so `with` never has to add one.
+#
+# The mode is what the next token may be. "value-or-close" and "key-or-close"
+# are the states right after an opening bracket, where the matching close is
+# still legal -- that one distinction is what makes `[]` and `{}` fall out
+# without a special case while `[1,]` is still refused.
+
+to json-array-frame:
+  give { kind: "array", items: [], fields: [], key: "" }
+
+to json-object-frame:
+  give { kind: "object", items: [], fields: [], key: "" }
+
+to json-emit-value of st, v:
+  if (count of st.stack) == 0:
+    give st with value: v, mode: "after", done: true
+  top = json-first of st.stack
+  others = rest of st.stack
+  if top.kind == "array":
+    give st with stack: ([top with items: (top.items plus v)] + others), mode: "after"
+  give st with stack: ([top with fields: (top.fields plus { key: top.key, value: v })] + others), mode: "after"
+
+to json-close-frame of st, expected:
+  if (count of st.stack) == 0:
+    give json-fail-state of st, "unexpected close in JSON: nothing is open"
+  top = json-first of st.stack
+  if not (top.kind == expected):
+    give json-fail-state of st, ("mismatched close in JSON: the open container is an " + top.kind)
+  popped = st with stack: (rest of st.stack)
+  if top.kind == "array":
+    give json-emit-value of popped, (json-list-value of top.items)
+  give json-emit-value of popped, (json-record-value of top.fields)
+
+to json-step-value of st, t, close-ok:
+  k = t.kind
+  if k == "punct":
+    if t.text == "[":
+      give st with stack: ([json-array-frame] + st.stack), mode: "value-or-close"
+    if t.text == "{":
+      give st with stack: ([json-object-frame] + st.stack), mode: "key-or-close"
+    if (t.text == "]") and close-ok:
+      give json-close-frame of st, "array"
+    give json-fail-state of st, ("expected a JSON value, found '" + t.text + "'")
+  if k == "string":
+    give json-emit-value of st, (json-text-value of t.text)
+  if k == "number":
+    give json-emit-value of st, (json-number-value of t.value)
+  if k == "true":
+    give json-emit-value of st, (json-bool-value of true)
+  if k == "false":
+    give json-emit-value of st, (json-bool-value of false)
+  give json-emit-value of st, (json-nothing-value)
+
+to json-step-key of st, t, close-ok:
+  if t.kind == "string":
+    top = json-first of st.stack
+    give st with stack: ([top with key: t.text] + (rest of st.stack)), mode: "colon"
+  if (t.kind == "punct") and (t.text == "}") and close-ok:
+    give json-close-frame of st, "object"
+  give json-fail-state of st, "expected a JSON field name in double quotes"
+
+to json-step-colon of st, t:
+  if (t.kind == "punct") and (t.text == ":"):
+    give st with mode: "value"
+  give json-fail-state of st, "expected ':' after a JSON field name"
+
+to json-step-after of st, t:
+  if not (t.kind == "punct"):
+    give json-fail-state of st, "expected ',' or a closing bracket after a JSON value"
+  if (count of st.stack) == 0:
+    give json-fail-state of st, ("trailing content after the JSON value: '" + t.text + "'")
+  top = json-first of st.stack
+  if t.text == ",":
+    if top.kind == "array":
+      give st with mode: "value"
+    give st with mode: "key"
+  if t.text == "]":
+    give json-close-frame of st, "array"
+  if t.text == "}":
+    give json-close-frame of st, "object"
+  give json-fail-state of st, ("expected ',' or a closing bracket, found '" + t.text + "'")
+
+to json-parse-step of st, t:
+  if st.mode == "colon":
+    give json-step-colon of st, t
+  if st.mode == "key":
+    give json-step-key of st, t, false
+  if st.mode == "key-or-close":
+    give json-step-key of st, t, true
+  if st.mode == "after":
+    give json-step-after of st, t
+  give json-step-value of st, t, (st.mode == "value-or-close")
+
+to json-parse-finish of st:
+  if not st.ok:
+    give { ok: false, detail: st.detail, value: nothing }
+  if not ((count of st.stack) == 0):
+    give { ok: false, detail: "unterminated JSON value: a bracket is still open", value: nothing }
+  if not st.done:
+    give { ok: false, detail: "no JSON value found", value: nothing }
+  give { ok: true, detail: "", value: st.value }
+
+to json-parse-tokens of toks:
+  st = { ok: true, detail: "", mode: "value", stack: [], value: nothing, done: false }
+  for each t in toks:
+    if st.ok:
+      st = json-parse-step of st, t
+  give json-parse-finish of st
+
+# The whole reader: text in, { ok, detail, value } out, with `value` a tagged
+# interp.planes value. A refusal is a value, never a raise -- the caller (the
+# `ask` boundary) falls back to the response's text exactly as the reference
+# does when json.loads raises.
+to json-parse of src:
+  toks = json-tokens of src
+  if not toks.ok:
+    give { ok: false, detail: toks.detail, value: nothing }
+  give json-parse-tokens of toks.out
+
+# ================================================================ writing
+#
+# interp.py's to_json: json.dumps(unwrap(v), indent=2). The `unwrap` is folded
+# in: a whole number goes out as an integer and a non-whole one as its exact
+# TEXT (so 1/3 lands in the file as "~0.333333333333" and is not silently
+# rounded), which is why no float is ever written and the writer needs no
+# float formatting at all.
+#
+# The indent is carried as the pad STRING rather than a level number, so a
+# level costs one concatenation and no range loop. This is the one recursive
+# walk in this file -- the output's shape follows the value's, as
+# interp.planes's own canonical-of-value already does -- so nesting depth here
+# costs interpreter depth. The measured ceiling is in REPORT_HOST_BOUNDARY.md.
+
+to json-escape-char of c:
+  if c == "\"":
+    give "\\\""
+  if c == "\\":
+    give "\\\\"
+  if c == "\n":
+    give "\\n"
+  if c == "\t":
+    give "\\t"
+  give c
+
+to json-escape of s:
+  result = ""
+  for each c in s:
+    result = result + (json-escape-char of c)
+  give result
+
+to json-quote of s:
+  give "\"" + (json-escape of s) + "\""
+
+to json-render-list of items, pad:
+  if (count of items) == 0:
+    give "[]"
+  inner = pad + "  "
+  body = ""
+  seen = false
+  for each item in items:
+    piece = inner + (json-render-value of item, inner)
+    if seen:
+      body = body + ",\n" + piece
+    else:
+      body = piece
+      seen = true
+  give "[\n" + body + "\n" + pad + "]"
+
+to json-render-fields of fields, pad:
+  if (count of fields) == 0:
+    give "{}"
+  inner = pad + "  "
+  body = ""
+  seen = false
+  for each f in fields:
+    piece = inner + (json-quote of f.key) + ": " + (json-render-value of f.value, inner)
+    if seen:
+      body = body + ",\n" + piece
+    else:
+      body = piece
+      seen = true
+  give "{\n" + body + "\n" + pad + "}"
+
+to json-render-value of v, pad:
+  k = v.kind
+  if k == "nothing":
+    give "null"
+  if k == "boolean":
+    if v.value:
+      give "true"
+    give "false"
+  if k == "number":
+    if (whole of v.value) == v.value:
+      give text of v.value
+    give json-quote of (text of v.value)
+  if k == "text":
+    give json-quote of v.value
+  if k == "list":
+    give json-render-list of v.items, pad
+  if k == "record":
+    give json-render-fields of v.fields, pad
+  fail "cannot write a value of kind '" + v.kind + "' as JSON" as cannot-write-json
+
+to json-text-of of v:
+  give json-render-value of v, ""

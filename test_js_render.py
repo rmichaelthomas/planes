@@ -229,14 +229,20 @@ def test_cross_impl_js_render_python_reparse():
 
 # ================================ the S5 limitation, now fixed on both sides (S6)
 
-def test_the_two_grammar_files_now_round_trip_on_both_implementations():
+def test_the_grammar_stage_files_round_trip_on_both_implementations():
     """FLIPPED from S5's `test_js_reproduces_render_py_roundtrip_limitation_on_interp`.
     grammar/interp.planes and grammar/parser.planes exercised four render
     round-trip defects (a greedy comma tail, the `first` operator, a field on a
     call result, and a dropped or-fail handler). All are fixed in S6, so both
     files render byte-identically between the two implementations AND round-trip
-    on each side — the opposite of the S5 assertion."""
-    for f in ("grammar/interp.planes", "grammar/parser.planes"):
+    on each side — the opposite of the S5 assertion.
+
+    C1 adds grammar/json.planes, a new stage file, to the same check: it is the
+    largest Planes program written since the composition defect was closed, so
+    whether it round-trips is a real test of that closure rather than a
+    formality."""
+    for f in ("grammar/interp.planes", "grammar/parser.planes",
+              "grammar/json.planes"):
         py = render(parse(open(f, encoding="utf-8").read()))
         assert _js_render(f) == py, f"{f}: render must be byte-identical"
         parse(py)  # render.py now reparses its own output (would raise otherwise)
