@@ -89,6 +89,85 @@ _EXPR_STMT = (Num, Str, Bool, Nothing, Var, ListLit, RecordLit, RecordUpdate,
               OrFail)
 
 
+# ================================================================ comma-list elements
+#
+# The composition defect (S6): an expression whose rendering ends in a GREEDY
+# comma-extensible list is misparsed when it appears as an element of an
+# enclosing comma-separated list -- the element's own commas are read as the
+# enclosing list's separators. Two renderings have such a tail:
+#
+#   * a call, `name of (a), (b)` -- the `of` argument list extends on a
+#     following primary (even `name of (a), k2` swallows `k2` as a second arg);
+#   * a record update, `base with a: 1, b: 2` -- the `with` field list extends
+#     on a following `name: expr`.
+#
+# The parser is correct; the renderer is emitting text whose meaning differs
+# from the AST it was given. The fix is parenthesisation, applied identically in
+# render.py and render.mjs: wrap such an element in parens, which stops the
+# greedy list at the paren boundary and reparses to the same AST (parens are
+# transparent). Applied uniformly, matching this module's existing "always
+# group, never rank precedence" philosophy -- an unnecessary wrap on a
+# last/only element is still correct, and both implementations wrap the same way.
+
+
+def _greedy_tail(node):
+    """The greedy comma-extensible list, if any, that terminates
+    render_expr(node) at top level:
+
+      "of"   -- a call's argument list (extends on a following primary);
+      "with" -- a record update's field list (extends on a following
+                `name: expr`);
+      None   -- render(node) ends in a self-delimiting token (bracket,
+                keyword, or atom).
+
+    Recursive through the renderings that end in a sub-expression: a `for each`
+    expression ends in its body; a BinOp / `not` / `plus` ends in its trailing
+    operand -- unless render_operand parenthesises that operand (a _COMPOUND
+    operand is wrapped and so ends in ')'). Everything else ends self-delimited.
+    """
+    if isinstance(node, Call):
+        return "of" if node.args else None
+    if isinstance(node, RecordUpdate):
+        return "with"
+    if isinstance(node, ForEach):
+        return _greedy_tail(node.body[0])
+    if isinstance(node, BinOp):
+        return None if isinstance(node.right, _COMPOUND) else _greedy_tail(node.right)
+    if isinstance(node, Not):
+        return None if isinstance(node.expr, _COMPOUND) else _greedy_tail(node.expr)
+    if isinstance(node, ListPlus):
+        return None if isinstance(node.item, _COMPOUND) else _greedy_tail(node.item)
+    return None
+
+
+def _comma_element(node, sep):
+    """Render `node` as an element of a comma-separated list, parenthesising it
+    when its greedy tail would be swallowed by the list's own separator.
+
+    `sep` is "record" -- the following separator is `, name: expr` (between
+    record-literal or record-update fields) -- or "list" -- the following
+    separator is `, expr` (between list items). A call's `of` list swallows
+    either kind of sibling; a record update's `with` list swallows only a
+    `name: expr`, so it is dangerous only between record fields.
+    """
+    text = render_expr(node)
+    tail = _greedy_tail(node)
+    dangerous = tail == "of" or (tail == "with" and sep == "record")
+    return f"({text})" if dangerous else text
+
+
+def _field_base(node):
+    """The base of a `X.name` field access. Like render_operand -- parenthesise
+    a _COMPOUND base -- but ALSO parenthesise a base with a greedy tail (S6):
+    `(f of a, b).kind` rendered bare as `f of (a), (b).kind` binds `.kind` to
+    the argument `(b)`, not the call, and `(p with a: 1).b` bare binds `.b` to
+    the field value. The following `.` is the enclosing separator here.
+    """
+    if isinstance(node, _COMPOUND) or _greedy_tail(node) is not None:
+        return f"({render_expr(node)})"
+    return render_expr(node)
+
+
 # ================================================================ expressions
 
 def render_operand(node):
@@ -111,29 +190,43 @@ def render_expr(node):
     if isinstance(node, Var):
         return node.name
     if isinstance(node, ListLit):
-        return "[" + ", ".join(render_expr(i) for i in node.items) + "]"
+        return "[" + ", ".join(_comma_element(i, "list") for i in node.items) + "]"
     if isinstance(node, ListPlus):
         return f"{render_operand(node.base)} plus {render_operand(node.item)}"
     if isinstance(node, RecordLit):
-        fields = ", ".join(f"{k}: {render_expr(v)}" for k, v in node.fields)
+        fields = ", ".join(f"{k}: {_comma_element(v, 'record')}"
+                           for k, v in node.fields)
         return "{ " + fields + " }" if fields else "{}"
     if isinstance(node, RecordUpdate):
         # `base with name: expr, ...` (v5.0 §72). The base is an operand
         # (parenthesised if compound); each field value re-renders as a full
-        # expression. Chains render left to right, since a RecordUpdate base
-        # is itself rendered here -- `p with a: 1 with b: 2` round-trips.
-        fields = ", ".join(f"{k}: {render_expr(v)}" for k, v in node.fields)
+        # expression, parenthesised when its greedy tail would collide with the
+        # `with` list's own commas (S6). Chains render left to right, since a
+        # RecordUpdate base is itself rendered here -- `p with a: 1 with b: 2`
+        # round-trips.
+        fields = ", ".join(f"{k}: {_comma_element(v, 'record')}"
+                           for k, v in node.fields)
         return f"{render_operand(node.base)} with {fields}"
     if isinstance(node, BinOp):
         if node.op == "first":
-            return f"first {render_operand(node.left)} of {render_operand(node.right)}"
+            # `first N of L` (S6). Both operands are parse_unary(), and each is
+            # parenthesised so it reads as a single closed primary: a bare Var
+            # count (`first k of parts`) is otherwise swallowed as the call
+            # `k of parts`, and a sub-unary list (`first k of a plus b`) is
+            # otherwise split by precedence. render_operand alone does not cover
+            # either -- it wraps only _COMPOUND -- so wrap both, matching this
+            # module's always-group philosophy.
+            return f"first ({render_expr(node.left)}) of ({render_expr(node.right)})"
         return f"{render_operand(node.left)} {node.op} {render_operand(node.right)}"
     if isinstance(node, Not):
         return f"not {render_operand(node.expr)}"
     if isinstance(node, IsNothing):
         return f"{render_operand(node.expr)} is nothing"
     if isinstance(node, Field):
-        return f"{render_operand(node.obj)}.{node.name}"
+        # `X.name` (S6). render_operand wraps a _COMPOUND base, but a base with
+        # a greedy tail also needs wrapping: `(call).kind` rendered bare as
+        # `call.kind` binds `.kind` to the call's last argument, not the call.
+        return f"{_field_base(node.obj)}.{node.name}"
     if isinstance(node, Call):
         return render_call(node)
     if isinstance(node, Round):
@@ -278,7 +371,40 @@ def render_when(node, indent, markers):
     return "\n".join(lines)
 
 
+def _statement_orfail(node):
+    """The or-fail-with-handler at this statement's top, or None. A handler is a
+    statement-level continuation (`... or fail as tag:` then a block), so it can
+    appear as a bare OrFail statement or wrapped inside the Assign/Give whose
+    value it is (the corpus shapes; parse_or_fail attaches it there)."""
+    if isinstance(node, OrFail) and node.handler is not None:
+        return node
+    if isinstance(node, (Assign, Give)) and isinstance(node.expr, OrFail) \
+            and node.expr.handler is not None:
+        return node.expr
+    return None
+
+
+def _without_handler(node):
+    """A copy of `node` with its or-fail handler cleared, so the existing
+    single-line render paths produce the head line."""
+    if isinstance(node, OrFail):
+        return dataclasses.replace(node, handler=None)
+    return dataclasses.replace(
+        node, expr=dataclasses.replace(node.expr, handler=None))
+
+
 def render_stmt(node, indent, markers):
+    # An or-fail HANDLER block turns an otherwise single-line statement into a
+    # block (S6): `x = EXPR or fail as tag:` then the indented handler. Render
+    # the head line without the handler through the ordinary path, then the
+    # block. render_orfail is single-line and (correctly) renders no handler;
+    # this is where the handler is put back.
+    orfail = _statement_orfail(node)
+    if orfail is not None:
+        head = render_stmt(_without_handler(node), indent, markers)
+        block = render_block(orfail.handler, indent + INDENT, markers)
+        return head + ":\n" + block
+
     if isinstance(node, Use):
         return indent + render_use(node)
     if isinstance(node, Foreign):

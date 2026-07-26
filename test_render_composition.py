@@ -1,26 +1,23 @@
-"""S6, Phase 1 — reproduce the composition defect (render produces
-source that does not reparse), on the Python side, before any fix.
+"""S6, Phase 2 — the composition defect, fixed (render round-trips the corpus).
 
-The analyser port (S5) found that render.py renders a multi-argument call used
-as a record-field value in a form it cannot reparse — the call's argument-list
-commas collide with the record's field separators. A.0 requires reproducing it
-as a test and confirming the mechanism before changing code.
+Phase 1 pinned the defect the analyser port (S5) found: render produces source
+that does not reparse. Reproducing it confirmed the mechanism AND that it was a
+CLASS, not one instance — four distinct render round-trip defects, all masked
+because the only files exercising them (grammar/interp.planes, parser.planes)
+sat outside render.py's own round-trip corpus (*.planes + demo/**):
 
-Confirmed, and BROADER than the single instance the report described (this is
-what A.3's composition coverage exists to surface):
+  1. a greedy comma tail -- a call's `of` argument list, or a RecordUpdate's
+     `with` field list -- in a record-field-value or list-element position;
+  2. the `first N of L` operator, whose bare Var count is swallowed as the call
+     `k of parts` and whose sub-unary list is split by precedence;
+  3. a `X.name` field access whose base has a greedy tail: `(call).kind` bare
+     binds `.kind` to the call's last argument;
+  4. an `or fail as tag:` HANDLER block, dropped entirely by render_orfail.
 
-  * the greedy tail is not only a call's `of` argument list — a RecordUpdate's
-    `with` field list is greedy the same way (`base with a: 1, b: 2` extends on a
-    following `name: expr`);
-  * even a ONE-argument call breaks, because `name of (a), k2` reads `k2` as a
-    second bare-primary argument;
-  * it occurs in record-field-value AND list-element positions;
-  * TWO corpus files fail the render round-trip, not one: grammar/interp.planes
-    (the reported site) and grammar/parser.planes.
-
-Phase 1 pins the bug as it is TODAY (these tests assert the broken behaviour, so
-the suite stays green — invariant 7). Phase 2 flips each assertion to the fixed
-behaviour and lands the fix.
+Phase 2 fixes all four in render.py (and mirrors them in render.mjs), by
+parenthesisation and by rendering the handler block -- no grammar change. This
+file flips the Phase 1 assertions to the fixed behaviour; the composition
+generator that proves the class is closed is Phase 3.
 """
 import glob
 import sys
@@ -47,25 +44,18 @@ REPRO_CALL_IN_RECORD = (
 )
 
 
-def test_reproduction_call_in_record_currently_fails_to_reparse():
-    """PINS THE BUG (Phase 1). render strips the source's protective parens and
-    emits `{ k: f of (a), (b), k2: 9 }`, whose commas collide with the record
-    separators. Phase 2 flips this to assert a clean round-trip."""
-    prog = parse(REPRO_CALL_IN_RECORD)
-    rendered = render(prog)
-    assert "k: f of (a), (b), k2:" in rendered, rendered
-    # currently does NOT reparse — the defect
-    try:
-        parse(rendered)
-        reparsed = True
-    except PlanesSyntaxError:
-        reparsed = False
-    assert reparsed is False, "expected the known reparse failure (Phase 1)"
+def test_call_in_record_round_trips():
+    """FLIPPED from Phase 1. render now wraps the greedy call, emitting
+    `{ k: (f of (a), (b)), k2: 9 }`, which reparses to the same AST."""
+    rendered = render(parse(REPRO_CALL_IN_RECORD))
+    assert "k: (f of (a), (b)), k2:" in rendered, rendered
+    assert _round_trips(REPRO_CALL_IN_RECORD)
 
 
-def test_the_two_corpus_files_that_fail_the_render_round_trip():
-    """A.0: confirm the footprint. Exactly interp.planes and parser.planes fail
-    render round-trip today. Phase 2 makes both round-trip."""
+def test_every_corpus_file_now_round_trips():
+    """FLIPPED from Phase 1. No standalone-parseable file fails the render
+    round-trip any more -- interp.planes and parser.planes included, which never
+    round-tripped before this build."""
     paths = sorted(glob.glob("*.planes")) + \
         sorted(glob.glob("demo/**/*.planes", recursive=True)) + \
         sorted(glob.glob("grammar/*.planes"))
@@ -78,7 +68,28 @@ def test_the_two_corpus_files_that_fail_the_render_round_trip():
             continue
         if not _round_trips(open(p, encoding="utf-8").read()):
             broken.append(p)
-    assert broken == ["grammar/interp.planes", "grammar/parser.planes"], broken
+    assert broken == [], broken
+
+
+def test_each_of_the_four_defect_shapes_round_trips():
+    """One distilled case per defect (Phase 2), all fixed."""
+    prelude = "to f of a, b:\n  give a\n\nto g of a:\n  give a\n\n"
+    cases = [
+        # 1. greedy call in a record field, and a RecordUpdate in a record field
+        'x = { k: (f of a, b), k2: 9 }\n',
+        'x = { k: (p with a: 1, b: 2), k2: 9 }\n',
+        # 1b. greedy call in a list element
+        'x = [(f of a, b), 9]\n',
+        # 2. the first operator with a bare Var count and a sub-unary list
+        'x = first (k) of parts\n',
+        'x = first (k) of (parts plus [1])\n',
+        # 3. a field access on a call result
+        'x = (g of a).kind\n',
+        # 4. an or-fail handler block
+        'x = (f of a, b) or fail as e:\n  give g of e\n',
+    ]
+    for src in cases:
+        assert _round_trips(prelude + src), src
 
 
 if __name__ == "__main__":
