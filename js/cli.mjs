@@ -538,6 +538,7 @@ switch (sub) {
       lex: "grammar/lexer.planes",
       parse: "grammar/parser.planes",
       run: "grammar/interp.planes",
+      json: "grammar/json.planes",
     }[stage];
     const stageItp = new Interpreter({ host: new TestHost() });
     runFile(stageItp, stageFile);
@@ -567,6 +568,22 @@ switch (sub) {
             tag = err && err.get ? err.get("tag") : String(err);
           }
           results.push({ output: stageItp.host.shown, tag });
+        } else if (stage === "json") {
+          // grammar/json.planes: read the file as JSON and write it straight
+          // back out. Reader and writer in one call, so the emitted text is a
+          // canonical form both implementations must agree on byte for byte —
+          // and a refusal (an escape Planes cannot spell) must agree too.
+          const r = stageItp.call("json-parse", [lit(src, "<json source>")], stageItp.env);
+          if (!r.value.get("ok")) {
+            results.push({ ok: false, detail: r.value.get("detail"), text: null });
+          } else {
+            const w = stageItp.call(
+              "json-text-of",
+              [lit(r.value.get("value"), "<json value>")],
+              stageItp.env,
+            );
+            results.push({ ok: true, detail: "", text: w.value });
+          }
         } else {
           throw new Error(`unknown meta stage: ${stage}`);
         }
