@@ -19,6 +19,7 @@ import { parse, PlanesAmbiguity } from "./parser.mjs";
 import { canonicalProgram } from "./canonical.mjs";
 import { Interpreter, PlanesError, lit } from "./interp.mjs";
 import { TestHost } from "./host.mjs";
+import { sha256Hex } from "./sha256.mjs";
 import { PlanesNumber, Fraction, Inexact } from "./planes_num.mjs";
 import {
   resolveStringEscapes,
@@ -205,6 +206,12 @@ switch (sub) {
   case "text":
     out(JSON.stringify(JSON.parse(rest[0]).map(textOp)));
     break;
+  case "hash": {
+    // hash <json-array-of-strings> — the full 64-char SHA-256 hex digest of
+    // each string's UTF-8 bytes, for byte-identity against hashlib (A.2).
+    out(JSON.stringify(JSON.parse(rest[0]).map((s) => sha256Hex(s))));
+    break;
+  }
   case "tokens": {
     // The canonical token form: [kind, value, line] per token, matching
     // test_lexer_in_planes.py's (t.kind, t.value, t.line). On a syntax error,
