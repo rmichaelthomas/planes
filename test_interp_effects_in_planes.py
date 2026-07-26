@@ -23,7 +23,9 @@ That is also why the one `pytest.mark.parametrize` is now a plain loop: nothing
 else in this repo needs pytest, and a suite the gate cannot run is not a gate.
 """
 import json
+import os
 import sys
+import tempfile
 
 from host import TestHost as _TestHost  # (aliased: not a test class)
 from interp import Deriv, Interpreter, Number, Traced
@@ -266,6 +268,74 @@ def test_write_real_mode_bytes_match_interp_py():
     ip.run(src)
     assert ho.files.get("out.json") == hp.files.get("out.json")
     assert ho.files.get("out.json") is not None
+
+
+def test_write_then_read_in_one_inert_run_sees_what_was_written():
+    # C1: the inert files table is read-write within a run. The reference
+    # already does this — TestHost.write fills its own files dict and
+    # TestHost.read serves it back — so the oracle needs no special setup.
+    src = ('use file\n'
+           'write { query: "2 + 2", result: 4 } to "cache/answer.json"\n'
+           'back = read "cache/answer.json"\n'
+           'show back\n')
+    state = assert_effect_log_agrees(src)
+    assert _log(state)[:2] == [("write", "cache/answer.json"),
+                               ("read", "cache/answer.json")]
+    shown = [t for (k, t) in _log(state) if k == "show"]
+    # the bytes read back are json.planes's, and they are to_json's
+    assert shown == ['{\n  "query": "2 + 2",\n  "result": 4\n}']
+    _theirs, out = py_effects(src)
+    assert shown == out
+
+
+def test_the_bytes_the_inert_table_holds_are_the_bytes_the_reference_holds():
+    src = ('use file\n'
+           'write [1, 2, 3] to "a.json"\n'
+           'write "text" to "b.json"\n'
+           'write { n: 5, xs: [1, 2] } to "c.json"\n')
+    state = run_inert(src)
+    assert state["status"] == "normal", state
+    mine = {f["path"]: f["body"] for f in _io_of(state)["files"]}
+    host = _TestHost(files={})
+    Interpreter(host=host).run(src)
+    assert mine == host.files, f"\nplanes: {mine}\nreference: {host.files}"
+
+
+def test_a_rewrite_of_the_same_path_is_what_a_later_read_sees():
+    src = ('use file\n'
+           'write "first" to "p.txt"\n'
+           'write "second" to "p.txt"\n'
+           'show read "p.txt"\n')
+    state = assert_effect_log_agrees(src)
+    assert [t for (k, t) in _log(state) if k == "show"] == ['"second"']
+
+
+def test_an_inert_write_reaches_no_real_filesystem():
+    """Constraint: inert mode reaches nothing real. The destination is an
+    absolute path in a fresh temp directory, so the check is not confounded by
+    anything already on disk."""
+    d = tempfile.mkdtemp(prefix="planes-inert-")
+    path = os.path.join(d, "must-not-exist.json")
+    src = (f'use file\nwrite {{ a: 1 }} to "{path}"\n'
+           f'show read "{path}"\n')
+    state = run_inert(src)
+    assert state["status"] == "normal", state
+    assert [t for (k, t) in _log(state) if k == "show"] == ['{\n  "a": 1\n}']
+    assert os.listdir(d) == [], os.listdir(d)
+
+
+def test_the_write_then_read_corpus_program_runs_self_hosted_and_agrees():
+    """corpus/cache-store.planes — the program the report named as unreachable
+    for exactly this reason. It now runs on interp.planes and produces the
+    reference's output, byte for byte."""
+    src = open("corpus/cache-store.planes", encoding="utf-8").read()
+    state = run_inert(src)
+    assert state["status"] == "normal", state
+    mine = _io_of(state)["output"]
+    host = _TestHost()
+    ip = Interpreter(host=host)
+    ip.run(src)
+    assert mine == ip.output, f"\nplanes: {mine}\nreference: {ip.output}"
 
 
 def test_write_real_mode_of_a_record_carries_the_json_one_layer_encoded():

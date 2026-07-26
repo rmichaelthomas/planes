@@ -1513,10 +1513,21 @@ to exec-why of stmt, state, globals:
 # requires the file module (`use file`), serialises the value as JSON, hands it
 # to the host, and logs ("write", dest, len); the expression's value is nothing.
 # Reproduced: the module check names the same fix, the effect logs ("write",
-# dest), and dispatch on the mode tag is flat. In inert mode nothing is written;
-# in real mode the Planes `write` runs, and the outer host serialises the
-# unwrapped raw value exactly as interp.py's to_json does -- so a real write
-# from interp.planes and one from interp.py produce the same bytes.
+# dest), and dispatch on the mode tag is flat. In real mode the Planes `write`
+# runs, and the outer host serialises the unwrapped raw value exactly as
+# interp.py's to_json does -- so a real write from interp.planes and one from
+# interp.py produce the same bytes.
+#
+# In inert mode nothing reaches a filesystem, and the write is still not lost:
+# it UPDATES the files table, so a later `read` in the same run sees what was
+# written (C1). That is what the reference already does -- TestHost.write puts
+# the payload in its own files dict and TestHost.read serves it back -- and
+# until C1 the table here was input-only, which is the one reason
+# corpus/cache-store.planes could not run self-hosted. The bytes stored are
+# json.planes's, identical to to_json's, so the round trip agrees byte for byte.
+# The table stays per-run and starts from supplied data: hermetic either way.
+# A rewrite of the same path PREPENDS, because lookup-file takes the first
+# match -- appending would have a later read serve the older body.
 to eval-writeto-node of node, env, globals:
   v = eval-node of node.value, env, globals
   if not (v.status == "normal"):
@@ -1539,7 +1550,10 @@ to do-write of value, dest, env:
   # anything downstream names the file it went to.
   written = derived-at of (make-nothing), "effect", ("write to " + dest), [value.deriv], ("file:" + dest)
   if io.mode == "inert":
-    give normal-of of written, env2
+    payload = (json-text-of of value) or fail as e:
+      give fail-of of e, env2
+    stored = logged with files: ([{ path: dest, body: payload }] + logged.files)
+    give normal-of of written, (with-io of env, stored)
   write (unwrap-value of value) to dest
   give normal-of of written, env2
 
