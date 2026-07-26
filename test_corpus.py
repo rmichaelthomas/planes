@@ -48,7 +48,7 @@ REPO = os.path.dirname(os.path.abspath(__file__))
 # strain). ENFORCE_FLOOR is flipped to True in Phase 4, once the corpus is
 # built — until then the batches are still growing and the count only reports.
 FLOOR = 40
-ENFORCE_FLOOR = False    # Phase 2-3: report only. Phase 4: flipped to True.
+ENFORCE_FLOOR = True     # Phase 4: the corpus is built; the floor is enforced.
 
 # Boundaries that count as "touching the world" — everything past the console.
 WORLD = {"file", "network", "ambient"}

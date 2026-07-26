@@ -15,8 +15,15 @@ NOT_STANDALONE_PARSEABLE = {"demo/app/net.planes"}
 
 
 def every_planes_file():
+    # S7: the canonical corpus joins render's round-trip set, and so do the two
+    # self-hosted grammar files this function's own name always implied but
+    # excluded — grammar/interp.planes and grammar/parser.planes, the repo's two
+    # largest programs, whose exclusion from a round-trip set is exactly how #24's
+    # forty defects hid. render round-trips all of them since #24/S6.
     paths = sorted(glob.glob("*.planes")) + \
-        sorted(glob.glob("demo/**/*.planes", recursive=True))
+        sorted(glob.glob("demo/**/*.planes", recursive=True)) + \
+        sorted(glob.glob("grammar/*.planes")) + \
+        sorted(glob.glob("corpus/**/*.planes", recursive=True))
     return [p for p in paths if p not in NOT_STANDALONE_PARSEABLE]
 
 
