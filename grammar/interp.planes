@@ -96,7 +96,9 @@ to canonical-of-fields of fields:
 # shadowing falls out of scan order. The scan reads each binding's `name`
 # and `value` by static field access -- there is no dynamic record lookup.
 
-to env-lookup of env, name:
+# The first binding for a name, of any kind: { found, value }. A local
+# variable prepended in front shadows one behind it -- first match wins.
+to env-find of env, name:
   result = nothing
   found = false
   for each binding in env:
@@ -104,9 +106,21 @@ to env-lookup of env, name:
       if binding.name == name:
         result = binding.value
         found = true
-  if found:
-    give result
-  fail "no name '" + name + "' here" as unknown-name
+  give { found: found, value: result }
+
+# The first *function* binding for a name, skipping any non-function binding
+# of the same name -- interp.py keeps functions in their own namespace, so a
+# call resolves to the function even when a local variable shares its name.
+to function-find of env, name:
+  result = nothing
+  found = false
+  for each binding in env:
+    if not found:
+      if binding.name == name:
+        if binding.value.kind == "function":
+          result = binding.value
+          found = true
+  give { found: found, value: result }
 
 # ================================================================ eval (A.1: flat, from the first line)
 #
@@ -129,7 +143,12 @@ to eval of node, env:
   if k == "Nothing":
     give make-nothing
   if k == "Var":
-    give env-lookup of env, node.name
+    binding = env-find of env, node.name
+    if not binding.found:
+      fail "no name '" + node.name + "' here" as unknown-name
+    if binding.value.kind == "function":
+      give apply-function of binding.value, [], env, node.name
+    give binding.value
   if k == "BinOp":
     give eval-binop of node, env
   if k == "Not":
@@ -483,6 +502,12 @@ to is-builtin-name of name:
 to eval-call of node, env:
   name = node.name
   args = node.args
+  # A user function wins over a builtin of the same name (interp.py: a name in
+  # funcs is never routed to a builtin) -- the shadowing build-known already
+  # relies on, here on the value environment.
+  fn = function-find of env, name
+  if fn.found:
+    give apply-function of fn.value, args, env, name
   if is-builtin-name of name:
     if not ((count of args) == 1):
       fail "'" + name + "' takes 1 value, given " + (text of (count of args)) as wrong-arity
@@ -583,3 +608,63 @@ to builtin-rest of arg:
   if (count of arg.items) == 0:
     fail "cannot take the rest of an empty list" as empty-list
   give make-list of (rest of arg.items)
+
+# ================================================================ function application (Phase 5)
+#
+# A function is a tagged value living in the environment, applied against the
+# environment it is called in: its parameters are bound, prepended to that
+# environment, and the extended list passed down to the body (A.2). No stored
+# closure -- the environment always carries every function value at its base,
+# so recursion and calls between functions resolve without a cyclic record.
+#
+# Build 1 applies functions whose body is a single give-expression. A
+# multi-statement body, or any body that is not a lone `give`, is control
+# flow -- interp.planes build 2 -- and fails naming it, never a wrong stub
+# (A.6's honest-failure pattern).
+
+to make-function of funcdef:
+  give { kind: "function", name: funcdef.name, params: funcdef.params, body: funcdef.body, deriv: nothing }
+
+to apply-function of fn, arg-nodes, call-env, name:
+  if not ((count of fn.params) == (count of arg-nodes)):
+    fail "'" + name + "' takes " + (text of (count of fn.params)) + " values, given " + (text of (count of arg-nodes)) as wrong-arity
+  if not ((count of fn.body) == 1):
+    fail "'" + name + "' has a multi-statement body -- statements are interp.planes build 2" as build-2-statements
+  stmt = first-item of fn.body
+  if not (stmt.kind == "Give"):
+    fail "'" + name + "' body is not a single give-expression -- control flow is interp.planes build 2" as build-2-statements
+  bindings = bind-params of fn.params, arg-nodes, call-env, []
+  new-env = bindings + call-env
+  give eval of stmt.expr, new-env
+
+# Evaluate each argument in the calling environment, pairing it with its
+# parameter name. Structural recursion over the parameter list -- one frame
+# per parameter, and functions take few.
+to bind-params of params, arg-nodes, call-env, acc:
+  if (count of params) == 0:
+    give acc
+  p = first-item of params
+  a = first-item of arg-nodes
+  val = eval of a, call-env
+  give bind-params of (rest of params), (rest of arg-nodes), call-env, (acc plus { name: p, value: val })
+
+# ================================================================ building a function environment (A.4 pipeline support)
+#
+# Parse a whole program and turn each top-level definition into a function
+# value bound by name. The base environment the pipeline evaluates an
+# expression against.
+
+to program-nodes-of of src:
+  toks = tokenize of src
+  known = build-known of toks
+  initial = { out: [], cursor: toks, done: false, tokens: toks, known: known }
+  final = run-program of initial, toks
+  give final.out
+
+to functions-env-of of src:
+  nodes = program-nodes-of of src
+  env = []
+  for each n in nodes:
+    if n.kind == "FuncDef":
+      env = env plus { name: n.name, value: (make-function of n) }
+  give env

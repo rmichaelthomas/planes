@@ -174,6 +174,39 @@ def assert_eval_fails(src, tag, bindings=None):
         assert e.tag == tag, f"planes tag {e.tag!r} != {tag!r} for {src!r}"
 
 
+def planes_eval_program(defs_src, expr_src, bindings=None):
+    """Evaluate an expression through grammar/interp.planes against an
+    environment carrying the program's function values plus bindings."""
+    i = _get_interp()
+    fenv = i.call("functions-env-of", [_traced(defs_src)], i.env)
+    i.run(f"__vars = {_env_literal(bindings or {})}\n")
+    vars_t = i.env.get("__vars")
+    full = i.call("append-all", [vars_t, fenv], i.env)
+    node = i.call("node-of-source", [_traced(expr_src)], i.env)
+    val = i.call("eval", [node, full], i.env)
+    return i.call("canonical-of-value", [val], i.env).value
+
+
+def interp_eval_program(defs_src, expr_src, bindings=None):
+    """The oracle: hoist the program's function definitions into interp.py,
+    then evaluate the expression against the same bindings."""
+    itp = Interpreter()
+    itp.hoist(parse(defs_src), itp.env)
+    env = itp.env
+    for k, v in (bindings or {}).items():
+        env.bind_local(k, Traced(v, Deriv("name", k, v, [])))
+    node = parse(expr_src + "\n")[0]
+    return itp.eval(node, env).value
+
+
+def assert_eval_program_agrees(defs_src, expr_src, bindings=None):
+    py_form = canonical(interp_eval_program(defs_src, expr_src, bindings))
+    planes_form = planes_eval_program(defs_src, expr_src, bindings)
+    assert planes_form == py_form, (
+        f"\ndefs:\n{defs_src}\nexpr: {expr_src!r}"
+        f"\n--- planes ---\n{planes_form!r}\n--- python ---\n{py_form!r}")
+
+
 def assert_planes_fails(src, tag, bindings=None):
     """Only grammar/interp.planes refuses the expression with this tag -- used
     where interp.py fully implements the behaviour (effects) so the two tags
@@ -552,6 +585,101 @@ def test_eval_effects_fail_naming_build_3():
     # reach a case that fails naming build 3, never a silent stub.
     assert_planes_fails('ask "http://example.com"', "build-3-effect")
     assert_planes_fails('read "notes.txt"', "build-3-effect")
+
+
+# ============================================== Phase 5: calls to pure functions
+
+
+def test_call_single_param_function():
+    defs = "to double of x: give x + x\n"
+    assert_eval_program_agrees(defs, "double of 21")
+    assert_eval_program_agrees(defs, "double of (double of 5)")
+
+
+def test_call_multi_param_function():
+    defs = "to add of a, b: give a + b\n"
+    assert_eval_program_agrees(defs, "add of 3, 4")
+    assert_eval_program_agrees(defs, "add of 10, (add of 1, 2)")
+
+
+def test_function_calls_another_function():
+    defs = ("to add of a, b: give a + b\n"
+            "to twice of x: give add of x, x\n")
+    assert_eval_program_agrees(defs, "twice of 5")
+    assert_eval_program_agrees(defs, "twice of (twice of 3)")
+
+
+def test_function_uses_a_builtin():
+    defs = "to loud of s: give upper of s\n"
+    assert_eval_program_agrees(defs, 'loud of "hello"')
+
+
+def test_function_returns_record_and_list():
+    defs = ("to point of x, y: give { x: x, y: y }\n"
+            "to pair of a, b: give [a, b]\n")
+    assert_eval_program_agrees(defs, "point of 1, 2")
+    assert_eval_program_agrees(defs, "pair of 3, 4")
+    assert_eval_program_agrees(defs, "(point of 1, 2).x")
+
+
+def test_function_with_field_access_on_argument():
+    defs = "to name-of of r: give r.name\n"
+    assert_eval_program_agrees(defs, "name-of of person",
+                               {"person": {"name": "Ada", "age": Number.of(36)}})
+
+
+def test_user_function_shadows_builtin():
+    # interp.py: a name in funcs is never routed to a builtin.
+    defs = "to count of x: give x + 100\n"
+    assert_eval_program_agrees(defs, "count of 5")
+
+
+def test_zero_arg_function_by_bare_name():
+    defs = "to seven: give 3 + 4\n"
+    assert_eval_program_agrees(defs, "seven")
+    assert_eval_program_agrees(defs, "seven + 1")
+    assert_eval_program_agrees(defs, "seven * seven")
+
+
+def test_nested_calls():
+    defs = "to inc of n: give n + 1\n"
+    assert_eval_program_agrees(defs, "inc of (inc of (inc of 0))")
+
+
+def test_call_arity_and_unknown_errors():
+    defs = "to add of a, b: give a + b\n"
+    # wrong arity, agreeing tag
+    for expr in ["add of 1", "add of 1, 2, 3"]:
+        py_raised = planes_raised = None
+        try:
+            interp_eval_program(defs, expr)
+        except PlanesError as e:
+            py_raised = e.tag
+        try:
+            planes_eval_program(defs, expr)
+        except PlanesError as e:
+            planes_raised = e.tag
+        assert py_raised == "wrong-arity" == planes_raised, (expr, py_raised, planes_raised)
+    # unknown function
+    try:
+        planes_eval_program(defs, "nope of 1")
+        raise AssertionError("expected failure")
+    except PlanesError as e:
+        assert e.tag == "unknown-function", e.tag
+
+
+def test_non_expression_body_fails_naming_build_2():
+    # A function whose body is not a single give-expression is control flow --
+    # build 2. interp.py evaluates it (statements are already built there), so
+    # this is asserted Planes-side: it must fail naming build 2, not stub.
+    defs = ("to f of x:\n"
+            "  let y = x + 1\n"
+            "  give y\n")
+    try:
+        planes_eval_program(defs, "f of 5")
+        raise AssertionError("expected build-2 failure")
+    except PlanesError as e:
+        assert e.tag == "build-2-statements", e.tag
 
 
 def test_env_first_match_wins_shadowing():
