@@ -1,0 +1,18 @@
+# Ask a weather service for today's reading and raise a heat alert if it comes
+# back too warm. The request is guarded: if the service cannot be reached, the
+# program fails with a named tag rather than carrying on with no data and
+# pretending the sky is clear.
+
+use http
+
+to reading of city:
+  let body = ask "https://weather.example.com/today/" + city
+    or fail as weather-unavailable
+  give body
+
+let today = reading of "lisbon" because "one city today; the same function serves any other by name"
+
+if today.high > 30:
+  show "heat alert: " + text of today.high
+else:
+  show "no alert"

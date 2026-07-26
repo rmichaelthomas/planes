@@ -1,0 +1,22 @@
+# Sort a day's high temperature into a comfort band. Pure arithmetic and a
+# chain of thresholds — the kind of decision a person makes in prose and a
+# program should be able to make as plainly.
+
+to band of celsius:
+  if celsius < 10:
+    give "cold"
+  else:
+    if celsius < 24:
+      give "mild"
+    else:
+      give "hot"
+
+readings = [
+  { city: "Oslo", high: 6 },
+  { city: "Lisbon", high: 21 },
+  { city: "Cairo", high: 33 }
+]
+
+for each place in readings:
+  let label = band of place.high because "the same thresholds a forecast would read out loud"
+  show place.city + ": " + label

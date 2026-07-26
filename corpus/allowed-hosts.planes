@@ -1,0 +1,19 @@
+# A rule about where this program may reach. The checker reads the rule; the
+# program never does. The boundary here is a network one — usage data may go to
+# the first-party endpoint and nowhere else. The fetch below stays inside that
+# line, so the checker passes it: the rule documents the intent and guards
+# against a later edit that would quietly cross it.
+
+rule [first-party-only] anything may not ask to "https://third-party.example.com"
+  because "usage data must not leave the first-party boundary"
+
+note:
+  from "data-handling policy, section 4"
+  derives-from [first-party-only]
+
+use http
+
+let stats = ask "https://metrics.example.com/report"
+  or fail as metrics-unavailable
+
+show "usage reported to the first-party endpoint"

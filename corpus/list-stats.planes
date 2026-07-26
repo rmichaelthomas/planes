@@ -1,0 +1,28 @@
+# The four numbers you always end up wanting from a list: how many, the
+# smallest, the largest, and the mean. Each is one pass — a running value
+# reassigned as the loop walks the list.
+#
+# The min and max start at `nothing` and the first reading fills them in. That
+# is cleaner than seeding with a made-up sentinel, and it reads as what it is:
+# "if we have not seen a low yet, this is the low." `or` stops at the first
+# `nothing` check, so the comparison never runs against nothing.
+
+samples = [12, 47, 8, 23, 91, 34, 5]
+
+low = nothing
+high = nothing
+total = 0
+for each n in samples:
+  total = total + n
+  if low is nothing or n < low:
+    low = n
+  if high is nothing or n > high:
+    high = n
+
+let size = count of samples
+let mean = round (total / size) to 2 places because "a mean rarely divides evenly, and two places is enough to read"
+
+show "count " + text of size
+show "min   " + text of low
+show "max   " + text of high
+show "mean  " + text of mean

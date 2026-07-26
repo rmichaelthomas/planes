@@ -1,0 +1,18 @@
+# What this module can reach for, declared up front. Each `foreign` names a
+# capability the host provides and, with `doing`, the effect it carries — so
+# the effect surface shows `clock`, `random`, and `env` from these three lines
+# alone, without any of them being called.
+#
+# `doing` is a claim by whoever wrote the line, not something the analyser can
+# check inside the host, so it is reported as a claim. Omitting it would mean
+# "unknown", not "pure" — unknown shows up in the surface too.
+
+foreign now from "time.time" doing clock
+foreign entropy from "random.random" doing random
+foreign home from "os.getcwd" doing env
+
+let capabilities = ["clock", "random", "env"] because "the three ambient boundaries this module declares; the effect surface derives these same three from the foreigns above, which is the point of declaring them"
+
+show "declared ambient capabilities:"
+for each c in capabilities:
+  show "  " + c

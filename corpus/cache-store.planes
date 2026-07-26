@@ -1,0 +1,14 @@
+# A tiny cache, round-tripped. Compute an answer, store it, and read it
+# straight back. `write` puts the record at the file boundary as JSON and
+# `read` brings that same text back — so what returns is the stored record's
+# JSON text, on disk, not the live record in memory.
+
+use file
+
+let answer = { query: "2 + 2", result: 4 } because "the cache holds the whole question-and-answer, so a later reader knows what the 4 was the answer to"
+
+write answer to "cache/answer.json"
+let restored = read "cache/answer.json"
+
+show "restored from the cache:"
+show restored
