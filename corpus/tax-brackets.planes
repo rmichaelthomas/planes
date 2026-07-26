@@ -1,0 +1,26 @@
+# Progressive tax on an income, bracket by bracket. Each bracket taxes only the
+# slice of income that falls inside it — not the whole income — so the total is
+# a sum of slices. The brackets are data; the loop is the formula; and the cap
+# on each slice is an explicit comparison rather than a hidden minimum.
+
+brackets = [
+  { upto: 10000, rate: 0.0 },
+  { upto: 40000, rate: 0.2 },
+  { upto: 1000000, rate: 0.4 }
+]
+
+income = 55000
+tax = 0
+band-floor = 0
+for each b in brackets:
+  taxable-top = income
+  if income > b.upto:
+    taxable-top = b.upto
+  if taxable-top > band-floor:
+    tax = tax + ((taxable-top - band-floor) * b.rate)
+  band-floor = b.upto
+
+let due = round tax to 2 places because "tax lands on the cent, so the exact slice arithmetic is rounded once at the very end, on the figure that is actually owed"
+
+show "income " + text of income
+show "tax    " + text of due

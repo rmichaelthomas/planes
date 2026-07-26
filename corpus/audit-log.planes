@@ -1,0 +1,24 @@
+# Append audit entries to the audit file, and nowhere else. The rule says so —
+# writes to the scratch file are forbidden — and the note ties the rule to the
+# retention policy it comes from. The program writes only to audit.json, so the
+# checker passes it; the rule is the guardrail against a later edit that would
+# put a record somewhere it could be lost.
+
+rule [no-scratch-writes] anything may not write to "debug.json"
+  because "audit records are retained and tamper-evident; a scratch write must never land in the audit path"
+
+note:
+  from "records-retention policy, section 2"
+  derives-from [no-scratch-writes]
+
+use file
+
+events = [
+  { actor: "ada", action: "login" },
+  { actor: "bob", action: "export" }
+]
+
+entries = for each e in events: { who: e.actor, did: e.action }
+write entries to "audit.json"
+
+show "logged " + text of (count of events) + " event(s)"

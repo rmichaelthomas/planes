@@ -1,0 +1,19 @@
+# An exponential backoff schedule. Each delay is double the last, starting at
+# one second, and the recursion stops after a fixed number of attempts so a
+# doubling delay never runs away. `now` is declared — a clock capability — so
+# the surface shows the schedule is meant to be read against a real clock, even
+# though computing the delays needs no clock at all.
+
+foreign now from "time.time" doing clock
+
+to backoff of attempts-left, wait:
+  if attempts-left <= 0:
+    give "then give up"
+  else:
+    show "  wait " + text of wait + "s"
+    give backoff of (attempts-left - 1), (wait * 2)
+
+let outcome = backoff of 5, 1 because "capping the attempts is what bounds a doubling delay; five tries reaches sixteen seconds, which the runbook treats as long enough"
+
+show "backoff schedule:"
+show outcome

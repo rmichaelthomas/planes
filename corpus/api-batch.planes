@@ -1,0 +1,19 @@
+# Fetch a batch of resources by id. Each request is guarded, so if the service
+# is unreachable the whole batch fails with one named tag rather than returning
+# a half-filled list a caller might mistake for complete.
+
+use http
+
+let policy = "one failure fails the batch" because "a partial list that looked whole would be worse than a clean, named failure, so the guard stops the batch rather than dropping the item quietly"
+
+ids = ["a1", "b2", "c3"]
+
+to fetch of id:
+  give ask "https://api.example.com/items/" + id
+    or fail as service-unavailable
+
+items = for each id in ids: fetch of id
+
+show "fetched " + text of (count of items) + " items"
+for each item in items:
+  show "  " + item.name

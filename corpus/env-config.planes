@@ -1,0 +1,16 @@
+# Configuration with an honest label on where it can read from. `home` names an
+# env-boundary capability the host provides; declaring it puts `env` in the
+# effect surface, so anyone auditing this module sees it can read the
+# environment before they run it — even though this file only lists the
+# capability and falls back to the declared defaults below.
+
+foreign home from "os.getcwd" doing env
+
+let config = {
+  workdir: ".",
+  log-level: "info",
+  retries: 3
+} because "the defaults live in one record; the `home` capability above is why the surface reports an env read, which is the honest thing for a module that can consult the environment"
+
+show "log-level: " + config.log-level
+show "retries:   " + text of config.retries
