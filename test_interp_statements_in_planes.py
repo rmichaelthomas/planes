@@ -570,3 +570,114 @@ def test_give_stops_at_boundary_fail_does_not():
 def test_or_fail_not_triggered_passes_value_through():
     src = ("v = (10 * 5) or fail as e: 0\n")
     assert_program_var_agrees(src, "v")
+
+
+# ============================================================ Phase 7: function bodies as blocks
+
+
+def test_multi_statement_body():
+    src = ("to f of x:\n"
+           "  let y = x + 1\n"
+           "  let z = y * 2\n"
+           "  give z\n"
+           "result = f of 5\n")
+    assert_program_var_agrees(src, "result")
+
+
+def test_recursive_factorial():
+    src = ("to fact of n:\n"
+           "  if n <= 1:\n"
+           "    give 1\n"
+           "  give n * (fact of (n - 1))\n"
+           "result = fact of 6\n")
+    assert_program_var_agrees(src, "result")
+
+
+def test_recursive_sum():
+    src = ("to sum-to of n:\n"
+           "  if n == 0:\n"
+           "    give 0\n"
+           "  give n + (sum-to of (n - 1))\n"
+           "result = sum-to of 20\n")
+    assert_program_var_agrees(src, "result")
+
+
+def test_early_return_via_if_gives():
+    src = ("to sign of x:\n"
+           "  if x > 0:\n"
+           '    give "positive"\n'
+           "  if x < 0:\n"
+           '    give "negative"\n'
+           '  give "zero"\n'
+           "a = sign of 5\n"
+           "b = sign of 0\n"
+           "c = sign of (0 - 3)\n")
+    for v in ["a", "b", "c"]:
+        assert_program_var_agrees(src, v)
+
+
+def test_body_with_foreach_accumulator():
+    src = ("to sum-list of xs:\n"
+           "  total = 0\n"
+           "  for each x in xs:\n"
+           "    total = total + x\n"
+           "  give total\n"
+           "result = sum-list of [3, 1, 4, 1, 5, 9]\n")
+    assert_program_var_agrees(src, "result")
+
+
+def test_body_fall_through_returns_nothing():
+    src = ("to noop of x:\n"
+           "  let y = x\n"
+           "result = noop of 5\n")
+    assert_program_var_agrees(src, "result")
+
+
+def test_mutual_recursion():
+    src = ("to is-even of n:\n"
+           "  if n == 0:\n"
+           "    give true\n"
+           "  give is-odd of (n - 1)\n"
+           "to is-odd of n:\n"
+           "  if n == 0:\n"
+           "    give false\n"
+           "  give is-even of (n - 1)\n"
+           "a = is-even of 10\n"
+           "b = is-odd of 7\n")
+    assert_program_var_agrees(src, "a")
+    assert_program_var_agrees(src, "b")
+
+
+def test_fail_statement_in_function_body_propagates():
+    # The nested_fail_propagation corpus shape: a fail raised in a function's
+    # body (a single fail statement, not a give) propagating through several
+    # calls to an or fail above them all.
+    src = ("to parse-primary of tok:\n"
+           '  fail "unexpected token" as parse-error\n'
+           "to parse-unary of tok:\n"
+           "  give parse-primary of tok\n"
+           "to parse-expr of tok:\n"
+           "  give parse-unary of tok\n"
+           'answer = (parse-expr of "bad") or fail as e: e.tag\n')
+    assert_program_var_agrees(src, "answer")
+
+
+def test_function_local_does_not_escape_to_caller():
+    # A body-local let is not visible to the caller (lexical scoping, A.1).
+    src = ("to f of x:\n"
+           "  let secret = x * 100\n"
+           "  give secret\n"
+           "result = f of 2\n")
+    assert_program_var_agrees(src, "result")
+    state = planes_execute(src)
+    assert env_lookup(state, "secret") is None
+
+
+def test_recursion_and_show_together():
+    src = ("to countdown of n:\n"
+           "  if n < 0:\n"
+           "    give 0\n"
+           "  show n\n"
+           "  give countdown of (n - 1)\n"
+           "done = countdown of 3\n")
+    assert_output_agrees(src)

@@ -856,7 +856,7 @@ to apply-function-node of fn, arg-nodes, call-env, globals, name:
   # globals are computed once (globals-of the entry environment) and carried
   # unchanged, so a call is an O(1) prepend, not a per-call scan of the env.
   callee-env = bound.value + globals
-  give run-body of fn, callee-env, globals, call-env, name
+  give run-body of fn, callee-env, globals, call-env
 
 # Evaluate each argument in the calling environment, pairing it with its
 # parameter name, threading status so an argument that fails stops the call.
@@ -872,22 +872,21 @@ to eval-args of params, arg-nodes, call-env, globals, acc:
   p = first-item of params
   give eval-args of (rest of params), (rest of arg-nodes), call-env, globals, (acc plus { name: p, value: r.value })
 
-# Run a function body against the callee environment and carry the result out
-# to the caller (Rule 2). Build 1 restricts a body to a single give-expression;
-# Phase 7 replaces this with a block run through exec-block, at which point a
-# `give` anywhere in the body returns the function's value and a fall-through
-# returns nothing. Until then a multi-statement body fails naming build 2 --
-# now build 2 is here, so Phase 7 lifts the restriction rather than this stub.
-to run-body of fn, callee-env, globals, call-env, name:
-  if not ((count of fn.body) == 1):
-    give fail-of of (error-of of "build-2-statements", ("'" + name + "' has a multi-statement body -- statements are interp.planes build 2 (Phase 7)")), call-env
-  stmt = first-item of fn.body
-  if not (stmt.kind == "Give"):
-    give fail-of of (error-of of "build-2-statements", ("'" + name + "' body is not a single give-expression -- control flow is interp.planes build 2 (Phase 7)")), call-env
-  r = eval-node of stmt.expr, callee-env, globals
-  if not (r.status == "normal"):
-    give r
-  give normal-of of r.value, call-env
+# Run a function body as a block (Phase 7). The body threads a status record
+# from a normal start over the callee environment; a `give` anywhere in it
+# returns the function's value with the status reset to normal for the caller
+# (Rule 2), a `fail` propagates out unchanged (Rule 3), and a body that runs to
+# the end without a give returns nothing (interp.py's Traced(None)). The caller's
+# environment is restored either way -- the callee's locals do not escape. This
+# is where interpreted recursion becomes possible, and where the recursion
+# ceiling (A.7) is met and must be flattened rather than raised.
+to run-body of fn, callee-env, globals, call-env:
+  after = exec-block of fn.body, (normal-of of nothing, callee-env), globals
+  if after.status == "give":
+    give normal-of of after.value, call-env
+  if after.status == "fail":
+    give fail-of of after.error, call-env
+  give normal-of of (make-nothing), call-env
 
 # ================================================================ control flow as expressions (Phases 3, 5, 6)
 #

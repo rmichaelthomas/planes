@@ -727,18 +727,17 @@ def test_call_arity_and_unknown_errors():
         assert e.tag == "unknown-function", e.tag
 
 
-def test_non_expression_body_fails_naming_build_2():
-    # A function whose body is not a single give-expression is control flow --
-    # build 2. interp.py evaluates it (statements are already built there), so
-    # this is asserted Planes-side: it must fail naming build 2, not stub.
+def test_multi_statement_body_now_runs_build_2():
+    # Build 1 refused any body that was not a single give-expression, failing
+    # with build-2-statements; this is the ONE build-1 test whose result
+    # changed, because it asserted a temporary limitation that build 2 (Phase 7)
+    # lifts. It is updated to assert the multi-statement body now evaluates and
+    # agrees with interp.py -- not passing for the wrong reason, but asserting a
+    # capability that has arrived.
     defs = ("to f of x:\n"
             "  let y = x + 1\n"
             "  give y\n")
-    try:
-        planes_eval_program(defs, "f of 5")
-        raise AssertionError("expected build-2 failure")
-    except PlanesError as e:
-        assert e.tag == "build-2-statements", e.tag
+    assert_eval_program_agrees(defs, "f of 5")
 
 
 def _program_fail_tag(defs_src, expr_src, side, bindings=None):
