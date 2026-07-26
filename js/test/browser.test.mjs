@@ -10,7 +10,17 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runProgram } from "../browser_main.mjs";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+import { runProgram, analyseProgram, surfaceReport } from "../browser_main.mjs";
+
+// The exact program the page ships with, read from index.html — so these tests
+// guard the real demo, not a copy that can drift.
+function pageSample() {
+  const html = fileURLToPath(new URL("../../index.html", import.meta.url));
+  const src = fs.readFileSync(html, "utf-8");
+  return src.split('<textarea id="source" spellcheck="false">')[1].split("</textarea>")[0];
+}
 
 test("the browser engine runs a program and returns its output", () => {
   const r = runProgram('show "hello from the browser"\nshow text of (0.1 + 0.2)');
@@ -39,26 +49,45 @@ test("the browser VFS seeds files and captures writes", () => {
   assert.equal(r.files["out.json"], "[\n  1,\n  2\n]");
 });
 
-test("the sample program in index.html runs clean", () => {
-  // The exact sample the page ships with — a regression guard on the demo.
-  const sample = [
-    'price = 0.1 + 0.2',
-    'show "0.1 + 0.2 = " + text of price',
-    'third = 1 / 3',
-    'show "1 / 3   = " + text of third',
-    'readings = [23, 8, 41, 15, 4]',
-    'show "readings: " + text of count of readings + " values"',
-    'x = 5',
-    'y = 3',
-    'z = x * y + 2',
-    'why z',
-  ].join("\n");
-  const r = runProgram(sample);
+test("the sample program in index.html runs clean and performs no network send", () => {
+  // A regression guard on the actual demo: it must run without error, and the
+  // ask hidden behind `fetch` must NOT execute at the top level.
+  const r = runProgram(pageSample());
   assert.equal(r.error, null);
   assert.deepEqual(r.output, [
     "0.1 + 0.2 = 0.3",
-    "1 / 3   = ~0.333333333333",
-    "readings: 5 values",
-    "17 from x (5) * y (3) + 2",
+    "wrote 5 readings to readings.json",
   ]);
+  assert.ok(!r.effects.some((e) => e[0] === "ask"), "no network send runs");
+  assert.equal(r.files["readings.json"] !== undefined, true);
+});
+
+// ================================================================ the effect surface (A.5)
+
+test("analyseProgram reports the surface WITHOUT running the program", () => {
+  // A program whose only effect is a network send that would throw if run
+  // (no stubbed response) — the surface must still see it, proving nothing ran.
+  const src = 'use http\nx = ask "https://example.com/a.json"\n';
+  const { surface, error } = analyseProgram(src);
+  assert.equal(error, null);
+  assert.ok(surface.touches("network"));
+  assert.deepEqual(surface.targets("ask"), ["https://example.com/a.json"]);
+});
+
+test("the surface sees a network reach hidden behind an uncalled function", () => {
+  // The page's whole point: running the sample sends nothing, but the surface
+  // sees fetch's ask.
+  const { surface } = analyseProgram(pageSample());
+  assert.ok(surface.touches("network"), "surface sees the hidden ask");
+  assert.ok(surface.touches("file"), "and the file write");
+  assert.ok(surface.touches("console"), "and the shows");
+  const report = surfaceReport(surface);
+  assert.match(report, /network:/);
+  assert.match(report, /why → derives from: url/); // why shipped
+});
+
+test("analyseProgram reports a syntax error, not throws", () => {
+  const { surface, error } = analyseProgram("x = = 5\n");
+  assert.equal(surface, null);
+  assert.equal(error.tag, "syntax");
 });
