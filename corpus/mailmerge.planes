@@ -1,0 +1,16 @@
+# Fill a greeting for each recipient. The wording is the same for everyone; only
+# the fields change, pulled from each recipient's record. That is all a mail
+# merge is — a loop over records — and keeping the template in one place means a
+# change to the greeting reaches everyone at once.
+
+recipients = [
+  { name: "Ada", city: "London", credits: 25 },
+  { name: "Grace", city: "New York", credits: 40 }
+]
+
+for each r in recipients:
+  let line = "Hi " + r.name + " in " + r.city + " — you have " + text of r.credits + " credits."
+  show line
+
+let one-template = "one template, many records" because "the greeting lives in exactly one line, so editing it changes every message and none can drift out of step with the others"
+show one-template

@@ -1,0 +1,12 @@
+# Convert distances from miles to kilometres. The factor is exact and the
+# arithmetic stays exact until the last step, so no rounding creeps in before the
+# figure a reader actually sees. Stating the factor once keeps a future
+# correction to a single line.
+
+let per-mile = 1.60934 because "the standard mile-to-kilometre factor; named once so a change lands in exactly one place instead of every call site"
+
+distances = [3, 10, 26.2]
+
+for each miles in distances:
+  let km = round (miles * per-mile) to 2 places
+  show text of miles + " mi = " + text of km + " km"
