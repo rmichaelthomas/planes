@@ -1200,7 +1200,20 @@ to execute-program of src:
   nodes = program-nodes-of of src
   globals = functions-env-of of src
   start = { status: "normal", value: nothing, env: globals, error: nothing }
-  give exec-block of nodes, start, globals
+  give run-top-level of nodes, start
+
+# The top level threads its status like any block, but the globals a called
+# function sees is the current top-level environment, not just the function
+# values: interp.py captures each function's env as the live global scope, so a
+# top-level `let` bound before a call is visible inside the callee. Refreshing
+# globals to the threaded env each statement reproduces that, while a caller's
+# own locals (params, body lets) are never in the top-level env and so stay
+# invisible to a callee -- the lexical-scoping guarantee (A.1) still holds.
+to run-top-level of nodes, state:
+  threaded = state
+  for each stmt in nodes:
+    threaded = exec-stmt of stmt, threaded, threaded.env
+  give threaded
 
 # ================================================================ building a function environment (A.4 pipeline support)
 #

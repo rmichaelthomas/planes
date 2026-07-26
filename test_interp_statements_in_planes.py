@@ -673,6 +673,15 @@ def test_function_local_does_not_escape_to_caller():
     assert env_lookup(state, "secret") is None
 
 
+def test_function_reads_top_level_global():
+    # interp.py captures each function's env as the live global scope, so a
+    # top-level let bound before a call is visible inside the callee -- even one
+    # bound after the function's definition. A caller's own locals stay
+    # invisible (test_function_local_does_not_escape_to_caller pins that).
+    assert_program_var_agrees("g = 10\nto f: give g\nresult = f\n", "result")
+    assert_program_var_agrees("to f: give g\ng = 7\nresult = f\n", "result")
+
+
 def test_recursion_and_show_together():
     src = ("to countdown of n:\n"
            "  if n < 0:\n"
