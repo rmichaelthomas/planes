@@ -23,9 +23,28 @@ import { check } from "./rules.mjs";
 
 const INDENT = "  ";
 
-// Sub-expressions that need parens wherever they are not the outermost
-// expression of their statement.
-const COMPOUND = new Set(["BinOp", "Not", "IsNothing"]);
+// Sub-expressions that need parens wherever they are read at less than full
+// precedence. BinOp/Not/IsNothing were the original set; S6's composition
+// generator showed it was incomplete — ListPlus, OrFail, RecordUpdate, and
+// ForEach are all low-precedence and are otherwise split, or swallow a following
+// token, when embedded. (`first` and `round` render as primaries.)
+const COMPOUND = new Set([
+  "BinOp", "Not", "IsNothing", "ListPlus", "OrFail", "RecordUpdate", "ForEach",
+]);
+
+// Expressions whose own trailing structure swallows a following keyword or `:`
+// delimiter: an or-fail's `as tag[:...]`, a record update's `with` fields, a
+// for-each's `: body`. Distinct from COMPOUND — a BinOp before `:` (`if x > 0:`)
+// does not collide, so these positions must NOT wrap it.
+const OPEN_TRAILING = new Set(["OrFail", "RecordUpdate", "ForEach"]);
+
+// An expression read up to a trailing keyword or `:` delimiter — a for-each
+// source or where, an if/when subject, a write value or dest, a fail message, an
+// or-fail inner (S6). Parenthesise the kinds whose trailing structure would
+// otherwise swallow that delimiter.
+function delimited(node) {
+  return OPEN_TRAILING.has(node.__node) ? `(${renderExpr(node)})` : renderExpr(node);
+}
 
 // Expression node kinds that may stand alone as a statement. Listed explicitly
 // so renderStmt raises on a node that is neither a known statement nor a
@@ -39,6 +58,63 @@ const EXPR_STMT = new Set([
 // A RecordLit/RecordUpdate/Use/Note field Tup — its items.
 function parts(t) {
   return isTup(t) ? t.items : t;
+}
+
+// ================================================================ comma-list elements
+//
+// The composition defect (S6): an expression whose rendering ends in a GREEDY
+// comma-extensible list is misparsed when placed as an element of an enclosing
+// comma-separated list — the element's own commas are read as the enclosing
+// list's separators. A call's `of` argument list extends on a following primary;
+// a record update's `with` field list extends on a following `name: expr`. The
+// parser is correct; the renderer emits text whose meaning differs from the AST.
+// The fix is parenthesisation, identical to render.py (its specification).
+
+// The greedy comma-extensible list that terminates renderExpr(node) at top
+// level: "of" (a call's argument list), "with" (a record update's field list),
+// or null (renders self-delimited). Recursive through the renderings that end in
+// a sub-expression — a `for each` body, a BinOp/Not/plus trailing operand,
+// unless renderOperand parenthesises that operand (a COMPOUND operand ends ')').
+function greedyTail(node) {
+  switch (node.__node) {
+    case "Call":
+      return node.args.length ? "of" : null;
+    case "RecordUpdate":
+      return "with";
+    case "ForEach":
+      return greedyTail(node.body[0]);
+    case "BinOp":
+      return COMPOUND.has(node.right.__node) ? null : greedyTail(node.right);
+    case "Not":
+      return COMPOUND.has(node.expr.__node) ? null : greedyTail(node.expr);
+    case "ListPlus":
+      return COMPOUND.has(node.item.__node) ? null : greedyTail(node.item);
+    default:
+      return null;
+  }
+}
+
+// Render `node` as an element of a comma-separated list, parenthesising it when
+// its greedy tail would be swallowed by the list's own separator. `sep` is
+// "record" (siblings are `name: expr`) or "list" (siblings are exprs). A call's
+// `of` list swallows either; a record update's `with` list swallows only a
+// `name: expr`, so it is dangerous only between record fields.
+function commaElement(node, sep) {
+  const text = renderExpr(node);
+  const tail = greedyTail(node);
+  const dangerous = tail === "of" || (tail === "with" && sep === "record");
+  return dangerous ? `(${text})` : text;
+}
+
+// The base of a `X.name` field access. Like renderOperand — parenthesise a
+// COMPOUND base — but ALSO parenthesise a base with a greedy tail (S6):
+// `(f of a, b).kind` bare as `f of (a), (b).kind` binds `.kind` to the argument
+// `(b)`, not the call. The `.` is the enclosing separator here.
+function fieldBase(node) {
+  if (COMPOUND.has(node.__node) || greedyTail(node) !== null) {
+    return `(${renderExpr(node)})`;
+  }
+  return renderExpr(node);
 }
 
 // ================================================================ expressions
@@ -63,14 +139,14 @@ export function renderExpr(node) {
     case "Var":
       return node.name;
     case "ListLit":
-      return "[" + node.items.map(renderExpr).join(", ") + "]";
+      return "[" + node.items.map((i) => commaElement(i, "list")).join(", ") + "]";
     case "ListPlus":
       return `${renderOperand(node.base)} plus ${renderOperand(node.item)}`;
     case "RecordLit": {
       const fields = node.fields
         .map((f) => {
           const [k, v] = parts(f);
-          return `${k}: ${renderExpr(v)}`;
+          return `${k}: ${commaElement(v, "record")}`;
         })
         .join(", ");
       return fields ? "{ " + fields + " }" : "{}";
@@ -79,14 +155,17 @@ export function renderExpr(node) {
       const fields = node.fields
         .map((f) => {
           const [k, v] = parts(f);
-          return `${k}: ${renderExpr(v)}`;
+          return `${k}: ${commaElement(v, "record")}`;
         })
         .join(", ");
       return `${renderOperand(node.base)} with ${fields}`;
     }
     case "BinOp":
       if (node.op === "first") {
-        return `first ${renderOperand(node.left)} of ${renderOperand(node.right)}`;
+        // `first N of L` (S6): both operands parenthesised so each reads as a
+        // single closed primary — a bare Var count is otherwise swallowed as
+        // `k of parts`, a sub-unary list is otherwise split by precedence.
+        return `first (${renderExpr(node.left)}) of (${renderExpr(node.right)})`;
       }
       return `${renderOperand(node.left)} ${node.op} ${renderOperand(node.right)}`;
     case "Not":
@@ -94,7 +173,9 @@ export function renderExpr(node) {
     case "IsNothing":
       return `${renderOperand(node.expr)} is nothing`;
     case "Field":
-      return `${renderOperand(node.obj)}.${node.name}`;
+      // `X.name` (S6): a base with a greedy tail needs wrapping — `(call).kind`
+      // bare binds `.kind` to the call's last argument, not the call.
+      return `${fieldBase(node.obj)}.${node.name}`;
     case "Call":
       return renderCall(node);
     case "Round":
@@ -120,21 +201,21 @@ function renderCall(node) {
 
 function renderForeachExpr(node) {
   const where = node.where !== null && node.where !== undefined
-    ? ` where ${renderExpr(node.where)}`
+    ? ` where ${delimited(node.where)}`
     : "";
   const body = renderExpr(node.body[0]);
-  return `for each ${node.var} in ${renderExpr(node.source)}${where}: ${body}`;
+  return `for each ${node.var} in ${delimited(node.source)}${where}: ${body}`;
 }
 
 function renderWritetoInline(node) {
-  return `write ${renderExpr(node.value)} to ${renderExpr(node.dest)}`;
+  return `write ${delimited(node.value)} to ${delimited(node.dest)}`;
 }
 
 function renderOrfail(node) {
   const inner =
     node.expr.__node === "WriteTo"
       ? renderWritetoInline(node.expr)
-      : renderExpr(node.expr);
+      : delimited(node.expr);
   return `${inner} or fail as ${node.tag}`;
 }
 
@@ -222,7 +303,7 @@ function renderFuncdef(node, indent, markers) {
 }
 
 function renderIf(node, indent, markers) {
-  const lines = [indent + `if ${renderExpr(node.cond)}:`];
+  const lines = [indent + `if ${delimited(node.cond)}:`];
   lines.push(renderBlock(node.then, indent + INDENT, markers));
   if (node.els.length) {
     lines.push(indent + "else:");
@@ -233,21 +314,23 @@ function renderIf(node, indent, markers) {
 
 function renderForeachStmt(node, indent, markers) {
   const where = node.where !== null && node.where !== undefined
-    ? ` where ${renderExpr(node.where)}`
+    ? ` where ${delimited(node.where)}`
     : "";
-  const header = indent + `for each ${node.var} in ${renderExpr(node.source)}${where}:`;
+  const header = indent + `for each ${node.var} in ${delimited(node.source)}${where}:`;
   const body = renderBlock(node.body, indent + INDENT, markers);
   return header + "\n" + body;
 }
 
 function renderWhen(node, indent, markers) {
+  // A match value is a record-field position (comma-separated `name: expr`), so
+  // it parenthesises a greedy tail the same way a record literal's does (S6).
   const entries = [];
   for (const p of node.pattern) {
     const [fname, inner] = p.items;
     const [kind, arg] = inner.items;
-    entries.push(kind === "match" ? `${fname}: ${renderExpr(arg)}` : fname);
+    entries.push(kind === "match" ? `${fname}: ${commaElement(arg, "record")}` : fname);
   }
-  const header = indent + `when ${renderExpr(node.subject)} is { ${entries.join(", ")} }:`;
+  const header = indent + `when ${delimited(node.subject)} is { ${entries.join(", ")} }:`;
   const lines = [header, renderBlock(node.body, indent + INDENT, markers)];
   if (node.els.length) {
     lines.push(indent + "else:");
@@ -256,7 +339,43 @@ function renderWhen(node, indent, markers) {
   return lines.join("\n");
 }
 
+// The or-fail-with-handler at this statement's top, or null. A handler is a
+// statement-level continuation (`... or fail as tag:` then a block), appearing
+// as a bare OrFail statement or wrapped in the Assign/Give whose value it is.
+function statementOrfail(node) {
+  if (node.__node === "OrFail" && node.handler !== null && node.handler !== undefined) {
+    return node;
+  }
+  if (
+    (node.__node === "Assign" || node.__node === "Give") &&
+    node.expr.__node === "OrFail" &&
+    node.expr.handler !== null &&
+    node.expr.handler !== undefined
+  ) {
+    return node.expr;
+  }
+  return null;
+}
+
+// A copy of `node` with its or-fail handler cleared, so the single-line render
+// path produces the head line.
+function withoutHandler(node) {
+  if (node.__node === "OrFail") return { ...node, handler: null };
+  return { ...node, expr: { ...node.expr, handler: null } };
+}
+
 export function renderStmt(node, indent, markers) {
+  // An or-fail HANDLER block turns an otherwise single-line statement into a
+  // block (S6): `x = EXPR or fail as tag:` then the indented handler. Render the
+  // head line without the handler, then the block. renderOrfail is single-line
+  // and renders no handler; this is where the handler is put back.
+  const orfail = statementOrfail(node);
+  if (orfail !== null) {
+    const head = renderStmt(withoutHandler(node), indent, markers);
+    const block = renderBlock(orfail.handler, indent + INDENT, markers);
+    return head + ":\n" + block;
+  }
+
   switch (node.__node) {
     case "Use":
       return indent + renderUse(node);
@@ -283,7 +402,7 @@ export function renderStmt(node, indent, markers) {
     case "OrFail":
       return indent + renderOrfail(node);
     case "Fail":
-      return indent + `fail ${renderExpr(node.message)} as ${node.tag}`;
+      return indent + `fail ${delimited(node.message)} as ${node.tag}`;
     case "If":
       return renderIf(node, indent, markers);
     case "ForEach":

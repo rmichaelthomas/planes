@@ -7,13 +7,15 @@ safe fallback, a round-trip per kind on the JS side, PLUS cross-implementation
 round-trips both directions — render with one, reparse with the other, which
 catches divergence a same-side round-trip cannot.
 
-render.py is the specification, and the port reproduces it exactly — including a
-pre-existing render.py limitation the port must NOT fix (A.6): render.py renders
-a multi-argument call used as a record-field value in a form it cannot itself
-reparse (grammar/interp.planes:717 region), because the call's arg-list commas
-collide with the record's field separators. The JS renderer reproduces that
-byte-for-byte, so its round-trip fails on exactly the file render.py's does —
-agreement on the limitation, documented below.
+render.py is the specification, and the port reproduces it exactly.
+
+S6 UPDATE: the render round-trip limitation this suite documented in S5 — a
+multi-argument call used as a record-field value that render could not reparse —
+is FIXED (test_render_composition.py), along with three sibling defects it turned
+out to be one of. render now round-trips the WHOLE corpus, grammar/interp.planes
+and grammar/parser.planes included, on both implementations. The S5
+`test_js_reproduces_render_py_roundtrip_limitation_on_interp` test is replaced
+below by its opposite: both files now round-trip on both sides.
 """
 import glob
 import json
@@ -223,26 +225,20 @@ def test_cross_impl_js_render_python_reparse():
         "\n".join(failures)
 
 
-# ================================ the render.py limitation, reproduced exactly (A.6 finding)
+# ================================ the S5 limitation, now fixed on both sides (S6)
 
-def test_js_reproduces_render_py_roundtrip_limitation_on_interp():
-    """grammar/interp.planes: render.py renders a multi-arg call as a
-    record-field value in a form neither implementation can reparse (the call's
-    commas collide with the record's field separators). The JS render is
-    byte-identical to render.py's, and its reparse fails identically — the
-    faithful result, and a reported render.py finding, not a fix (A.6)."""
-    src = open("grammar/interp.planes", encoding="utf-8").read()
-    py = render(parse(src))
-    assert _js_render("grammar/interp.planes") == py, "render must be identical"
-    # render.py cannot reparse its own output here
-    try:
-        parse(py)
-        assert False, "expected render.py's own output to fail reparse"
-    except PlanesSyntaxError:
-        pass
-    # and the JS side reports the same failure, not a crash
-    r = _js_roundtrip("grammar/interp.planes")
-    assert r["ok"] is False and r["reparseFailed"] is True, r
+def test_the_two_grammar_files_now_round_trip_on_both_implementations():
+    """FLIPPED from S5's `test_js_reproduces_render_py_roundtrip_limitation_on_interp`.
+    grammar/interp.planes and grammar/parser.planes exercised four render
+    round-trip defects (a greedy comma tail, the `first` operator, a field on a
+    call result, and a dropped or-fail handler). All are fixed in S6, so both
+    files render byte-identically between the two implementations AND round-trip
+    on each side — the opposite of the S5 assertion."""
+    for f in ("grammar/interp.planes", "grammar/parser.planes"):
+        py = render(parse(open(f, encoding="utf-8").read()))
+        assert _js_render(f) == py, f"{f}: render must be byte-identical"
+        parse(py)  # render.py now reparses its own output (would raise otherwise)
+        assert _js_roundtrip(f)["ok"] is True, f"{f}: JS round-trip must hold"
 
 
 # ================================================================ escapes round-trip

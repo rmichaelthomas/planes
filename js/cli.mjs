@@ -380,6 +380,38 @@ switch (sub) {
     out(JSON.stringify({ ok, reparseFailed, kinds: [...kinds].sort() }));
     break;
   }
+  case "render-batch": {
+    // render-batch <json-array-of-sources> — for each source: {parsed, rendered,
+    // ok} where ok is parse -> render -> reparse -> astEqual. One call for the
+    // composition generator's many tiny programs (S6, A.3), instead of a node
+    // process per case.
+    loadGrammar();
+    const { render, astEqual } = await import("./render.mjs");
+    const srcs = JSON.parse(rest[0]);
+    const results = srcs.map((src) => {
+      let prog;
+      try {
+        prog = parse(src);
+      } catch (e) {
+        if (e instanceof PlanesSyntaxError || e instanceof PlanesAmbiguity) {
+          return { parsed: false };
+        }
+        throw e;
+      }
+      const rendered = render(prog);
+      let ok = false;
+      try {
+        const p2 = parse(rendered);
+        ok = prog.length === p2.length && prog.every((a, i) => astEqual(a, p2[i]));
+      } catch (e) {
+        if (!(e instanceof PlanesSyntaxError || e instanceof PlanesAmbiguity)) throw e;
+        ok = false;
+      }
+      return { parsed: true, rendered, ok };
+    });
+    out(JSON.stringify(results));
+    break;
+  }
   case "astequal": {
     // astequal <fileA> <fileB> — whether parse(A) and parse(B) are astEqual
     // (line-insensitive). Drives the cross-implementation round-trip: Python
