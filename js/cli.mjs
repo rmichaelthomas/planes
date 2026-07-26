@@ -11,6 +11,14 @@
 // Later phases add: tokens, ast, run.
 
 import { NodeHost, HostError, Host } from "./host.mjs";
+import { PlanesNumber, Fraction, Inexact } from "./planes_num.mjs";
+import {
+  resolveStringEscapes,
+  escapeStringLiteral,
+  codePoints,
+  codePointLength,
+  StringEscapeError,
+} from "./planes_text.mjs";
 
 const [, , sub, ...rest] = process.argv;
 
@@ -97,9 +105,93 @@ function hostCmd(argv) {
   }
 }
 
+// Each op is a JSON array [name, ...args]; returns the text/canonical result,
+// so the Python oracle can compare planes_num.py's answer string for string.
+function numOp(op) {
+  const [name, ...a] = op;
+  switch (name) {
+    case "parse":
+      return PlanesNumber.parse(a[0]).text();
+    case "of":
+      return PlanesNumber.of(a[0]).text();
+    case "add":
+      return PlanesNumber.parse(a[0]).add(PlanesNumber.parse(a[1])).text();
+    case "sub":
+      return PlanesNumber.parse(a[0]).sub(PlanesNumber.parse(a[1])).text();
+    case "mul":
+      return PlanesNumber.parse(a[0]).mul(PlanesNumber.parse(a[1])).text();
+    case "div":
+      return PlanesNumber.parse(a[0]).div(PlanesNumber.parse(a[1])).text();
+    case "round":
+      return PlanesNumber.parse(a[0]).roundTo(Number(a[1])).text();
+    case "frac":
+      return new PlanesNumber(new Fraction(BigInt(a[0]), BigInt(a[1]))).text();
+    case "cmp":
+      return String(PlanesNumber.parse(a[0]).cmp(PlanesNumber.parse(a[1])));
+    case "whole":
+      return PlanesNumber.parse(a[0]).isWhole() ? "true" : "false";
+    case "asint":
+      try {
+        return String(PlanesNumber.parse(a[0]).asInt());
+      } catch {
+        return "ERR";
+      }
+    case "harmonic": {
+      // 1/1 + 1/2 + ... + 1/n, exact — the denominator-growth case.
+      let acc = new PlanesNumber(new Fraction(0n));
+      for (let k = 1; k <= Number(a[0]); k++) {
+        acc = acc.add(new PlanesNumber(new Fraction(1n, BigInt(k))));
+      }
+      return acc.text();
+    }
+    case "inexact": {
+      // A denominator past MAX_DENOMINATOR must refuse, not round.
+      try {
+        new PlanesNumber(new Fraction(1n, 2n ** 4001n))
+          .add(PlanesNumber.of(0))
+          .text();
+        return "NO-REFUSAL";
+      } catch (e) {
+        return e instanceof Inexact ? "INEXACT" : "OTHER:" + e.message;
+      }
+    }
+    default:
+      throw new Error(`unknown num op: ${name}`);
+  }
+}
+
+function textOp(op) {
+  const [name, ...a] = op;
+  switch (name) {
+    case "resolve":
+      return resolveStringEscapes(a[0]);
+    case "escape":
+      return escapeStringLiteral(a[0]);
+    case "cplen":
+      return String(codePointLength(a[0]));
+    case "cps":
+      return codePoints(a[0]);
+    case "badresolve":
+      try {
+        resolveStringEscapes(a[0]);
+        return "NO-ERROR";
+      } catch (e) {
+        return e instanceof StringEscapeError ? "BAD:" + e.badChar : "OTHER";
+      }
+    default:
+      throw new Error(`unknown text op: ${name}`);
+  }
+}
+
 switch (sub) {
   case "host":
     hostCmd(rest);
+    break;
+  case "num":
+    out(JSON.stringify(JSON.parse(rest[0]).map(numOp)));
+    break;
+  case "text":
+    out(JSON.stringify(JSON.parse(rest[0]).map(textOp)));
     break;
   default:
     process.stderr.write(`unknown subcommand: ${sub}\n`);
