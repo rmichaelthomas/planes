@@ -15,7 +15,7 @@ Four phases, four commits, one PR.
 | host methods, **declared** | 8 | **7** |
 | host methods, **used** | 7 | **7** |
 | reference error work list | 0 of 109 | **0 of 109** |
-| self-hosted fix-clause shortfall | not measurable | **73 of 114** |
+| self-hosted fix-clause shortfall | not measurable | **72 of 113** |
 
 `scripts/verify_fast_follow.py`: **31 of 31 checks pass**, full run (not
 `--quick`). Table in `fast-follow-verification.md`.
@@ -97,12 +97,19 @@ first time and `errors_coverage.py` counts them:
 
 | state | count |
 |---|---:|
-| names a fix | 6 of 114 (5%) |
-| deliberately names none | 35 of 114 (31%) |
-| **should name one and does not** | **73 of 114 (64%)** |
+| names a fix | 6 of 113 (5%) |
+| deliberately names none | 35 of 113 (31%) |
+| **should name one and does not** | **72 of 113 (64%)** |
 
-By file: `interp.planes` 54, `parser.planes` 15, `lexer.planes` 3,
+By file: `interp.planes` 54, `parser.planes` 14, `lexer.planes` 3,
 `json.planes` 1.
+
+*Measured on merged `main`, after all four phases.* An earlier draft of this
+report carried 73 of 114 — the Phase B reading, taken before Phase D removed
+`parse_rule`'s duplicate raise from `grammar/parser.planes`. Correcting a
+figure this report reached for out of an earlier reading rather than out of
+the repo is invariant 8 applied to this report itself, which is the only
+honest place left to apply it.
 
 **Reported, not merged, and not driven to zero.** The reference's work list
 stays at 0 of 109 and merging would hide that. Closing the self-hosted 73 is a
@@ -249,7 +256,7 @@ owed.
   asserted it, because the self-hosted parser suites compare ASTs and error
   *tags*, not text. Closed for this message; **the other ~21 `fail` sites in
   `grammar/parser.planes` are still shorter than their reference twins** and
-  are part of the 73 in §2.
+  are part of the 72 in §2.
 * **Planes has exactly four escapes** (`\"` `\\` `\n` `\t`), so an em-dash in a
   self-hosted message is written as itself, not `—`. Discovered by the
   lexer refusing, in its own words, which is the refusal working.
