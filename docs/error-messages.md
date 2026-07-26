@@ -60,7 +60,7 @@ Some worked examples of the difference:
 | the error | a clause that restates | the clause that helps |
 |---|---|---|
 | `cannot count 5` | *count needs a collection* | `count takes a list, a record, or text — check which of those this value should be` |
-| `cannot take the whole part of text "5"` | *whole of needs a number* | `whole of rounds a number toward zero; Planes has no text-to-number builtin, so a number has to arrive as one — from a literal, from arithmetic, or from a field of something read as JSON` |
+| `cannot take the whole part of "5"` | *whole of needs a number* | `whole of rounds a number toward zero; Planes has no text-to-number builtin, so a number has to arrive as one — from a literal, from arithmetic, or from a field of something read as JSON` |
 | `'add' takes 2 values, given 1` | *pass 2 values* | `it is declared \`to add of a, b\`, so call it as \`add of a, b\`` |
 | `field 'a' appears twice in this record` | *remove the duplicate* | `keep one of the two; to change a field's value later, build a new record from this one — \`r with a: value\`` |
 
@@ -75,6 +75,16 @@ disagreed about what to say (found in C1, closed in C2). `lower of [1, 2]`
 answered `'[1, 2]'` when the program ran on the Python reference and `'1,2'`
 when it ran on the JavaScript host. `count of 5` raised a Python `TypeError`
 on one and a Planes `not-a-collection` on the other.
+
+There turned out to be a third implementation to disagree with. `grammar/
+interp.planes` — Planes interpreting Planes — was rendering its details through
+`canonical-of-value`, its own *test-oracle* form, so it differed from both
+others on nearly every detail while its test suite stayed green: those suites
+compared error **tags**, and a tag is deliberately shared across many messages.
+All three now agree on tag and detail across 348 shapes, and that agreement is
+asserted rather than assumed. The lesson is the same one, one turn sharper: if
+what a message *says* is part of the language, then a test that only checks the
+tag is not checking the language.
 
 That is the sharpest available illustration of the principle: **a message is
 part of the language, not an artifact of whichever host ran the program.** The
@@ -136,6 +146,31 @@ information was there and a reader could find it; a tool could not, and the
 catalogue counted them as naming nothing. They now say the same thing on a
 continuation line. Nothing was added — it moved.
 
+### How a value is written in a detail
+
+One rule, and all three implementations follow it: **write the value as the
+language would write it when writing it is bounded, and name its shape when it
+is not.**
+
+```
+cannot combine "5" with 1 using +          text, as a quoted literal
+cannot take the whole part of true         a boolean, a number, nothing: the literal
+cannot round [2 items]                     a list: its shape
+cannot read .a from {record}               a record: its shape
+```
+
+Text gets quotes because the plain display form does not have them — it is what
+`show` prints — so `whole of "5"` used to report `cannot take the whole part of
+5`, which reads as a number and is the one thing the message is about. Planes
+has one string syntax, so the quotes settle it.
+
+A list and a record get their *shape*, not their contents, and this is the part
+worth knowing: an error detail has to be **bounded**. A message that rendered a
+10,000-item list in full would be unreadable, and one that rendered
+`{ token: "hunter2" }` in full would put a credential into stderr and into
+whatever collects stderr. So a detail names how many and what kind, and if you
+need the contents, `why` on the name will show you where the value came from.
+
 Where a message crosses an `or fail`, the fix clause travels with it. An error
 that named a fix does not stop naming one because the author renamed it.
 
@@ -177,6 +212,26 @@ unknown-builtin: no builtin is named 'frobnicate'
 
 Telling you the failure is not your fault is a next move. Marking these as
 "no fix" would withhold exactly the thing you need to know.
+
+### One place the commitment is not available at all
+
+`grammar/interp.planes` — Planes interpreting Planes — cannot name a fix
+anywhere, and the reason is in the language rather than in the file. A program
+raises with `fail <message> as <tag>`, which has one slot for text, and the
+error record a program catches with `or fail as e` carries `e.tag` and
+`e.detail` and nothing else. There is no third field to put a fix clause in, so
+the self-hosted interpreter says what went wrong and never what to do about it.
+
+The three implementations agree on every tag and every detail — that is
+asserted, over 348 shapes. They cannot agree on fix clauses, because two of them
+have them and one has no way to.
+
+Closing it means either a two-part `fail` and a third field on the error record —
+a language addition, and this chain does not make those without a ruling — or
+accepting that a Planes-written interpreter answers the first question and not
+the second. Naming it is not the same as closing it, and it is named here
+because a learner reading `grammar/interp.planes` should not conclude the
+commitment was forgotten there.
 
 A deliberate silence is **marked**, never merely absent. The reason is a
 literal at the raise site, read into the catalogue the same way the message is,
@@ -293,6 +348,8 @@ list, and its target is zero.
 | you want | look at |
 |---|---|
 | every catalogued site | `grammar/errors.json` (generated — do not hand-edit) |
+| how a value is written in a detail | `detail_value` in `interp.py`, `detailValue` in `js/interp.mjs`, `detail-of-value` in `grammar/interp.planes` |
+| whether the three agree | `test_builtin_guards.py`, the three-way sweep |
 | the current count, in three states | `python3 errors_coverage.py` |
 | what makes an entry an error | the inclusion rule at the top of `grammar_gen.py` |
 | amber's refusal text | `grammar/messages/amber.json` (data, not inline prose) |
