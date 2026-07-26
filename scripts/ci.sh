@@ -31,7 +31,10 @@ python3 core_check.py
 # port surface a second host must implement and is held to the same core.
 python3 core_check.py grammar/json.planes
 
-echo "== errors coverage (S8 — every catalogued error names its fix; a report) =="
+echo "== errors coverage (every catalogued error names its fix; a report) =="
+# C2: three states now — names a fix, deliberately names none, and should name
+# one and does not. The last is the only one that is a work list, and its
+# target is zero.
 # A.5 / invariant 6: `errors name the fix` is measured, never enforced. A
 # message with no fix clause is work to schedule, not a build to break, and an
 # honest one-line error should not be un-committable. The checker exits 0 by

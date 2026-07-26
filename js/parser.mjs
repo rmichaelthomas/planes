@@ -140,7 +140,20 @@ export class Parser {
       }
       let msg = `line ${g.line}: expected ${value || kind.toLowerCase()}, found '${found}'`;
       if (fix) msg += `\n  ${fix}`;
-      throw new PlanesSyntaxError(msg);
+      // The bare form names no fix, deliberately (C2, A.2 item 3): this is the
+      // generic token gate, reached from every form in the grammar, and it
+      // knows which token was due and not what the author meant instead. The
+      // reason is carried here for the same reason interp.mjs carries `noFix` —
+      // a site marked deliberate in one implementation is marked in both.
+      throw new PlanesSyntaxError(
+        msg,
+        fix
+          ? null
+          : "this is the generic token gate, reached from every form in the grammar; it knows " +
+            "which token was due and not what the author meant by writing another, so a call " +
+            "site that can say more passes `fix=` and a call site that cannot says nothing " +
+            "rather than guessing",
+      );
     }
     return t;
   }
@@ -358,7 +371,9 @@ export class Parser {
     }
     throw new PlanesSyntaxError(
       `line ${t.line}: expected an effect name after ${after}, ` +
-        `found '${t.value || "end of line"}'`,
+        `found '${t.value || "end of line"}'\n` +
+        `  valid kinds: ${[...effectKinds().keys()].sort().join(", ")} \u2014 and ` +
+        `'nothing' after 'doing', for a foreign that performs none`,
     );
   }
 
@@ -812,7 +827,11 @@ export class Parser {
     if (parts.length === 0) {
       const g = this.peek();
       throw new PlanesSyntaxError(
-        `line ${g.line}: expected a name, found '${g.value || "end of line"}'`,
+        `line ${g.line}: expected a name, found '${g.value || "end of line"}'\n` +
+          `  a name here is one or more plain words \u2014 the old or the ` +
+          `new spelling in a \`use ... with <old> as <new>\` rename; a ` +
+          `quoted string, a number, or a punctuation mark cannot stand ` +
+          `for one`,
       );
     }
     return parts.join(" ");
@@ -1151,7 +1170,10 @@ export class Parser {
         const k = f.items[0];
         if (seen.has(k)) {
           throw new PlanesSyntaxError(
-            `line ${t.line}: field '${k}' appears twice in this record`,
+            `line ${t.line}: field '${k}' appears twice in this ` +
+              `record\n  keep one of the two; to change a field's ` +
+              `value later, build a new record from this one \u2014 ` +
+              `\`r with ${k}: value\``,
           );
         }
         seen.add(k);
@@ -1245,7 +1267,12 @@ export class Parser {
     }
 
     throw new PlanesSyntaxError(
-      `line ${t.line}: expected a value, found '${t.value || "end of line"}'`,
+      `line ${t.line}: expected a value, ` +
+        `found '${t.value || "end of line"}'\n` +
+        `  a value starts with a number, a quoted string, true, false, ` +
+        `nothing, a name, \`not\`, a list, a record, or a parenthesised ` +
+        `expression \u2014 a statement word like \`show\` or \`write\` cannot ` +
+        `stand in for one`,
     );
   }
 }

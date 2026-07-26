@@ -137,15 +137,103 @@ def condition(v):
         "compare it: `if count of items > 0:`")
 
 
+def require_text(name, verb, v):
+    """The guard `lower`, `upper`, and `normalize` share (C2, A.6 family 2).
+
+    Each of the three used to hand its argument to the host's own string
+    conversion — `str()` here, `String()` in JavaScript — so `lower of [1, 2]`
+    answered `'[1, 2]'` on one implementation and `'1,2'` on the other. Ten
+    cases where both were confidently wrong in the same way, and the answer
+    depended on which host ran the program.
+
+    They refuse instead, naming `text of`. The chain was already consistent
+    on this everywhere else — `+` does not coerce, ordering across types
+    errors naming both operands, `join` refuses a non-text element — so an
+    explicit conversion exists and implicit coercion bought nothing but the
+    loss of a value's type. `verb` is separate from `name` so the sentence
+    reads ("cannot lowercase") while the fix names the builtin ("lower of").
+    """
+    if not isinstance(v, str):
+        raise PlanesError(
+            "not-text", f"cannot {verb} {fmt(v)}",
+            f"{name} takes text; convert first — e.g. {name} of (text of n)")
+
+
+def require_target(what, spelled, v):
+    """The guard on an effect's target: a url, a path, a write destination.
+
+    `ask`, `read`, and `write ... to` used to hand the value straight to the
+    host, so a non-text target reached a host primitive and failed in the
+    host's words — `open(5, "w")` opens file descriptor 5, and a TestHost
+    keyed by path raised a bare `unhashable type` on a list. C2 refuses at
+    the language boundary instead, where the message can name the fix.
+    """
+    if not isinstance(v, str):
+        raise PlanesError(
+            "not-text", f"{what} must be text, found {fmt(v)}",
+            f"wrap it with text of — `{spelled}`")
+
+
+def kinded(v):
+    """A value in an error detail, with its kind named when the bare form would
+    hide it.
+
+    `fmt` renders text without quotes — it is what `show` prints — so
+    `whole of "5"` reported `cannot take the whole part of 5`, which reads as a
+    number and is the one thing the message is about. Every other kind is
+    already distinguishable in `fmt`'s output (`true`, `nothing`, `[2 items]`,
+    `{record}`), so only text needs saying.
+
+    Used at the two sites where a text value is a realistic wrong input and the
+    message turns on it being a number. The same ambiguity sits in `+`, `round`,
+    ordering comparison, and `arith` — reported, not fixed here: the
+    self-hosted `grammar/interp.planes` renders those details through
+    `canonical-of-value`, which quotes text, so converging the three
+    implementations is a change of its own with its own agreement to establish.
+    `rest of text "..."` and `in text "..."` already name the kind this way.
+    """
+    if isinstance(v, str):
+        return f'text "{escape_string_literal(v)}"'
+    return fmt(v)
+
+
+def param_list(params):
+    """The ` of a, b` tail of a declaration, empty when it takes none. Used by
+    the arity messages, which name the parameters rather than only counting
+    them: a count leaves an author counting commas, and the declared names say
+    which values are wanted and in what order."""
+    return f" of {', '.join(params)}" if params else ""
+
+
+def call_shape(name, params):
+    """The call a declaration wants, each parameter standing in for its value:
+    `f of a, b`, or a bare `f` for a function that takes nothing."""
+    return f"{name} of {', '.join(params)}" if params else name
+
+
 # ================================================================ errors
 
 class PlanesError(Exception):
-    def __init__(self, tag, detail="", fix="", path=None):
+    """A program error, with the fix clause the language commits to naming.
+
+    `no_fix` (C2) is the other half of that commitment: a reason, in words,
+    why *this* site names none. Two shapes qualify and no others — a message
+    the language did not write (`fail`'s own text, an `or fail` re-tag of a
+    caught error), and a gate too generic to know what the author meant
+    (`expect`). It is never rendered, so a message stays byte-identical
+    across implementations; it exists so `grammar_gen.py` records the reason
+    at the raise site and `errors_coverage.py` can tell a deliberate silence
+    from a gap. Marked, never silent — an unexplained absence still counts
+    against the commitment.
+    """
+
+    def __init__(self, tag, detail="", fix="", path=None, no_fix=None):
         self.tag = tag
         self.detail = detail
         self.fix = fix
         self.path = path      # list-index/record-field steps to a comparison
                               # mismatch, or None when not applicable (§109)
+        self.no_fix = no_fix
         msg = tag
         if detail:
             msg += f": {detail}"
@@ -551,7 +639,11 @@ class Interpreter:
                     "fail-message-not-text",
                     f"fail's message must be text, found {fmt(v.value)}",
                     "wrap it with text of")
-            raise PlanesError(stmt.tag, v.value)
+            raise PlanesError(
+                stmt.tag, v.value,
+                no_fix="the message is the program's own, written at the "
+                       "`fail`; naming a fix here would overwrite what the "
+                       "author chose to say")
 
         return self.eval(stmt, env)
 
@@ -655,8 +747,18 @@ class Interpreter:
                 raise PlanesError("module-not-used",
                                   "writing a file needs the file module",
                                   "add `use file` at the top")
+            require_target("a destination to write to",
+                           "write value to (text of p)", dest.value)
             payload = to_json(value.value)
-            self.host.write(dest.value, payload)
+            try:
+                self.host.write(dest.value, payload)
+            except (HostError, OSError) as e:
+                # A failed write used to leave the host's own OSError to escape
+                # (C2, constraint 6). `read` and `ask` already converted; this
+                # is the third boundary, converted in the same voice.
+                raise PlanesError(
+                    "write-failed", f"writing '{dest.value}' failed: {e}",
+                    "check the directory exists and is writable")
             self.effects.append(("write", dest.value, len(payload)))
             self.maybe_record("write", dest.value, self.host_anchor(),
                               derivation=dest.node)
@@ -664,6 +766,20 @@ class Interpreter:
                                       [value.node], origin=f"file:{dest.value}"))
 
         if isinstance(node, OrFail):
+            # The three raises below name no fix of their own, deliberately and
+            # for one reason: they do not write a message. Each re-tags a
+            # message somebody else wrote — a caught Planes error, or a host
+            # exception a `foreign` call raised — under the author's `or fail
+            # as` tag. Inventing a fix clause here would attach the language's
+            # advice to a failure the language did not diagnose. `no_fix` says
+            # so at the raise site, so the catalogue records a decision rather
+            # than a gap. The caught error's own `fix` is carried forward
+            # (C2): an error that named a fix must not stop naming it because
+            # it crossed an `or fail`.
+            # The reason is written out at each of the three, not hoisted into a
+            # variable, for the same purpose parser.py's `expect` keeps two
+            # literal raises: grammar_gen.py reads the catalogue off these call
+            # sites, and a reason assembled elsewhere is a reason it cannot see.
             try:
                 return self.eval(node.expr, env)
             except _Give:
@@ -671,12 +787,26 @@ class Interpreter:
             except PlanesError as e:
                 if node.handler is not None:
                     return self.run_or_fail_handler(node, e, env)
-                raise PlanesError(node.tag, e.detail or e.tag, path=e.path)
+                raise PlanesError(
+                    node.tag, e.detail or e.tag, e.fix, path=e.path,
+                    no_fix="re-tags a message this raise did not write; the "
+                           "fix belongs to whoever raised it, and is carried "
+                           "forward")
             except Exception as e:
                 if node.handler is not None:
                     return self.run_or_fail_handler(
-                        node, PlanesError(node.tag, str(e)), env)
-                raise PlanesError(node.tag, str(e))
+                        node,
+                        PlanesError(
+                            node.tag, str(e),
+                            no_fix="re-tags a host exception this raise did "
+                                   "not write; a host failure is not "
+                                   "something the language can advise on"),
+                        env)
+                raise PlanesError(
+                    node.tag, str(e),
+                    no_fix="re-tags a host exception this raise did not "
+                           "write; a host failure is not something the "
+                           "language can advise on")
 
         if isinstance(node, ForEach):
             return self.eval_foreach(node, env)
@@ -690,7 +820,19 @@ class Interpreter:
                     result = self.exec_stmt(s, env)
             return result
 
-        raise PlanesError("cannot-evaluate", type(node).__name__)
+        # C2 (A.1): a literal, so the catalogue can read it. The four
+        # interpreter-invariant guards in this file (this one, `unknown-builtin`,
+        # and `unknown-operator` twice) are unreachable from any program the
+        # parser accepts — every statement-only construct is refused there as
+        # "expected a value". So they name a fix an author can actually act on:
+        # report it, because reaching one means the two halves disagree.
+        raise PlanesError(
+            "cannot-evaluate",
+            f"'{type(node).__name__}' has no value — it is a statement, not "
+            f"an expression",
+            "write it on its own line; reaching this from a program the parser "
+            "accepted is a defect in the interpreter, not in the program, and "
+            "worth reporting with the source that produced it")
 
     def eval_binop(self, node, env):
         if node.op == "and":
@@ -712,6 +854,22 @@ class Interpreter:
         if node.op == "first":
             n = self.eval(node.left, env)
             src = self.eval(node.right, env)
+            # C2 (constraint 6): both guards. Neither implementation had them —
+            # a non-number count and a non-sequence source each reached a host
+            # primitive, and `first 1 of 5` answered with a Python TypeError
+            # here and a V8 one there.
+            if not is_num(n.value):
+                raise PlanesError(
+                    "not-a-number",
+                    f"the count in `first n of` must be a number, "
+                    f"found {kinded(n.value)}",
+                    "write the count as a number — `first 3 of items`")
+            if not isinstance(src.value, (str, list, tuple)):
+                raise PlanesError(
+                    "not-a-collection",
+                    f"cannot take the first {fmt(n.value)} of {fmt(src.value)}",
+                    "`first n of` takes a list or text; a record has no order "
+                    "to take a prefix of")
             v = src.value[: int(n.value)]
             return Traced(v, Deriv("op", f"first {int(n.value)} of", v, [src.node]))
 
@@ -733,10 +891,18 @@ class Interpreter:
                                   "asking a url needs the http module",
                                   "add `use http` at the top")
             url = arg.value
+            require_target("a url to ask", "ask (text of u)", url)
             try:
                 body = self.host.ask(url)
             except HostError as e:
-                raise PlanesError("ask-failed", str(e))
+                # C2 (A.1): the message is a literal here, so the catalogue can
+                # read it. The host's own words ride along as the cause — they
+                # say which url and why — but the sentence and the fix are the
+                # language's.
+                raise PlanesError(
+                    "ask-failed", f"asking '{url}' failed: {e}",
+                    "check the url is reachable and spelled right; a run "
+                    "without the network needs a stubbed response")
             self.effects.append(("ask", url, len(body)))
             self.maybe_record("ask", url, self.host_anchor(), derivation=arg.node)
             try:
@@ -752,6 +918,7 @@ class Interpreter:
                                   "reading a file needs the file module",
                                   "add `use file` at the top")
             path = arg.value
+            require_target("a path to read", "read (text of p)", path)
             try:
                 body = self.host.read(path)
             except HostError:
@@ -763,18 +930,35 @@ class Interpreter:
                                       [arg.node], origin=f"file:{path}"))
 
         if node.name == "count":
+            # C2 (A.6, family 1): the guard. `len()` on a number, a boolean, or
+            # nothing raised a bare Python TypeError — a host exception escaping
+            # into a Planes program, which is the most complete failure of the
+            # fix-clause commitment there is. js/interp.mjs already refused;
+            # this now refuses in the same words.
+            if not isinstance(arg.value, (str, list, tuple, dict)):
+                raise PlanesError(
+                    "not-a-collection", f"cannot count {fmt(arg.value)}",
+                    "count takes a list, a record, or text — check which of "
+                    "those this value should be")
             v = Number.of(len(arg.value))
             return Traced(v, Deriv("op", "count of", v, [arg.node]))
         if node.name == "lower":
-            v = str(arg.value).lower()
+            require_text("lower", "lowercase", arg.value)
+            v = arg.value.lower()
             return Traced(v, Deriv("op", "lower of", v, [arg.node]))
         if node.name == "upper":
-            v = str(arg.value).upper()
+            require_text("upper", "uppercase", arg.value)
+            v = arg.value.upper()
             return Traced(v, Deriv("op", "upper of", v, [arg.node]))
         if node.name == "whole":
             if not is_num(arg.value):
-                raise PlanesError("not-a-number",
-                                  f"cannot take the whole part of {fmt(arg.value)}")
+                raise PlanesError(
+                    "not-a-number",
+                    f"cannot take the whole part of {kinded(arg.value)}",
+                    "whole of rounds a number toward zero; Planes has no "
+                    "text-to-number builtin, so a number has to arrive as "
+                    "one — from a literal, from arithmetic, or from a field "
+                    "of something read as JSON")
             n = Number.of(arg.value).round_to(0)
             return Traced(n, Deriv("op", "whole of", n, [arg.node]))
 
@@ -782,7 +966,8 @@ class Interpreter:
             v = fmt(arg.value)
             return Traced(v, Deriv("op", "text of", v, [arg.node]))
         if node.name == "normalize":
-            v = unicodedata.normalize("NFC", str(arg.value))
+            require_text("normalize", "normalize", arg.value)
+            v = unicodedata.normalize("NFC", arg.value)
             return Traced(v, Deriv("op", "normalize of", v, [arg.node]))
         if node.name == "join":
             # Fold a list of text into one string in O(n) — the answer to the
@@ -828,7 +1013,11 @@ class Interpreter:
             v = arg.value[1:]
             return Traced(v, Deriv("op", "rest of", v, [arg.node]))
 
-        raise PlanesError("unknown-builtin", node.name)
+        raise PlanesError(
+            "unknown-builtin", f"no builtin is named '{node.name}'",
+            "the ten builtins are fixed and the lexer recognises only those, "
+            "so reaching this is a defect in the interpreter rather than in "
+            "the program — worth reporting with the source")
 
     def run_or_fail_handler(self, node, error, env):
         """Bind `node.tag` to `error`, as a record, and run the handler.
@@ -902,9 +1091,14 @@ class Interpreter:
         # return value, RecursionError narrowed to this body (§42).
         if len(args) != len(fn.params):
             word = "value" if len(fn.params) == 1 else "values"
+            # C2: the fix names the parameters. The count alone leaves an author
+            # counting commas; the declared names say which values are wanted
+            # and in what order, and `call_shape` renders the call to write.
             raise PlanesError(
                 "wrong-arity",
-                f"'{iname}' takes {len(fn.params)} {word}, given {len(args)}")
+                f"'{iname}' takes {len(fn.params)} {word}, given {len(args)}",
+                f"it is declared `to {iname}{param_list(fn.params)}`, so call "
+                f"it as `{call_shape(iname, fn.params)}`")
         arg_vals = [a if isinstance(a, Traced) else self.eval(a, env)
                     for a in args]
         inner = Env(fn.env)
@@ -948,7 +1142,10 @@ class Interpreter:
             raise PlanesError(
                 "wrong-arity",
                 f"'{decl.name}' takes {len(decl.params)} {word}, "
-                f"given {len(args)}")
+                f"given {len(args)}",
+                f"it is declared `foreign {decl.name}"
+                f"{param_list(decl.params)} from \"{decl.target}\"`, so call "
+                f"it as `{call_shape(decl.name, decl.params)}`")
 
         arg_vals = [a if isinstance(a, Traced) else self.eval(a, env)
                     for a in args]
@@ -1029,12 +1226,41 @@ def apply_op(op, a, b):
     if op == ">=": return compare(op, a, b)
     if op == "==": return equal(a, b)
     if op == "!=": return not equal(a, b)
-    if op == "in": return a in b
-    raise PlanesError("unknown-operator", op)
+    if op == "in": return membership(a, b)
+    raise PlanesError(
+        "unknown-operator", f"no operator is spelled '{op}'",
+        "the parser builds only the operators the language defines, so "
+        "reaching this is a defect in the interpreter rather than in the "
+        "program — worth reporting with the source")
 
 
 def is_num(v):
     return isinstance(v, (Number, int)) and not isinstance(v, bool)
+
+
+def membership(a, b):
+    """`a in b` — over a list, a record's field names, or text.
+
+    Guarded on both operands (C2, constraint 6). `b` had no guard at all:
+    `1 in 5` raised a Python TypeError here and answered `unknown-operator` in
+    JavaScript, which named the wrong thing — `in` is an operator the language
+    defines; what was wrong was the value on the right. And a text container
+    had no guard on `a`: Python refused `1 in "ab"` with a TypeError while V8
+    coerced the 1 to "1", so `1 in "a1b"` would have answered true on one host
+    and raised on the other.
+    """
+    if isinstance(b, str):
+        if not isinstance(a, str):
+            raise PlanesError(
+                "not-text", f"cannot look for {fmt(a)} in text {fmt(b)}",
+                "`in` over text looks for text — wrap the left side with "
+                "text of")
+        return a in b
+    if isinstance(b, (list, tuple, dict)):
+        return a in b
+    raise PlanesError(
+        "not-a-collection", f"cannot look inside {fmt(b)}",
+        "`in` looks inside a list, a record's field names, or text")
 
 
 def arith(op, a, b):
@@ -1055,7 +1281,11 @@ def arith(op, a, b):
         raise PlanesError(
             "needs-rounding", str(e),
             "round an intermediate value, e.g. `round x to 6 places`")
-    raise PlanesError("unknown-operator", op)
+    raise PlanesError(
+        "unknown-operator", f"'{op}' is not an arithmetic operator",
+        "arithmetic is + - * /; reaching this means apply_op routed an "
+        "operator here that it does not itself arithmetic on, which is a "
+        "defect in the interpreter rather than in the program")
 
 
 def compare(op, a, b):

@@ -17,10 +17,13 @@ export { GrammarDataError };
 // A malformed program — refuse, don't guess. The JS analogue of lexer.py's
 // PlanesSyntaxError, which tokenize() raises on an unrecognized escape or a
 // trailing backslash that consumes the closing quote.
+// `noFix` mirrors lexer.py's `no_fix` (C2): a reason why this raise site names
+// no fix clause. Never rendered — the message is byte-identical either way.
 export class PlanesSyntaxError extends Error {
-  constructor(message) {
+  constructor(message, noFix = null) {
     super(message);
     this.name = "PlanesSyntaxError";
+    this.noFix = noFix;
   }
 }
 
@@ -106,8 +109,10 @@ function resolveWithLine(raw, lineno) {
     const nxt = e.badChar;
     throw new PlanesSyntaxError(
       `line ${lineno}: unrecognized escape '\\${nxt}' in a ` +
-        `string literal -- the four recognized escapes are ` +
-        `\\" \\\\ \\n \\t`,
+        `string literal\n` +
+        `  the four recognized escapes are ` +
+        `\\" \\\\ \\n \\t -- for any other character, write the ` +
+        `character itself`,
     );
   }
 }
@@ -144,16 +149,18 @@ export function tokenize(src) {
             throw new PlanesSyntaxError(
               `line ${lineno}: unterminated string literal -- a ` +
                 `backslash right before the closing quote escapes ` +
-                `that quote (\\") instead of ending the string; ` +
-                `the four recognized escapes are ` +
+                `that quote (\\") instead of ending the string\n` +
+                `  the four recognized escapes are ` +
                 `\\" \\\\ \\n \\t -- write \\\\ for a literal ` +
                 `trailing backslash`,
             );
           }
           throw new PlanesSyntaxError(
             `line ${lineno}: unterminated string literal -- no ` +
-              `closing quote found before the end of the line ` +
-              `(a Planes string cannot span multiple lines)`,
+              `closing quote found before the end of the line\n` +
+              `  add the closing quote; a Planes string cannot span ` +
+              `multiple lines, so a long one has to be joined with ` +
+              `+ across lines`,
           );
         }
         pos += 1;
