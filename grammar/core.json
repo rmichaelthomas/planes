@@ -1,0 +1,27 @@
+{
+  "note": "The core subset -- the port surface a second host must implement to run grammar/interp.planes. Declared here as a single source of truth (as grammar/vocabulary.json is for the full surface) and enforced by core_check.py, which fails when interp.planes uses any keyword or builtin outside it. Derived from evidence: every member is a construct interp.planes actually uses; every excluded construct is one it provably avoids. CORE_SUBSET.md is the prose derivation; this file is what the checker reads. Effect kinds are NOT listed as constraints -- all seven are core (an interpreter performs whatever it interprets, confirmed by shapes in Phase 5), so they are never flagged.",
+  "format": 1,
+  "keywords": [
+    "and", "as", "doing", "each", "else", "fail", "false", "first", "for",
+    "foreign", "from", "give", "if", "in", "not", "nothing", "of", "or",
+    "places", "plus", "round", "show", "to", "true", "use", "where", "with",
+    "write"
+  ],
+  "builtins": [
+    "ask", "count", "join", "lower", "normalize", "read", "rest", "text",
+    "upper", "whole"
+  ],
+  "effect_kinds_all_core": true,
+  "excluded_keywords": {
+    "let": "plain `=` suffices everywhere; interp.planes never writes `let`",
+    "rule": "a rule is a checker constraint, not an interpreter action",
+    "when": "dispatch is flat `if k == ...` on the node kind (A.1/A.6), never `when subject is {...}` -- so `when` is NOT needed, refuting CORE_SUBSET.md's claim that it is the only substitute for the absent isinstance",
+    "why": "provenance query is a tool, not a language the interpreter needs; the deriv slot stays nothing (A.6)"
+  },
+  "excluded_builtins": {},
+  "size": {
+    "keywords": "28 of 32",
+    "builtins": "10 of 10 -- interp.planes delegates every builtin to the host, so all ten are core, not the 3-4 CORE_SUBSET.md predicted",
+    "effect_kinds": "7 of 7"
+  }
+}

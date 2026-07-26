@@ -25,6 +25,9 @@ python3 audit_locked_vs_built.py
 echo "== grammar_gen.py --check =="
 python3 grammar_gen.py --check
 
+echo "== core_check.py (interp.planes stays inside the declared core) =="
+python3 core_check.py
+
 echo "== ruff =="
 ruff check .
 
