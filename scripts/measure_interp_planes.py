@@ -33,7 +33,7 @@ def _fresh():
 
 
 def _traced(v):
-    return Traced(v, Deriv("literal", repr(v), v, []))
+    return Traced(v, Deriv("literal", "<host value>", v, []))
 
 
 # ---------------------------------------------------------------- expr nesting

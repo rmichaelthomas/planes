@@ -61,13 +61,13 @@ to make-record of fields:
 #   kind    -- the step: literal / name / op / field / call / effect / item /
 #              comprehension / list / record / foreign
 #   label   -- the text `why` prints for the step
-#   value   -- the value the step produced, as it stood BEFORE this step's
-#              deriv was attached. interp.py stores a raw Python value here;
-#              `derived` stores the pre-attachment record, which is this
-#              model's nearest thing to one -- no cycle, and because records
-#              are immutable and shared, no copy. It is only ever read back
-#              through `fmt-of`, which reads `kind` and the payload and never
-#              the slot, so a residual inner deriv is invisible.
+#   value   -- the value the step produced, with NO provenance of its own.
+#              interp.py stores a raw Python value here, and a value record
+#              whose deriv slot is cleared is this model's raw value: no
+#              cycle, and no path from a deriv back into the graph except
+#              through `inputs`, which keeps the graph a DAG of the shape
+#              interp.py's is rather than a deeper one that only renders the
+#              same. It is read back through `fmt-of` alone.
 #   inputs  -- the derivs this step was computed from
 #   origin  -- the boundary the value crossed to enter the program, or nothing
 #
@@ -75,12 +75,12 @@ to make-record of fields:
 # per site, and the constructors above never learn about it.
 
 to derived of value, kind, label, inputs:
-  give value with deriv: { kind: kind, label: label, value: value, inputs: inputs, origin: nothing }
+  give value with deriv: { kind: kind, label: label, value: (value with deriv: nothing), inputs: inputs, origin: nothing }
 
 # The same, for a value that entered the program at a boundary -- an effect's
 # result or a foreign call's return, which `origins-of` walks back to.
 to derived-at of value, kind, label, inputs, origin:
-  give value with deriv: { kind: kind, label: label, value: value, inputs: inputs, origin: origin }
+  give value with deriv: { kind: kind, label: label, value: (value with deriv: nothing), inputs: inputs, origin: origin }
 
 # ================================================================ the canonical value form (A.5)
 #
@@ -1056,8 +1056,25 @@ to apply-function-node of fn, arg-nodes, call-env, globals, name:
   # effect performed inside the callee accumulates to the one shared log, and it
   # is prepended ahead of globals so it shadows any staler __io__ the frozen
   # globals still carry from the top level.
-  callee-env = bound.value + ([{ name: "__io__", value: (io-of of call-env) }] + globals)
-  give run-body of fn, callee-env, globals, call-env
+  # Each parameter is a `name` derivation step over the argument it was given,
+  # so a derivation crossing a call boundary shows the parameter, then unfolds
+  # into the caller's expression (interp.py binds Deriv("name", p, ...)).
+  callee-env = (bind-params of bound.value) + ([{ name: "__io__", value: (io-of of call-env) }] + globals)
+  give run-body of fn, callee-env, globals, call-env, name, (arg-derivs-of of bound.value)
+
+to bind-params of bindings:
+  result = []
+  for each b in bindings:
+    result = result plus { name: b.name, value: (derived of b.value, "name", b.name, [b.value.deriv]) }
+  give result
+
+# The derivs of the evaluated arguments, as they stood before the parameter
+# binding wrapped them -- the inputs interp.py gives a `call` or `foreign` step.
+to arg-derivs-of of bindings:
+  result = []
+  for each b in bindings:
+    result = result plus b.value.deriv
+  give result
 
 # Evaluate each argument in the calling environment, pairing it with its
 # parameter name, threading status so an argument that fails stops the call.
@@ -1081,18 +1098,21 @@ to eval-args of params, arg-nodes, call-env, globals, acc:
 # environment is restored either way -- the callee's locals do not escape. This
 # is where interpreted recursion becomes possible, and where the recursion
 # ceiling (A.7) is met and must be flattened rather than raised.
-to run-body of fn, callee-env, globals, call-env:
+to run-body of fn, callee-env, globals, call-env, name, arg-derivs:
   after = exec-block of fn.body, (normal-of of nothing, callee-env), globals
   # Restore the caller's environment (the callee's locals do not escape) but
   # carry the callee's final io back out (build 3): effects performed inside the
   # body must survive into the caller's log, so the one thing that crosses the
   # boundary out is the accumulated __io__.
   out-env = with-io of call-env, (io-of of after.env)
+  # A `call` step, interp.py's two shapes: a body that gave puts the given
+  # value's deriv ahead of the arguments' (so `why` can print `f(a) = <body>`);
+  # a body that ran to the end has the arguments alone.
   if after.status == "give":
-    give normal-of of after.value, out-env
+    give normal-of of (derived of after.value, "call", name, ([after.value.deriv] + arg-derivs)), out-env
   if after.status == "fail":
     give fail-of of after.error, out-env
-  give normal-of of (make-nothing), out-env
+  give normal-of of (derived of (make-nothing), "call", name, arg-derivs), out-env
 
 # ================================================================ control flow as expressions (Phases 3, 5, 6)
 #
@@ -1135,10 +1155,32 @@ to eval-when-node of node, env, globals:
   m = match-pattern of node.pattern, subj.value, subj.env, globals, []
   if not (m.status == "normal"):
     give m
+  label = "when {" + (pattern-field-names of node.pattern) + "} "
   if m.value.matched:
     bound-env = m.value.bindings + subj.env
-    give exec-block of node.body, (normal-of of nothing, bound-env), globals
-  give exec-block of node.els, (normal-of of nothing, subj.env), globals
+    give when-result of (exec-block of node.body, (normal-of of nothing, bound-env), globals), subj.value, (label + "matched")
+  give when-result of (exec-block of node.els, (normal-of of nothing, subj.env), globals), subj.value, (label + "did not match")
+
+to pattern-field-names of entries:
+  result = ""
+  seen = false
+  for each e in entries:
+    if seen:
+      result = result + ", " + e.field
+    else:
+      result = e.field
+      seen = true
+  give result
+
+# The when's own derivation step: the subject, and whatever the chosen block
+# produced (interp.py's Deriv("op", "when {...} matched", ...)). A block that
+# produced no statement result carries interp.py's literal `nothing` node.
+to when-result of after, subject, label:
+  if not (after.status == "normal"):
+    give after
+  if after.value is nothing:
+    give normal-of of (derived of (make-nothing), "op", label, [subject.deriv, { kind: "literal", label: "nothing", value: (make-nothing), inputs: [], origin: nothing }]), after.env
+  give normal-of of (derived of after.value, "op", label, [subject.deriv, after.value.deriv]), after.env
 
 # Walk the pattern entries, threading status (a match expression may fail), and
 # return { matched, bindings }. A missing field or an unequal match value stops
@@ -1159,7 +1201,7 @@ to match-pattern of entries, subject, env, globals, bindings:
     if not eq:
       give normal-of of { matched: false, bindings: [] }, want.env
     give match-pattern of (rest of entries), subject, want.env, globals, bindings
-  give match-pattern of (rest of entries), subject, env, globals, (bindings plus { name: entry.field, value: found.value })
+  give match-pattern of (rest of entries), subject, env, globals, (bindings plus { name: entry.field, value: (derived of found.value, "field", ("." + entry.field), [subject.deriv]) })
 
 # `for each v in source where cond: body` (Phase 5), both the statement form and
 # the comprehension (is-expr). interp.py runs each item in a fresh child scope
@@ -1181,22 +1223,23 @@ to eval-foreach-node of node, env, globals:
   if not (src.status == "normal"):
     give src
   if src.value.kind == "list":
-    give run-foreach of node, src.value.items, src.env, globals
+    give run-foreach of node, src.value.items, src.value.deriv, src.env, globals
   if src.value.kind == "text":
     chars = []
     for each c in src.value.value:
       chars = chars plus (make-text of c)
-    give run-foreach of node, chars, src.env, globals
+    give run-foreach of node, chars, src.value.deriv, src.env, globals
   give fail-of of (error-of of "not-a-collection", ("cannot loop over " + (canonical-of-value of src.value))), src.env
 
-to run-foreach of node, items, start-env, globals:
+to run-foreach of node, items, source-deriv, start-env, globals:
   outer = start-env
   results = []
+  result-derivs = []
   broke = false
   carry = normal-of of nothing, start-env
   for each item in items:
     if not broke:
-      st = foreach-item-step of node, item, outer, globals
+      st = foreach-item-step of node, item, source-deriv, outer, globals
       if st.broke:
         broke = true
         carry = st.status
@@ -1204,9 +1247,16 @@ to run-foreach of node, items, start-env, globals:
         outer = st.env
         if st.kept:
           results = results plus st.value
+          result-derivs = result-derivs plus st.value.deriv
   if broke:
     give carry
-  give normal-of of (make-list of results), outer
+  # A `comprehension` step: the source, then the first three kept results --
+  # interp.py caps the inputs there so the graph stays the size of the
+  # derivation, not of the data.
+  label = "for each " + node.var
+  if not (node.where is nothing):
+    label = label + " where ..."
+  give normal-of of (derived of (make-list of results), "comprehension", label, ([source-deriv] + (first 3 of result-derivs))), outer
 
 # One item: bind the loop variable over the outer env, test the `where` clause
 # (a non-yes/no result fails at the leaf), and run the body (an expression for a
@@ -1214,8 +1264,8 @@ to run-foreach of node, items, start-env, globals:
 # (a give or fail short-circuits the rest), whether the item was kept (survived
 # `where`), its value, and the next outer env with the body's outer-variable
 # reassignments applied.
-to foreach-item-step of node, item, outer, globals:
-  iter-env = [{ name: node.var, value: item }] + outer
+to foreach-item-step of node, item, source-deriv, outer, globals:
+  iter-env = [{ name: node.var, value: (derived of item, "item", node.var, [source-deriv]) }] + outer
   keep = true
   if not (node.where is nothing):
     wr = eval-node of node.where, iter-env, globals
@@ -1229,6 +1279,13 @@ to foreach-item-step of node, item, outer, globals:
   bs = foreach-body of node, iter-env, globals
   if not (bs.status == "normal"):
     give { broke: true, status: bs, kept: false, value: nothing, env: outer }
+  # An iteration whose body produced no statement result at all -- an empty
+  # block, a definition, an `if` whose taken branch was empty -- contributes
+  # nothing to the comprehension. interp.py's `if r is not None` skips exactly
+  # these, and a raw `nothing` here is precisely its None: distinct from a
+  # statement that produced the VALUE nothing, which is kept.
+  if bs.value is nothing:
+    give { broke: false, status: bs, kept: false, value: nothing, env: (rebind-outer of outer, bs.env) }
   give { broke: false, status: bs, kept: true, value: bs.value, env: (rebind-outer of outer, bs.env) }
 
 to foreach-body of node, iter-env, globals:
@@ -1266,7 +1323,7 @@ to eval-orfail-node of node, env, globals:
     give r
   if node.handler is nothing:
     give fail-of of (error-of of node.tag, r.error.detail), r.env
-  err-value = make-error-value of r.error
+  err-value = derived of (make-error-value of r.error), "record", "{record}", []
   handler-env = [{ name: node.tag, value: err-value }] + env
   give exec-block of node.handler, (normal-of of nothing, handler-env), globals
 
@@ -1461,10 +1518,13 @@ to do-write of value, dest, env:
   io = io-of of env
   logged = io with log: (io.log plus { kind: "write", target: dest })
   env2 = with-io of env, logged
+  # A write crosses a boundary, so its step carries an origin: `origins-of` on
+  # anything downstream names the file it went to.
+  written = derived-at of (make-nothing), "effect", ("write to " + dest), [value.deriv], ("file:" + dest)
   if io.mode == "inert":
-    give normal-of of (make-nothing), env2
+    give normal-of of written, env2
   write (unwrap-value of value) to dest
-  give normal-of of (make-nothing), env2
+  give normal-of of written, env2
 
 # A tagged interp.planes value back to a raw Planes value, so the outer host's
 # `write`/JSON path sees `5`, not `{ kind: "number", value: 5 }`. Scalars and
@@ -1513,12 +1573,14 @@ to do-ask of arg, env:
   url = arg.value
   logged = io with log: (io.log plus { kind: "ask", target: url })
   env2 = with-io of env, logged
+  label = "ask " + url
+  origin = "network:" + url
   if io.mode == "inert":
     r = lookup-response of io.responses, url
     if not r.found:
       give fail-of of (error-of of "ask-failed", ("no stubbed response for " + url)), env2
-    give normal-of of r.value, env2
-  give normal-of of (make-text of (text of (ask of url))), env2
+    give normal-of of (derived-at of r.value, "effect", label, [arg.deriv], origin), env2
+  give normal-of of (derived-at of (make-text of (text of (ask of url))), "effect", label, [arg.deriv], origin), env2
 
 to do-read of arg, env:
   io = io-of of env
@@ -1527,12 +1589,14 @@ to do-read of arg, env:
   path = arg.value
   logged = io with log: (io.log plus { kind: "read", target: path })
   env2 = with-io of env, logged
+  label = "read " + path
+  origin = "file:" + path
   if io.mode == "inert":
     f = lookup-file of io.files, path
     if not f.found:
       give fail-of of (error-of of "no-such-file", path), env2
-    give normal-of of (make-text of f.value), env2
-  give normal-of of (make-text of (read of path)), env2
+    give normal-of of (derived-at of (make-text of f.value), "effect", label, [arg.deriv], origin), env2
+  give normal-of of (derived-at of (make-text of (read of path)), "effect", label, [arg.deriv], origin), env2
 
 # The inert input tables are association lists read by static field access -- no
 # dynamic record lookup (A.2). Each is a distinct shape with its own key field,
@@ -1609,8 +1673,15 @@ to do-foreign of decl, param-bindings, env:
   logged = log-foreign-effects of decl.effects, decl, param-bindings, io
   env1 = with-io of env, logged
   if logged.mode == "inert":
-    give foreign-result-inert of decl, param-bindings, env1
-  give foreign-result-real of decl, param-bindings, env1
+    give foreign-wrap of (foreign-result-inert of decl, param-bindings, env1), decl, param-bindings
+  give foreign-wrap of (foreign-result-real of decl, param-bindings, env1), decl, param-bindings
+
+# A host call is a boundary crossing, so its step carries the target as an
+# origin -- what `origins-of` reports for anything computed from the result.
+to foreign-wrap of r, decl, param-bindings:
+  if not (r.status == "normal"):
+    give r
+  give normal-of of (derived-at of r.value, "foreign", decl.name, (arg-derivs-of of param-bindings), ("foreign:" + decl.target)), r.env
 
 # Append one { kind, target } per declared effect. Destination resolution
 # matches interp.py: a literal destination is the literal, a param destination

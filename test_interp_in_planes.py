@@ -105,7 +105,7 @@ def _get_interp():
 
 
 def _traced(v):
-    return Traced(v, Deriv("literal", repr(v), v, []))
+    return Traced(v, Deriv("literal", "<host value>", v, []))
 
 
 def planes_canonical_value(record_src):

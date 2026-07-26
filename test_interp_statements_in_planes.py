@@ -26,7 +26,7 @@ def _get():
 
 
 def _t(v):
-    return Traced(v, Deriv("literal", repr(v), v, []))
+    return Traced(v, Deriv("literal", "<host value>", v, []))
 
 
 def planes_execute(src):

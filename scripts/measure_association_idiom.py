@@ -26,7 +26,7 @@ to lookup of table, key:
 
 
 def traced(v):
-    return Traced(v, Deriv("literal", repr(v), v, []))
+    return Traced(v, Deriv("literal", "<host value>", v, []))
 
 
 def build_table(n):

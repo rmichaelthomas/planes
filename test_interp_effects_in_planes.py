@@ -33,7 +33,7 @@ def _fresh():
 
 
 def _t(v):
-    return Traced(v, Deriv("literal", repr(v), v))
+    return Traced(v, Deriv("literal", "<host value>", v))
 
 
 def _inert_io(*, clock=0, randoms=None, files=None, responses=None,
