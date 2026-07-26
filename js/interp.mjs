@@ -95,7 +95,7 @@ function equal(a, b, path = null) {
   if (aBool !== bBool) {
     throw new PlanesError(
       "cannot-compare",
-      `cannot compare ${fmt(a)} with ${fmt(b)}`,
+      `cannot compare ${detailValue(a)} with ${detailValue(b)}`,
       "compare a yes/no value with a yes/no value",
       path,
     );
@@ -108,7 +108,7 @@ function equal(a, b, path = null) {
   if (kindOf(a) !== kindOf(b)) {
     throw new PlanesError(
       "cannot-compare",
-      `cannot compare ${fmt(a)} with ${fmt(b)}`,
+      `cannot compare ${detailValue(a)} with ${detailValue(b)}`,
       "compare numbers with numbers, or text with text",
       path,
     );
@@ -147,7 +147,7 @@ function condition(v) {
   if (typeof v === "boolean") return v;
   throw new PlanesError(
     "not-a-yes-no",
-    `a condition needs a yes/no value, found ${fmt(v)}`,
+    `a condition needs a yes/no value, found ${detailValue(v)}`,
     "compare it: `if count of items > 0:`",
   );
 }
@@ -161,7 +161,7 @@ function requireText(name, verb, v) {
   if (typeof v !== "string") {
     throw new PlanesError(
       "not-text",
-      `cannot ${verb} ${fmt(v)}`,
+      `cannot ${verb} ${detailValue(v)}`,
       `${name} takes text; convert first — e.g. ${name} of (text of n)`,
     );
   }
@@ -174,19 +174,22 @@ function requireTarget(what, spelled, v) {
   if (typeof v !== "string") {
     throw new PlanesError(
       "not-text",
-      `${what} must be text, found ${fmt(v)}`,
+      `${what} must be text, found ${detailValue(v)}`,
       `wrap it with text of — \`${spelled}\``,
     );
   }
 }
 
-// A value in an error detail, with its kind named when the bare form would hide
-// it — interp.py's `kinded`. `fmt` renders text without quotes (it is what
-// `show` prints), so `whole of "5"` reported `5` and read as a number, which is
-// the one thing the message is about. Used at the two sites where a text value
-// is a realistic wrong input and the message turns on it being a number.
-function kinded(v) {
-  return typeof v === "string" ? `text "${escapeStringLiteral(v)}"` : fmt(v);
+// How a value is written when it appears in an error detail — interp.py's
+// `detail_value`, and `grammar/interp.planes`'s `detail-of-value`. The rule is
+// the same in all three: write the value as the language would write it when
+// writing it is bounded, and name its shape when it is not. Text gets quotes
+// (`fmt` renders it bare, so `whole of "5"` reported `5` and read as a number,
+// which is the one thing the message is about); a list or a record gets its
+// shape rather than its contents, because an error detail must be bounded and
+// must not spill a credential into stderr.
+function detailValue(v) {
+  return typeof v === "string" ? `"${escapeStringLiteral(v)}"` : fmt(v);
 }
 
 // The ` of a, b` tail of a declaration, and the call it wants — interp.py's
@@ -428,7 +431,7 @@ export class Interpreter {
       if (typeof v.value !== "string") {
         throw new PlanesError(
           "fail-message-not-text",
-          `fail's message must be text, found ${fmt(v.value)}`,
+          `fail's message must be text, found ${detailValue(v.value)}`,
           "wrap it with text of",
         );
       }
@@ -442,7 +445,7 @@ export class Interpreter {
     if (!isRecord(subject.value)) {
       throw new PlanesError(
         "not-a-record",
-        `cannot match ${fmt(subject.value)} against a shape`,
+        `cannot match ${detailValue(subject.value)} against a shape`,
         "when matches record shapes only",
       );
     }
@@ -526,7 +529,7 @@ export class Interpreter {
       if (!isRecord(base.value)) {
         throw new PlanesError(
           "not-a-record",
-          `cannot update ${fmt(base.value)} with with`,
+          `cannot update ${detailValue(base.value)} with with`,
           "with updates a record; check the base is one",
         );
       }
@@ -546,7 +549,7 @@ export class Interpreter {
       if (!Array.isArray(base.value)) {
         throw new PlanesError(
           "not-a-list",
-          `cannot append to ${fmt(base.value)} with plus`,
+          `cannot append to ${detailValue(base.value)} with plus`,
           "plus appends to a list; check the base is one",
         );
       }
@@ -570,7 +573,7 @@ export class Interpreter {
       if (!isRecord(obj.value)) {
         throw new PlanesError(
           "not-a-record",
-          `cannot read .${node.name} from ${fmt(obj.value)}`,
+          `cannot read .${node.name} from ${detailValue(obj.value)}`,
           "check the value is a record before using dot access",
         );
       }
@@ -583,7 +586,7 @@ export class Interpreter {
       const v = this.eval(node.value, env);
       const p = this.eval(node.places, env);
       if (!isNum(v.value)) {
-        throw new PlanesError("not-a-number", `cannot round ${fmt(v.value)}`, "round only works on numbers");
+        throw new PlanesError("not-a-number", `cannot round ${detailValue(v.value)}`, "round only works on numbers");
       }
       const n = PlanesNumber.of(v.value).roundTo(Number(PlanesNumber.of(p.value).asInt()));
       return new Traced(n, new Deriv("op", `round to ${fmt(p.value)} places`, n, [v.node]));
@@ -689,14 +692,14 @@ export class Interpreter {
       if (!isNum(n.value)) {
         throw new PlanesError(
           "not-a-number",
-          `the count in \`first n of\` must be a number, found ${kinded(n.value)}`,
+          `the count in \`first n of\` must be a number, found ${detailValue(n.value)}`,
           "write the count as a number — `first 3 of items`",
         );
       }
       if (typeof src.value !== "string" && !Array.isArray(src.value)) {
         throw new PlanesError(
           "not-a-collection",
-          `cannot take the first ${fmt(n.value)} of ${fmt(src.value)}`,
+          `cannot take the first ${detailValue(n.value)} of ${detailValue(src.value)}`,
           "`first n of` takes a list or text; a record has no order to take a prefix of",
         );
       }
@@ -768,7 +771,7 @@ export class Interpreter {
       else
         throw new PlanesError(
           "not-a-collection",
-          `cannot count ${fmt(arg.value)}`,
+          `cannot count ${detailValue(arg.value)}`,
           "count takes a list, a record, or text — check which of those this value should be",
         );
       const v = PlanesNumber.of(n);
@@ -788,7 +791,7 @@ export class Interpreter {
       if (!isNum(arg.value)) {
         throw new PlanesError(
           "not-a-number",
-          `cannot take the whole part of ${kinded(arg.value)}`,
+          `cannot take the whole part of ${detailValue(arg.value)}`,
           "whole of rounds a number toward zero; Planes has no text-to-number builtin, so a " +
             "number has to arrive as one — from a literal, from arithmetic, or from a field of " +
             "something read as JSON",
@@ -808,11 +811,11 @@ export class Interpreter {
     }
     if (name === "join") {
       if (!Array.isArray(arg.value)) {
-        throw new PlanesError("cannot-join", `cannot join ${fmt(arg.value)}`, "join takes a list of text; check the value is a list");
+        throw new PlanesError("cannot-join", `cannot join ${detailValue(arg.value)}`, "join takes a list of text; check the value is a list");
       }
       for (const x of arg.value) {
         if (typeof x !== "string") {
-          throw new PlanesError("cannot-join", `join needs a list of text, found ${fmt(x)}`, "convert each item first — e.g. text of n");
+          throw new PlanesError("cannot-join", `join needs a list of text, found ${detailValue(x)}`, "convert each item first — e.g. text of n");
         }
       }
       const v = arg.value.join("");
@@ -820,10 +823,10 @@ export class Interpreter {
     }
     if (name === "rest") {
       if (typeof arg.value === "string") {
-        throw new PlanesError("not-a-list", `cannot take the rest of text ${fmt(arg.value)}`, "rest is for lists; for a text prefix use `first n of`");
+        throw new PlanesError("not-a-list", `cannot take the rest of text ${detailValue(arg.value)}`, "rest is for lists; for a text prefix use `first n of`");
       }
       if (!Array.isArray(arg.value)) {
-        throw new PlanesError("not-a-list", `cannot take the rest of ${fmt(arg.value)}`, "rest takes a list; check the value is a list");
+        throw new PlanesError("not-a-list", `cannot take the rest of ${detailValue(arg.value)}`, "rest takes a list; check the value is a list");
       }
       if (arg.value.length === 0) {
         throw new PlanesError("empty-list", "cannot take the rest of an empty list", "check it is not empty first, e.g. `if count of xs > 0:`");
@@ -852,7 +855,7 @@ export class Interpreter {
     if (!(Array.isArray(sv) || typeof sv === "string")) {
       throw new PlanesError(
         "not-a-collection",
-        `cannot loop over ${fmt(sv)}`,
+        `cannot loop over ${detailValue(sv)}`,
         "for each needs a list, or a string to walk its code points",
       );
     }
@@ -1010,7 +1013,7 @@ function applyOp(op, a, b) {
     if (typeof a === "string" && typeof b === "string") return a + b;
     if (Array.isArray(a) && Array.isArray(b)) return [...a, ...b];
     if (isNum(a) && isNum(b)) return arith("+", a, b);
-    throw new PlanesError("cannot-combine", `cannot combine ${fmt(a)} with ${fmt(b)} using +`, 'convert first — e.g. "total: " + text of n');
+    throw new PlanesError("cannot-combine", `cannot combine ${detailValue(a)} with ${detailValue(b)} using +`, 'convert first — e.g. "total: " + text of n');
   }
   if (op === "-") return arith("-", a, b);
   if (op === "*") return arith("*", a, b);
@@ -1035,7 +1038,7 @@ function applyOp(op, a, b) {
 function arith(op, a, b) {
   for (const v of [a, b]) {
     if (!isNum(v)) {
-      throw new PlanesError("not-a-number", `cannot use '${op}' on ${fmt(v)}`, "check the value is a number before doing arithmetic");
+      throw new PlanesError("not-a-number", `cannot use '${op}' on ${detailValue(v)}`, "check the value is a number before doing arithmetic");
     }
   }
   const x = PlanesNumber.of(a);
@@ -1072,7 +1075,7 @@ function compareOp(op, a, b) {
   }
   const kindOf = (v) => (typeof v === "string" ? "str" : isNum(v) ? "num" : "other");
   if (kindOf(a) !== kindOf(b) || kindOf(a) === "other") {
-    throw new PlanesError("cannot-compare", `cannot compare ${fmt(a)} with ${fmt(b)}`, "compare numbers with numbers, or text with text");
+    throw new PlanesError("cannot-compare", `cannot compare ${detailValue(a)} with ${detailValue(b)}`, "compare numbers with numbers, or text with text");
   }
   // both strings — Python compares by code point
   const cmp = strCmp(x, y);
@@ -1104,7 +1107,7 @@ function inOp(a, b) {
     if (typeof a !== "string") {
       throw new PlanesError(
         "not-text",
-        `cannot look for ${fmt(a)} in text ${fmt(b)}`,
+        `cannot look for ${detailValue(a)} in text ${detailValue(b)}`,
         "`in` over text looks for text — wrap the left side with text of",
       );
     }
@@ -1114,7 +1117,7 @@ function inOp(a, b) {
   if (isRecord(b)) return b.has(a);
   throw new PlanesError(
     "not-a-collection",
-    `cannot look inside ${fmt(b)}`,
+    `cannot look inside ${detailValue(b)}`,
     "`in` looks inside a list, a record's field names, or text",
   );
 }

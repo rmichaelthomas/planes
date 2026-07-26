@@ -146,6 +146,27 @@ to canonical-of-fields of fields:
       seen = true
   give result
 
+# How a value is written when it appears in an ERROR DETAIL -- interp.py's
+# `detail_value`, js/interp.mjs's `detailValue`, and this. The rule is the same
+# in all three: write the value as the language would write it when writing it
+# is bounded, and name its shape when it is not. Text gets quotes, because
+# `builtin-text` renders it bare and `whole of "5"` would otherwise report `5`
+# and read as a number -- the one thing the message is about. A list or a record
+# gets its SHAPE and not its contents, because an error detail has to be
+# bounded and must not spill a 10,000-item list or a credential into stderr.
+#
+# Every error detail in this file used to render through `canonical-of-value`
+# instead. That is the TEST-ORACLE form -- its own comment above says both sides
+# render to it and the harness compares strings -- and it renders a list and a
+# record canonically, in full. Reusing it for messages is where the divergence
+# from interp.py came from: the oracle needs to distinguish every value, a
+# message needs to stay short. The oracle form is unchanged and still the
+# oracle; this is the message form.
+to detail-of-value of v:
+  if v.kind == "text":
+    give "\"" + (escape-string-literal of v.value) + "\""
+  give (builtin-text of v).value
+
 # ================================================================ the environment (A.2)
 #
 # One flat list of { name, value } bindings, innermost first, first match
@@ -552,6 +573,13 @@ to eval-first-node of node, env, globals:
   src = eval-node of node.right, n.env, globals
   if not (src.status == "normal"):
     give src
+  # The count guard, which neither implementation had before C2. Without it a
+  # non-number count reached `truncate-of`, which reported `cannot take the
+  # whole part of ...` -- true of what it was doing and not of what the author
+  # wrote. It runs before the label is built, because building the label is what
+  # used to fail.
+  if not (n.value.kind == "number"):
+    give fail-of of (error-of of "not-a-number", ("the count in `first n of` must be a number, found " + (detail-of-value of n.value))), src.env
   label = "first " + (text of (truncate-of of n.value.value)) + " of"
   if src.value.kind == "list":
     r = (first (n.value.value) of src.value.items) or fail as e:
@@ -561,7 +589,7 @@ to eval-first-node of node, env, globals:
     r2 = (first (n.value.value) of src.value.value) or fail as e2:
       give fail-of of e2, src.env
     give normal-of of (derived of (make-text of r2), "op", label, [src.value.deriv]), src.env
-  give fail-of of (error-of of "not-a-collection", ("cannot take the first n of " + (canonical-of-value of src.value))), src.env
+  give fail-of of (error-of of "not-a-collection", ("cannot take the first " + (text of (truncate-of of n.value.value)) + " of " + (detail-of-value of src.value))), src.env
 
 # interp.py labels a `first` step with `int(n.value)` -- truncation toward
 # zero, not rounding. Planes rounds half away from zero (`whole of`) and has no
@@ -581,19 +609,19 @@ to apply-op of op, a, b:
   if op == "+":
     give apply-plus of a, b
   if op == "-":
-    give make-number of ((num-of of a) - (num-of of b))
+    give make-number of ((num-of of a, op) - (num-of of b, op))
   if op == "*":
-    give make-number of ((num-of of a) * (num-of of b))
+    give make-number of ((num-of of a, op) * (num-of of b, op))
   if op == "/":
-    give make-number of ((num-of of a) / (num-of of b))
+    give make-number of ((num-of of a, op) / (num-of of b, op))
   if op == "<":
-    give make-boolean of ((cmp-of of a) < (cmp-of of b))
+    give make-boolean of (compare-values of op, a, b)
   if op == ">":
-    give make-boolean of ((cmp-of of a) > (cmp-of of b))
+    give make-boolean of (compare-values of op, a, b)
   if op == "<=":
-    give make-boolean of ((cmp-of of a) <= (cmp-of of b))
+    give make-boolean of (compare-values of op, a, b)
   if op == ">=":
-    give make-boolean of ((cmp-of of a) >= (cmp-of of b))
+    give make-boolean of (compare-values of op, a, b)
   if op == "==":
     give make-boolean of (values-equal of a, b)
   if op == "!=":
@@ -611,34 +639,58 @@ to apply-plus of a, b:
     give make-text of (a.value + b.value)
   if a.kind == "list" and b.kind == "list":
     give make-list of (a.items + b.items)
-  fail "cannot combine " + (canonical-of-value of a) + " with " + (canonical-of-value of b) + " using +" as cannot-combine
+  fail "cannot combine " + (detail-of-value of a) + " with " + (detail-of-value of b) + " using +" as cannot-combine
 
 # The raw number under a number value, or interp.py's not-a-number refusal.
 # `-`, `*`, `/` then use the host's own exact arithmetic on the raw numbers,
 # so divide-by-zero and the exact-rational result are reproduced by
 # construction rather than reimplemented.
-to num-of of v:
+to num-of of v, op:
   if v.kind == "number":
     give v.value
-  fail "cannot do arithmetic on " + (canonical-of-value of v) as not-a-number
+  fail "cannot use '" + op + "' on " + (detail-of-value of v) as not-a-number
 
-# The raw scalar an ordering comparison reads. A cross-type comparison is
-# left to the host's own guarded `<` (via the raw values), which refuses it
-# naming both operands -- interp.py's rule, not restated here.
-to cmp-of of v:
-  if v.kind == "number":
-    give v.value
+# What `<` can order: text with text, or a number with a number. Anything else
+# is "other" and cannot be ordered at all -- interp.py's `_order_kind`.
+to order-kind-of of v:
   if v.kind == "text":
-    give v.value
-  if v.kind == "boolean":
-    give v.value
-  fail "cannot order " + (canonical-of-value of v) as cannot-compare
+    give "text"
+  if v.kind == "number":
+    give "number"
+  give "other"
+
+# interp.py's compare(): the two operands must be the same kind, and that kind
+# must be one the language orders. The guard runs ONCE, with both operands in
+# their written order, so the message names them the way the author wrote them
+# -- a per-operand extractor could only name the one it was looking at, and
+# would name them backwards on the right-hand side.
+#
+# Both implementations reached this rule from opposite directions. The
+# self-hosted side refused every non-orderable kind and named one operand;
+# interp.py named both and only checked that the KINDS matched, so a same-kind
+# pair fell through to the host's own `<` and `[1] < [2]` answered `true` out
+# of Python's list comparison. Neither was the language. This is the rule both
+# now keep, with interp.py's sentence.
+to compare-values of op, a, b:
+  ka = order-kind-of of a
+  kb = order-kind-of of b
+  if (not (ka == kb)) or ka == "other":
+    fail "cannot compare " + (detail-of-value of a) + " with " + (detail-of-value of b) as cannot-compare
+  x = a.value
+  y = b.value
+  if op == "<":
+    give x < y
+  if op == ">":
+    give x > y
+  if op == "<=":
+    give x <= y
+  give x >= y
 
 # interp.py's condition(): a yes/no value and nothing else.
 to as-condition of v:
   if v.kind == "boolean":
     give v.value
-  fail "a condition needs a yes/no value, found " + (canonical-of-value of v) as not-a-yes-no
+  fail "a condition needs a yes/no value, found " + (detail-of-value of v) as not-a-yes-no
 
 # ================================================================ equality and membership
 #
@@ -658,13 +710,13 @@ to values-equal of a, b:
   a-bool = a.kind == "boolean"
   b-bool = b.kind == "boolean"
   if a-bool and not b-bool:
-    fail "cannot compare a yes/no value with " + (canonical-of-value of b) as cannot-compare
+    fail "cannot compare " + (detail-of-value of a) + " with " + (detail-of-value of b) as cannot-compare
   if b-bool and not a-bool:
-    fail "cannot compare " + (canonical-of-value of a) + " with a yes/no value" as cannot-compare
+    fail "cannot compare " + (detail-of-value of a) + " with " + (detail-of-value of b) as cannot-compare
   if a-bool and b-bool:
     give a.value == b.value
   if not (a.kind == b.kind):
-    fail "cannot compare " + (canonical-of-value of a) + " with " + (canonical-of-value of b) as cannot-compare
+    fail "cannot compare " + (detail-of-value of a) + " with " + (detail-of-value of b) as cannot-compare
   if a.kind == "text":
     give a.value == b.value
   if a.kind == "list":
@@ -741,8 +793,22 @@ to member-of of a, b:
   if b.kind == "text":
     if a.kind == "text":
       give (a.value) in (b.value)
-    fail "cannot look for " + (canonical-of-value of a) + " in text" as cannot-combine
-  fail "cannot check membership in " + (canonical-of-value of b) as unknown-operator
+    fail "cannot look for " + (detail-of-value of a) + " in text " + (detail-of-value of b) as not-text
+  # A record's field names are text, so a candidate that is not text is simply
+  # ABSENT -- an answer, not a refusal. This arm was missing entirely, so
+  # `"a" in { a: 1 }` was refused here while interp.py answered `true`.
+  if b.kind == "record":
+    if not (a.kind == "text"):
+      give false
+    found = false
+    for each f in b.fields:
+      if f.key == a.value:
+        found = true
+    give found
+  # `unknown-operator` named the wrong thing: `in` IS an operator the language
+  # defines, and what was wrong was the value on the right. The same defect
+  # js/interp.mjs had, fixed there in C2 and here now.
+  fail "cannot look inside " + (detail-of-value of b) as not-a-collection
 
 # ================================================================ lists, records, field access (Phase 4)
 
@@ -808,7 +874,7 @@ to eval-record-update-node of node, env, globals:
   if not (base.status == "normal"):
     give base
   if not (base.value.kind == "record"):
-    give fail-of of (error-of of "not-a-record", ("cannot update " + (canonical-of-value of base.value) + " with with")), base.env
+    give fail-of of (error-of of "not-a-record", ("cannot update " + (detail-of-value of base.value) + " with with")), base.env
   fields = base.value.fields
   derivs = [base.value.deriv]
   state = base
@@ -829,7 +895,7 @@ to eval-list-plus-node of node, env, globals:
   if not (base.status == "normal"):
     give base
   if not (base.value.kind == "list"):
-    give fail-of of (error-of of "not-a-list", ("cannot append to " + (canonical-of-value of base.value) + " with plus")), base.env
+    give fail-of of (error-of of "not-a-list", ("cannot append to " + (detail-of-value of base.value) + " with plus")), base.env
   item = eval-node of node.item, base.env, globals
   if not (item.status == "normal"):
     give item
@@ -842,7 +908,7 @@ to eval-field-node of node, env, globals:
   if not (obj.status == "normal"):
     give obj
   if not (obj.value.kind == "record"):
-    give fail-of of (error-of of "not-a-record", ("cannot read ." + node.name + " from " + (canonical-of-value of obj.value))), obj.env
+    give fail-of of (error-of of "not-a-record", ("cannot read ." + node.name + " from " + (detail-of-value of obj.value))), obj.env
   label = "." + node.name
   match = field-in of obj.value.fields, node.name
   if match.found:
@@ -860,7 +926,7 @@ to eval-round-node of node, env, globals:
   if not (p.status == "normal"):
     give p
   if not (v.value.kind == "number"):
-    give fail-of of (error-of of "not-a-number", ("cannot round " + (canonical-of-value of v.value))), p.env
+    give fail-of of (error-of of "not-a-number", ("cannot round " + (detail-of-value of v.value))), p.env
   r = (round (v.value.value) to (p.value.value) places) or fail as e:
     give fail-of of e, p.env
   give normal-of of (derived of (make-number of r), "op", ("round to " + (fmt-of of p.value) + " places"), [v.value.deriv]), p.env
@@ -920,11 +986,11 @@ to eval-builtin of name, arg:
   if name == "text":
     give builtin-text of arg
   if name == "lower":
-    give make-text of (lower of (text-form-of of arg))
+    give make-text of (lower of (require-text-of of arg, "lower", "lowercase"))
   if name == "upper":
-    give make-text of (upper of (text-form-of of arg))
+    give make-text of (upper of (require-text-of of arg, "upper", "uppercase"))
   if name == "normalize":
-    give make-text of (normalize of (text-form-of of arg))
+    give make-text of (normalize of (require-text-of of arg, "normalize", "normalize"))
   if name == "whole":
     give builtin-whole of arg
   if name == "join":
@@ -946,7 +1012,7 @@ to builtin-count of arg:
     give make-number of (count of arg.value)
   if arg.kind == "record":
     give make-number of (count of arg.fields)
-  fail "cannot count " + (canonical-of-value of arg) as not-a-collection
+  fail "cannot count " + (detail-of-value of arg) as not-a-collection
 
 # `text of` is interp.py's fmt: a value's plain display form, distinct from
 # the canonical form (a list is "[n items]", a record is "{record}", a string
@@ -967,33 +1033,47 @@ to builtin-text of arg:
     give make-text of ("[" + (text of (count of arg.items)) + " items]")
   if arg.kind == "record":
     give make-text of "{record}"
-  fail "cannot render " + (canonical-of-value of arg) as cannot-render
+  fail "cannot render a value of kind '" + arg.kind + "'" as cannot-render
 
-# The string form lower / upper / normalize operate on. interp.py coerces via
-# str(); reproduced for the sensible inputs (text and number). A non-text,
-# non-number argument is refused rather than leaking a host repr.
-to text-form-of of v:
+# The guard `lower`, `upper`, and `normalize` share -- interp.py's
+# `require_text`, js/interp.mjs's `requireText`.
+#
+# This arm was HALF right before either of the others. It refused a list, a
+# record, a boolean, and nothing -- "rather than leaking a host repr", which is
+# exactly A.6 family 2's reasoning, reached here first and independently. But it
+# still coerced a NUMBER (`lower of 5` gave `"5"`), and it said `cannot take the
+# text of` for all of them where interp.py names the operation the author wrote.
+# Both closed: a number is refused too, and `verb` makes the sentence read while
+# `name` makes the fix name the builtin.
+to require-text-of of v, name, verb:
   if v.kind == "text":
     give v.value
-  if v.kind == "number":
-    give text of v.value
-  fail "cannot take the text of " + (canonical-of-value of v) as not-text
+  fail "cannot " + verb + " " + (detail-of-value of v) as not-text
+
+# The guard on an effect's target -- interp.py's `require_target`. `ask`, `read`,
+# and `write ... to` took `arg.value` raw, so a non-text target was concatenated
+# into the effect's own label and failed there as `cannot-combine`, naming the
+# wrong thing. Refused at the boundary instead, in interp.py's words.
+to require-target-of of v, what:
+  if v.kind == "text":
+    give v.value
+  fail what + " must be text, found " + (detail-of-value of v) as not-text
 
 to builtin-whole of arg:
   if arg.kind == "number":
     give make-number of (whole of arg.value)
-  fail "cannot take the whole part of " + (canonical-of-value of arg) as not-a-number
+  fail "cannot take the whole part of " + (detail-of-value of arg) as not-a-number
 
 # Fold a list of text into one string. A non-list, or any non-text element,
 # is refused naming the fix -- the same refusal interp.py's join makes, not a
 # silent stringify. An empty list joins to the empty string.
 to builtin-join of arg:
   if not (arg.kind == "list"):
-    fail "cannot join " + (canonical-of-value of arg) as cannot-join
+    fail "cannot join " + (detail-of-value of arg) as cannot-join
   strings = []
   for each item in arg.items:
     if not (item.kind == "text"):
-      fail "join needs a list of text, found " + (canonical-of-value of item) as cannot-join
+      fail "join needs a list of text, found " + (detail-of-value of item) as cannot-join
     strings = strings plus item.value
   give make-text of (join of strings)
 
@@ -1001,9 +1081,9 @@ to builtin-join of arg:
 # rest of an empty list is an error, not a silent empty list.
 to builtin-rest of arg:
   if arg.kind == "text":
-    fail "cannot take the rest of text " + (canonical-of-value of arg) as not-a-list
+    fail "cannot take the rest of text " + (detail-of-value of arg) as not-a-list
   if not (arg.kind == "list"):
-    fail "cannot take the rest of " + (canonical-of-value of arg) as not-a-list
+    fail "cannot take the rest of " + (detail-of-value of arg) as not-a-list
   if (count of arg.items) == 0:
     fail "cannot take the rest of an empty list" as empty-list
   give make-list of (rest of arg.items)
@@ -1159,7 +1239,7 @@ to eval-when-node of node, env, globals:
   if not (subj.status == "normal"):
     give subj
   if not (subj.value.kind == "record"):
-    give fail-of of (error-of of "not-a-record", ("cannot match " + (canonical-of-value of subj.value) + " against a shape")), subj.env
+    give fail-of of (error-of of "not-a-record", ("cannot match " + (detail-of-value of subj.value) + " against a shape")), subj.env
   m = match-pattern of node.pattern, subj.value, subj.env, globals, []
   if not (m.status == "normal"):
     give m
@@ -1237,7 +1317,7 @@ to eval-foreach-node of node, env, globals:
     for each c in src.value.value:
       chars = chars plus (make-text of c)
     give run-foreach of node, chars, src.value.deriv, src.env, globals
-  give fail-of of (error-of of "not-a-collection", ("cannot loop over " + (canonical-of-value of src.value))), src.env
+  give fail-of of (error-of of "not-a-collection", ("cannot loop over " + (detail-of-value of src.value))), src.env
 
 to run-foreach of node, items, source-deriv, start-env, globals:
   outer = start-env
@@ -1538,7 +1618,7 @@ to eval-writeto-node of node, env, globals:
   io = io-of of d.env
   if not (list-includes of io.modules, "file"):
     give fail-of of (error-of of "module-not-used", "writing a file needs the file module"), d.env
-  dest = (text-form-of of d.value) or fail as e:
+  dest = (require-target-of of d.value, "a destination to write to") or fail as e:
     give fail-of of e, d.env
   give do-write of v.value, dest, d.env
 
@@ -1619,7 +1699,8 @@ to do-ask of arg, env:
   io = io-of of env
   if not (list-includes of io.modules, "http"):
     give fail-of of (error-of of "module-not-used", "asking a url needs the http module"), env
-  url = arg.value
+  url = (require-target-of of arg, "a url to ask") or fail as e:
+    give fail-of of e, env
   logged = io with log: (io.log plus { kind: "ask", target: url })
   env2 = with-io of env, logged
   label = "ask " + url
@@ -1645,7 +1726,8 @@ to do-read of arg, env:
   io = io-of of env
   if not (list-includes of io.modules, "file"):
     give fail-of of (error-of of "module-not-used", "reading a file needs the file module"), env
-  path = arg.value
+  path = (require-target-of of arg, "a path to read") or fail as e:
+    give fail-of of e, env
   logged = io with log: (io.log plus { kind: "read", target: path })
   env2 = with-io of env, logged
   label = "read " + path
@@ -1844,7 +1926,7 @@ to exec-fail of stmt, state, globals:
   if not (m.status == "normal"):
     give m
   if not (m.value.kind == "text"):
-    give fail-of of (error-of of "fail-message-not-text", ("fail's message must be text, found " + (canonical-of-value of m.value))), m.env
+    give fail-of of (error-of of "fail-message-not-text", ("fail's message must be text, found " + (detail-of-value of m.value))), m.env
   give fail-of of (error-of of stmt.tag, m.value.value), m.env
 
 # ================================================================ why -- reading a derivation back (build 4)

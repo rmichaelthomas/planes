@@ -90,7 +90,7 @@ def equal(a, b, path=None):
     if isinstance(a, bool) != isinstance(b, bool):
         raise PlanesError(
             "cannot-compare",
-            f"cannot compare {fmt(a)} with {fmt(b)}",
+            f"cannot compare {detail_value(a)} with {detail_value(b)}",
             "compare a yes/no value with a yes/no value",
             path=path)
     if isinstance(a, bool):
@@ -99,7 +99,7 @@ def equal(a, b, path=None):
     if type(a) is not type(b):
         raise PlanesError(
             "cannot-compare",
-            f"cannot compare {fmt(a)} with {fmt(b)}",
+            f"cannot compare {detail_value(a)} with {detail_value(b)}",
             "compare numbers with numbers, or text with text",
             path=path)
 
@@ -133,7 +133,7 @@ def condition(v):
         return v
     raise PlanesError(
         "not-a-yes-no",
-        f"a condition needs a yes/no value, found {fmt(v)}",
+        f"a condition needs a yes/no value, found {detail_value(v)}",
         "compare it: `if count of items > 0:`")
 
 
@@ -155,7 +155,7 @@ def require_text(name, verb, v):
     """
     if not isinstance(v, str):
         raise PlanesError(
-            "not-text", f"cannot {verb} {fmt(v)}",
+            "not-text", f"cannot {verb} {detail_value(v)}",
             f"{name} takes text; convert first — e.g. {name} of (text of n)")
 
 
@@ -170,30 +170,39 @@ def require_target(what, spelled, v):
     """
     if not isinstance(v, str):
         raise PlanesError(
-            "not-text", f"{what} must be text, found {fmt(v)}",
+            "not-text", f"{what} must be text, found {detail_value(v)}",
             f"wrap it with text of — `{spelled}`")
 
 
-def kinded(v):
-    """A value in an error detail, with its kind named when the bare form would
-    hide it.
+def detail_value(v):
+    """How a value is written when it appears in an error detail.
 
-    `fmt` renders text without quotes — it is what `show` prints — so
-    `whole of "5"` reported `cannot take the whole part of 5`, which reads as a
-    number and is the one thing the message is about. Every other kind is
-    already distinguishable in `fmt`'s output (`true`, `nothing`, `[2 items]`,
-    `{record}`), so only text needs saying.
+    The rule, and it is the same in all three implementations: **write the
+    value as the language would write it when writing it is bounded, and name
+    its shape when it is not.**
 
-    Used at the two sites where a text value is a realistic wrong input and the
-    message turns on it being a number. The same ambiguity sits in `+`, `round`,
-    ordering comparison, and `arith` — reported, not fixed here: the
-    self-hosted `grammar/interp.planes` renders those details through
-    `canonical-of-value`, which quotes text, so converging the three
-    implementations is a change of its own with its own agreement to establish.
-    `rest of text "..."` and `in text "..."` already name the kind this way.
+    * text — as a quoted Planes literal, escaped. `fmt` renders text bare (it
+      is what `show` prints), so `whole of "5"` used to report `cannot take the
+      whole part of 5`, which reads as a number and is the one thing the
+      message is about. The quotes are the whole fix: Planes has one string
+      syntax, so a quoted value is unambiguously text.
+    * number, boolean, nothing — the literal, which `fmt` already gives.
+    * list, record — the *shape* (`[2 items]`, `{record}`), not the contents.
+      Two reasons, and both are why this does not simply defer to the canonical
+      form: an error detail must be bounded, and a canonical render of a
+      10,000-item list or a record holding a credential puts unbounded — and
+      possibly sensitive — data into text that goes to stderr and into logs.
+
+    C2 applied this at two sites and reported the other four. This is the
+    convergence: every site that puts a value into an error detail goes through
+    here, `js/interp.mjs` has the same function, and
+    `grammar/interp.planes`'s `detail-of-value` is the third. The self-hosted
+    interpreter had been reusing `canonical-of-value` — its *test-oracle* form —
+    for error details, which is where the divergence came from; that form is
+    unchanged and still the oracle.
     """
     if isinstance(v, str):
-        return f'text "{escape_string_literal(v)}"'
+        return f'"{escape_string_literal(v)}"'
     return fmt(v)
 
 
@@ -603,7 +612,7 @@ class Interpreter:
             if not isinstance(subject.value, dict):
                 raise PlanesError(
                     "not-a-record",
-                    f"cannot match {fmt(subject.value)} against a shape",
+                    f"cannot match {detail_value(subject.value)} against a shape",
                     "when matches record shapes only")
             matched, bindings = True, []
             for fname, (kind, arg) in stmt.pattern:
@@ -637,7 +646,7 @@ class Interpreter:
             if not isinstance(v.value, str):
                 raise PlanesError(
                     "fail-message-not-text",
-                    f"fail's message must be text, found {fmt(v.value)}",
+                    f"fail's message must be text, found {detail_value(v.value)}",
                     "wrap it with text of")
             raise PlanesError(
                 stmt.tag, v.value,
@@ -682,7 +691,7 @@ class Interpreter:
             if not isinstance(base.value, dict):
                 raise PlanesError(
                     "not-a-record",
-                    f"cannot update {fmt(base.value)} with with",
+                    f"cannot update {detail_value(base.value)} with with",
                     "with updates a record; check the base is one")
             parts = [(k, self.eval(v, env)) for k, v in node.fields]
             new = {**base.value, **{k: t.value for k, t in parts}}
@@ -694,7 +703,7 @@ class Interpreter:
             if not isinstance(base.value, list):
                 raise PlanesError(
                     "not-a-list",
-                    f"cannot append to {fmt(base.value)} with plus",
+                    f"cannot append to {detail_value(base.value)} with plus",
                     "plus appends to a list; check the base is one")
             item = self.eval(node.item, env)
             new = base.value + [item.value]
@@ -718,7 +727,7 @@ class Interpreter:
             if not isinstance(obj.value, dict):
                 raise PlanesError(
                     "not-a-record",
-                    f"cannot read .{node.name} from {fmt(obj.value)}",
+                    f"cannot read .{node.name} from {detail_value(obj.value)}",
                     "check the value is a record before using dot access")
             val = obj.value.get(node.name)
             return Traced(val, Deriv("field", f".{node.name}", val, [obj.node]))
@@ -734,7 +743,7 @@ class Interpreter:
             p = self.eval(node.places, env)
             if not is_num(v.value):
                 raise PlanesError("not-a-number",
-                                  f"cannot round {fmt(v.value)}",
+                                  f"cannot round {detail_value(v.value)}",
                                   "round only works on numbers")
             n = Number.of(v.value).round_to(Number.of(p.value).as_int())
             return Traced(n, Deriv("op", f"round to {fmt(p.value)} places",
@@ -862,12 +871,12 @@ class Interpreter:
                 raise PlanesError(
                     "not-a-number",
                     f"the count in `first n of` must be a number, "
-                    f"found {kinded(n.value)}",
+                    f"found {detail_value(n.value)}",
                     "write the count as a number — `first 3 of items`")
             if not isinstance(src.value, (str, list, tuple)):
                 raise PlanesError(
                     "not-a-collection",
-                    f"cannot take the first {fmt(n.value)} of {fmt(src.value)}",
+                    f"cannot take the first {detail_value(n.value)} of {detail_value(src.value)}",
                     "`first n of` takes a list or text; a record has no order "
                     "to take a prefix of")
             v = src.value[: int(n.value)]
@@ -937,7 +946,7 @@ class Interpreter:
             # this now refuses in the same words.
             if not isinstance(arg.value, (str, list, tuple, dict)):
                 raise PlanesError(
-                    "not-a-collection", f"cannot count {fmt(arg.value)}",
+                    "not-a-collection", f"cannot count {detail_value(arg.value)}",
                     "count takes a list, a record, or text — check which of "
                     "those this value should be")
             v = Number.of(len(arg.value))
@@ -954,7 +963,7 @@ class Interpreter:
             if not is_num(arg.value):
                 raise PlanesError(
                     "not-a-number",
-                    f"cannot take the whole part of {kinded(arg.value)}",
+                    f"cannot take the whole part of {detail_value(arg.value)}",
                     "whole of rounds a number toward zero; Planes has no "
                     "text-to-number builtin, so a number has to arrive as "
                     "one — from a literal, from arithmetic, or from a field "
@@ -978,13 +987,13 @@ class Interpreter:
             if not isinstance(arg.value, list):
                 raise PlanesError(
                     "cannot-join",
-                    f"cannot join {fmt(arg.value)}",
+                    f"cannot join {detail_value(arg.value)}",
                     "join takes a list of text; check the value is a list")
             for x in arg.value:
                 if not isinstance(x, str):
                     raise PlanesError(
                         "cannot-join",
-                        f"join needs a list of text, found {fmt(x)}",
+                        f"join needs a list of text, found {detail_value(x)}",
                         "convert each item first — e.g. text of n")
             v = "".join(arg.value)
             return Traced(v, Deriv("op", "join of", v, [arg.node]))
@@ -998,12 +1007,12 @@ class Interpreter:
             if isinstance(arg.value, str):
                 raise PlanesError(
                     "not-a-list",
-                    f"cannot take the rest of text {fmt(arg.value)}",
+                    f"cannot take the rest of text {detail_value(arg.value)}",
                     "rest is for lists; for a text prefix use `first n of`")
             if not isinstance(arg.value, list):
                 raise PlanesError(
                     "not-a-list",
-                    f"cannot take the rest of {fmt(arg.value)}",
+                    f"cannot take the rest of {detail_value(arg.value)}",
                     "rest takes a list; check the value is a list")
             if not arg.value:
                 raise PlanesError(
@@ -1035,7 +1044,7 @@ class Interpreter:
         source = self.eval(node.source, env)
         if not isinstance(source.value, (list, tuple, str)):
             raise PlanesError("not-a-collection",
-                              f"cannot loop over {fmt(source.value)}",
+                              f"cannot loop over {detail_value(source.value)}",
                               "for each needs a list, or a string to walk its code points")
         results, nodes = [], []
         for idx, item in enumerate(source.value):
@@ -1211,7 +1220,7 @@ def apply_op(op, a, b):
             return arith("+", a, b)
         raise PlanesError(
             "cannot-combine",
-            f"cannot combine {fmt(a)} with {fmt(b)} using +",
+            f"cannot combine {detail_value(a)} with {detail_value(b)} using +",
             "convert first — e.g. \"total: \" + text of n")
     if op == "-": return arith("-", a, b)
     if op == "*": return arith("*", a, b)
@@ -1238,6 +1247,34 @@ def is_num(v):
     return isinstance(v, (Number, int)) and not isinstance(v, bool)
 
 
+def loose_equal(a, b):
+    """The comparison membership uses: guarded equality's rules, without its
+    refusals.
+
+    `x in xs` asks whether an equal element is present, and a differently-typed
+    element is an *answer* (no) rather than a mistake — unlike `==`, where a
+    cross-type comparison is a bug worth naming. Python's `in` went through
+    `Number.__eq__`, which refuses a boolean, so `true in [1, 2]` leaked
+    planes_num's own `TypeError: a yes/no value is not a number` into the
+    program. A port of `js/interp.mjs`'s `looseEqual`, arm for arm and in the
+    same order.
+    """
+    if is_num(a) and is_num(b):
+        return Number.of(a) == Number.of(b)
+    if isinstance(a, bool) or isinstance(b, bool):
+        return a is b
+    if isinstance(a, str) and isinstance(b, str):
+        return a == b
+    if a is None or b is None:
+        return a is b
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(
+            loose_equal(x, y) for x, y in zip(a, b))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return set(a) == set(b) and all(loose_equal(a[k], b[k]) for k in a)
+    return False
+
+
 def membership(a, b):
     """`a in b` — over a list, a record's field names, or text.
 
@@ -1252,14 +1289,20 @@ def membership(a, b):
     if isinstance(b, str):
         if not isinstance(a, str):
             raise PlanesError(
-                "not-text", f"cannot look for {fmt(a)} in text {fmt(b)}",
+                "not-text", f"cannot look for {detail_value(a)} in text {detail_value(b)}",
                 "`in` over text looks for text — wrap the left side with "
                 "text of")
         return a in b
-    if isinstance(b, (list, tuple, dict)):
-        return a in b
+    if isinstance(b, dict):
+        # A record's field names are text, so a candidate that is not text is
+        # simply absent — not an error, and not the host's `unhashable type`
+        # (which is what `[1] in { a: 1 }` used to raise). js/interp.mjs's
+        # `b.has(a)` already answered false.
+        return isinstance(a, str) and a in b
+    if isinstance(b, (list, tuple)):
+        return any(loose_equal(a, x) for x in b)
     raise PlanesError(
-        "not-a-collection", f"cannot look inside {fmt(b)}",
+        "not-a-collection", f"cannot look inside {detail_value(b)}",
         "`in` looks inside a list, a record's field names, or text")
 
 
@@ -1269,7 +1312,7 @@ def arith(op, a, b):
         if not is_num(v):
             raise PlanesError(
                 "not-a-number",
-                f"cannot use '{op}' on {fmt(v)}",
+                f"cannot use '{op}' on {detail_value(v)}",
                 "check the value is a number before doing arithmetic")
     x, y = Number.of(a), Number.of(b)
     try:
@@ -1288,15 +1331,34 @@ def arith(op, a, b):
         "defect in the interpreter rather than in the program")
 
 
+def _order_kind(v):
+    """What `<` can order: text with text, or a number with a number. Anything
+    else is "other" and cannot be ordered at all."""
+    if isinstance(v, str):
+        return "str"
+    return "num" if is_num(v) else "other"
+
+
 def compare(op, a, b):
-    """Ordering comparisons work on numbers and on text."""
-    if is_num(a) and is_num(b):
-        a, b = Number.of(a), Number.of(b)
-    elif type(a) is not type(b):
+    """Ordering comparisons work on numbers and on text — and, now, on nothing
+    else.
+
+    The docstring said that before it was true. The guard was
+    `type(a) is not type(b)`, which let a SAME-kind pair through to the host's
+    own `<`: `[1] < [2]` answered `true` by way of Python's list comparison,
+    `true < false` answered `false`, and a record pair and `nothing < nothing`
+    each leaked a raw `TypeError`. Four accidents of the host, none of them the
+    language, and the answer depended on which host ran the program.
+    `js/interp.mjs` already refused all four — so this is Python catching up,
+    the same direction A.6's family 1 went.
+    """
+    if _order_kind(a) != _order_kind(b) or _order_kind(a) == "other":
         raise PlanesError(
             "cannot-compare",
-            f"cannot compare {fmt(a)} with {fmt(b)}",
+            f"cannot compare {detail_value(a)} with {detail_value(b)}",
             "compare numbers with numbers, or text with text")
+    if is_num(a):
+        a, b = Number.of(a), Number.of(b)
     if op == "<":  return a < b
     if op == ">":  return a > b
     if op == "<=": return a <= b
