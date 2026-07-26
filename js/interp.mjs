@@ -37,7 +37,7 @@ export class Traced {
   }
 }
 
-function lit(v, label = null) {
+export function lit(v, label = null) {
   return new Traced(v, new Deriv("literal", label !== null ? label : fmt(v), v));
 }
 

@@ -17,7 +17,7 @@ import { loadGrammar } from "./loader_node.mjs";
 import { tokenize, PlanesSyntaxError } from "./lexer.mjs";
 import { parse, PlanesAmbiguity } from "./parser.mjs";
 import { canonicalProgram } from "./canonical.mjs";
-import { Interpreter, PlanesError } from "./interp.mjs";
+import { Interpreter, PlanesError, lit } from "./interp.mjs";
 import { TestHost } from "./host.mjs";
 import { PlanesNumber, Fraction, Inexact } from "./planes_num.mjs";
 import {
@@ -312,6 +312,62 @@ switch (sub) {
         files: itp.host.files ?? {},
       }),
     );
+    break;
+  }
+  case "meta": {
+    // meta <stage> <corpusfile...> — the metacircular conformance run (A.1):
+    // load grammar/<stage>.planes into a JS Interpreter (a Planes
+    // implementation running on the JavaScript one) and process each corpus
+    // file with it. stage in {lex, parse, run}. One grammar load amortised over
+    // all files. Emits a JSON array of per-file results (or {error: tag}).
+    loadGrammar();
+    const { runFile } = await import("./run_file.mjs");
+    const stage = rest[0];
+    const files = rest.slice(1);
+    const stageFile = {
+      lex: "grammar/lexer.planes",
+      parse: "grammar/parser.planes",
+      run: "grammar/interp.planes",
+    }[stage];
+    const stageItp = new Interpreter({ host: new TestHost() });
+    runFile(stageItp, stageFile);
+
+    const num = (v) => (v instanceof PlanesNumber ? Number(v.asInt()) : v);
+    const results = [];
+    for (const f of files) {
+      const src = fs.readFileSync(f, "utf-8");
+      // Each file runs on a fresh outer host so show output does not bleed
+      // across files, but reuses the loaded stage definitions.
+      stageItp.host = new TestHost();
+      stageItp.output = [];
+      stageItp.effects = [];
+      try {
+        if (stage === "lex") {
+          const r = stageItp.call("tokenize", [lit(src)], stageItp.env);
+          results.push(r.value.map((m) => [m.get("kind"), m.get("text"), num(m.get("line"))]));
+        } else if (stage === "parse") {
+          const r = stageItp.call("canonical-of-program-source", [lit(src)], stageItp.env);
+          results.push(r.value);
+        } else if (stage === "run") {
+          const r = stageItp.call("execute-program", [lit(src)], stageItp.env);
+          const status = r.value.get("status");
+          let tag = null;
+          if (status === "fail") {
+            const err = r.value.get("error");
+            tag = err && err.get ? err.get("tag") : String(err);
+          }
+          results.push({ output: stageItp.host.shown, tag });
+        } else {
+          throw new Error(`unknown meta stage: ${stage}`);
+        }
+      } catch (e) {
+        if (e instanceof PlanesError) results.push({ error: e.tag });
+        else if (e instanceof RangeError) results.push({ error: "recursion-too-deep" });
+        else if (e instanceof PlanesSyntaxError) results.push({ error: "PARSE" });
+        else throw e;
+      }
+    }
+    out(JSON.stringify(results));
     break;
   }
   default:
