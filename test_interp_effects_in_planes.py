@@ -22,6 +22,7 @@ module was the whole of what the gate did with it and none of these tests ran.
 That is also why the one `pytest.mark.parametrize` is now a plain loop: nothing
 else in this repo needs pytest, and a suite the gate cannot run is not a gate.
 """
+import glob
 import json
 import os
 import sys
@@ -582,6 +583,72 @@ def test_foreign_pure_result_supplied_matches_the_real_builtin():
     _theirs, out = py_effects(src)
     shown = [t for (k, t) in _log(state) if k == "show"]
     assert shown == out
+
+
+def test_a_foreign_with_no_supplied_result_fails_naming_the_stub():
+    # C1: it used to return `nothing` and let the program carry on — a wrong
+    # value produced silently, which is the failure mode this language exists to
+    # prevent. An under-specified run now says so at the under-specified site.
+    src = ('foreign srt of xs from "builtins.sorted" doing nothing\n'
+           'ordered = srt of [3, 1, 2]\n'
+           'show text of (count of ordered)\n')
+    state = run_inert(src)
+    assert state["status"] == "fail", state
+    err = state["error"]
+    assert err["tag"] == "no-foreign-result", err
+    # names which foreign lacked a result, its target, and how to supply one
+    assert "'srt'" in err["detail"] and "builtins.sorted" in err["detail"]
+    assert "supply one as" in err["detail"], err["detail"]
+    assert '{ name: "srt", value: <the result> }' in err["detail"], err["detail"]
+    assert "foreigns table" in err["detail"], err["detail"]
+    # and nothing was shown: the failure lands before the downstream expression
+    assert [t for (k, t) in _log(state) if k == "show"] == []
+
+
+def test_an_env_foreign_with_nothing_supplied_names_its_own_table_too():
+    src = ('foreign home from "os.getcwd" doing env\n'
+           'h = home\n')
+    state = run_inert(src)
+    assert state["status"] == "fail"
+    assert state["error"]["tag"] == "no-foreign-result"
+    assert "envs table" in state["error"]["detail"], state["error"]["detail"]
+
+
+def test_the_pure_foreign_corpus_program_runs_with_a_supplied_result():
+    """corpus/fastest-responses.planes — the program the report named as
+    unreachable because a pure foreign returned `nothing`. Given the result its
+    foreign returns, it runs and agrees with the reference. The stub is computed
+    through the host's own builtins.sorted, so it cannot drift from what the
+    reference actually returns."""
+    from scripts.run_corpus_selfhosted import INERT_CONFIG
+    path = "corpus/fastest-responses.planes"
+    src = open(path, encoding="utf-8").read()
+    state = run_inert(src, **INERT_CONFIG[path])
+    assert state["status"] == "normal", state
+    host = _TestHost()
+    ip = Interpreter(host=host)
+    ip.run(src)
+    assert _io_of(state)["output"] == ip.output
+
+
+def test_every_corpus_program_runs_self_hosted_and_agrees_with_the_reference():
+    """C1 §6: the corpus runnable count through the self-hosted stack. The
+    measurement lives in scripts/run_corpus_selfhosted.py so it can be read as a
+    report; this asserts it. Baseline before C1, same instrument: 48 of 50 with
+    the default configuration (cache-store could not read back its own write,
+    fastest-responses got `nothing` from its foreign), 49 with the foreign stub
+    supplied."""
+    from scripts.run_corpus_selfhosted import classify
+    files = sorted(glob.glob("corpus/**/*.planes", recursive=True))
+    bad = []
+    for f in files:
+        status, detail = classify(f)
+        if status != "RUNNABLE":
+            bad.append(f"{f}: {status} — {detail}")
+    print(f"    [self-hosted corpus: {len(files) - len(bad)}/{len(files)} "
+          f"runnable, inert, agreeing with interp.py under a TestHost]")
+    assert not bad, "not runnable self-hosted:\n" + "\n".join(bad)
+    assert len(files) == 50, len(files)
 
 
 def test_foreign_unloadable_target_refused_like_interp_py():

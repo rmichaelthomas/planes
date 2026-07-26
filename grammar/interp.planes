@@ -1712,10 +1712,13 @@ to lookup-by-name of pairs, name:
 # sequence, env reads the supplied table, and a pure foreign (`doing nothing`,
 # e.g. builtins.sorted) returns its supplied result -- because interp.planes has
 # no dynamic host.resolve, an arbitrary host function cannot be run, and the
-# supplied result is what stands in. In "real" mode the three ambient effects go
-# through interp.planes's own host-clock/host-random/host-getcwd foreigns
-# (resolved by the outer host); an arbitrary foreign's real resolution is the
-# one thing that needs a second host, and it fails naming that (Phase 4, A.7).
+# supplied result is what stands in. A foreign with NO supplied result fails
+# naming the stub (C1); it used to return `nothing`, which is a wrong value
+# produced silently. In "real" mode the three ambient effects go through
+# interp.planes's own host-clock/host-random/host-getcwd foreigns (resolved by
+# the outer host); an arbitrary foreign's real resolution is the one thing that
+# needs a host method the language cannot reach, and it fails naming that
+# (Phase 4, A.7 -- the argument is in REPORT_HOST_BOUNDARY.md).
 
 to make-foreign of decl:
   give { kind: "foreign", name: decl.name, params: decl.params, target: decl.target, effects: decl.effects, declared: decl.declared, deriv: nothing }
@@ -1793,17 +1796,31 @@ to foreign-result-inert of decl, param-bindings, env:
     r = lookup-by-name of io.envs, decl.name
     if r.found:
       give normal-of of r.value, env
-    give foreign-supplied-or-nothing of decl, io, env
-  give foreign-supplied-or-nothing of decl, io, env
+    give foreign-supplied-or-fail of decl, io, env
+  give foreign-supplied-or-fail of decl, io, env
 
 # A pure foreign (`doing nothing`, e.g. builtins.sorted) returns its supplied
-# result, keyed by the foreign's name. Absent a supplied result, nothing --
-# there is no host to compute it in inert mode.
-to foreign-supplied-or-nothing of decl, io, env:
+# result, keyed by the foreign's name. Absent a supplied result it FAILS, naming
+# the stub that is missing (C1). It used to return `nothing`, which is the one
+# thing this language exists to prevent: a wrong value produced silently, with
+# the program carrying on to do arithmetic on it and failing somewhere else
+# entirely -- corpus/fastest-responses.planes failed `not-a-collection` three
+# expressions downstream of the real problem. An under-specified test should say
+# so, at the site that is under-specified.
+to foreign-supplied-or-fail of decl, io, env:
   r = lookup-by-name of io.foreigns, decl.name
   if r.found:
     give normal-of of r.value, env
-  give normal-of of (make-nothing), env
+  give fail-of of (error-of of "no-foreign-result", (missing-foreign-result-message of decl)), env
+
+# The message names which foreign lacked a result and how to supply one -- and
+# for a foreign declaring `env`, that its own table is the more specific place.
+to missing-foreign-result-message of decl:
+  opening = "inert mode has no result supplied for foreign '" + decl.name + "' (" + decl.target + ")"
+  fix = " -- supply one as { name: \"" + decl.name + "\", value: <the result> } in the run's foreigns table"
+  if has-effect-kind of decl.effects, "env":
+    give opening + fix + ", or in its envs table, or run in real mode where the host reads it"
+  give opening + fix + ", or run in real mode where the host resolves the target"
 
 # The real return value. The three ambient effects call interp.planes's own
 # host foreigns (resolved by the outer host). An arbitrary foreign's resolution
