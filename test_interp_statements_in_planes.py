@@ -11,7 +11,7 @@ Where a program has no top-level `give` and no unresolved effect, its result is
 checked against interp.py's own run() by comparing a chosen top-level variable
 through the canonical value form the build-1 harness established.
 """
-from interp import Deriv, Interpreter, Traced
+from interp import Deriv, Interpreter, PlanesError, Traced
 from test_interp_in_planes import canonical
 
 _interp = None
@@ -180,3 +180,116 @@ def test_top_level_call_result_agrees():
            "t = add of s, s\n")
     assert_program_var_agrees(src, "s")
     assert_program_var_agrees(src, "t")
+
+
+# ============================================================ Phase 3: branching
+
+
+def test_if_statement_chooses_branch_and_rebinds():
+    src = ("x = 5\n"
+           "result = 0\n"
+           "if x > 3:\n"
+           "  result = 100\n"
+           "else:\n"
+           "  result = 200\n")
+    assert_program_var_agrees(src, "result")
+
+
+def test_if_statement_false_branch():
+    src = ("x = 1\n"
+           "result = 0\n"
+           "if x > 3:\n"
+           "  result = 100\n"
+           "else:\n"
+           "  result = 200\n")
+    assert_program_var_agrees(src, "result")
+
+
+def test_if_statement_no_else():
+    src = ("x = 1\n"
+           "seen = false\n"
+           "if x > 3:\n"
+           "  seen = true\n")
+    assert_program_var_agrees(src, "seen")
+
+
+def test_if_condition_not_yes_no_fails():
+    src = ("x = 5\n"
+           "if x:\n"
+           "  y = 1\n")
+    state = planes_execute(src)
+    assert state["status"] == "fail"
+    assert state["error"]["tag"] == "not-a-yes-no"
+    # interp.py refuses the same way
+    itp = Interpreter()
+    try:
+        itp.run(src)
+        raise AssertionError("interp.py did not fail")
+    except PlanesError as e:
+        assert e.tag == "not-a-yes-no", e.tag
+
+
+def test_when_match_and_bind():
+    # `body` bound from the record (a `when` field cannot be a builtin name like
+    # `text`, so the corpus binds a plain name).
+    src = ('current = { kind: "NAME", body: "ab" }\n'
+           'result = "start"\n'
+           "when current is { kind: \"NAME\", body }:\n"
+           '  result = "matched " + body\n'
+           "else:\n"
+           '  result = "no match"\n')
+    assert_program_var_agrees(src, "result")
+
+
+def test_when_no_match_runs_else():
+    src = ('current = { kind: "OP", text: "+" }\n'
+           'result = "start"\n'
+           "when current is { kind: \"NAME\" }:\n"
+           '  result = "yes"\n'
+           "else:\n"
+           '  result = "no"\n')
+    assert_program_var_agrees(src, "result")
+
+
+def test_when_missing_field_no_match():
+    src = ('r = { a: 1 }\n'
+           'out = "init"\n'
+           "when r is { b: 2 }:\n"
+           '  out = "has b"\n'
+           "else:\n"
+           '  out = "no b"\n')
+    assert_program_var_agrees(src, "out")
+
+
+def test_when_bind_only_pattern():
+    src = ('point = { x: 3, y: 4 }\n'
+           "when point is { x, y }:\n"
+           "  s = x + y\n"
+           "else:\n"
+           "  s = 0\n")
+    assert_program_var_agrees(src, "s")
+
+
+def test_when_subject_not_a_record_fails():
+    src = ("when 5 is { kind: \"NAME\" }:\n"
+           "  y = 1\n")
+    state = planes_execute(src)
+    assert state["status"] == "fail"
+    assert state["error"]["tag"] == "not-a-record"
+    itp = Interpreter()
+    try:
+        itp.run(src)
+        raise AssertionError("interp.py did not fail")
+    except PlanesError as e:
+        assert e.tag == "not-a-record", e.tag
+
+
+def test_nested_if_inside_when():
+    src = ('cmd = { verb: "go", n: 5 }\n'
+           'msg = "none"\n'
+           "when cmd is { verb: \"go\", n }:\n"
+           "  if n > 3:\n"
+           '    msg = "far"\n'
+           "  else:\n"
+           '    msg = "near"\n')
+    assert_program_var_agrees(src, "msg")

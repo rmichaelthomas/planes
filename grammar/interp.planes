@@ -896,11 +896,65 @@ to run-body of fn, callee-env, globals, call-env, name:
 # dispatches to these; each is filled in its phase. Until then a use reaches a
 # fail status naming the phase, never a wrong value.
 
+# `if cond: then else: els` (Phase 3). interp.py runs the chosen block in the
+# SAME environment -- no child scope, so a name a branch binds is visible after
+# the if -- and the if's value is the block's last result. Both hold here: the
+# block runs from a normal start over the (threaded) current env, and its final
+# status is returned directly, so a give or fail inside a branch propagates and
+# a binding rides out in the env. The condition must be a yes/no value
+# (interp.py's condition()), so a non-boolean is a fail at the leaf.
 to eval-if-node of node, env, globals:
-  give fail-of of (error-of of "todo-phase-3", "if as an expression is Phase 3"), env
+  c = eval-node of node.cond, env, globals
+  if not (c.status == "normal"):
+    give c
+  cond = (as-condition of c.value) or fail as e:
+    give fail-of of e, c.env
+  if cond:
+    give exec-block of node.then, (normal-of of nothing, c.env), globals
+  give exec-block of node.els, (normal-of of nothing, c.env), globals
 
+# `when subject is { pattern }: body else: els` (Phase 3, shape dispatch). The
+# subject must be a record; the pattern is a list of entries, each a `match`
+# (field: expr -- the field must be present and equal, through the same guarded
+# equality `==` uses, so a wrong-shaped field fails rather than silently missing)
+# or a `bind` (field -- the field's value bound under its name). A missing field
+# is no match. On a match the bindings are prepended to the environment and the
+# body runs; otherwise els runs. Like `if`, no child scope and the block's last
+# result is the value.
 to eval-when-node of node, env, globals:
-  give fail-of of (error-of of "todo-phase-3", "when as an expression is Phase 3"), env
+  subj = eval-node of node.subject, env, globals
+  if not (subj.status == "normal"):
+    give subj
+  if not (subj.value.kind == "record"):
+    give fail-of of (error-of of "not-a-record", ("cannot match " + (canonical-of-value of subj.value) + " against a shape")), subj.env
+  m = match-pattern of node.pattern, subj.value, subj.env, globals, []
+  if not (m.status == "normal"):
+    give m
+  if m.value.matched:
+    bound-env = m.value.bindings + subj.env
+    give exec-block of node.body, (normal-of of nothing, bound-env), globals
+  give exec-block of node.els, (normal-of of nothing, subj.env), globals
+
+# Walk the pattern entries, threading status (a match expression may fail), and
+# return { matched, bindings }. A missing field or an unequal match value stops
+# with matched false; a bind entry collects the field value under its name.
+to match-pattern of entries, subject, env, globals, bindings:
+  if (count of entries) == 0:
+    give normal-of of { matched: true, bindings: bindings }, env
+  entry = first-item of entries
+  found = field-in of subject.fields, entry.field
+  if not found.found:
+    give normal-of of { matched: false, bindings: [] }, env
+  if entry.matcher-tag == "match":
+    want = eval-node of entry.value, env, globals
+    if not (want.status == "normal"):
+      give want
+    eq = (values-equal of found.value, want.value) or fail as e:
+      give fail-of of e, want.env
+    if not eq:
+      give normal-of of { matched: false, bindings: [] }, want.env
+    give match-pattern of (rest of entries), subject, want.env, globals, bindings
+  give match-pattern of (rest of entries), subject, env, globals, (bindings plus { name: entry.field, value: found.value })
 
 to eval-foreach-node of node, env, globals:
   give fail-of of (error-of of "todo-phase-5", "for each as an expression is Phase 5"), env
