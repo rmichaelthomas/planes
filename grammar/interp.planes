@@ -1490,7 +1490,16 @@ to exec-why of stmt, state, globals:
     if found.found:
       because = found.value
   line = explain-of of r.value, because
-  give normal-of of r.value, (with-io of r.env, (io with output: (io.output plus line)))
+  env2 = with-io of r.env, (io with output: (io.output plus line))
+  if io.mode == "inert":
+    give normal-of of r.value, env2
+  # Real mode: the line reaches the person who asked. interp.py's `why` puts it
+  # in self.output, which is what the CLI prints, so the self-hosted `why`
+  # executes a Planes `show` and the outer host prints it -- the same path
+  # `show` takes. It is NOT appended to the effect log: interp.py logs no
+  # effect for a `why`, and neither does this.
+  show line
+  give normal-of of r.value, env2
 
 # `write value to dest` (Phase 2, an output effect). interp.py evaluates both,
 # requires the file module (`use file`), serialises the value as JSON, hands it

@@ -211,6 +211,25 @@ def test_why_lands_in_output_and_never_in_the_effect_log():
     assert out == ["3 from 1 + 2", "done"], out
 
 
+def test_why_reaches_the_host_in_real_mode_without_logging_an_effect():
+    """interp.py's `why` line lands in self.output, which is what the CLI
+    prints. In real mode the self-hosted `why` executes a Planes `show` so the
+    outer host prints it the same way — and still logs no effect, because
+    asking where a value came from performs nothing."""
+    src = ('x = 5\ny = x + 2 because "the agreed markup"\n'
+           'why y\nshow "done"\n')
+    # A hermetic host, so the outer show is captured rather than printed.
+    i = Interpreter(host=_TestHost())
+    i.run_file(INTERP_PLANES)
+    state = i.call("execute-program", [_t(src)], i.env).value
+    mine = list(i.output)
+    pi, theirs = py_output(src)
+    assert mine == theirs, f"\nplanes: {mine}\npy:     {theirs}"
+    log = [(e["kind"], e["target"]) for e in _io_of(state)["log"]]
+    assert log == [("show", "done")], log
+    assert [(e[0], e[1]) for e in pi.effects] == log
+
+
 EFFECT_CASES = [
     ('use file\nbody = read "notes.txt"\nwhy body\n',
      dict(files=[{"path": "notes.txt", "body": "hello"}]),
