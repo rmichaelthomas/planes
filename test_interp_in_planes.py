@@ -587,6 +587,65 @@ def test_eval_effects_fail_naming_build_3():
     assert_planes_fails('read "notes.txt"', "build-3-effect")
 
 
+# ============================================== Phase 6: the pipeline, connected
+
+
+def planes_pipeline(src):
+    """Source text -> canonical value, entirely through grammar/interp.planes's
+    evaluate-source: tokenize -> parse -> eval -> render, one Planes call."""
+    i = _get_interp()
+    return i.call("evaluate-source", [_traced(src)], i.env).value
+
+
+def assert_pipeline_agrees(src):
+    py_form = canonical(interp_eval(src))
+    planes_form = planes_pipeline(src)
+    assert planes_form == py_form, (
+        f"\nsrc: {src!r}\n--- planes pipeline ---\n{planes_form!r}"
+        f"\n--- python ---\n{py_form!r}")
+
+
+def test_pipeline_source_to_canonical_end_to_end():
+    # The first three-stage Planes run: lexer.planes -> parser.planes ->
+    # interp.planes, no Python in the path but the host running the outermost
+    # interpreter. Each fragment goes from source text straight to a canonical
+    # value string in one call.
+    for src in ["1 + 2 * 3", "(2 + 3) * 4", "2 / 3", "0.1 + 0.2",
+                '"a" + "b" + "c"', "not (1 == 2)", "true and (1 < 2)",
+                "{ x: 1, y: [2, 3], ok: true }", "[1, 2, 3] plus 4",
+                "first 2 of [9, 8, 7]", '"read " + text of 42 + " bytes"',
+                "{ a: 1 } with a: 9", "count of [1, 2, 3]", "1 / 3 + 1 / 3 + 1 / 3"]:
+        assert_pipeline_agrees(src)
+
+
+def test_pipeline_with_functions_end_to_end():
+    i = _get_interp()
+    defs = ("to add of a, b: give a + b\n"
+            "to twice of x: give add of x, x\n")
+    expr = "twice of (add of 3, 4)"
+    planes_form = i.call("evaluate-with", [_traced(defs), _traced(expr)], i.env).value
+    py_form = canonical(interp_eval_program(defs, expr))
+    assert planes_form == py_form, (planes_form, py_form)
+
+
+def test_pipeline_depth_within_and_past_the_limit():
+    # The interpreted-expression-nesting limit is real (parse-bound at ~23
+    # levels; eval alone reaches ~140). Robust margins: a shallow nest
+    # evaluates; a deep one raises recursion-too-deep, honestly, not a wrong
+    # value.
+    def nested(n):
+        s = "1"
+        for _ in range(n):
+            s = "1 + (" + s + ")"
+        return s
+    assert planes_pipeline(nested(15)) == "16"
+    try:
+        planes_pipeline(nested(60))
+        raise AssertionError("expected recursion-too-deep past the usable depth")
+    except PlanesError as e:
+        assert e.tag == "recursion-too-deep", e.tag
+
+
 # ============================================== Phase 5: calls to pure functions
 
 

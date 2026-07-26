@@ -668,3 +668,18 @@ to functions-env-of of src:
     if n.kind == "FuncDef":
       env = env plus { name: n.name, value: (make-function of n) }
   give env
+
+# ================================================================ the pipeline, connected (Phase 6, A.4)
+#
+# Source text in, canonical value out, entirely in Planes: tokenize
+# (lexer.planes) -> parse (parser.planes) -> eval (interp.planes) -> render.
+# The three Planes stages meet in this one call; the only Python in the path
+# is the host running the outermost interpreter.
+
+to evaluate-source of src:
+  give canonical-of-value of (eval of (node-of-source of src), [])
+
+# The same, for an expression evaluated against a program's functions.
+to evaluate-with of defs-src, expr-src:
+  env = functions-env-of of defs-src
+  give canonical-of-value of (eval of (node-of-source of expr-src), env)
