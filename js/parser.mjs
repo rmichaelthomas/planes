@@ -118,14 +118,29 @@ export class Parser {
   accept(kind, value = null) {
     return this.at(kind, value) ? this.next() : null;
   }
-  expect(kind, value = null) {
+  // The generic token expectation, with the two ways it can name a fix
+  // (S8, identical to parser.py's). `errors name the fix` is a language-level
+  // commitment, and a bare token mismatch honours its letter and not its
+  // substance: `expected }, found ':'` is true and tells nobody what to write.
+  //   * a reserved word where a NAME was wanted gets its own message — that is
+  //     never a punctuation slip, it is the 42-name reserved surface (32
+  //     keywords + 10 builtins) being hit. The builtin half already errored
+  //     naming the collision; this is the keyword half, in the same voice.
+  //   * every other site may pass a `fix` clause naming what to write instead.
+  expect(kind, value = null, fix = null) {
     const t = this.accept(kind, value);
     if (t === null) {
       const g = this.peek();
-      throw new PlanesSyntaxError(
-        `line ${g.line}: expected ${value || kind.toLowerCase()}, ` +
-          `found '${g.value || "end of line"}'`,
-      );
+      const found = g.value || "end of line";
+      if (kind === "NAME" && keywords().has(g.value)) {
+        throw new PlanesSyntaxError(
+          `line ${g.line}: '${found}' is a keyword, so it cannot be used as a name\n` +
+            `  keyword names are reserved like builtins; pick another name`,
+        );
+      }
+      let msg = `line ${g.line}: expected ${value || kind.toLowerCase()}, found '${found}'`;
+      if (fix) msg += `\n  ${fix}`;
+      throw new PlanesSyntaxError(msg);
     }
     return t;
   }
@@ -1122,7 +1137,15 @@ export class Parser {
         }
       }
       this.skip_bracket_ws();
-      this.expect("OP", "}");
+      // The greedy-tail shape, named. `{ k: f of a, k2: 9 }` reads `k2` as a
+      // second argument to `f`, then meets `:` where `}` was due.
+      this.expect(
+        "OP",
+        "}",
+        "a record is `{ name: value, ... }`; a call or `with` used as a field " +
+          "value takes the rest of the list, so parenthesise it: " +
+          "`{ k: (f of a, b), k2: 9 }`",
+      );
       const seen = new Set();
       for (const f of fields) {
         const k = f.items[0];

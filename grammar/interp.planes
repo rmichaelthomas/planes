@@ -1,4 +1,4 @@
-note: from "interp.py, written in Planes -- Route B stage three, build 1: the expression evaluator. Evaluates Planes expressions to values, checked by agreement with interp.py's own eval() through a canonical value-text form (test_interp_in_planes.py). Consumes the AST grammar/parser.planes already produces (A.4); statements, control flow, and effects are builds 2 and 3. Values carry a deriv slot, `nothing` throughout build 1 (A.3) -- provenance is a later build's fill, not a rewrite."
+note: from "interp.py, written in Planes -- Route B stage three: the interpreter. Evaluates Planes expressions to values, checked by agreement with interp.py's own eval() through a canonical value-text form (test_interp_in_planes.py). Consumes the AST grammar/parser.planes already produces (A.4); statements, control flow, and effects followed in builds 2 and 3. Build 4 fills the deriv slot build 1 left `nothing`, so the self-hosted stack answers both of the language's questions -- what does this program do, and where did this value come from."
 
 use parser
 
@@ -19,9 +19,14 @@ use http
 # `fields` (record -- a list of { key, value } pairs, because Planes cannot
 # build a record with runtime field names, so a record value is never a
 # native record but always this tagged list-of-pairs). Every value carries a
-# `deriv` slot, `nothing` throughout build 1 (A.3). The tag is what lets the
-# renderer and every operator dispatch flatly on a value's type (A.1) without
-# a dynamic type probe -- Planes has none that does not itself raise.
+# `deriv` slot: `nothing` as built here, filled by the evaluation step that
+# produced the value (build 4, below). The tag is what lets the renderer and
+# every operator dispatch flatly on a value's type (A.1) without a dynamic
+# type probe -- Planes has none that does not itself raise.
+#
+# The constructors stay derivation-blind, exactly as interp.py's apply_op does:
+# they build a value and know nothing about where it came from. Provenance is
+# attached by the caller, at the sites interp.py builds a Deriv.
 
 to make-number of n:
   give { kind: "number", value: n, deriv: nothing }
@@ -40,6 +45,42 @@ to make-list of items:
 
 to make-record of fields:
   give { kind: "record", fields: fields, deriv: nothing }
+
+# ================================================================ derivation -- the second guarantee (build 4)
+#
+# Planes answers two questions: what does this program do, and where did this
+# value come from. The first is the effect surface; the second is `why`, and it
+# rides on values -- never in a type, never in a signature. interp.py carries a
+# Deriv beside every value and its `apply_op` has no idea derivation exists.
+# The architecture is reproduced, not reinvented: the `deriv` slot every value
+# already carried is filled at the sites interp.py builds a Deriv, and every
+# constructor, operator, builtin, and equality helper stays derivation-blind.
+#
+# A deriv is a record of five fields, interp.py's Deriv field for field:
+#
+#   kind    -- the step: literal / name / op / field / call / effect / item /
+#              comprehension / list / record / foreign
+#   label   -- the text `why` prints for the step
+#   value   -- the value the step produced, with NO provenance of its own.
+#              interp.py stores a raw Python value here, and a value record
+#              whose deriv slot is cleared is this model's raw value: no
+#              cycle, and no path from a deriv back into the graph except
+#              through `inputs`, which keeps the graph a DAG of the shape
+#              interp.py's is rather than a deeper one that only renders the
+#              same. It is read back through `fmt-of` alone.
+#   inputs  -- the derivs this step was computed from
+#   origin  -- the boundary the value crossed to enter the program, or nothing
+#
+# `derived` is the fill: build a value, then say where it came from. One call
+# per site, and the constructors above never learn about it.
+
+to derived of value, kind, label, inputs:
+  give value with deriv: { kind: kind, label: label, value: (value with deriv: nothing), inputs: inputs, origin: nothing }
+
+# The same, for a value that entered the program at a boundary -- an effect's
+# result or a foreign call's return, which `origins-of` walks back to.
+to derived-at of value, kind, label, inputs, origin:
+  give value with deriv: { kind: kind, label: label, value: (value with deriv: nothing), inputs: inputs, origin: origin }
 
 # ================================================================ the canonical value form (A.5)
 #
@@ -197,12 +238,21 @@ to error-of of tag, detail:
 # the file/http module checks; `clock` is the fixed inert time; `randoms` is the
 # inert sequence, drawn head-first; `files` / `responses` / `envs` / `foreigns`
 # are the inert input tables scanned by read / ask / env / a pure foreign.
+#
+# `output` and `annotations` are interp.py's self.output and self.annotations,
+# threaded rather than mutated (build 4). `output` is the ordered text a program
+# produced -- a `show`'s rendered value AND a `why`'s derivation line, in the
+# order they ran, which is why it is not the effect log: interp.py appends a
+# `why` line to self.output and to no effect list, because asking where a value
+# came from touches nothing. `annotations` is the association list of
+# `because:` texts by name, display text `why` prints beside a derivation and
+# never an input the derivation graph carries.
 
 to default-io:
-  give { mode: "inert", log: [], modules: [], clock: 0, randoms: [], files: [], responses: [], envs: [], foreigns: [] }
+  give { mode: "inert", log: [], output: [], annotations: [], modules: [], clock: 0, randoms: [], files: [], responses: [], envs: [], foreigns: [] }
 
 to real-io:
-  give { mode: "real", log: [], modules: [], clock: 0, randoms: [], files: [], responses: [], envs: [], foreigns: [] }
+  give { mode: "real", log: [], output: [], annotations: [], modules: [], clock: 0, randoms: [], files: [], responses: [], envs: [], foreigns: [] }
 
 # The io record for the current environment: the reserved __io__ binding, or a
 # default inert record when none is present. A pure expression evaluated through
@@ -260,13 +310,13 @@ foreign host-getcwd from "os.getcwd" doing env
 to eval-node of node, env, globals:
   k = node.kind
   if k == "Num":
-    give normal-of of (make-number of node.value), env
+    give normal-of of (derived of (make-number of node.value), "literal", (text of node.value), []), env
   if k == "Str":
-    give normal-of of (make-text of node.value), env
+    give normal-of of (derived of (make-text of node.value), "literal", ("\"" + (escape-string-literal of node.value) + "\""), []), env
   if k == "Bool":
-    give normal-of of (make-boolean of node.value), env
+    give normal-of of (derived of (make-boolean of node.value), "literal", (text of node.value), []), env
   if k == "Nothing":
-    give normal-of of (make-nothing), env
+    give normal-of of (derived of (make-nothing), "literal", "nothing", []), env
   if k == "Var":
     give eval-var of node, env, globals
   if k == "BinOp":
@@ -430,7 +480,9 @@ to eval-binop-node of node, env, globals:
     give rs
   v = (apply-op of op, ls.value, rs.value) or fail as e:
     give fail-of of e, rs.env
-  give normal-of of v, rs.env
+  # apply-op has no idea derivation exists (interp.py's rule); the caller says
+  # where the answer came from.
+  give normal-of of (derived of v, "op", op, [ls.value.deriv, rs.value.deriv]), rs.env
 
 # `not` / `is nothing`, threaded. `not` requires a yes/no value (interp.py's
 # condition()), so a non-boolean operand becomes a fail status at the leaf.
@@ -440,13 +492,13 @@ to eval-not-node of node, env, globals:
     give v
   c = (as-condition of v.value) or fail as e:
     give fail-of of e, v.env
-  give normal-of of (make-boolean of (not c)), v.env
+  give normal-of of (derived of (make-boolean of (not c)), "op", "not", [v.value.deriv]), v.env
 
 to eval-isnothing-node of node, env, globals:
   v = eval-node of node.expr, env, globals
   if not (v.status == "normal"):
     give v
-  give normal-of of (make-boolean of (v.value.kind == "nothing")), v.env
+  give normal-of of (derived of (make-boolean of (v.value.kind == "nothing")), "op", "is nothing", [v.value.deriv]), v.env
 
 # `and` / `or` short-circuit, and -- like interp.py -- require both operands
 # to be yes/no values, returning the second operand's condition, not the
@@ -458,13 +510,13 @@ to eval-and-node of node, env, globals:
   lc = (as-condition of ls.value) or fail as e:
     give fail-of of e, ls.env
   if not lc:
-    give normal-of of (make-boolean of false), ls.env
+    give normal-of of (derived of (make-boolean of false), "op", "and", [ls.value.deriv]), ls.env
   rs = eval-node of node.right, ls.env, globals
   if not (rs.status == "normal"):
     give rs
   rc = (as-condition of rs.value) or fail as e2:
     give fail-of of e2, rs.env
-  give normal-of of (make-boolean of rc), rs.env
+  give normal-of of (derived of (make-boolean of rc), "op", "and", [ls.value.deriv, rs.value.deriv]), rs.env
 
 to eval-or-node of node, env, globals:
   ls = eval-node of node.left, env, globals
@@ -473,13 +525,13 @@ to eval-or-node of node, env, globals:
   lc = (as-condition of ls.value) or fail as e:
     give fail-of of e, ls.env
   if lc:
-    give normal-of of (make-boolean of true), ls.env
+    give normal-of of (derived of (make-boolean of true), "op", "or", [ls.value.deriv]), ls.env
   rs = eval-node of node.right, ls.env, globals
   if not (rs.status == "normal"):
     give rs
   rc = (as-condition of rs.value) or fail as e2:
     give fail-of of e2, rs.env
-  give normal-of of (make-boolean of rc), rs.env
+  give normal-of of (derived of (make-boolean of rc), "op", "or", [ls.value.deriv, rs.value.deriv]), rs.env
 
 # `first n of x`: a list's first n items, or a text's first n code points.
 # interp.py takes `src.value[:int(n.value)]`; the native `first` operator is
@@ -492,15 +544,30 @@ to eval-first-node of node, env, globals:
   src = eval-node of node.right, n.env, globals
   if not (src.status == "normal"):
     give src
+  label = "first " + (text of (truncate-of of n.value.value)) + " of"
   if src.value.kind == "list":
     r = (first (n.value.value) of src.value.items) or fail as e:
       give fail-of of e, src.env
-    give normal-of of (make-list of r), src.env
+    give normal-of of (derived of (make-list of r), "op", label, [src.value.deriv]), src.env
   if src.value.kind == "text":
     r2 = (first (n.value.value) of src.value.value) or fail as e2:
       give fail-of of e2, src.env
-    give normal-of of (make-text of r2), src.env
+    give normal-of of (derived of (make-text of r2), "op", label, [src.value.deriv]), src.env
   give fail-of of (error-of of "not-a-collection", ("cannot take the first n of " + (canonical-of-value of src.value))), src.env
+
+# interp.py labels a `first` step with `int(n.value)` -- truncation toward
+# zero, not rounding. Planes rounds half away from zero (`whole of`) and has no
+# truncation builtin, so the toward-zero correction is made here rather than
+# letting a fractional count label a step with the wrong number.
+to truncate-of of n:
+  w = whole of n
+  if n < 0:
+    if w < n:
+      give w + 1
+    give w
+  if w > n:
+    give w - 1
+  give w
 
 to apply-op of op, a, b:
   if op == "+":
@@ -677,16 +744,18 @@ to member-of of a, b:
 # pass and takes no per-item recursion frame).
 to eval-list-node of node, env, globals:
   items = []
+  derivs = []
   state = normal-of of nothing, env
   for each n in node.items:
     if state.status == "normal":
       r = eval-node of n, state.env, globals
       if r.status == "normal":
         items = items plus r.value
+        derivs = derivs plus r.value.deriv
       state = r
   if not (state.status == "normal"):
     give state
-  give normal-of of (make-list of items), state.env
+  give normal-of of (derived of (make-list of items), "list", ("[" + (text of (count of items)) + " items]"), derivs), state.env
 
 # interp.py builds a record as a Python dict, so a repeated field keeps its
 # first position and its last value. eval-record-node reproduces that by
@@ -694,16 +763,20 @@ to eval-list-node of node, env, globals:
 # status as the list literal does.
 to eval-record-node of node, env, globals:
   fields = []
+  derivs = []
   state = normal-of of nothing, env
   for each fn in node.fields:
     if state.status == "normal":
       r = eval-node of fn.value, state.env, globals
       if r.status == "normal":
         fields = upsert-field of fields, fn.key, r.value
+        # Source order, and a repeated field contributes twice -- interp.py
+        # builds its input list from the field expressions, not the dict.
+        derivs = derivs plus r.value.deriv
       state = r
   if not (state.status == "normal"):
     give state
-  give normal-of of (make-record of fields), state.env
+  give normal-of of (derived of (make-record of fields), "record", "{record}", derivs), state.env
 
 to upsert-field of fields, key, val:
   if (field-in of fields, key).found:
@@ -729,16 +802,18 @@ to eval-record-update-node of node, env, globals:
   if not (base.value.kind == "record"):
     give fail-of of (error-of of "not-a-record", ("cannot update " + (canonical-of-value of base.value) + " with with")), base.env
   fields = base.value.fields
+  derivs = [base.value.deriv]
   state = base
   for each fn in node.fields:
     if state.status == "normal":
       r = eval-node of fn.value, state.env, globals
       if r.status == "normal":
         fields = upsert-field of fields, fn.key, r.value
+        derivs = derivs plus r.value.deriv
       state = r
   if not (state.status == "normal"):
     give state
-  give normal-of of (make-record of fields), state.env
+  give normal-of of (derived of (make-record of fields), "op", "with", derivs), state.env
 
 # `base plus item` -- a new list with item appended, the base untouched.
 to eval-list-plus-node of node, env, globals:
@@ -750,7 +825,7 @@ to eval-list-plus-node of node, env, globals:
   item = eval-node of node.item, base.env, globals
   if not (item.status == "normal"):
     give item
-  give normal-of of (make-list of (base.value.items plus item.value)), item.env
+  give normal-of of (derived of (make-list of (base.value.items plus item.value)), "op", "plus", [base.value.deriv, item.value.deriv]), item.env
 
 # Field access. interp.py reads obj.value.get(name) -- a missing field is
 # `nothing`, not an error; only a non-record base is refused.
@@ -760,10 +835,11 @@ to eval-field-node of node, env, globals:
     give obj
   if not (obj.value.kind == "record"):
     give fail-of of (error-of of "not-a-record", ("cannot read ." + node.name + " from " + (canonical-of-value of obj.value))), obj.env
+  label = "." + node.name
   match = field-in of obj.value.fields, node.name
   if match.found:
-    give normal-of of match.value, obj.env
-  give normal-of of (make-nothing), obj.env
+    give normal-of of (derived of match.value, "field", label, [obj.value.deriv]), obj.env
+  give normal-of of (derived of (make-nothing), "field", label, [obj.value.deriv]), obj.env
 
 # `round x to n places` -- reproduced metacircularly: the host's own round,
 # on the raw number, is interp.py's Number.round_to. Only a non-number base
@@ -779,7 +855,7 @@ to eval-round-node of node, env, globals:
     give fail-of of (error-of of "not-a-number", ("cannot round " + (canonical-of-value of v.value))), p.env
   r = (round (v.value.value) to (p.value.value) places) or fail as e:
     give fail-of of e, p.env
-  give normal-of of (make-number of r), p.env
+  give normal-of of (derived of (make-number of r), "op", ("round to " + (fmt-of of p.value) + " places"), [v.value.deriv]), p.env
 
 # ================================================================ builtins (Phase 4)
 #
@@ -827,7 +903,7 @@ to eval-call-node of node, env, globals:
       give do-read of a.value, a.env
     v = (eval-builtin of name, a.value) or fail as e:
       give fail-of of e, a.env
-    give normal-of of v, a.env
+    give normal-of of (derived of v, "op", (name + " of"), [a.value.deriv]), a.env
   give fail-of of (error-of of "unknown-function", ("no function named '" + name + "'")), env
 
 to eval-builtin of name, arg:
@@ -980,8 +1056,25 @@ to apply-function-node of fn, arg-nodes, call-env, globals, name:
   # effect performed inside the callee accumulates to the one shared log, and it
   # is prepended ahead of globals so it shadows any staler __io__ the frozen
   # globals still carry from the top level.
-  callee-env = bound.value + ([{ name: "__io__", value: (io-of of call-env) }] + globals)
-  give run-body of fn, callee-env, globals, call-env
+  # Each parameter is a `name` derivation step over the argument it was given,
+  # so a derivation crossing a call boundary shows the parameter, then unfolds
+  # into the caller's expression (interp.py binds Deriv("name", p, ...)).
+  callee-env = (bind-params of bound.value) + ([{ name: "__io__", value: (io-of of call-env) }] + globals)
+  give run-body of fn, callee-env, globals, call-env, name, (arg-derivs-of of bound.value)
+
+to bind-params of bindings:
+  result = []
+  for each b in bindings:
+    result = result plus { name: b.name, value: (derived of b.value, "name", b.name, [b.value.deriv]) }
+  give result
+
+# The derivs of the evaluated arguments, as they stood before the parameter
+# binding wrapped them -- the inputs interp.py gives a `call` or `foreign` step.
+to arg-derivs-of of bindings:
+  result = []
+  for each b in bindings:
+    result = result plus b.value.deriv
+  give result
 
 # Evaluate each argument in the calling environment, pairing it with its
 # parameter name, threading status so an argument that fails stops the call.
@@ -1005,18 +1098,21 @@ to eval-args of params, arg-nodes, call-env, globals, acc:
 # environment is restored either way -- the callee's locals do not escape. This
 # is where interpreted recursion becomes possible, and where the recursion
 # ceiling (A.7) is met and must be flattened rather than raised.
-to run-body of fn, callee-env, globals, call-env:
+to run-body of fn, callee-env, globals, call-env, name, arg-derivs:
   after = exec-block of fn.body, (normal-of of nothing, callee-env), globals
   # Restore the caller's environment (the callee's locals do not escape) but
   # carry the callee's final io back out (build 3): effects performed inside the
   # body must survive into the caller's log, so the one thing that crosses the
   # boundary out is the accumulated __io__.
   out-env = with-io of call-env, (io-of of after.env)
+  # A `call` step, interp.py's two shapes: a body that gave puts the given
+  # value's deriv ahead of the arguments' (so `why` can print `f(a) = <body>`);
+  # a body that ran to the end has the arguments alone.
   if after.status == "give":
-    give normal-of of after.value, out-env
+    give normal-of of (derived of after.value, "call", name, ([after.value.deriv] + arg-derivs)), out-env
   if after.status == "fail":
     give fail-of of after.error, out-env
-  give normal-of of (make-nothing), out-env
+  give normal-of of (derived of (make-nothing), "call", name, arg-derivs), out-env
 
 # ================================================================ control flow as expressions (Phases 3, 5, 6)
 #
@@ -1059,10 +1155,32 @@ to eval-when-node of node, env, globals:
   m = match-pattern of node.pattern, subj.value, subj.env, globals, []
   if not (m.status == "normal"):
     give m
+  label = "when {" + (pattern-field-names of node.pattern) + "} "
   if m.value.matched:
     bound-env = m.value.bindings + subj.env
-    give exec-block of node.body, (normal-of of nothing, bound-env), globals
-  give exec-block of node.els, (normal-of of nothing, subj.env), globals
+    give when-result of (exec-block of node.body, (normal-of of nothing, bound-env), globals), subj.value, (label + "matched")
+  give when-result of (exec-block of node.els, (normal-of of nothing, subj.env), globals), subj.value, (label + "did not match")
+
+to pattern-field-names of entries:
+  result = ""
+  seen = false
+  for each e in entries:
+    if seen:
+      result = result + ", " + e.field
+    else:
+      result = e.field
+      seen = true
+  give result
+
+# The when's own derivation step: the subject, and whatever the chosen block
+# produced (interp.py's Deriv("op", "when {...} matched", ...)). A block that
+# produced no statement result carries interp.py's literal `nothing` node.
+to when-result of after, subject, label:
+  if not (after.status == "normal"):
+    give after
+  if after.value is nothing:
+    give normal-of of (derived of (make-nothing), "op", label, [subject.deriv, { kind: "literal", label: "nothing", value: (make-nothing), inputs: [], origin: nothing }]), after.env
+  give normal-of of (derived of after.value, "op", label, [subject.deriv, after.value.deriv]), after.env
 
 # Walk the pattern entries, threading status (a match expression may fail), and
 # return { matched, bindings }. A missing field or an unequal match value stops
@@ -1083,7 +1201,7 @@ to match-pattern of entries, subject, env, globals, bindings:
     if not eq:
       give normal-of of { matched: false, bindings: [] }, want.env
     give match-pattern of (rest of entries), subject, want.env, globals, bindings
-  give match-pattern of (rest of entries), subject, env, globals, (bindings plus { name: entry.field, value: found.value })
+  give match-pattern of (rest of entries), subject, env, globals, (bindings plus { name: entry.field, value: (derived of found.value, "field", ("." + entry.field), [subject.deriv]) })
 
 # `for each v in source where cond: body` (Phase 5), both the statement form and
 # the comprehension (is-expr). interp.py runs each item in a fresh child scope
@@ -1105,22 +1223,23 @@ to eval-foreach-node of node, env, globals:
   if not (src.status == "normal"):
     give src
   if src.value.kind == "list":
-    give run-foreach of node, src.value.items, src.env, globals
+    give run-foreach of node, src.value.items, src.value.deriv, src.env, globals
   if src.value.kind == "text":
     chars = []
     for each c in src.value.value:
       chars = chars plus (make-text of c)
-    give run-foreach of node, chars, src.env, globals
+    give run-foreach of node, chars, src.value.deriv, src.env, globals
   give fail-of of (error-of of "not-a-collection", ("cannot loop over " + (canonical-of-value of src.value))), src.env
 
-to run-foreach of node, items, start-env, globals:
+to run-foreach of node, items, source-deriv, start-env, globals:
   outer = start-env
   results = []
+  result-derivs = []
   broke = false
   carry = normal-of of nothing, start-env
   for each item in items:
     if not broke:
-      st = foreach-item-step of node, item, outer, globals
+      st = foreach-item-step of node, item, source-deriv, outer, globals
       if st.broke:
         broke = true
         carry = st.status
@@ -1128,9 +1247,16 @@ to run-foreach of node, items, start-env, globals:
         outer = st.env
         if st.kept:
           results = results plus st.value
+          result-derivs = result-derivs plus st.value.deriv
   if broke:
     give carry
-  give normal-of of (make-list of results), outer
+  # A `comprehension` step: the source, then the first three kept results --
+  # interp.py caps the inputs there so the graph stays the size of the
+  # derivation, not of the data.
+  label = "for each " + node.var
+  if not (node.where is nothing):
+    label = label + " where ..."
+  give normal-of of (derived of (make-list of results), "comprehension", label, ([source-deriv] + (first 3 of result-derivs))), outer
 
 # One item: bind the loop variable over the outer env, test the `where` clause
 # (a non-yes/no result fails at the leaf), and run the body (an expression for a
@@ -1138,8 +1264,8 @@ to run-foreach of node, items, start-env, globals:
 # (a give or fail short-circuits the rest), whether the item was kept (survived
 # `where`), its value, and the next outer env with the body's outer-variable
 # reassignments applied.
-to foreach-item-step of node, item, outer, globals:
-  iter-env = [{ name: node.var, value: item }] + outer
+to foreach-item-step of node, item, source-deriv, outer, globals:
+  iter-env = [{ name: node.var, value: (derived of item, "item", node.var, [source-deriv]) }] + outer
   keep = true
   if not (node.where is nothing):
     wr = eval-node of node.where, iter-env, globals
@@ -1153,6 +1279,13 @@ to foreach-item-step of node, item, outer, globals:
   bs = foreach-body of node, iter-env, globals
   if not (bs.status == "normal"):
     give { broke: true, status: bs, kept: false, value: nothing, env: outer }
+  # An iteration whose body produced no statement result at all -- an empty
+  # block, a definition, an `if` whose taken branch was empty -- contributes
+  # nothing to the comprehension. interp.py's `if r is not None` skips exactly
+  # these, and a raw `nothing` here is precisely its None: distinct from a
+  # statement that produced the VALUE nothing, which is kept.
+  if bs.value is nothing:
+    give { broke: false, status: bs, kept: false, value: nothing, env: (rebind-outer of outer, bs.env) }
   give { broke: false, status: bs, kept: true, value: bs.value, env: (rebind-outer of outer, bs.env) }
 
 to foreach-body of node, iter-env, globals:
@@ -1190,7 +1323,7 @@ to eval-orfail-node of node, env, globals:
     give r
   if node.handler is nothing:
     give fail-of of (error-of of node.tag, r.error.detail), r.env
-  err-value = make-error-value of r.error
+  err-value = derived of (make-error-value of r.error), "record", "{record}", []
   handler-env = [{ name: node.tag, value: err-value }] + env
   give exec-block of node.handler, (normal-of of nothing, handler-env), globals
 
@@ -1239,6 +1372,8 @@ to run-stmt of stmt, state, globals:
     give give-of of r.value, r.env
   if k == "Show":
     give exec-show of stmt, state, globals
+  if k == "Why":
+    give exec-why of stmt, state, globals
   if k == "Fail":
     give exec-fail of stmt, state, globals
   if k == "Note":
@@ -1271,9 +1406,26 @@ to exec-assign of stmt, state, globals:
   r = eval-node of stmt.expr, state.env, globals
   if not (r.status == "normal"):
     give r
+  # The binding is a derivation step of its own: `name`, over the expression's
+  # deriv, so `why x` can name the variable and then unfold what it came from.
+  named = derived of r.value, "name", stmt.name, [r.value.deriv]
+  env2 = with-io of r.env, (set-annotation of (io-of of r.env), stmt.name, stmt.annotation)
   if stmt.is-let:
-    give normal-of of r.value, ([{ name: stmt.name, value: r.value }] + r.env)
-  give normal-of of r.value, (set-in-env of r.env, stmt.name, r.value)
+    give normal-of of named, ([{ name: stmt.name, value: named }] + env2)
+  give normal-of of named, (set-in-env of env2, stmt.name, named)
+
+# `because:` is a rationale `why` shows beside a derivation, never an input the
+# graph carries -- so it lives here, not in the deriv. interp.py sets it on an
+# annotated assignment and POPS it on an unannotated one, so a plain rebind
+# clears a stale rationale; both halves are reproduced.
+to set-annotation of io, name, annotation:
+  kept = []
+  for each a in io.annotations:
+    if not (a.name == name):
+      kept = kept plus a
+  if annotation is nothing:
+    give io with annotations: kept
+  give io with annotations: (kept plus { name: name, value: annotation.text })
 
 # Rebind the first binding of `name` in place, or prepend one if `name` is new
 # (interp.py's env.set over a single flat scope). One `for each` pass, no growth
@@ -1314,12 +1466,40 @@ to exec-show of stmt, state, globals:
 # what puts `show` on interp.planes's own static effect surface (Phase 5, A.3).
 to perform-show of shown, value, env:
   io = io-of of env
-  logged = io with log: (io.log plus { kind: "show", target: shown })
+  logged = io with log: (io.log plus { kind: "show", target: shown }), output: (io.output plus shown)
   env2 = with-io of env, logged
   if io.mode == "inert":
     give normal-of of value, env2
   show shown
   give normal-of of value, env2
+
+# `why x` (build 4, the second guarantee). interp.py evaluates the expression,
+# looks up a `because:` rationale when the expression is a bare name, and
+# appends the one-line derivation to self.output -- and to NO effect list,
+# because asking where a value came from performs nothing: `why` crosses no
+# boundary, so it widens no effect surface. Reproduced exactly: the line lands
+# in io.output beside show's, in run order, and the effect log is untouched.
+to exec-why of stmt, state, globals:
+  r = eval-node of stmt.expr, state.env, globals
+  if not (r.status == "normal"):
+    give r
+  io = io-of of r.env
+  because = nothing
+  if stmt.expr.kind == "Var":
+    found = lookup-by-name of io.annotations, stmt.expr.name
+    if found.found:
+      because = found.value
+  line = explain-of of r.value, because
+  env2 = with-io of r.env, (io with output: (io.output plus line))
+  if io.mode == "inert":
+    give normal-of of r.value, env2
+  # Real mode: the line reaches the person who asked. interp.py's `why` puts it
+  # in self.output, which is what the CLI prints, so the self-hosted `why`
+  # executes a Planes `show` and the outer host prints it -- the same path
+  # `show` takes. It is NOT appended to the effect log: interp.py logs no
+  # effect for a `why`, and neither does this.
+  show line
+  give normal-of of r.value, env2
 
 # `write value to dest` (Phase 2, an output effect). interp.py evaluates both,
 # requires the file module (`use file`), serialises the value as JSON, hands it
@@ -1347,10 +1527,13 @@ to do-write of value, dest, env:
   io = io-of of env
   logged = io with log: (io.log plus { kind: "write", target: dest })
   env2 = with-io of env, logged
+  # A write crosses a boundary, so its step carries an origin: `origins-of` on
+  # anything downstream names the file it went to.
+  written = derived-at of (make-nothing), "effect", ("write to " + dest), [value.deriv], ("file:" + dest)
   if io.mode == "inert":
-    give normal-of of (make-nothing), env2
+    give normal-of of written, env2
   write (unwrap-value of value) to dest
-  give normal-of of (make-nothing), env2
+  give normal-of of written, env2
 
 # A tagged interp.planes value back to a raw Planes value, so the outer host's
 # `write`/JSON path sees `5`, not `{ kind: "number", value: 5 }`. Scalars and
@@ -1399,12 +1582,14 @@ to do-ask of arg, env:
   url = arg.value
   logged = io with log: (io.log plus { kind: "ask", target: url })
   env2 = with-io of env, logged
+  label = "ask " + url
+  origin = "network:" + url
   if io.mode == "inert":
     r = lookup-response of io.responses, url
     if not r.found:
       give fail-of of (error-of of "ask-failed", ("no stubbed response for " + url)), env2
-    give normal-of of r.value, env2
-  give normal-of of (make-text of (text of (ask of url))), env2
+    give normal-of of (derived-at of r.value, "effect", label, [arg.deriv], origin), env2
+  give normal-of of (derived-at of (make-text of (text of (ask of url))), "effect", label, [arg.deriv], origin), env2
 
 to do-read of arg, env:
   io = io-of of env
@@ -1413,12 +1598,14 @@ to do-read of arg, env:
   path = arg.value
   logged = io with log: (io.log plus { kind: "read", target: path })
   env2 = with-io of env, logged
+  label = "read " + path
+  origin = "file:" + path
   if io.mode == "inert":
     f = lookup-file of io.files, path
     if not f.found:
       give fail-of of (error-of of "no-such-file", path), env2
-    give normal-of of (make-text of f.value), env2
-  give normal-of of (make-text of (read of path)), env2
+    give normal-of of (derived-at of (make-text of f.value), "effect", label, [arg.deriv], origin), env2
+  give normal-of of (derived-at of (make-text of (read of path)), "effect", label, [arg.deriv], origin), env2
 
 # The inert input tables are association lists read by static field access -- no
 # dynamic record lookup (A.2). Each is a distinct shape with its own key field,
@@ -1495,8 +1682,15 @@ to do-foreign of decl, param-bindings, env:
   logged = log-foreign-effects of decl.effects, decl, param-bindings, io
   env1 = with-io of env, logged
   if logged.mode == "inert":
-    give foreign-result-inert of decl, param-bindings, env1
-  give foreign-result-real of decl, param-bindings, env1
+    give foreign-wrap of (foreign-result-inert of decl, param-bindings, env1), decl, param-bindings
+  give foreign-wrap of (foreign-result-real of decl, param-bindings, env1), decl, param-bindings
+
+# A host call is a boundary crossing, so its step carries the target as an
+# origin -- what `origins-of` reports for anything computed from the result.
+to foreign-wrap of r, decl, param-bindings:
+  if not (r.status == "normal"):
+    give r
+  give normal-of of (derived-at of r.value, "foreign", decl.name, (arg-derivs-of of param-bindings), ("foreign:" + decl.target)), r.env
 
 # Append one { kind, target } per declared effect. Destination resolution
 # matches interp.py: a literal destination is the literal, a param destination
@@ -1582,6 +1776,110 @@ to exec-fail of stmt, state, globals:
   if not (m.value.kind == "text"):
     give fail-of of (error-of of "fail-message-not-text", ("fail's message must be text, found " + (canonical-of-value of m.value))), m.env
   give fail-of of (error-of of stmt.tag, m.value.value), m.env
+
+# ================================================================ why -- reading a derivation back (build 4)
+#
+# interp.py's explain() / render() / origins(), reproduced. The graph is data,
+# so reading it is a walk: `explain-of` is the one line `why x` prints,
+# `render-deriv` is the inline form of one step, and `origins-of` is every
+# boundary a value depends on -- the runtime twin of the analyser's origins_of.
+#
+# `explain-of` unwraps one `name` step before rendering, so `why total` shows
+# what total was computed FROM rather than the tautology `total (7)`.
+
+to explain-of of v, because:
+  d = v.deriv
+  inner = d
+  if d.kind == "name":
+    if (count of d.inputs) > 0:
+      inner = first-item of d.inputs
+  line = (fmt-of of v) + " from " + (render-deriv of inner)
+  if because is nothing:
+    give line
+  give line + "\n  because \"" + (escape-string-literal of because) + "\""
+
+# One step, inline. Flat dispatch on the step kind (A.1), interp.py's render()
+# arm for arm -- including its treatment of a `call` with no `give`, whose
+# first input is an argument and is rendered in the body position.
+to render-deriv of d:
+  k = d.kind
+  if k == "literal":
+    give d.label
+  if (k == "name") or (k == "item"):
+    give d.label + " (" + (fmt-of of d.value) + ")"
+  if k == "field":
+    if (count of d.inputs) == 0:
+      give "?" + d.label
+    give (render-deriv of (first-item of d.inputs)) + d.label
+  if k == "call":
+    give render-call-deriv of d
+  if k == "effect":
+    give d.label
+  if k == "comprehension":
+    if (count of d.inputs) == 0:
+      give d.label + " over ?"
+    give d.label + " over " + (render-deriv of (first-item of d.inputs))
+  if k == "list":
+    give d.label
+  if k == "record":
+    give d.label
+  if k == "op":
+    if (ends-with of d.label, " of") or (d.label == "not"):
+      give d.label + " " + (render-deriv of (first-item of d.inputs))
+    give join-derivs of d.inputs, (" " + d.label + " ")
+  give fmt-of of d.value
+
+to render-call-deriv of d:
+  if (count of d.inputs) == 0:
+    give d.label
+  arglist = join-derivs of (rest of d.inputs), ", "
+  head = d.label
+  if not (arglist == ""):
+    head = d.label + "(" + arglist + ")"
+  give head + " = " + (render-deriv of (first-item of d.inputs))
+
+to join-derivs of ds, sep:
+  result = ""
+  seen = false
+  for each d in ds:
+    piece = render-deriv of d
+    if seen:
+      result = result + sep + piece
+    else:
+      result = piece
+      seen = true
+  give result
+
+# Planes has `first n of` for a prefix and no suffix operator at all, so a
+# suffix test is one pass keeping the last (count of suffix) code points.
+# interp.py's render() asks whether an op label ends in " of" -- the unary
+# builtin form -- and this answers that question without a host string method.
+to ends-with of s, suffix:
+  n = count of s
+  k = count of suffix
+  if n < k:
+    give false
+  seen = 0
+  tail = ""
+  for each c in s:
+    seen = seen + 1
+    if seen > (n - k):
+      tail = tail + c
+  give tail == suffix
+
+# Every boundary crossing this value depends on, in walk order -- interp.py's
+# origins(). An `origin` is set only where a value entered the program: a read,
+# an ask, a write's destination, a foreign's return.
+to origins-of of v:
+  give origins-walk of v.deriv, []
+
+to origins-walk of d, acc:
+  out = acc
+  if not (d.origin is nothing):
+    out = out plus d.origin
+  for each i in d.inputs:
+    out = origins-walk of i, out
+  give out
 
 # ================================================================ whole-program execution (Phase 2 driver; Phase 8 finishes)
 #

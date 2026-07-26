@@ -33,7 +33,7 @@ def _fresh():
 
 
 def _t(v):
-    return Traced(v, Deriv("literal", repr(v), v))
+    return Traced(v, Deriv("literal", "<host value>", v))
 
 
 def _inert_io(*, clock=0, randoms=None, files=None, responses=None,
@@ -48,6 +48,10 @@ def _inert_io(*, clock=0, randoms=None, files=None, responses=None,
     return {
         "mode": "inert",
         "log": [],
+        # build 4: interp.py's self.output (show text AND why lines, in run
+        # order) and self.annotations (`because:` by name), threaded.
+        "output": [],
+        "annotations": [],
         "modules": list(modules or []),
         "clock": clock,
         "randoms": list(randoms or []),
@@ -187,6 +191,22 @@ def _lst(items):
     return {"kind": "list", "items": items, "deriv": None}
 
 
+def _bare(v):
+    """A value record with every `deriv` slot cleared.
+
+    Build 4 fills the slot these hand-built expectations were written against
+    (`deriv: None`), because provenance now rides on every value exactly as
+    interp.py's Traced does. An assertion about what a value IS compares the
+    bare record; where a value CAME FROM is asserted separately, against
+    interp.py's own `why` output.
+    """
+    if isinstance(v, list):
+        return [_bare(x) for x in v]
+    if not isinstance(v, dict):
+        return v
+    return {k: (None if k == "deriv" else _bare(val)) for k, val in v.items()}
+
+
 def assert_effect_log_agrees(src, *, files=None, responses=None, py_responses=None,
                              now=0, clock=0, randoms=None, envs=None, foreigns=None):
     """The inert interp.planes effect log agrees with interp.py's, in order,
@@ -265,7 +285,7 @@ def test_read_inert_returns_file_body_and_logs_agree():
     state = assert_effect_log_agrees(src, files=[{"path": "notes.txt", "body": "hello"}])
     assert _log(state) == [("read", "notes.txt"), ("show", "hello")]
     body = next(b["value"] for b in state["env"] if b["name"] == "body")
-    assert body == _txt("hello")
+    assert _bare(body) == _txt("hello")
 
 
 def test_read_without_use_file_fails_module_check():
@@ -290,7 +310,7 @@ def test_ask_inert_returns_supplied_response_and_logs_agree():
         py_responses={"https://api.example.com/x": '"ok"'})
     assert _log(state) == [("ask", "https://api.example.com/x")]
     r = next(b["value"] for b in state["env"] if b["name"] == "r")
-    assert r == _txt("ok")
+    assert _bare(r) == _txt("ok")
 
 
 def test_ask_without_use_http_fails_module_check():
@@ -309,7 +329,7 @@ def test_clock_foreign_inert_is_the_fixed_value_and_logs_agree():
     assert _log(state) == [("clock", "time.time"), ("clock", "time.time")]
     for name in ("a", "b"):
         v = next(x["value"] for x in state["env"] if x["name"] == name)
-        assert v == _num(1000000)
+        assert _bare(v) == _num(1000000)
 
 
 def test_random_foreign_inert_draws_the_sequence_head_first():
@@ -339,7 +359,7 @@ def test_env_foreign_inert_reads_supplied_table_and_logs_agree():
     state = assert_effect_log_agrees(src, envs=[{"name": "home", "value": _txt("/work")}])
     assert _log(state) == [("env", "os.getcwd")]
     h = next(b["value"] for b in state["env"] if b["name"] == "h")
-    assert h == _txt("/work")
+    assert _bare(h) == _txt("/work")
 
 
 def test_ask_param_destination_resolves_at_the_call_site():
@@ -435,7 +455,7 @@ def test_foreign_ask_declared_effect_logs_and_returns_supplied():
     assert _log(state) == [("ask", "https://metrics.example.com/readings"),
                            ("show", "ok")]
     sent = next(b["value"] for b in state["env"] if b["name"] == "sent")
-    assert sent == _txt("done")
+    assert _bare(sent) == _txt("done")
 
 
 # =========================================== Phase 5: the effect surface (A.3)

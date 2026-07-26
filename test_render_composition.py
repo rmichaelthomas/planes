@@ -19,6 +19,8 @@ parenthesisation and by rendering the handler block -- no grammar change. This
 file flips the Phase 1 assertions to the fixed behaviour; the composition
 generator that proves the class is closed is Phase 3.
 """
+import ast
+import dataclasses
 import glob
 import json
 import os
@@ -26,6 +28,7 @@ import shutil
 import subprocess
 import sys
 
+import lexer
 from parser import PlanesSyntaxError, parse
 from render import ast_equal, render
 
@@ -146,7 +149,19 @@ _INNER = {
     "Round": "(round v to 2 places)",
     "ForEach": "(for each i in xs: i)",
     "OrFail": "(g of a or fail as e)",
+    # S8: the three remaining BinOp precedence levels. The original matrix
+    # sampled BinOp with `+` and `>` only; `and`, `or`, and `in` are separate
+    # productions (parse_and / parse_or / parse_comparison) and a renderer that
+    # gets one right can still get another wrong.
+    "BinOpAnd": "(z and w)",
+    "BinOpOr": "(z or w)",
+    "BinOpIn": "(z in xs)",
 }
+
+# S8: plus every node the parser SYNTHESISES, derived from its construction
+# sites (see _parser_synthesis_sites below, which is defined after _CONTAINER
+# so the derivation reads as one block). Merged in at module level so the
+# matrix runs them like any other inner.
 
 # CONTAINER: name -> a source template with the marker HOLE where the inner goes.
 # Every grammar position that reads a sub-expression.
@@ -188,13 +203,150 @@ _CONTAINER = {
 }
 
 
+# ============================================ S8: the nodes the parser SYNTHESISES
+#
+# A.4, and the class fix that matters more than its instance. The matrix above
+# is derived from the GRAMMAR: _INNER lists the kinds render_expr emits,
+# _CONTAINER the positions a production reads a sub-expression. That misses a
+# whole category — a node the parser BUILDS that no source text writes.
+# `parse_unary` desugars `-X` into `BinOp("-", Num(0), X)`, and that synthetic
+# `Num(0)` is not something any container-times-inner pair can produce, because
+# the matrix's inners are all written down as source. The corpus found the
+# consequence (S7): a negative literal did not round-trip.
+#
+# Per A.4 the list is DERIVED from the parser's construction sites, not written
+# by hand: _parser_synthesis_sites reads parser.py's own AST and reports every
+# place an AST node is constructed with a sub-node built entirely from
+# constants — the exact signature of "the source did not supply this". The
+# authored part is only the source fragment that reaches each site, and
+# test_every_synthesised_node_is_in_the_matrix fails if a site appears with no
+# fragment, so a new desugaring in the parser cannot slip past the matrix.
+
+_NODE_CLASSES = {n for n in dir(lexer)
+                 if dataclasses.is_dataclass(getattr(lexer, n, None))}
+
+
+def _all_constant(call):
+    """Every argument of this call is a literal, or a call whose arguments
+    are — i.e. nothing in it came from a token."""
+    args = list(call.args) + [k.value for k in call.keywords]
+    if not args:
+        return False
+    return all(isinstance(a, ast.Constant)
+               or (isinstance(a, ast.Call) and _all_constant(a))
+               for a in args)
+
+
+def _parser_synthesis_sites(path=None):
+    """Every site in the parser that builds an AST node containing a sub-node
+    made entirely of constants. Returns (outer, inner, line, source) tuples."""
+    path = path or os.path.join(REPO, "parser.py")
+    tree = ast.parse(open(path, encoding="utf-8").read())
+    out = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        outer = node.func.id if isinstance(node.func, ast.Name) else None
+        if outer not in _NODE_CLASSES:
+            continue
+        for a in list(node.args) + [k.value for k in node.keywords]:
+            inner = (a.func.id if isinstance(a, ast.Call)
+                     and isinstance(a.func, ast.Name) else None)
+            if inner in _NODE_CLASSES and _all_constant(a):
+                out.append((outer, inner, node.lineno, ast.unparse(node)))
+    return sorted(out)
+
+
+# One source fragment per synthesis site, keyed by (outer, inner). The KEYS are
+# checked against the derived sites; only the fragments are authored.
+_SYNTH_SOURCE = {
+    ("BinOp", "Num"): ("Negation", "(-1)"),
+}
+
+
+def _synthesised_inners():
+    """The _INNER entries the derived synthesis sites call for."""
+    out = {}
+    for outer, inner, _line, _src in _parser_synthesis_sites():
+        entry = _SYNTH_SOURCE.get((outer, inner))
+        if entry is not None:
+            out[entry[0]] = entry[1]
+    return out
+
+
+def test_every_synthesised_node_is_in_the_matrix():
+    """The derived list, checked against the authored fragments. A new
+    desugaring in parser.py lands here before it lands in the corpus."""
+    sites = _parser_synthesis_sites()
+    assert sites, ("no synthesis site found — the deriver stopped matching "
+                   "parser.py's construction sites")
+    missing = [(o, i, ln, src) for o, i, ln, src in sites
+               if (o, i) not in _SYNTH_SOURCE]
+    print(f"    [parser synthesis sites: {len(sites)} derived, "
+          f"{len(_SYNTH_SOURCE)} with a matrix fragment]")
+    for o, i, ln, src in sites:
+        print(f"      parser.py:{ln}  {o} <- {i}   {src}")
+    assert not missing, (
+        "parser.py synthesises a node the composition matrix cannot reach; "
+        "add a source fragment to _SYNTH_SOURCE:\n"
+        + "\n".join(f"  parser.py:{ln}: {src}" for _o, _i, ln, src in missing))
+
+
+# The negative literal, distilled — the instance the corpus found (S7). Before
+# the fix these rendered `0 - X` with a synthetic raw-int zero, and none of them
+# reparsed to an equal AST.
+NEGATION_CASES = [
+    "x = -25\n",
+    "x = -0.5\n",
+    "x = -y\n",
+    "x = 3 - -2\n",
+    "x = 5 * -2\n",
+    "xs = [-1, -2]\n",
+    "r = { a: -1, b: 2 }\n",
+    "x = -(a + b)\n",
+    "x = -count of xs\n",
+    "x = 0 - 25\n",
+    'if -1 < 0:\n  show "neg"\n',
+    'write -1 to "f"\n',
+    "x = first (-1) of xs\n",
+    "x = round -1.5 to 0 places\n",
+    "to f of n:\n  give -n\n",
+    "x = (-y).fld\n",
+    "x = -xs plus 1\n",
+    "x = - -1\n",
+    "x = -0\n",
+]
+
+
+def test_negative_literals_round_trip():
+    for src in NEGATION_CASES:
+        assert _round_trips(src), src
+
+
+def test_a_negative_literal_renders_as_itself():
+    """The canonical text is the source form, not the desugaring."""
+    assert render(parse("x = -25\n")) == "x = -25\n"
+    assert render(parse("xs = [-1, -2]\n")) == "xs = [-1, -2]\n"
+
+
+def test_a_written_zero_subtraction_canonicalises_to_the_unary_form():
+    """The one canonical-text change this fix makes. The renderer cannot tell
+    a synthesised zero from a written one — the JavaScript parser builds a real
+    PlanesNumber for both — so a source-written `0 - X` canonicalises to `-X`.
+    Same program, shorter form, and it round-trips."""
+    assert render(parse("x = 0 - 25\n")) == "x = -25\n"
+    assert _round_trips("x = 0 - 25\n")
+
+
 def _composition_sources():
     """Every (container, inner) pair as a source string, deterministically
     ordered. Returns a list of (label, source)."""
+    inner = dict(_INNER)
+    inner.update(_synthesised_inners())
     out = []
     for cname in sorted(_CONTAINER):
-        for iname in sorted(_INNER):
-            src = _PRELUDE + _CONTAINER[cname].replace("HOLE", _INNER[iname])
+        for iname in sorted(inner):
+            src = _PRELUDE + _CONTAINER[cname].replace("HOLE", inner[iname])
             out.append((f"{cname} <- {iname}", src))
     return out
 

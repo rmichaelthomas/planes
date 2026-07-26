@@ -20,7 +20,7 @@ def load():
 
 
 def t(v):
-    return Traced(v, Deriv("literal", repr(v), v, []))
+    return Traced(v, Deriv("literal", "<host value>", v, []))
 
 
 def call(i, fn, *args):

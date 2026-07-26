@@ -103,13 +103,46 @@ class Parser:
     def accept(self, kind, value=None):
         return self.next() if self.at(kind, value) else None
 
-    def expect(self, kind, value=None):
+    def expect(self, kind, value=None, fix=None):
+        """The generic token expectation, with the two ways it can name a fix.
+
+        `errors name the fix` is a language-level commitment (unbound v1.1
+        §22), and a bare token mismatch honours the letter of it and not the
+        substance: `expected }, found ':'` is true and tells nobody what to
+        write. Two answers, both added S8 after the corpus surfaced the
+        messages that had none:
+
+        * a reserved word where a NAME was wanted gets its own message,
+          because that is never a punctuation slip — it is the 42-name
+          reserved surface (32 keywords + 10 builtins) being hit. The
+          builtin half already errored naming the collision
+          (check_binding_name); this is the keyword half, in the same voice.
+        * every other site may pass `fix=`, a clause naming what to write
+          instead, in the same `\\n  ...` continuation shape every other
+          message in this file uses.
+        """
         t = self.accept(kind, value)
         if t is None:
             g = self.peek()
+            found = g.value or "end of line"
+            if kind == "NAME" and g.value in KEYWORDS:
+                raise PlanesSyntaxError(
+                    f"line {g.line}: '{found}' is a keyword, so it cannot be "
+                    f"used as a name\n"
+                    f"  keyword names are reserved like builtins; pick "
+                    f"another name")
+            # Two literal raises, not one message assembled in a variable:
+            # grammar_gen.py reads the catalogue off these call sites, and a
+            # message built up piecewise is one it has to record as
+            # unassembled — which would hide the fix clause from the very
+            # check that counts them.
+            if fix:
+                raise PlanesSyntaxError(
+                    f"line {g.line}: expected {value or kind.lower()}, "
+                    f"found '{found}'\n  {fix}")
             raise PlanesSyntaxError(
                 f"line {g.line}: expected {value or kind.lower()}, "
-                f"found '{g.value or 'end of line'}'")
+                f"found '{found}'")
         return t
 
     def check_binding_name(self, name, line, what):
@@ -1133,7 +1166,14 @@ class Parser:
                         break          # trailing comma
                     fields.append(self.parse_record_field())
             self.skip_bracket_ws()
-            self.expect("OP", "}")
+            # The greedy-tail shape, named. `{ k: f of a, k2: 9 }` reads
+            # `k2` as a second argument to `f`, then meets `:` where `}` was
+            # due — the parser is right and the message was useless.
+            self.expect("OP", "}",
+                        fix="a record is `{ name: value, ... }`; a call or "
+                            "`with` used as a field value takes the rest of "
+                            "the list, so parenthesise it: "
+                            "`{ k: (f of a, b), k2: 9 }`")
             seen = set()
             for k, _ in fields:
                 if k in seen:

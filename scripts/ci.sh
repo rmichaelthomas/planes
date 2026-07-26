@@ -28,6 +28,13 @@ python3 grammar_gen.py --check
 echo "== core_check.py (interp.planes stays inside the declared core) =="
 python3 core_check.py
 
+echo "== errors coverage (S8 — every catalogued error names its fix; a report) =="
+# A.5 / invariant 6: `errors name the fix` is measured, never enforced. A
+# message with no fix clause is work to schedule, not a build to break, and an
+# honest one-line error should not be un-committable. The checker exits 0 by
+# construction; `|| true` says so twice.
+python3 errors_coverage.py || true
+
 echo "== corpus coverage (S7 — a report, never a gate) =="
 # A.2 / invariant 7: coverage over corpus/ is reported, never enforced. A gap is
 # a fact to weigh, not a build break; `|| true` keeps set -e from ever letting
