@@ -436,3 +436,27 @@ def test_foreign_ask_declared_effect_logs_and_returns_supplied():
                            ("show", "ok")]
     sent = next(b["value"] for b in state["env"] if b["name"] == "sent")
     assert sent == _txt("done")
+
+
+# =========================================== Phase 5: the effect surface (A.3)
+
+def test_effect_surface_of_interp_planes_is_all_seven_kinds():
+    # A.3's prediction, checked against the real artifact: the static effect
+    # surface of the interpreter is all seven kinds, because it performs
+    # whatever the program it runs performs. Sound and maximally imprecise.
+    from lexer import EFFECT_KINDS
+    from shapes import analyse_file
+    surface = analyse_file("grammar/interp.planes", follow=True)  # total: no raise
+    kinds = {e.kind for e in surface.declared}
+    assert kinds >= set(EFFECT_KINDS), (
+        f"missing {set(EFFECT_KINDS) - kinds}")
+    assert kinds == set(EFFECT_KINDS), f"unexpected {kinds - set(EFFECT_KINDS)}"
+
+
+def test_effect_surface_analyser_stays_total_and_origins_do_not_crash():
+    from shapes import analyse_file
+    surface = analyse_file("grammar/interp.planes", follow=True)
+    # origins_of walks the derivation graph of every effect without raising.
+    for e in surface.declared:
+        origins = surface.origins_of(e)
+        assert isinstance(origins, list)
