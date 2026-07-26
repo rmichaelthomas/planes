@@ -315,17 +315,51 @@ def test_every_runtime_message_this_build_changed_names_a_fix():
         assert "\n  try: " in msg, f"{label} names no fix:\n{msg}"
 
 
-def test_a_text_value_in_an_error_detail_is_named_as_text():
+def test_a_text_value_in_an_error_detail_is_quoted():
     """`fmt` renders text without quotes — it is what `show` prints — so
     `whole of "5"` used to report `cannot take the whole part of 5`, which reads
-    as a number and is the one thing the message is about."""
-    assert 'the whole part of text "5"' in _py_message(
+    as a number and is the one thing the message is about. The quotes are the
+    whole fix: Planes has one string syntax, so a quoted value is
+    unambiguously text.
+
+    C3 applies this at every error-detail site, not the two C2 reached, and
+    drops C2's `text ` prefix — the quotes alone carry it, and the bare form is
+    what `grammar/interp.planes` already produced."""
+    assert 'the whole part of "5"' in _py_message(
         'x = "5"\nshow text of (whole of x)\n')
-    assert 'must be a number, found text "5"' in _py_message(
+    assert 'must be a number, found "5"' in _py_message(
         'show text of (first "5" of [1, 2])\n')
-    # And a number still renders bare, so nothing else moved.
+    # The four sites C2 reported and left.
+    assert 'cannot combine "5" with 1 using +' in _py_message(
+        'x = "5"\nshow text of (x + 1)\n')
+    assert 'cannot round "5"' in _py_message(
+        'x = "5"\nshow text of (round x to 2 places)\n')
+    assert "cannot use '-' on \"5\"" in _py_message(
+        'x = "5"\nshow text of (x - 1)\n')
+    assert 'cannot compare "5" with 1' in _py_message(
+        'x = "5"\nshow text of (x < 1)\n')
+    # Every other kind still renders as `fmt` renders it, so nothing else moved.
     assert "cannot take the whole part of true" in _py_message(
         "x = true\nshow text of (whole of x)\n")
+    assert "cannot take the whole part of [2 items]" in _py_message(
+        "x = [1, 2]\nshow text of (whole of x)\n")
+    assert "cannot take the whole part of {record}" in _py_message(
+        "x = { a: 1 }\nshow text of (whole of x)\n")
+
+
+def test_a_list_or_record_in_a_detail_names_its_shape_not_its_contents():
+    """The reason this does not simply defer to the canonical form: an error
+    detail has to be bounded. A canonical render would put every element of a
+    10,000-item list — or a record's credential — into text that goes to stderr
+    and into logs."""
+    big = "xs = [" + ", ".join(str(i) for i in range(200)) + "]\n"
+    msg = _py_message(big + "show text of (whole of xs)\n")
+    assert "[200 items]" in msg, msg
+    assert "17, 18, 19" not in msg, "the detail spilled the list's contents"
+    secret = 'r = { token: "hunter2" }\nshow text of (whole of r)\n'
+    msg2 = _py_message(secret)
+    assert "{record}" in msg2, msg2
+    assert "hunter2" not in msg2, "the detail spilled a record's contents"
 
 
 # ================================================ the siblings the sweep found
@@ -438,6 +472,188 @@ def test_no_corpus_program_relied_on_the_coercion():
             pass                # every other refusal is the program's own
     assert not broken, "the family-two ruling broke corpus programs:\n" + \
         "\n".join(broken)
+
+
+# ============================ C3 — the third implementation, and same-kind pairs
+#
+# C2 swept `<value> <op> 1` and every builtin, and reported two findings it did
+# not close: `fmt` renders text unquoted, so a detail could not tell `"5"` from
+# `5`; and the self-hosted `grammar/interp.planes` rendered its details through
+# `canonical-of-value` — its own TEST-ORACLE form — so a third implementation
+# disagreed with both others and nothing asserted it, because the self-hosted
+# suites compare error TAGS and not detail text.
+#
+# The sweep below closes both. It runs every shape through all three
+# implementations and compares tag AND detail, and it adds the pairs C2's
+# one-sided sweep could not reach: every ordered pair of value kinds, same-kind
+# included. Five more host exceptions were hiding there — `{a:1} < {a:2}`,
+# `nothing < nothing`, `[1] in {a:1}`, `{a:1} in {a:1}`, and `true in [1,2]` —
+# and two accidents of the host answering instead of refusing: `[1] < [2]` was
+# `true` out of Python's list comparison and `true < false` was `false`.
+
+_PL = None
+
+
+def _planes_interp():
+    """grammar/interp.planes, loaded once. The third implementation."""
+    global _PL
+    if _PL is None:
+        from interp import Interpreter as _I
+        _PL = _I()
+        _PL.run_file("grammar/interp.planes")
+    return _PL
+
+
+# A value of every kind, as each implementation spells one.
+_VAL_PLANES = {
+    "number": '{ kind: "number", value: 5, deriv: nothing }',
+    "text": '{ kind: "text", value: "5", deriv: nothing }',
+    "list": '{ kind: "list", items: [{ kind: "number", value: 1, deriv: nothing }, '
+            '{ kind: "number", value: 2, deriv: nothing }], deriv: nothing }',
+    "record": '{ kind: "record", fields: [{ key: "a", value: '
+              '{ kind: "number", value: 1, deriv: nothing } }], deriv: nothing }',
+    "boolean": '{ kind: "boolean", value: true, deriv: nothing }',
+    "nothing": '{ kind: "nothing", value: nothing, deriv: nothing }',
+}
+_VAL_SRC = {"number": "5", "text": '"5"', "list": "[1, 2]",
+            "record": "{ a: 1 }", "boolean": "true", "nothing": "nothing"}
+_KINDS = tuple(_VAL_SRC)
+
+
+def _three_way_cases():
+    cases = []
+    for k in _KINDS:
+        n = {"x": k}
+        for b in ("count", "text", "lower", "upper", "normalize", "whole",
+                  "join", "rest"):
+            cases.append((f"{b} of {k}", f"{b} of x", n))
+        cases += [
+            (f"round {k}", "round x to 2 places", n),
+            (f"not {k}", "not x", n),
+            (f"field of {k}", "x.a", n),
+            (f"{k} with a: 2", "x with a: 2", n),
+            (f"{k} plus 1", "x plus 1", n),
+            (f"first 1 of {k}", "first 1 of x", n),
+            (f"first text of {k}", 'first "5" of x', n),
+            (f"for each over {k}", "(for each i in x: i)", n),
+        ]
+    for a in _KINDS:
+        for b in _KINDS:
+            n = {"x": a, "y": b}
+            for op in ("+", "-", "*", "/", "<", "==", "in"):
+                cases.append((f"{a} {op} {b}", f"x {op} y", n))
+    return cases
+
+
+def _outcome_py(expr, names):
+    itp = Interpreter(host=TestHost())
+    src = "".join(f"{k} = {_VAL_SRC[v]}\n" for k, v in names.items())
+    try:
+        itp.run(src + f"show text of ({expr})\n")
+    except PlanesError as e:
+        return ("error", e.tag, e.detail)
+    except PlanesSyntaxError:
+        return ("parse", "PARSE", "")
+    except Exception as e:                                   # noqa: BLE001
+        return ("HOST", type(e).__name__, str(e)[:70])
+    return ("ok", "", itp.output[-1] if itp.output else "")
+
+
+def _outcome_js(expr, names):
+    src = "".join(f"{k} = {_VAL_SRC[v]}\n" for k, v in names.items())
+    r = _js_raw(src + f"show text of ({expr})\n")
+    if r.returncode != 0:
+        return ("HOST", "crash", r.stderr.strip().split("\n")[0][:70])
+    d = json.loads(r.stdout)
+    if d["tag"] == "PARSE":
+        return ("parse", "PARSE", "")
+    if d["tag"]:
+        head = d["message"].split("\n")[0]
+        return ("error", d["tag"],
+                head.split(": ", 1)[1] if ": " in head else head)
+    return ("ok", "", d["output"][-1] if d["output"] else "")
+
+
+def _outcome_planes(expr, names):
+    """Through grammar/interp.planes — the self-hosted interpreter, running on
+    interp.py. `builtin-text` is its own `fmt`, so a successful result comes back
+    in the same form the other two show."""
+    from interp import Deriv as _D
+    from interp import Traced as _T
+    i = _planes_interp()
+    parts = ['{ name: "%s", value: %s }' % (k, _VAL_PLANES[v])
+             for k, v in names.items()]
+    i.run("__env = [%s]\n" % ", ".join(parts))
+    env = i.env.get("__env")
+    try:
+        node = i.call("node-of-source",
+                      [_T(expr, _D("literal", "<src>", expr, []))], i.env)
+        val = i.call("eval", [node, env], i.env)
+        return ("ok", "", i.call("builtin-text", [val], i.env).value.get("value"))
+    except PlanesError as e:
+        return ("error", e.tag, e.detail)
+    except Exception as e:                                   # noqa: BLE001
+        return ("HOST", type(e).__name__, str(e)[:70])
+
+
+def test_no_host_exception_escapes_from_any_operand_pair():
+    """The invariant C2 asserted over a one-sided sweep, re-asserted over every
+    ordered pair. `{a:1} < {a:2}`, `nothing < nothing`, `[1] in {a:1}`,
+    `{a:1} in {a:1}`, and `true in [1,2]` all leaked a raw host exception."""
+    leaks = []
+    for label, expr, names in _three_way_cases():
+        for name, out in (("py", _outcome_py(expr, names)),
+                          ("pl", _outcome_planes(expr, names))):
+            if out[0] == "HOST":
+                leaks.append(f"  {label} [{name}]: {out[1]} {out[2]}")
+    assert not leaks, "host exceptions escaping:\n" + "\n".join(leaks)
+
+
+def test_all_three_implementations_agree_on_tag_and_detail():
+    """The convergence, asserted rather than claimed. Detail text, not just the
+    tag — a tag is deliberately shared across many messages, which is why the
+    self-hosted side could diverge on every detail while its suite stayed
+    green."""
+    if NODE is None:
+        return
+    bad = []
+    for label, expr, names in _three_way_cases():
+        py = _outcome_py(expr, names)
+        js = _outcome_js(expr, names)
+        pl = _outcome_planes(expr, names)
+        if not (py == js == pl):
+            bad.append(f"  {label}\n    py={py}\n    js={js}\n    pl={pl}")
+    assert not bad, (f"{len(bad)} divergence(s) across the three "
+                     f"implementations:\n" + "\n".join(bad))
+
+
+def test_ordering_works_on_numbers_and_text_and_nothing_else():
+    """What `compare`'s docstring said before it was true. A same-kind pair used
+    to reach the host's own `<`, so `[1] < [2]` answered `true` out of Python's
+    list comparison — an accident of the host, not the language."""
+    for lit in ("[1, 2]", "{ a: 1 }", "true", "nothing"):
+        try:
+            Interpreter(host=TestHost()).run(
+                f"x = {lit}\ny = {lit}\nshow text of (x < y)\n")
+        except PlanesError as e:
+            assert e.tag == "cannot-compare", (lit, e.tag)
+            assert "numbers with numbers, or text with text" in e.fix, e.fix
+        else:
+            raise AssertionError(f"{lit} < {lit} was ordered")
+    # And the two kinds it does order still order.
+    itp = Interpreter(host=TestHost())
+    itp.run('show text of (1 < 2)\nshow text of ("a" < "b")\n')
+    assert itp.output == ["true", "true"]
+
+
+def test_membership_answers_rather_than_refusing_where_it_can():
+    """`in` asks whether an equal element is present, and a differently-typed
+    element is an answer. Python's `in` went through guarded equality, so
+    `true in [1, 2]` leaked planes_num's own TypeError."""
+    itp = Interpreter(host=TestHost())
+    itp.run('show text of (true in [1, 2])\nshow text of ([1] in { a: 1 })\n'
+            'show text of ("a" in { a: 1 })\nshow text of (1 in [1, 2])\n')
+    assert itp.output == ["false", "false", "true", "true"]
 
 
 if __name__ == "__main__":

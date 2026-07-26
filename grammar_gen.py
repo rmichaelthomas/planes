@@ -306,11 +306,36 @@ def _extract_error_entries(fname, tree, src_lines):
                                 "(built elsewhere)"
         entries.append(entry)
 
-    # A tag (or the class-site fallback) is not unique on its own -- the
-    # same tag legitimately raises from several call sites (interp.py's
-    # "cannot-compare", four places). Disambiguate ids that collide by
-    # appending a running count, in source order, rather than pretending
-    # each id was already unique.
+    # A tag (or the class-site fallback) is not unique on its own -- the same
+    # tag legitimately raises from several call sites (interp.py's
+    # "cannot-compare", four places). The disambiguator is the enclosing
+    # FUNCTION first, and a running count only where that still collides.
+    #
+    # C2 used the running count alone, and reported the consequence as a
+    # finding: the count is assigned in source order, so adding a raise site
+    # renumbered every later site sharing its tag. Adding `first n of`'s count
+    # guard silently moved `whole of` from `interp.not-a-number-3` to `-4` and
+    # `for each`'s guard from `interp.not-a-collection` to `-2` — an id that
+    # meant one message before the commit and a different one after.
+    #
+    # The function name is data the entry already carries (`raised_in`), so this
+    # promotes it rather than inventing a key. It makes an id READ better too --
+    # `interp.not-a-number.builtin` says where -- and it is stable under the
+    # change that broke it: a new site for an existing tag somewhere else. It is
+    # NOT a guarantee. Two raises with the same tag in the same function still
+    # fall back to a count (`rest`'s two `not-a-list` arms), and inserting a
+    # raise ABOVE one of those still renumbers. Nothing short of a hand-assigned
+    # key makes an id permanent, and a hand-assigned key is what ruling D1
+    # ("generated, not hand-authored") exists to refuse.
+    # Source order, before numbering. `ast.walk` is breadth-first, so the
+    # running count did not even follow the file: `expect`'s three raises came
+    # out 1, 2, 3 in walk order rather than in the order they are written, which
+    # made the suffix unpredictable from reading the source. Sorting here also
+    # puts errors.json itself in source order, which is how a person reads it.
+    entries.sort(key=_entry_line)
+    for e in entries:
+        if e.get("raised_in"):
+            e["id"] = f"{e['id']}.{e['raised_in']}"
     counters = {}
     for e in entries:
         counters[e["id"]] = counters.get(e["id"], 0) + 1
@@ -348,6 +373,13 @@ def _branch_message(stmts):
             if t is not None:
                 pieces.append(t)
     return "\n".join(pieces) if pieces else None
+
+
+def _entry_line(entry):
+    """The source line an entry sits on, from its `file:line` (or
+    `file:start-end`) pointer. Used to put every entry in source order before
+    the running count is assigned, so `-1` is the first one written."""
+    return int(entry["source"].rsplit(":", 1)[1].split("-")[0])
 
 
 def _span(stmts):
@@ -428,10 +460,16 @@ def generate_errors():
             src = f.read()
         tree = ast.parse(src, filename=fname)
         src_lines = src.split("\n")
-        entries.extend(_extract_error_entries(fname, tree, src_lines))
+        per_file = _extract_error_entries(fname, tree, src_lines)
         for site_file, method in ASSEMBLED_MESSAGE_SITES:
             if fname == site_file:
-                entries.extend(_extract_assembled_entries(fname, tree, src_lines, method))
+                per_file.extend(
+                    _extract_assembled_entries(fname, tree, src_lines, method))
+        # Source order across both kinds, so the file reads the way the source
+        # does. The raise sites were already sorted before numbering; this puts
+        # the assembled report entries in among them rather than after them.
+        per_file.sort(key=_entry_line)
+        entries.extend(per_file)
 
     tags = {}
     for e in entries:
