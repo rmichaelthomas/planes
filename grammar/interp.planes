@@ -132,6 +132,20 @@ to function-find of env, name:
           found = true
   give { found: found, value: result }
 
+# The first *foreign* binding for a name (build 3). interp.py keeps foreigns in
+# their own global namespace (self.foreigns), hoisted before execution, and a
+# foreign call resolves there when no user function shadows the name.
+to foreign-find of env, name:
+  result = nothing
+  found = false
+  for each binding in env:
+    if not found:
+      if binding.name == name:
+        if binding.value.kind == "foreign":
+          result = binding.value
+          found = true
+  give { found: found, value: result }
+
 # ================================================================ the status record (A.3)
 #
 # Every evaluation and execution step takes a status record and returns one.
@@ -214,6 +228,19 @@ to list-includes of names, name:
       if n == name:
         found = true
   give found
+
+# The interpreter's own foreign boundary for the three ambient effects (build
+# 3). clock / random / env are foreign-only in Planes -- there is no `clock`
+# statement or builtin, so interp.py reaches them only through a `foreign ...
+# doing clock/random/env` declaration. interp.planes reaches them the same way:
+# in "real" mode a foreign the interpreted program declares as `doing clock`
+# performs its reading by calling these, resolved by the outer host exactly as
+# any foreign is. These three declarations are also what puts clock, random, and
+# env on interp.planes's own static effect surface (Phase 5, A.3) -- the
+# interpreter performs whatever effects it interprets, so it declares them.
+foreign host-clock from "time.time" doing clock
+foreign host-random from "random.random" doing random
+foreign host-getcwd from "os.getcwd" doing env
 
 # ================================================================ eval-node (A.1: flat; A.3: status-threaded)
 #
@@ -348,6 +375,16 @@ to reraise of err:
     fail d as recursion-too-deep
   if t == "fail-message-not-text":
     fail d as fail-message-not-text
+  if t == "module-not-used":
+    fail d as module-not-used
+  if t == "no-such-file":
+    fail d as no-such-file
+  if t == "ask-failed":
+    fail d as ask-failed
+  if t == "no-random-supplied":
+    fail d as no-random-supplied
+  if t == "foreign-needs-host":
+    fail d as foreign-needs-host
   fail d as interp-error
 
 # ================================================================ source -> node (consumes parser.planes, A.4)
@@ -769,14 +806,25 @@ to eval-call-node of node, env, globals:
   fn = function-find of env, name
   if fn.found:
     give apply-function-node of fn.value, args, env, globals, name
+  # A foreign the program declared -- the host boundary (build 3). Resolved
+  # after user functions (a `to` shadows a foreign of the same name, as in
+  # interp.py) and before builtins.
+  fr = foreign-find of env, name
+  if fr.found:
+    give apply-foreign-node of fr.value, args, env, globals, name
   if is-builtin-name of name:
     if not ((count of args) == 1):
       give fail-of of (error-of of "wrong-arity", ("'" + name + "' takes 1 value, given " + (text of (count of args)))), env
     a = eval-node of (first-item of args), env, globals
     if not (a.status == "normal"):
       give a
-    # eval-builtin is value-returning; ask/read raise the build-3 refusal, so
-    # the leaf catch turns any builtin failure into a fail status.
+    # The two effect-bearing builtins route through the boundary (build 3);
+    # the eight pure ones evaluate to a value and the leaf catch turns a
+    # builtin failure into a fail status.
+    if name == "ask":
+      give do-ask of a.value, a.env
+    if name == "read":
+      give do-read of a.value, a.env
     v = (eval-builtin of name, a.value) or fail as e:
       give fail-of of e, a.env
     give normal-of of v, a.env
@@ -897,7 +945,7 @@ to builtin-rest of arg:
 to globals-of of env:
   result = []
   for each binding in env:
-    if binding.value.kind == "function":
+    if (binding.value.kind == "function") or (binding.value.kind == "foreign"):
       result = result plus binding
   give result
 
@@ -1326,6 +1374,203 @@ to unwrap-value of v:
     give raw
   give canonical-of-value of v
 
+# ================================================================ input effects (Phase 3)
+#
+# ask / read are the two effect-bearing builtins. Each requires its module
+# (`use http` / `use file`, the same check interp.py makes), logs the effect,
+# and returns a value. Dispatch on the mode tag is flat (A.1). In "inert" mode
+# the value is read deterministically from the supplied tables -- a response for
+# a url, a file's text for a path -- so agreement is checkable without a network
+# or a filesystem. In "real" mode the outer host performs the call.
+#
+# ask returns PARSED JSON in interp.py (host.parse_json then from_foreign). That
+# is the one place the host boundary is irreducible: Planes has no JSON parser
+# and no runtime type probe, so interp.planes cannot re-wrap a host-parsed value
+# into its tagged model on its own. In "real" mode it returns the result's text
+# form (the fetch happens, but the shape is flattened); in "inert" mode the
+# supplied response is already a tagged value, which is why inert is the tested
+# path. The answer to "can Planes parse JSON without a host" is no, and it shows
+# up exactly here (A.3, Phase 3).
+
+to do-ask of arg, env:
+  io = io-of of env
+  if not (list-includes of io.modules, "http"):
+    give fail-of of (error-of of "module-not-used", "asking a url needs the http module"), env
+  url = arg.value
+  logged = io with log: (io.log plus { kind: "ask", target: url })
+  env2 = with-io of env, logged
+  if io.mode == "inert":
+    r = lookup-response of io.responses, url
+    if not r.found:
+      give fail-of of (error-of of "ask-failed", ("no stubbed response for " + url)), env2
+    give normal-of of r.value, env2
+  give normal-of of (make-text of (text of (ask of url))), env2
+
+to do-read of arg, env:
+  io = io-of of env
+  if not (list-includes of io.modules, "file"):
+    give fail-of of (error-of of "module-not-used", "reading a file needs the file module"), env
+  path = arg.value
+  logged = io with log: (io.log plus { kind: "read", target: path })
+  env2 = with-io of env, logged
+  if io.mode == "inert":
+    f = lookup-file of io.files, path
+    if not f.found:
+      give fail-of of (error-of of "no-such-file", path), env2
+    give normal-of of (make-text of f.value), env2
+  give normal-of of (make-text of (read of path)), env2
+
+# The inert input tables are association lists read by static field access -- no
+# dynamic record lookup (A.2). Each is a distinct shape with its own key field,
+# so each lookup names its field literally: responses keyed by `url`, files by
+# `path` (file text under `body`), envs and foreigns by `name`. `value` on a
+# response / env / foreign is an already-wrapped tagged value; `body` on a file
+# is the raw text read returns.
+
+to lookup-response of responses, url:
+  result = nothing
+  found = false
+  for each r in responses:
+    if not found:
+      if r.url == url:
+        result = r.value
+        found = true
+  give { found: found, value: result }
+
+to lookup-file of files, path:
+  result = nothing
+  found = false
+  for each f in files:
+    if not found:
+      if f.path == path:
+        result = f.body
+        found = true
+  give { found: found, value: result }
+
+to lookup-by-name of pairs, name:
+  result = nothing
+  found = false
+  for each p in pairs:
+    if not found:
+      if p.name == name:
+        result = p.value
+        found = true
+  give { found: found, value: result }
+
+# ================================================================ foreign calls (Phase 3/4, the host boundary)
+#
+# A foreign is a tagged value hoisted alongside functions (make-foreign), holding
+# the declaration interp.py's self.foreigns holds: name, params, target, the
+# declared effects, and whether `doing` was written. Calling one reproduces
+# interp.py's call_foreign: check arity, evaluate the arguments (threading io),
+# LOG each declared effect with its destination resolved against the call, then
+# produce the return value.
+#
+# clock / random / env are foreign-only, so this is where they are performed.
+# In "inert" mode each is deterministic from the configuration (A.2): clock is
+# the supplied fixed time, random is drawn head-first from the supplied
+# sequence, env reads the supplied table, and a pure foreign (`doing nothing`,
+# e.g. builtins.sorted) returns its supplied result -- because interp.planes has
+# no dynamic host.resolve, an arbitrary host function cannot be run, and the
+# supplied result is what stands in. In "real" mode the three ambient effects go
+# through interp.planes's own host-clock/host-random/host-getcwd foreigns
+# (resolved by the outer host); an arbitrary foreign's real resolution is the
+# one thing that needs a second host, and it fails naming that (Phase 4, A.7).
+
+to make-foreign of decl:
+  give { kind: "foreign", name: decl.name, params: decl.params, target: decl.target, effects: decl.effects, declared: decl.declared, deriv: nothing }
+
+to apply-foreign-node of decl, arg-nodes, call-env, globals, name:
+  if not ((count of decl.params) == (count of arg-nodes)):
+    give fail-of of (error-of of "wrong-arity", ("'" + name + "' takes " + (text of (count of decl.params)) + " values, given " + (text of (count of arg-nodes)))), call-env
+  bound = eval-args of decl.params, arg-nodes, call-env, globals, []
+  if not (bound.status == "normal"):
+    give bound
+  give do-foreign of decl, bound.value, bound.env
+
+# Log the declared effects (a claim recorded before the call, interp.py's
+# pre-invoke append), then produce the return value on the mode tag.
+to do-foreign of decl, param-bindings, env:
+  io = io-of of env
+  logged = log-foreign-effects of decl.effects, decl, param-bindings, io
+  env1 = with-io of env, logged
+  if logged.mode == "inert":
+    give foreign-result-inert of decl, param-bindings, env1
+  give foreign-result-real of decl, param-bindings, env1
+
+# Append one { kind, target } per declared effect. Destination resolution
+# matches interp.py: a literal destination is the literal, a param destination
+# is that argument's text form, and an unstated destination is the target.
+to log-foreign-effects of effects, decl, param-bindings, io:
+  acc = io
+  for each e in effects:
+    dest = foreign-dest of e, decl, param-bindings
+    acc = acc with log: (acc.log plus { kind: e.kind, target: dest })
+  give acc
+
+to foreign-dest of e, decl, param-bindings:
+  if e.target-tag == "literal":
+    give e.target-value
+  if e.target-tag == "param":
+    b = lookup-by-name of param-bindings, e.target-value
+    if b.found:
+      give fmt-of of b.value
+    give decl.target
+  give decl.target
+
+# interp.py's fmt of a value, as a plain string, for a destination label.
+to fmt-of of v:
+  r = (builtin-text of v) or fail as e:
+    give "?"
+  give r.value
+
+to has-effect-kind of effects, kind:
+  found = false
+  for each e in effects:
+    if not found:
+      if e.kind == kind:
+        found = true
+  give found
+
+# The inert return value, deterministic from the configuration (A.2).
+to foreign-result-inert of decl, param-bindings, env:
+  io = io-of of env
+  if has-effect-kind of decl.effects, "clock":
+    give normal-of of (make-number of io.clock), env
+  if has-effect-kind of decl.effects, "random":
+    if (count of io.randoms) == 0:
+      give fail-of of (error-of of "no-random-supplied", "inert mode ran out of supplied random values"), env
+    drawn = first-item of io.randoms
+    give normal-of of (make-number of drawn), (with-io of env, (io with randoms: (rest of io.randoms)))
+  if has-effect-kind of decl.effects, "env":
+    r = lookup-by-name of io.envs, decl.name
+    if r.found:
+      give normal-of of r.value, env
+    give foreign-supplied-or-nothing of decl, io, env
+  give foreign-supplied-or-nothing of decl, io, env
+
+# A pure foreign (`doing nothing`, e.g. builtins.sorted) returns its supplied
+# result, keyed by the foreign's name. Absent a supplied result, nothing --
+# there is no host to compute it in inert mode.
+to foreign-supplied-or-nothing of decl, io, env:
+  r = lookup-by-name of io.foreigns, decl.name
+  if r.found:
+    give normal-of of r.value, env
+  give normal-of of (make-nothing), env
+
+# The real return value. The three ambient effects call interp.planes's own
+# host foreigns (resolved by the outer host). An arbitrary foreign's resolution
+# needs a dynamic host.resolve interp.planes does not have -- the second host's
+# job (A.7) -- so it fails naming exactly that rather than guessing a value.
+to foreign-result-real of decl, param-bindings, env:
+  if has-effect-kind of decl.effects, "clock":
+    give normal-of of (make-number of (host-clock)), env
+  if has-effect-kind of decl.effects, "random":
+    give normal-of of (make-number of (host-random)), env
+  if has-effect-kind of decl.effects, "env":
+    give normal-of of (make-text of (host-getcwd)), env
+  give fail-of of (error-of of "foreign-needs-host", ("resolving foreign '" + decl.name + "' (" + decl.target + ") needs a host that can load it -- the second host, Route B's next step")), env
+
 # `fail "message" as tag` (Phase 6, Rule 3). The tag is static (from the parser);
 # the message is evaluated and must be text (interp.py's fail-message-not-text),
 # then becomes a fail status carrying { tag, detail: message } that propagates
@@ -1396,6 +1641,8 @@ to functions-env-of of src:
   for each n in nodes:
     if n.kind == "FuncDef":
       env = env plus { name: n.name, value: (make-function of n) }
+    if n.kind == "Foreign":
+      env = env plus { name: n.name, value: (make-foreign of n) }
   give env
 
 # ================================================================ the pipeline, connected (Phase 6, A.4)
