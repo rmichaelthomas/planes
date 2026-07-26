@@ -19,6 +19,7 @@ import { parse, PlanesAmbiguity } from "./parser.mjs";
 import { canonicalProgram } from "./canonical.mjs";
 import { Interpreter, PlanesError, lit } from "./interp.mjs";
 import { TestHost } from "./host.mjs";
+import { sha256Hex } from "./sha256.mjs";
 import { PlanesNumber, Fraction, Inexact } from "./planes_num.mjs";
 import {
   resolveStringEscapes,
@@ -205,6 +206,12 @@ switch (sub) {
   case "text":
     out(JSON.stringify(JSON.parse(rest[0]).map(textOp)));
     break;
+  case "hash": {
+    // hash <json-array-of-strings> — the full 64-char SHA-256 hex digest of
+    // each string's UTF-8 bytes, for byte-identity against hashlib (A.2).
+    out(JSON.stringify(JSON.parse(rest[0]).map((s) => sha256Hex(s))));
+    break;
+  }
   case "tokens": {
     // The canonical token form: [kind, value, line] per token, matching
     // test_lexer_in_planes.py's (t.kind, t.value, t.line). On a syntax error,
@@ -312,6 +319,177 @@ switch (sub) {
         files: itp.host.files ?? {},
       }),
     );
+    break;
+  }
+  case "render": {
+    // render <file> — canonical source, byte-for-byte against render.py.
+    loadGrammar();
+    const { render } = await import("./render.mjs");
+    const src = fs.readFileSync(rest[0], "utf-8");
+    out(render(parse(src)));
+    break;
+  }
+  case "render-rules": {
+    // render-rules <file> — canonical source with the generated rule markers,
+    // like shapes_cli.py --render: single-file, unfollowed, so a rule subject
+    // resolves against a surface whose nodes all carry file=null.
+    loadGrammar();
+    const { render } = await import("./render.mjs");
+    const { analyse } = await import("./shapes.mjs");
+    const src = fs.readFileSync(rest[0], "utf-8");
+    const prog = parse(src);
+    const found = prog.filter((s) => s.__node === "Rule");
+    out(found.length ? render(prog, found, analyse(src)) : render(prog));
+    break;
+  }
+  case "roundtrip": {
+    // roundtrip <file> — parse -> render -> reparse -> astEqual, and the set of
+    // AST node kinds the program contains (A.4 per-kind coverage). JS-side.
+    loadGrammar();
+    const { render, astEqual } = await import("./render.mjs");
+    const src = fs.readFileSync(rest[0], "utf-8");
+    const prog = parse(src);
+    let ok;
+    let reparseFailed = false;
+    try {
+      const prog2 = parse(render(prog));
+      ok =
+        prog.length === prog2.length &&
+        prog.every((a, i) => astEqual(a, prog2[i]));
+    } catch (e) {
+      // render.py has a construct it renders but cannot reparse (a multi-arg
+      // call as a record-field value); the JS port reproduces that exactly, so
+      // a reparse failure is a reported result, not a crash.
+      if (e instanceof PlanesSyntaxError) {
+        ok = false;
+        reparseFailed = true;
+      } else throw e;
+    }
+    const kinds = new Set();
+    const walk = (v) => {
+      if (v && typeof v === "object" && "__node" in v) {
+        kinds.add(v.__node);
+        for (const k of Object.keys(v)) if (k !== "__node") walk(v[k]);
+      } else if (v && v.items !== undefined && Array.isArray(v.items)) {
+        for (const x of v.items) walk(x); // Tup
+      } else if (Array.isArray(v)) {
+        for (const x of v) walk(x);
+      }
+    };
+    for (const s of prog) walk(s);
+    out(JSON.stringify({ ok, reparseFailed, kinds: [...kinds].sort() }));
+    break;
+  }
+  case "astequal": {
+    // astequal <fileA> <fileB> — whether parse(A) and parse(B) are astEqual
+    // (line-insensitive). Drives the cross-implementation round-trip: Python
+    // renders, JS reparses, and this checks it against JS's parse of the source.
+    // A parse failure is reported, not thrown, so the caller can assert JS
+    // reproduces render.py's non-reparseable output.
+    loadGrammar();
+    const { astEqual } = await import("./render.mjs");
+    try {
+      const a = parse(fs.readFileSync(rest[0], "utf-8"));
+      const b = parse(fs.readFileSync(rest[1], "utf-8"));
+      const equal =
+        a.length === b.length && a.every((x, i) => astEqual(x, b[i]));
+      out(JSON.stringify({ equal, parseFailed: false }));
+    } catch (e) {
+      if (e instanceof PlanesSyntaxError) {
+        out(JSON.stringify({ equal: false, parseFailed: true }));
+      } else throw e;
+    }
+    break;
+  }
+  case "shapes": {
+    // shapes <file> [--no-follow] — the published effect surface (as_json),
+    // the effect-surface oracle against shapes_cli.as_json.
+    loadGrammar();
+    const { asJson } = await import("./shapes.mjs");
+    const { analyseFile } = await import("./shapes_node.mjs");
+    const follow = !rest.includes("--no-follow");
+    const surface = analyseFile(rest[0], follow);
+    out(JSON.stringify(asJson(surface, rest[0])));
+    break;
+  }
+  case "shapes-fn": {
+    // shapes-fn <file> [--no-follow] — the per-function effect breakdown.
+    loadGrammar();
+    const { functionsBreakdown } = await import("./shapes.mjs");
+    const { analyseFile } = await import("./shapes_node.mjs");
+    const follow = !rest.includes("--no-follow");
+    out(JSON.stringify(functionsBreakdown(analyseFile(rest[0], follow))));
+    break;
+  }
+  case "shapes-deriv": {
+    // shapes-deriv <file> — the derivation + origins form, computed from this
+    // file's own source with analyse(src) (file=null), so derivation `file`
+    // fields are null on both sides and only structure is compared.
+    loadGrammar();
+    const { analyse, derivationForm } = await import("./shapes.mjs");
+    const src = fs.readFileSync(rest[0], "utf-8");
+    out(JSON.stringify(derivationForm(analyse(src))));
+    break;
+  }
+  case "rules":
+  case "rules-src": {
+    // rules <file>      — shapes_cli.py --rules: surface via analyseFile(follow),
+    //                     check with declaringFile = abspath(file).
+    // rules-src <file>  — rule_violations(src): surface via analyse(src)
+    //                     (file=null), check with declaringFile=null.
+    // Both emit each violation's render text + is_violation + vacuous, the
+    // resolved subjects, and the exit category — or {error, message} on a
+    // conflict / unsupported subject. The rule-results oracle (A.3).
+    loadGrammar();
+    const { check, RuleConflict, RuleNotSupported } = await import("./rules.mjs");
+    const src = fs.readFileSync(rest[0], "utf-8");
+    const found = parse(src).filter((s) => s.__node === "Rule");
+    let surface;
+    let declaringFile = null;
+    if (sub === "rules") {
+      const pathmod = await import("node:path");
+      const { analyseFile } = await import("./shapes_node.mjs");
+      surface = analyseFile(rest[0], true);
+      declaringFile = pathmod.resolve(rest[0]);
+    } else {
+      const { analyse } = await import("./shapes.mjs");
+      surface = analyse(src);
+    }
+    try {
+      const results = check(found, surface, declaringFile);
+      out(
+        JSON.stringify({
+          violations: results.map((v) => ({
+            render: v.render(),
+            is_violation: v.is_violation,
+            vacuous: v.vacuous,
+          })),
+          resolved_subjects: results.resolvedSubjects,
+          exit: results.some((v) => v.is_violation)
+            ? 1
+            : results.some((v) => v.vacuous)
+              ? 2
+              : 0,
+        }),
+      );
+    } catch (e) {
+      if (e instanceof RuleConflict) {
+        out(JSON.stringify({ error: "RuleConflict", message: e.message }));
+      } else if (e instanceof RuleNotSupported) {
+        out(JSON.stringify({ error: "RuleNotSupported", message: e.message }));
+      } else throw e;
+    }
+    break;
+  }
+  case "fingerprints": {
+    // fingerprints <file> — [name, fingerprint] per rule, for byte-identity
+    // against rules.py's fingerprint() (which the FINGERPRINT token embeds).
+    loadGrammar();
+    const { fingerprint } = await import("./rules.mjs");
+    const found = parse(fs.readFileSync(rest[0], "utf-8")).filter(
+      (s) => s.__node === "Rule",
+    );
+    out(JSON.stringify(found.map((r) => [r.name, fingerprint(r)])));
     break;
   }
   case "meta": {

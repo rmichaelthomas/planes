@@ -21,10 +21,12 @@
         border-radius: 6px; resize: vertical;
       }
       button {
-        margin: 0.75rem 0; padding: 0.5rem 1.1rem; font-size: 14px;
+        margin: 0.75rem 0.4rem 0.75rem 0; padding: 0.5rem 1.1rem; font-size: 14px;
         border: 0; border-radius: 6px; background: #2d6cdf; color: #fff; cursor: pointer;
       }
       button:hover { background: #245ac0; }
+      button.secondary { background: #4a8a5c; }
+      button.secondary:hover { background: #3c7049; }
       .hint { color: #888; font-size: 12px; }
       pre#output {
         background: #f6f7f9; padding: 0.75rem; border-radius: 6px;
@@ -43,41 +45,51 @@
   <body>
     <h1>Planes, in JavaScript</h1>
     <p class="sub">
-      This page is a complete Planes implementation — lexer, parser, and
-      interpreter — running in your browser, with no Python and no build step.
+      A complete Planes implementation — lexer, parser, interpreter, and
+      <em>static effect analyser</em> — running in your browser, with no Python
+      and no build step. <strong>Run ▸</strong> executes the program;
+      <strong>Surface ⊚</strong> tells you what it <em>would</em> touch — which
+      boundaries, which destinations — without running a line of it.
     </p>
 
     <textarea id="source" spellcheck="false">
-# Planes runs here — in your browser, on JavaScript.
-# Numbers are exact: no floating-point surprises.
+# Planes runs here — and can tell you what a program would touch
+# without running it. Click "Run ▸" to execute; "Surface ⊚" to analyse.
+
+use file
+use http
+
+# A function that reaches the network — but nothing calls it at the top
+# level, so RUNNING this program performs no network send. The SURFACE
+# still sees it: a library that hides a network call behind a function is
+# exactly what the analyser refuses to call "pure".
+to fetch of url:
+  give ask url
+
+# What actually runs: exact arithmetic (no floating-point surprises),
+# a file write, and some output.
 price = 0.1 + 0.2
 show "0.1 + 0.2 = " + text of price
 
-third = 1 / 3
-show "1 / 3   = " + text of third
-
-# Lists and records, with the language's own prose calls.
 readings = [23, 8, 41, 15, 4]
-show "readings: " + text of count of readings + " values"
-
-# Every value remembers how it was made — ask `why`.
-x = 5
-y = 3
-z = x * y + 2
-why z
+write readings to "readings.json"
+show "wrote " + text of count of readings + " readings to readings.json"
 </textarea>
 
     <div>
       <button id="run">Run ▸</button>
-      <span class="hint">or press ⌘/Ctrl + Enter</span>
+      <button id="surface" class="secondary">Surface ⊚</button>
+      <span class="hint">⌘/Ctrl + Enter to run · add Shift for the surface</span>
     </div>
 
     <pre id="output">(no output yet)</pre>
 
     <footer>
-      Opens directly in Safari or Firefox. Chrome blocks ES-module loading over
-      <code>file://</code> as a security policy — for Chrome, serve the folder
-      with <code>python3 -m http.server</code> and open
+      The surface is computed by <code>js/shapes.mjs</code> — the same analyser
+      as <code>shapes.py</code>, checked against it — and it never executes the
+      program. Opens directly in Safari or Firefox. Chrome blocks ES-module
+      loading over <code>file://</code> as a security policy — for Chrome, serve
+      the folder with <code>python3 -m http.server</code> and open
       <code>http://localhost:8000/</code>. No bundler, no transpiler: the page
       loads the real <code>js/*.mjs</code> modules and the real
       <code>grammar/*.json</code> as JSON modules.
