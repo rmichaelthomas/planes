@@ -609,13 +609,39 @@ to builtin-rest of arg:
     fail "cannot take the rest of an empty list" as empty-list
   give make-list of (rest of arg.items)
 
+# ================================================================ lexical scoping (A.1)
+#
+# The environment a function is applied against is its *definition*
+# environment, not the caller's. interp.py gives each call a fresh Env(fn.env),
+# and every function in a program is defined at the top level (hoist folds even
+# nested defs into one flat funcs namespace), so a function's definition
+# environment is the globals: the function values, and nothing of the caller's
+# locals. globals-of keeps exactly the function bindings of an environment and
+# drops the rest, so a callee sees every function (mutual recursion) and its
+# own parameters, but never a name bound only in its caller -- the divergence a
+# dynamic-scoping evaluator produces, which build 1's tests could not detect
+# because its bodies had no locals to leak.
+#
+# This is also what stops the environment growing with call depth: with the
+# caller's locals dropped, a callee's environment is params + the fixed set of
+# function values, the same size at depth 1 and depth 100. There is no dead
+# binding to prune because none is ever carried down (A.1: do not implement
+# pruning; lexical scoping deletes the problem).
+to globals-of of env:
+  result = []
+  for each binding in env:
+    if binding.value.kind == "function":
+      result = result plus binding
+  give result
+
 # ================================================================ function application (Phase 5)
 #
-# A function is a tagged value living in the environment, applied against the
-# environment it is called in: its parameters are bound, prepended to that
-# environment, and the extended list passed down to the body (A.2). No stored
-# closure -- the environment always carries every function value at its base,
-# so recursion and calls between functions resolve without a cyclic record.
+# A function is a tagged value living in the environment, applied against its
+# definition environment: its parameters are bound and prepended to the globals
+# (globals-of the call environment), and that list -- not the caller's -- is
+# passed down to the body (A.1, A.2). No stored closure: the globals always
+# carry every function value, so recursion and calls between functions resolve
+# without a cyclic record, and no caller local ever reaches the callee.
 #
 # Build 1 applies functions whose body is a single give-expression. A
 # multi-statement body, or any body that is not a lone `give`, is control
@@ -634,7 +660,7 @@ to apply-function of fn, arg-nodes, call-env, name:
   if not (stmt.kind == "Give"):
     fail "'" + name + "' body is not a single give-expression -- control flow is interp.planes build 2" as build-2-statements
   bindings = bind-params of fn.params, arg-nodes, call-env, []
-  new-env = bindings + call-env
+  new-env = bindings + (globals-of of call-env)
   give eval of stmt.expr, new-env
 
 # Evaluate each argument in the calling environment, pairing it with its
