@@ -388,16 +388,15 @@ def test_reassignment_of_shadowing_let():
     assert len(user) == 1
 
 
-def test_non_show_effects_fail_naming_build_3():
-    # A.5: show is in scope; every other effect fails naming build 3.
-    for src, _kind in [
-        ('write 5 to "out.txt"\n', "write"),
-        ('x = ask "http://example.com"\n', "ask"),
-        ('x = read "notes.txt"\n', "read"),
-    ]:
-        state = planes_execute(src)
-        assert state["status"] == "fail", (src, state["status"])
-        assert state["error"]["tag"] == "build-3-effect", (src, state["error"])
+def test_write_is_implemented_build_3_and_no_longer_names_build_2():
+    # A.5's build-2 refusal is lifted for write in build 3, phase 2. Without a
+    # `use file`, write now fails the same module check interp.py raises -- not
+    # build-3-effect. The module check fails before anything is written, so this
+    # touches no filesystem; the write-succeeds path is tested inert (no real
+    # write) in test_interp_effects_in_planes.py. (ask/read arrive in phase 3.)
+    state = planes_execute('write 5 to "out.txt"\n')
+    assert state["status"] == "fail", state
+    assert state["error"]["tag"] == "module-not-used", state["error"]
 
 
 # ============================================================ Phase 5: for each

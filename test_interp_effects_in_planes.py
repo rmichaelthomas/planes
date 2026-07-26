@@ -171,3 +171,75 @@ def test_show_log_agrees_with_interp_py(src):
 def test_number_import_is_available():
     # guard: Number import used by later phases resolves
     assert Number.of(1).text() == "1"
+
+
+# =============================================================== Phase 2: write
+
+def _norm_all(effects):
+    return [(e[0], e[1]) for e in effects]
+
+
+def assert_effect_log_agrees(src, *, files=None, responses=None, now=0,
+                             clock=0, randoms=None, envs=None, foreigns=None):
+    """The inert interp.planes effect log agrees with interp.py's, in order,
+    across every kind — the general agreement assertion phases 2-4 use."""
+    state = run_inert(src, files=files or [], responses=responses or [],
+                      clock=clock, randoms=randoms or [], envs=envs or [],
+                      foreigns=foreigns or [])
+    assert state["status"] == "normal", state
+    mine = _log(state)
+    theirs, _out = py_effects(
+        src,
+        files={f["path"]: f["text"] for f in (files or [])},
+        responses={r["url"]: r["value"] for r in (responses or [])},
+        now=now)
+    assert mine == theirs, f"\ninterp.planes: {mine}\ninterp.py:     {theirs}"
+    return state
+
+
+def test_write_inert_logs_destination_and_agrees():
+    src = ('use file\n'
+           'write [1, 2, 3] to "out.json"\n'
+           'show "done"\n')
+    state = assert_effect_log_agrees(src)
+    assert _log(state) == [("write", "out.json"), ("show", "done")]
+
+
+def test_write_without_use_file_fails_module_check_like_interp_py():
+    state = run_inert('write 5 to "x"\n')
+    assert state["status"] == "fail"
+    assert state["error"]["tag"] == "module-not-used"
+
+
+def test_write_real_mode_bytes_match_interp_py():
+    # real mode, hermetic via a TestHost outer interpreter: interp.planes writes
+    # through the outer host's `write`, which serialises the unwrapped raw value
+    # with the same to_json interp.py uses -- so the bytes are identical.
+    src = ('use file\nwrite [1, 2, 3] to "out.json"\n')
+    ho = _TestHost(files={})
+    ir = Interpreter(host=ho)
+    ir.run_file(INTERP_PLANES)
+    ir.call("execute-program", [_t(src)], ir.env)
+    hp = _TestHost(files={})
+    ip = Interpreter(host=hp)
+    ip.run(src)
+    assert ho.files.get("out.json") == hp.files.get("out.json")
+    assert ho.files.get("out.json") is not None
+
+
+def test_write_dest_from_a_variable_and_a_show_of_a_read_shape():
+    # write's destination resolved from a binding, threaded through the log.
+    src = ('use file\n'
+           'name = "report.json"\n'
+           'write { ok: true } to name\n')
+    state = assert_effect_log_agrees(src)
+    assert _log(state) == [("write", "report.json")]
+
+
+def test_multiple_writes_ordered_in_the_log():
+    src = ('use file\n'
+           'for each p in ["a.txt", "b.txt", "c.txt"]:\n'
+           '  write "x" to p\n')
+    state = assert_effect_log_agrees(src)
+    assert _log(state) == [("write", "a.txt"), ("write", "b.txt"),
+                           ("write", "c.txt")]

@@ -2,6 +2,16 @@ note: from "interp.py, written in Planes -- Route B stage three, build 1: the ex
 
 use parser
 
+# The interpreter performs file and network effects in "real" mode (build 3):
+# it executes a Planes `write` / `read` / `ask` directly and the outer host
+# carries it out, so interp.planes must itself declare the modules those
+# constructs need, exactly as any program performing them would. This is the
+# host-boundary made concrete -- an interpreter is not pure (A.3). It does not
+# widen the static effect surface (`use` names a module, not an effect kind);
+# the surface comes from the effect constructs these modules enable.
+use file
+use http
+
 # ================================================================ value representation
 #
 # A value is a tagged record: `kind` names the type, and the payload rides
@@ -261,7 +271,7 @@ to eval-node of node, env, globals:
   if k == "OrFail":
     give eval-orfail-node of node, env, globals
   if k == "WriteTo":
-    give fail-of of (error-of of "build-3-effect", "writing a file is an effect -- effects are interp.planes build 3, not build 2"), env
+    give eval-writeto-node of node, env, globals
   give fail-of of (error-of of "cannot-evaluate", ("cannot evaluate a node of kind '" + k + "'")), env
 
 # A variable reference. A function value auto-calls only when no local variable
@@ -1262,6 +1272,59 @@ to perform-show of shown, value, env:
     give normal-of of value, env2
   show shown
   give normal-of of value, env2
+
+# `write value to dest` (Phase 2, an output effect). interp.py evaluates both,
+# requires the file module (`use file`), serialises the value as JSON, hands it
+# to the host, and logs ("write", dest, len); the expression's value is nothing.
+# Reproduced: the module check names the same fix, the effect logs ("write",
+# dest), and dispatch on the mode tag is flat. In inert mode nothing is written;
+# in real mode the Planes `write` runs, and the outer host serialises the
+# unwrapped raw value exactly as interp.py's to_json does -- so a real write
+# from interp.planes and one from interp.py produce the same bytes.
+to eval-writeto-node of node, env, globals:
+  v = eval-node of node.value, env, globals
+  if not (v.status == "normal"):
+    give v
+  d = eval-node of node.dest, v.env, globals
+  if not (d.status == "normal"):
+    give d
+  io = io-of of d.env
+  if not (list-includes of io.modules, "file"):
+    give fail-of of (error-of of "module-not-used", "writing a file needs the file module"), d.env
+  dest = (text-form-of of d.value) or fail as e:
+    give fail-of of e, d.env
+  give do-write of v.value, dest, d.env
+
+to do-write of value, dest, env:
+  io = io-of of env
+  logged = io with log: (io.log plus { kind: "write", target: dest })
+  env2 = with-io of env, logged
+  if io.mode == "inert":
+    give normal-of of (make-nothing), env2
+  write (unwrap-value of value) to dest
+  give normal-of of (make-nothing), env2
+
+# A tagged interp.planes value back to a raw Planes value, so the outer host's
+# `write`/JSON path sees `5`, not `{ kind: "number", value: 5 }`. Scalars and
+# lists unwrap cleanly; a record cannot be rebuilt with runtime field names in
+# Planes (records take static field names), so a record value falls back to its
+# canonical text -- a real-mode limitation named in the report, never reached by
+# the inert agreement path, which logs the destination and serialises nothing.
+to unwrap-value of v:
+  if v.kind == "number":
+    give v.value
+  if v.kind == "text":
+    give v.value
+  if v.kind == "boolean":
+    give v.value
+  if v.kind == "nothing":
+    give nothing
+  if v.kind == "list":
+    raw = []
+    for each item in v.items:
+      raw = raw plus (unwrap-value of item)
+    give raw
+  give canonical-of-value of v
 
 # `fail "message" as tag` (Phase 6, Rule 3). The tag is static (from the parser);
 # the message is evaluated and must be text (interp.py's fail-message-not-text),
