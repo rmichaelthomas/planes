@@ -1,0 +1,685 @@
+note: from "interp.py, written in Planes -- Route B stage three, build 1: the expression evaluator. Evaluates Planes expressions to values, checked by agreement with interp.py's own eval() through a canonical value-text form (test_interp_in_planes.py). Consumes the AST grammar/parser.planes already produces (A.4); statements, control flow, and effects are builds 2 and 3. Values carry a deriv slot, `nothing` throughout build 1 (A.3) -- provenance is a later build's fill, not a rewrite."
+
+use parser
+
+# ================================================================ value representation
+#
+# A value is a tagged record: `kind` names the type, and the payload rides
+# in `value` (number / text / boolean / nothing), in `items` (list), or in
+# `fields` (record -- a list of { key, value } pairs, because Planes cannot
+# build a record with runtime field names, so a record value is never a
+# native record but always this tagged list-of-pairs). Every value carries a
+# `deriv` slot, `nothing` throughout build 1 (A.3). The tag is what lets the
+# renderer and every operator dispatch flatly on a value's type (A.1) without
+# a dynamic type probe -- Planes has none that does not itself raise.
+
+to make-number of n:
+  give { kind: "number", value: n, deriv: nothing }
+
+to make-text of s:
+  give { kind: "text", value: s, deriv: nothing }
+
+to make-boolean of b:
+  give { kind: "boolean", value: b, deriv: nothing }
+
+to make-nothing:
+  give { kind: "nothing", value: nothing, deriv: nothing }
+
+to make-list of items:
+  give { kind: "list", items: items, deriv: nothing }
+
+to make-record of fields:
+  give { kind: "record", fields: fields, deriv: nothing }
+
+# ================================================================ the canonical value form (A.5)
+#
+# Both sides render an evaluated value to this exact text and the test
+# compares strings. Numbers render through `text of` -- interp.py's own
+# Number.text(), an exact-rational form that never shows a float: 2 / 3 is
+# `~0.666666666666`, 0.1 + 0.2 is `0.3`. Strings are escaped and quoted via
+# escape-string-literal (the same four escapes interp.py's escaper uses, so
+# a quote or newline survives the comparison). Records render their fields in
+# stored order. `1`, `"1"`, and `true` render distinctly, so the form names
+# the type as well as the value.
+
+to canonical-of-value of v:
+  if v.kind == "number":
+    give text of v.value
+  if v.kind == "text":
+    give "\"" + (escape-string-literal of v.value) + "\""
+  if v.kind == "boolean":
+    if v.value:
+      give "true"
+    give "false"
+  if v.kind == "nothing":
+    give "nothing"
+  if v.kind == "list":
+    give "[" + (canonical-of-items of v.items) + "]"
+  if v.kind == "record":
+    give "{" + (canonical-of-fields of v.fields) + "}"
+  fail "cannot render a value of kind '" + v.kind + "'" as cannot-render
+
+# One pass over the items, comma-joined (the join-comma shape, inlined with
+# the per-item render so there is no intermediate list and no per-item
+# recursion). An empty list renders its items as "" -- so `[]` and `{}` fall
+# out with no special case.
+to canonical-of-items of items:
+  result = ""
+  seen = false
+  for each item in items:
+    piece = canonical-of-value of item
+    if seen:
+      result = result + ", " + piece
+    else:
+      result = piece
+      seen = true
+  give result
+
+to canonical-of-fields of fields:
+  result = ""
+  seen = false
+  for each f in fields:
+    piece = f.key + ": " + (canonical-of-value of f.value)
+    if seen:
+      result = result + ", " + piece
+    else:
+      result = piece
+      seen = true
+  give result
+
+# ================================================================ the environment (A.2)
+#
+# One flat list of { name, value } bindings, innermost first, first match
+# wins -- no scope chain, no nested frames to walk. Entering a function
+# prepends its bindings and passes the extended list down (Phase 5); the
+# caller keeps its own list unchanged, because lists are immutable, so
+# shadowing falls out of scan order. The scan reads each binding's `name`
+# and `value` by static field access -- there is no dynamic record lookup.
+
+# The first binding for a name, of any kind: { found, value }. A local
+# variable prepended in front shadows one behind it -- first match wins.
+to env-find of env, name:
+  result = nothing
+  found = false
+  for each binding in env:
+    if not found:
+      if binding.name == name:
+        result = binding.value
+        found = true
+  give { found: found, value: result }
+
+# The first *function* binding for a name, skipping any non-function binding
+# of the same name -- interp.py keeps functions in their own namespace, so a
+# call resolves to the function even when a local variable shares its name.
+to function-find of env, name:
+  result = nothing
+  found = false
+  for each binding in env:
+    if not found:
+      if binding.name == name:
+        if binding.value.kind == "function":
+          result = binding.value
+          found = true
+  give { found: found, value: result }
+
+# ================================================================ eval (A.1: flat, from the first line)
+#
+# Dispatch on the parser's node kind with a flat if ... give sequence, each
+# arm returning when it matches and falling through when it does not -- never
+# a nested when/else ladder. An interpreter compounds recursion the way
+# self-parse did, so a deep dispatch ladder is itself deep enough to blow the
+# recursion ceiling when something walks it. A node kind this build does not
+# implement reaches the fall-through and fails, naming the kind -- an honest
+# failure, not a stub to a wrong value.
+
+to eval of node, env:
+  k = node.kind
+  if k == "Num":
+    give make-number of node.value
+  if k == "Str":
+    give make-text of node.value
+  if k == "Bool":
+    give make-boolean of node.value
+  if k == "Nothing":
+    give make-nothing
+  if k == "Var":
+    binding = env-find of env, node.name
+    if not binding.found:
+      fail "no name '" + node.name + "' here" as unknown-name
+    if binding.value.kind == "function":
+      give apply-function of binding.value, [], env, node.name
+    give binding.value
+  if k == "BinOp":
+    give eval-binop of node, env
+  if k == "Not":
+    v = eval of node.expr, env
+    give make-boolean of (not (as-condition of v))
+  if k == "IsNothing":
+    v = eval of node.expr, env
+    give make-boolean of (v.kind == "nothing")
+  if k == "ListLit":
+    give make-list of (list-items-from of node.items, env)
+  if k == "RecordLit":
+    give make-record of (record-fields-from of node.fields, env)
+  if k == "RecordUpdate":
+    give eval-record-update of node, env
+  if k == "ListPlus":
+    give eval-list-plus of node, env
+  if k == "Field":
+    give eval-field of node, env
+  if k == "Round":
+    give eval-round of node, env
+  if k == "Call":
+    give eval-call of node, env
+  fail "cannot evaluate a node of kind '" + k + "'" as cannot-evaluate
+
+# ================================================================ source -> node (consumes parser.planes, A.4)
+#
+# tokenize (lexer.planes) then parse-expr (parser.planes) -- the same AST
+# records parser.planes already produces, consumed here, not re-derived. The
+# three Planes stages meet through this one call.
+
+to node-of-source of src:
+  toks = tokenize of src
+  known = build-known of toks
+  result = parse-expr of toks, known
+  give result.node
+
+# ================================================================ operators (Phase 3)
+#
+# Every precedence level parser.py produces and interp.py evaluates.
+# interp.py's coercion and type guards are reproduced exactly, read from
+# interp.py, not taken from a specification: `+` does not coerce (it concats
+# text with text, appends list to list, adds number to number, and refuses
+# anything else); ordering comparison across types errors naming both
+# operands; equality across types errors rather than answering `false`.
+#
+# The arithmetic is metacircular and so exact for free (A.5): to add two
+# number values, interp.planes performs `a.value + b.value` in Planes, and
+# the host's own exact-rational `+` -- the very operator interp.py would use
+# -- produces the answer. 2 / 3 is one third here because it is one third
+# there; a float never enters.
+
+to eval-binop of node, env:
+  op = node.op
+  if op == "and":
+    give eval-and of node, env
+  if op == "or":
+    give eval-or of node, env
+  if op == "first":
+    give eval-first of node, env
+  left = eval of node.left, env
+  right = eval of node.right, env
+  give apply-op of op, left, right
+
+# `and` / `or` short-circuit, and -- like interp.py -- require both operands
+# to be yes/no values, returning the second operand's condition, not the
+# operand itself.
+to eval-and of node, env:
+  left = eval of node.left, env
+  if not (as-condition of left):
+    give make-boolean of false
+  right = eval of node.right, env
+  give make-boolean of (as-condition of right)
+
+to eval-or of node, env:
+  left = eval of node.left, env
+  if as-condition of left:
+    give make-boolean of true
+  right = eval of node.right, env
+  give make-boolean of (as-condition of right)
+
+# `first n of x`: a list's first n items, or a text's first n code points.
+# interp.py takes `src.value[:int(n.value)]`; the native `first` operator is
+# that same prefix, taken on the tagged items for a list and on the raw
+# string for text.
+to eval-first of node, env:
+  n = eval of node.left, env
+  src = eval of node.right, env
+  if src.kind == "list":
+    give make-list of (first (n.value) of src.items)
+  if src.kind == "text":
+    give make-text of (first (n.value) of src.value)
+  fail "cannot take the first n of " + (canonical-of-value of src) as not-a-collection
+
+to apply-op of op, a, b:
+  if op == "+":
+    give apply-plus of a, b
+  if op == "-":
+    give make-number of ((num-of of a) - (num-of of b))
+  if op == "*":
+    give make-number of ((num-of of a) * (num-of of b))
+  if op == "/":
+    give make-number of ((num-of of a) / (num-of of b))
+  if op == "<":
+    give make-boolean of ((cmp-of of a) < (cmp-of of b))
+  if op == ">":
+    give make-boolean of ((cmp-of of a) > (cmp-of of b))
+  if op == "<=":
+    give make-boolean of ((cmp-of of a) <= (cmp-of of b))
+  if op == ">=":
+    give make-boolean of ((cmp-of of a) >= (cmp-of of b))
+  if op == "==":
+    give make-boolean of (values-equal of a, b)
+  if op == "!=":
+    give make-boolean of (not (values-equal of a, b))
+  if op == "in":
+    give make-boolean of (member-of of a, b)
+  fail "unknown operator '" + op + "'" as unknown-operator
+
+# `+` is the one operator that reads the operand kinds, because its result
+# kind depends on them (text, list, or number). Everything else is one arm.
+to apply-plus of a, b:
+  if a.kind == "number" and b.kind == "number":
+    give make-number of (a.value + b.value)
+  if a.kind == "text" and b.kind == "text":
+    give make-text of (a.value + b.value)
+  if a.kind == "list" and b.kind == "list":
+    give make-list of (a.items + b.items)
+  fail "cannot combine " + (canonical-of-value of a) + " with " + (canonical-of-value of b) + " using +" as cannot-combine
+
+# The raw number under a number value, or interp.py's not-a-number refusal.
+# `-`, `*`, `/` then use the host's own exact arithmetic on the raw numbers,
+# so divide-by-zero and the exact-rational result are reproduced by
+# construction rather than reimplemented.
+to num-of of v:
+  if v.kind == "number":
+    give v.value
+  fail "cannot do arithmetic on " + (canonical-of-value of v) as not-a-number
+
+# The raw scalar an ordering comparison reads. A cross-type comparison is
+# left to the host's own guarded `<` (via the raw values), which refuses it
+# naming both operands -- interp.py's rule, not restated here.
+to cmp-of of v:
+  if v.kind == "number":
+    give v.value
+  if v.kind == "text":
+    give v.value
+  if v.kind == "boolean":
+    give v.value
+  fail "cannot order " + (canonical-of-value of v) as cannot-compare
+
+# interp.py's condition(): a yes/no value and nothing else.
+to as-condition of v:
+  if v.kind == "boolean":
+    give v.value
+  fail "a condition needs a yes/no value, found " + (canonical-of-value of v) as not-a-yes-no
+
+# ================================================================ equality and membership
+#
+# interp.py's equal() is guarded: nothing refuses comparison, a yes/no value
+# compares only with a yes/no value, and otherwise the two must be the same
+# type. Reproduced structurally here because two value records cannot be
+# handed to the host's `==` directly -- their `nothing` deriv slot would
+# itself trip the nothing-refusal.
+
+to values-equal of a, b:
+  if a.kind == "nothing":
+    fail "nothing cannot be compared with ==" as cannot-compare
+  if b.kind == "nothing":
+    fail "nothing cannot be compared with ==" as cannot-compare
+  if a.kind == "number" and b.kind == "number":
+    give a.value == b.value
+  a-bool = a.kind == "boolean"
+  b-bool = b.kind == "boolean"
+  if a-bool and not b-bool:
+    fail "cannot compare a yes/no value with " + (canonical-of-value of b) as cannot-compare
+  if b-bool and not a-bool:
+    fail "cannot compare " + (canonical-of-value of a) + " with a yes/no value" as cannot-compare
+  if a-bool and b-bool:
+    give a.value == b.value
+  if not (a.kind == b.kind):
+    fail "cannot compare " + (canonical-of-value of a) + " with " + (canonical-of-value of b) as cannot-compare
+  if a.kind == "text":
+    give a.value == b.value
+  if a.kind == "list":
+    give lists-equal of a.items, b.items
+  if a.kind == "record":
+    give records-equal of a.fields, b.fields
+  fail "cannot compare values of kind '" + a.kind + "'" as cannot-compare
+
+# Different lengths are unequal; same length compares element by element,
+# and a cross-type element mismatch raises through values-equal exactly as
+# interp.py's nested equal() does.
+to lists-equal of xs, ys:
+  if not ((count of xs) == (count of ys)):
+    give false
+  give lists-equal-walk of xs, ys
+
+to lists-equal-walk of xs, ys:
+  if (count of xs) == 0:
+    give true
+  x = first-item of xs
+  y = first-item of ys
+  if not (values-equal of x, y):
+    give false
+  give lists-equal-walk of (rest of xs), (rest of ys)
+
+# Records with different fields refuse comparison (interp.py: set(a) !=
+# set(b) raises); same field set compares field by field.
+to records-equal of af, bf:
+  if not ((count of af) == (count of bf)):
+    fail "records have different fields" as cannot-compare
+  give records-equal-walk of af, bf
+
+to records-equal-walk of af, bf:
+  if (count of af) == 0:
+    give true
+  f = first-item of af
+  match = field-in of bf, f.key
+  if not match.found:
+    fail "records have different fields" as cannot-compare
+  if not (values-equal of f.value, match.value):
+    give false
+  give records-equal-walk of (rest of af), bf
+
+# Find a field by name in a fields list: { found, value }. A list scan on
+# each pair's static `key` -- not a dynamic record lookup.
+to field-in of fields, name:
+  result = nothing
+  found = false
+  for each f in fields:
+    if not found:
+      if f.key == name:
+        result = f.value
+        found = true
+  give { found: found, value: result }
+
+# `in`: list membership by lenient equality (interp.py's `a in b` is Python's
+# `in`, which uses `==` and is false across types rather than raising), or
+# text substring. raw-eq is values-equal made lenient: a kind mismatch, or a
+# comparison values-equal would refuse, is simply false.
+to raw-eq of a, b:
+  if not (a.kind == b.kind):
+    give false
+  give (values-equal of a, b) or fail as err:
+    give false
+
+to member-of of a, b:
+  if b.kind == "list":
+    found = false
+    for each item in b.items:
+      if not found:
+        if raw-eq of a, item:
+          found = true
+    give found
+  if b.kind == "text":
+    if a.kind == "text":
+      give (a.value) in (b.value)
+    fail "cannot look for " + (canonical-of-value of a) + " in text" as cannot-combine
+  fail "cannot check membership in " + (canonical-of-value of b) as unknown-operator
+
+# ================================================================ lists, records, field access (Phase 4)
+
+to list-items-from of item-nodes, env:
+  items = []
+  for each n in item-nodes:
+    items = items plus (eval of n, env)
+  give items
+
+# interp.py builds a record as a Python dict, so a repeated field keeps its
+# first position and its last value. record-fields-from reproduces that by
+# upserting: a new key appends, a repeated key replaces in place.
+to record-fields-from of field-nodes, env:
+  fields = []
+  for each fn in field-nodes:
+    val = eval of fn.value, env
+    fields = upsert-field of fields, fn.key, val
+  give fields
+
+to upsert-field of fields, key, val:
+  if (field-in of fields, key).found:
+    give replace-field of fields, key, val
+  give fields plus { key: key, value: val }
+
+to replace-field of fields, key, val:
+  result = []
+  for each f in fields:
+    if f.key == key:
+      result = result plus { key: key, value: val }
+    else:
+      result = result plus f
+  give result
+
+# `base with f: v, ...` -- a new record differing in the named fields, the
+# base untouched. interp.py's {**base, **updates}: existing keys update in
+# place, new keys append in update order.
+to eval-record-update of node, env:
+  base = eval of node.base, env
+  if not (base.kind == "record"):
+    fail "cannot update " + (canonical-of-value of base) + " with with" as not-a-record
+  fields = base.fields
+  for each fn in node.fields:
+    val = eval of fn.value, env
+    fields = upsert-field of fields, fn.key, val
+  give make-record of fields
+
+# `base plus item` -- a new list with item appended, the base untouched.
+to eval-list-plus of node, env:
+  base = eval of node.base, env
+  if not (base.kind == "list"):
+    fail "cannot append to " + (canonical-of-value of base) + " with plus" as not-a-list
+  item = eval of node.item, env
+  give make-list of (base.items plus item)
+
+# Field access. interp.py reads obj.value.get(name) -- a missing field is
+# `nothing`, not an error; only a non-record base is refused.
+to eval-field of node, env:
+  obj = eval of node.obj, env
+  if not (obj.kind == "record"):
+    fail "cannot read ." + node.name + " from " + (canonical-of-value of obj) as not-a-record
+  match = field-in of obj.fields, node.name
+  if match.found:
+    give match.value
+  give make-nothing
+
+# `round x to n places` -- reproduced metacircularly: the host's own round,
+# on the raw number, is interp.py's Number.round_to. Only a non-number base
+# is refused here; the host handles the places argument.
+to eval-round of node, env:
+  v = eval of node.value, env
+  p = eval of node.places-value, env
+  if not (v.kind == "number"):
+    fail "cannot round " + (canonical-of-value of v) as not-a-number
+  give make-number of (round (v.value) to (p.value) places)
+
+# ================================================================ builtins (Phase 4)
+#
+# Ten builtins exist; the eight pure ones are expressions this build
+# evaluates -- count, text, lower, upper, whole, normalize, join, rest. The
+# two effect-bearing ones, ask and read, are builds 3: they reach a case that
+# fails naming build 3 (A.6), never a silent stub. A builtin is an ordinary
+# call in the parser (never a Builtin node), routed here by name.
+
+to is-builtin-name of name:
+  found = false
+  for each b in builtins:
+    if not found:
+      if b == name:
+        found = true
+  give found
+
+to eval-call of node, env:
+  name = node.name
+  args = node.args
+  # A user function wins over a builtin of the same name (interp.py: a name in
+  # funcs is never routed to a builtin) -- the shadowing build-known already
+  # relies on, here on the value environment.
+  fn = function-find of env, name
+  if fn.found:
+    give apply-function of fn.value, args, env, name
+  if is-builtin-name of name:
+    if not ((count of args) == 1):
+      fail "'" + name + "' takes 1 value, given " + (text of (count of args)) as wrong-arity
+    arg = eval of (first-item of args), env
+    give eval-builtin of name, arg
+  fail "no function named '" + name + "'" as unknown-function
+
+to eval-builtin of name, arg:
+  if name == "count":
+    give builtin-count of arg
+  if name == "text":
+    give builtin-text of arg
+  if name == "lower":
+    give make-text of (lower of (text-form-of of arg))
+  if name == "upper":
+    give make-text of (upper of (text-form-of of arg))
+  if name == "normalize":
+    give make-text of (normalize of (text-form-of of arg))
+  if name == "whole":
+    give builtin-whole of arg
+  if name == "join":
+    give builtin-join of arg
+  if name == "rest":
+    give builtin-rest of arg
+  if name == "ask":
+    fail "ask is an effect -- effects are interp.planes build 3, not build 1" as build-3-effect
+  if name == "read":
+    fail "read is an effect -- effects are interp.planes build 3, not build 1" as build-3-effect
+  fail "unknown builtin '" + name + "'" as unknown-builtin
+
+# count of a list is its item count, of text its code-point count, of a
+# record its field count -- interp.py's len(arg.value) over each shape.
+to builtin-count of arg:
+  if arg.kind == "list":
+    give make-number of (count of arg.items)
+  if arg.kind == "text":
+    give make-number of (count of arg.value)
+  if arg.kind == "record":
+    give make-number of (count of arg.fields)
+  fail "cannot count " + (canonical-of-value of arg) as not-a-collection
+
+# `text of` is interp.py's fmt: a value's plain display form, distinct from
+# the canonical form (a list is "[n items]", a record is "{record}", a string
+# is itself with no quotes). Used everywhere a value is spliced into a
+# message, so it is exact here.
+to builtin-text of arg:
+  if arg.kind == "number":
+    give make-text of (text of arg.value)
+  if arg.kind == "text":
+    give make-text of arg.value
+  if arg.kind == "boolean":
+    if arg.value:
+      give make-text of "true"
+    give make-text of "false"
+  if arg.kind == "nothing":
+    give make-text of "nothing"
+  if arg.kind == "list":
+    give make-text of ("[" + (text of (count of arg.items)) + " items]")
+  if arg.kind == "record":
+    give make-text of "{record}"
+  fail "cannot render " + (canonical-of-value of arg) as cannot-render
+
+# The string form lower / upper / normalize operate on. interp.py coerces via
+# str(); reproduced for the sensible inputs (text and number). A non-text,
+# non-number argument is refused rather than leaking a host repr.
+to text-form-of of v:
+  if v.kind == "text":
+    give v.value
+  if v.kind == "number":
+    give text of v.value
+  fail "cannot take the text of " + (canonical-of-value of v) as not-text
+
+to builtin-whole of arg:
+  if arg.kind == "number":
+    give make-number of (whole of arg.value)
+  fail "cannot take the whole part of " + (canonical-of-value of arg) as not-a-number
+
+# Fold a list of text into one string. A non-list, or any non-text element,
+# is refused naming the fix -- the same refusal interp.py's join makes, not a
+# silent stringify. An empty list joins to the empty string.
+to builtin-join of arg:
+  if not (arg.kind == "list"):
+    fail "cannot join " + (canonical-of-value of arg) as cannot-join
+  strings = []
+  for each item in arg.items:
+    if not (item.kind == "text"):
+      fail "join needs a list of text, found " + (canonical-of-value of item) as cannot-join
+    strings = strings plus item.value
+  give make-text of (join of strings)
+
+# The list without its first element. Text wants `first n of`, not rest; the
+# rest of an empty list is an error, not a silent empty list.
+to builtin-rest of arg:
+  if arg.kind == "text":
+    fail "cannot take the rest of text " + (canonical-of-value of arg) as not-a-list
+  if not (arg.kind == "list"):
+    fail "cannot take the rest of " + (canonical-of-value of arg) as not-a-list
+  if (count of arg.items) == 0:
+    fail "cannot take the rest of an empty list" as empty-list
+  give make-list of (rest of arg.items)
+
+# ================================================================ function application (Phase 5)
+#
+# A function is a tagged value living in the environment, applied against the
+# environment it is called in: its parameters are bound, prepended to that
+# environment, and the extended list passed down to the body (A.2). No stored
+# closure -- the environment always carries every function value at its base,
+# so recursion and calls between functions resolve without a cyclic record.
+#
+# Build 1 applies functions whose body is a single give-expression. A
+# multi-statement body, or any body that is not a lone `give`, is control
+# flow -- interp.planes build 2 -- and fails naming it, never a wrong stub
+# (A.6's honest-failure pattern).
+
+to make-function of funcdef:
+  give { kind: "function", name: funcdef.name, params: funcdef.params, body: funcdef.body, deriv: nothing }
+
+to apply-function of fn, arg-nodes, call-env, name:
+  if not ((count of fn.params) == (count of arg-nodes)):
+    fail "'" + name + "' takes " + (text of (count of fn.params)) + " values, given " + (text of (count of arg-nodes)) as wrong-arity
+  if not ((count of fn.body) == 1):
+    fail "'" + name + "' has a multi-statement body -- statements are interp.planes build 2" as build-2-statements
+  stmt = first-item of fn.body
+  if not (stmt.kind == "Give"):
+    fail "'" + name + "' body is not a single give-expression -- control flow is interp.planes build 2" as build-2-statements
+  bindings = bind-params of fn.params, arg-nodes, call-env, []
+  new-env = bindings + call-env
+  give eval of stmt.expr, new-env
+
+# Evaluate each argument in the calling environment, pairing it with its
+# parameter name. Structural recursion over the parameter list -- one frame
+# per parameter, and functions take few.
+to bind-params of params, arg-nodes, call-env, acc:
+  if (count of params) == 0:
+    give acc
+  p = first-item of params
+  a = first-item of arg-nodes
+  val = eval of a, call-env
+  give bind-params of (rest of params), (rest of arg-nodes), call-env, (acc plus { name: p, value: val })
+
+# ================================================================ building a function environment (A.4 pipeline support)
+#
+# Parse a whole program and turn each top-level definition into a function
+# value bound by name. The base environment the pipeline evaluates an
+# expression against.
+
+to program-nodes-of of src:
+  toks = tokenize of src
+  known = build-known of toks
+  initial = { out: [], cursor: toks, done: false, tokens: toks, known: known }
+  final = run-program of initial, toks
+  give final.out
+
+to functions-env-of of src:
+  nodes = program-nodes-of of src
+  env = []
+  for each n in nodes:
+    if n.kind == "FuncDef":
+      env = env plus { name: n.name, value: (make-function of n) }
+  give env
+
+# ================================================================ the pipeline, connected (Phase 6, A.4)
+#
+# Source text in, canonical value out, entirely in Planes: tokenize
+# (lexer.planes) -> parse (parser.planes) -> eval (interp.planes) -> render.
+# The three Planes stages meet in this one call; the only Python in the path
+# is the host running the outermost interpreter.
+
+to evaluate-source of src:
+  give canonical-of-value of (eval of (node-of-source of src), [])
+
+# The same, for an expression evaluated against a program's functions.
+to evaluate-with of defs-src, expr-src:
+  env = functions-env-of of defs-src
+  give canonical-of-value of (eval of (node-of-source of expr-src), env)
