@@ -1,0 +1,15 @@
+# Work a queue down to empty, one item at a time. `rest of` is the list without
+# its first item, and the function calls itself on that shorter list until none
+# remain. The base case — an empty queue — is stated first, so the recursion
+# always has somewhere to stop, and `rest` is never asked for the tail of an
+# empty list.
+
+to drain of queue:
+  if count of queue == 0:
+    give "all handled"
+  else:
+    show text of (count of queue) + " item(s) remaining"
+    give drain of (rest of queue)
+
+let outcome = drain of ["email", "invoice", "backup"] because "recursion reads the list plainly here; a loop with a running index would hide that each step is the same job on a smaller queue"
+show outcome

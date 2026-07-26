@@ -1,0 +1,17 @@
+# Forecast next quarter's budget from this one, file it, and show where the
+# number came from. `why` prints the forecast's provenance — the base figure,
+# the growth rate, and the arithmetic between them — which is the whole point of
+# carrying derivation: the figure in the file can always be traced back to the
+# inputs that produced it.
+
+use file
+
+let this-quarter = 240000
+let growth = 0.08 because "the finance team's internal planning rate for next quarter, not a market forecast"
+let forecast = round (this-quarter * (1 + growth)) to 2 places
+
+let plan = { base: this-quarter, growth: growth, forecast: forecast }
+write plan to "forecast.json"
+
+show "forecast: " + text of forecast
+why forecast

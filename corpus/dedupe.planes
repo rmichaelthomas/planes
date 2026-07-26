@@ -1,0 +1,17 @@
+# Remove duplicates while keeping first-seen order. Walk the list and append an
+# id with `plus` only when it is not already in the result — so the output is
+# the same sequence with the repeats dropped, not a reordered set.
+
+ids = [3, 1, 3, 2, 1, 4, 2]
+
+seen = []
+for each id in ids:
+  if not (id in seen):
+    seen = seen plus id
+
+let rule-of-thumb = "first occurrence wins" because "the result only ever grows by appending, never by reordering, so ids come out in the order they first appeared"
+
+show "unique in order: " + text of (count of seen)
+for each id in seen:
+  show "  " + text of id
+show rule-of-thumb

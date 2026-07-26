@@ -1,0 +1,18 @@
+# The three fastest responses in a batch. Sorting is a foreign call — the
+# host's own sort — and `first 3 of` takes the head of the ordered list, which
+# for ascending times is exactly the fastest three. The result is filed so a
+# dashboard can read it back.
+
+use file
+foreign ranked of xs from "builtins.sorted" doing nothing
+
+times-ms = [214, 87, 402, 63, 155, 91, 300]
+
+let ordered = ranked of times-ms because "sorted ascending, so the smallest — the fastest — sit at the head, where `first` can take them"
+let fastest = first 3 of ordered
+
+show "fastest three (ms):"
+for each t in fastest:
+  show "  " + text of t
+
+write fastest to "fastest.json"

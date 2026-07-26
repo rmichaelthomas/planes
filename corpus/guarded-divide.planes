@@ -1,0 +1,15 @@
+# Divide safely. A division by zero fails, but here the failure is caught right
+# where it happens: `or fail as e:` opens a handler block, `e` binds to the
+# error as a record, and the block returns a reported zero — so one bad row is
+# named and survived rather than stopping the whole run.
+
+to average of total, parts:
+  give (total / parts) or fail as e:
+    show "cannot average over " + text of parts + " parts: " + e.tag
+    give 0
+
+show "100 over 4: " + text of (average of 100, 4)
+show "100 over 0: " + text of (average of 100, 0)
+
+let stance = "a bad divisor is handled, not fatal" because "the handler turns a divide-by-zero into a named, reported zero, so a single bad row does not abort the batch it sits in"
+show stance

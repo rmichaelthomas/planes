@@ -1,0 +1,19 @@
+# Pull the errors out of a log. Each entry is a record with a level, a service,
+# and a message; the filter keeps the ones whose level is "error" AND whose
+# service is the one we are on call for — lower-casing the level first so
+# "ERROR" and "error" count as the same thing.
+
+entries = [
+  { level: "INFO", service: "api", message: "started" },
+  { level: "ERROR", service: "api", message: "upstream timeout" },
+  { level: "error", service: "worker", message: "retry exhausted" },
+  { level: "WARN", service: "api", message: "slow response" }
+]
+
+let on-call-for = "api" because "one service at a time; another team owns the worker's errors and would only be paged twice"
+
+problems = for each e in entries where lower of e.level == "error" and e.service == on-call-for: e
+
+show on-call-for + " errors: " + text of (count of problems)
+for each e in problems:
+  show "  " + e.message

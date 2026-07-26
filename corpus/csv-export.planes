@@ -1,0 +1,20 @@
+# Export records as CSV and write the file. Each row is built by hand — fields
+# joined with commas via + — and every row carries its own newline. `join` then
+# concatenates the header and the newline-terminated rows into one blob, which
+# is exactly what lands on disk.
+
+use file
+
+rows = [
+  { name: "Ada", score: 91 },
+  { name: "Alan", score: 63 }
+]
+
+let header = (upper of "name,score") + "\n" because "an upper-cased header row makes the column names stand out from the data below them"
+
+body-lines = for each r in rows: r.name + "," + text of r.score + "\n"
+
+let document = header + (join of body-lines)
+
+show "exporting " + text of (count of rows) + " rows"
+write document to "people.csv"
