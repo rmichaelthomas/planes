@@ -72,3 +72,22 @@ export function vocabulary() {
 export function vocabularyLoaded() {
   return _vocab !== null;
 }
+
+// Amber's refusal-message templates — grammar/messages/amber.json, keyed by id.
+// parser.py loads these lazily (render_amber); here they are injected the same
+// way the vocabulary is.
+let _amber = null;
+export function setAmberTemplates(doc) {
+  _amber = {};
+  for (const t of doc.templates) _amber[t.id] = t;
+}
+export function amberTemplates() {
+  if (_amber === null) {
+    throw new GrammarDataError(
+      "grammar-data-missing",
+      "amber templates not loaded",
+      "call loadGrammar() (Node) or setAmberTemplates(...) (browser) first",
+    );
+  }
+  return _amber;
+}

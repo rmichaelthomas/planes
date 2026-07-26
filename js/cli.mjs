@@ -14,6 +14,8 @@ import fs from "node:fs";
 import { NodeHost, HostError, Host } from "./host.mjs";
 import { loadGrammar } from "./loader_node.mjs";
 import { tokenize, PlanesSyntaxError } from "./lexer.mjs";
+import { parse, PlanesAmbiguity } from "./parser.mjs";
+import { canonicalProgram } from "./canonical.mjs";
 import { PlanesNumber, Fraction, Inexact } from "./planes_num.mjs";
 import {
   resolveStringEscapes,
@@ -207,6 +209,28 @@ switch (sub) {
       out(JSON.stringify(toks.map((t) => [t.kind, t.value, t.line])));
     } catch (e) {
       if (e instanceof PlanesSyntaxError) {
+        out(JSON.stringify({ error: "PlanesSyntaxError", message: e.message }));
+      } else throw e;
+    }
+    break;
+  }
+  case "ast": {
+    // ast <file> [known-json]. `known-json` is the identical name->arity mapping
+    // the Python harness computes (cross-file `use` resolution), so both parsers
+    // see the same module context. Emits the canonical AST program form; a
+    // syntax error or ambiguity emits a tagged marker to compare against.
+    loadGrammar();
+    const src = fs.readFileSync(rest[0], "utf-8");
+    let known = null;
+    if (rest[1] !== undefined && rest[1] !== "") {
+      known = new Map(Object.entries(JSON.parse(rest[1])));
+    }
+    try {
+      out(canonicalProgram(parse(src, known)));
+    } catch (e) {
+      if (e instanceof PlanesAmbiguity) {
+        out(JSON.stringify({ error: "PlanesAmbiguity", message: e.message }));
+      } else if (e instanceof PlanesSyntaxError) {
         out(JSON.stringify({ error: "PlanesSyntaxError", message: e.message }));
       } else throw e;
     }

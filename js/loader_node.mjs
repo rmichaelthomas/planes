@@ -6,7 +6,7 @@
 // a browser (Phase 6 sets the same data from an inlined copy instead).
 
 import fs from "node:fs";
-import { setVocabulary } from "./grammar_data.mjs";
+import { setVocabulary, setAmberTemplates } from "./grammar_data.mjs";
 
 function readJson(relPath) {
   const url = new URL(relPath, import.meta.url);
@@ -17,4 +17,5 @@ function readJson(relPath) {
 // to this module so it works from any working directory.
 export function loadGrammar() {
   setVocabulary(readJson("../grammar/vocabulary.json"));
+  setAmberTemplates(readJson("../grammar/messages/amber.json"));
 }

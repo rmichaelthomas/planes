@@ -57,6 +57,43 @@ export function keywords() {
   return _keywords;
 }
 
+// The closed vocabulary of effect kinds, kind -> boundary. lexer.py holds this
+// (EFFECT_KINDS) so the parser can validate a rule's kind at parse time. Here it
+// is derived lazily from the injected vocabulary.
+let _effectKinds = null;
+export function effectKinds() {
+  if (_effectKinds === null) {
+    _effectKinds = new Map(vocabulary().effect_kinds.map((e) => [e.kind, e.boundary]));
+  }
+  return _effectKinds;
+}
+
+// Builtin names, and builtin name -> arity (default 1). parser.py reads these
+// from _VOCAB: BUILTIN_NAMES so a bare `count of xs` is a call, and the arity
+// for the parse-time name table.
+let _builtinNames = null;
+export function builtinNames() {
+  if (_builtinNames === null) {
+    _builtinNames = new Set(vocabulary().builtins.map((b) => b.name));
+  }
+  return _builtinNames;
+}
+export function builtinsArity() {
+  const m = new Map();
+  for (const b of vocabulary().builtins) m.set(b.name, b.arity ?? 1);
+  return m;
+}
+
+// The token kinds that may name a record field or a with/when-pattern entry —
+// grammar/vocabulary.json's field_name_token_kinds.
+let _fieldNameKinds = null;
+export function fieldNameKinds() {
+  if (_fieldNameKinds === null) {
+    _fieldNameKinds = new Set(vocabulary().field_name_token_kinds);
+  }
+  return _fieldNameKinds;
+}
+
 // `raw` is a STRING token's content between the delimiting quotes. Resolves the
 // four escapes; on an unrecognized escape, raises PlanesSyntaxError with the
 // line, exactly as lexer.py's _resolve_string_escapes wraps planes_text's bare
