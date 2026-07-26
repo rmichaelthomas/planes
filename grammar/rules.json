@@ -10,7 +10,7 @@
       "opens_with": [],
       "produces": [],
       "calls": [],
-      "source": "parser.py:1031",
+      "source": "parser.py:1052",
       "surface": "Looking at `(`: is this an argument list, or a parenthesised argument that continues into a larger expression?"
     },
     {
@@ -23,7 +23,7 @@
       "calls": [
         "parse_expr"
       ],
-      "source": "parser.py:1056",
+      "source": "parser.py:1077",
       "surface": "`name: expr`. The key is a bare word, never an expression."
     },
     {
@@ -40,7 +40,7 @@
         "parse_block",
         "parse_when_pattern_entry"
       ],
-      "source": "parser.py:1074",
+      "source": "parser.py:1095",
       "surface": "`when subject is { field: expr, bindname, ... }: body [else: els]` (v5.0 \u00a774). `WHEN` is already consumed by the caller. A chained dispatch ladder (`when ... else: when ... else: ...`) needs no dedicated grammar \u2014 the else block is an ordinary block, and a `When` is an ordinary statement, so nesting one inside the other falls out of parse_block for free, the same way `if / else: if` already forms an if-elif-else chain in this language."
     },
     {
@@ -54,7 +54,7 @@
         "check_binding_name",
         "parse_expr"
       ],
-      "source": "parser.py:1108",
+      "source": "parser.py:1129",
       "surface": "`name: expr` (a match constraint) or a bare `name` (a binding). Same field-name recognition as parse_record_field \u2014 a pattern entry names a field, so a keyword like `to` or `from` must work here exactly as it does in a record literal."
     },
     {
@@ -91,7 +91,7 @@
         "check_juxtaposition_ambiguity",
         "parse_additive"
       ],
-      "source": "parser.py:1132",
+      "source": "parser.py:1153",
       "surface": null
     },
     {
@@ -209,7 +209,7 @@
       "calls": [
         "read_effect_word"
       ],
-      "source": "parser.py:412",
+      "source": "parser.py:435",
       "surface": "`rule [name] subject may not kind` (forbid) or `rule [name] subject may kind` (permit), each optionally with `to \"target\"` and a `supersedes [other-name]` clause, which may itself carry a fingerprint (`@xxxxxx`) of the rule it overrides."
     },
     {
@@ -226,7 +226,7 @@
         "parse_block",
         "read_param"
       ],
-      "source": "parser.py:505",
+      "source": "parser.py:526",
       "surface": null
     },
     {
@@ -250,7 +250,7 @@
         "parse_block",
         "parse_expr"
       ],
-      "source": "parser.py:535",
+      "source": "parser.py:556",
       "surface": null
     },
     {
@@ -263,7 +263,7 @@
       ],
       "produces": [],
       "calls": [],
-      "source": "parser.py:607",
+      "source": "parser.py:628",
       "surface": "A trailing `because \"...\"` on an Assign or Rule \u2014 same line, or an indented continuation (matching `trailing_or_fail`'s wrapped form). `because` is read positionally, right here, only \u2014 like `may` and `is` \u2014 so it stays free as an ordinary name everywhere else (test_names.py's reserved-word ceiling)."
     },
     {
@@ -280,7 +280,7 @@
       "calls": [
         "parse_note_entry"
       ],
-      "source": "parser.py:640",
+      "source": "parser.py:661",
       "surface": "`note:` followed by an indented block of `from \"...\"` and `derives-from [rule-name]` entries \u2014 or a single inline entry. Never executes; the interpreter raises if one reaches it."
     },
     {
@@ -294,7 +294,7 @@
       ],
       "produces": [],
       "calls": [],
-      "source": "parser.py:659",
+      "source": "parser.py:680",
       "surface": null
     },
     {
@@ -305,7 +305,7 @@
       "calls": [
         "parse_or"
       ],
-      "source": "parser.py:694",
+      "source": "parser.py:715",
       "surface": null
     },
     {
@@ -318,7 +318,7 @@
       "calls": [
         "parse_or"
       ],
-      "source": "parser.py:730",
+      "source": "parser.py:751",
       "surface": "`name: expr` inside a with-clause. Not parse_record_field: that one reads its value through parse_expr, which would re-enter trailing_with and let a *following* with-clause attach to this field's value instead of to the RecordUpdate as a whole \u2014 `p with a: 1 with b: 2` must chain onto `p with a: 1`, not parse as `p with a: (1 with b: 2)`. Everything parse_expr does except the with-chain itself, since that part is precisely what must not recurse here."
     },
     {
@@ -331,7 +331,7 @@
       "calls": [
         "parse_and"
       ],
-      "source": "parser.py:752",
+      "source": "parser.py:773",
       "surface": null
     },
     {
@@ -344,7 +344,7 @@
       "calls": [
         "parse_not"
       ],
-      "source": "parser.py:759",
+      "source": "parser.py:780",
       "surface": null
     },
     {
@@ -357,7 +357,7 @@
       "calls": [
         "parse_comparison"
       ],
-      "source": "parser.py:765",
+      "source": "parser.py:786",
       "surface": null
     },
     {
@@ -373,7 +373,7 @@
       "calls": [
         "parse_plus"
       ],
-      "source": "parser.py:770",
+      "source": "parser.py:791",
       "surface": null
     },
     {
@@ -386,7 +386,7 @@
       "calls": [
         "parse_additive"
       ],
-      "source": "parser.py:793",
+      "source": "parser.py:814",
       "surface": "`base plus item` (v5.0 \u00a772) \u2014 a named binary connective, bound below arithmetic so `xs plus a + b` reads as `xs plus (a + b)`."
     },
     {
@@ -399,7 +399,7 @@
       "calls": [
         "parse_multiplicative"
       ],
-      "source": "parser.py:802",
+      "source": "parser.py:823",
       "surface": null
     },
     {
@@ -412,7 +412,7 @@
       "calls": [
         "parse_unary"
       ],
-      "source": "parser.py:808",
+      "source": "parser.py:829",
       "surface": null
     },
     {
@@ -425,7 +425,7 @@
       "calls": [
         "parse_postfix"
       ],
-      "source": "parser.py:814",
+      "source": "parser.py:835",
       "surface": null
     },
     {
@@ -438,7 +438,7 @@
       "calls": [
         "parse_primary"
       ],
-      "source": "parser.py:820",
+      "source": "parser.py:841",
       "surface": null
     }
   ]

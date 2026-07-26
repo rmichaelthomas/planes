@@ -330,8 +330,17 @@ def error_record(e):
     """A caught error, as an ordinary record — discriminated by shape
     (§74), never by type. `path` (A.4) is present only when the error
     carries one; a path step is a Planes number (list index) or the field
-    name itself (already a string)."""
-    rec = {"tag": e.tag, "detail": e.detail}
+    name itself (already a string).
+
+    `fix` (§158) is always present and `nothing` when the error names none.
+    That is the opposite convention to `path`, deliberately and by ruling: a
+    missing field is no match under `when` (`When` below: a field not in the
+    subject sets matched = False), so `when e is { fix: f }:` would silently
+    skip every error without one if `fix` were absent rather than nothing. A
+    field a program is expected to *read* has to be there to be read. `path`
+    keeps its own convention in this build; converging the two is a ruling
+    nobody has made."""
+    rec = {"tag": e.tag, "detail": e.detail, "fix": e.fix or None}
     if e.path is not None:
         rec["path"] = [Number.of(p) if isinstance(p, int) else p for p in e.path]
     return rec
@@ -643,13 +652,35 @@ class Interpreter:
 
         if isinstance(stmt, Fail):
             v = self.eval(stmt.message, env)
-            if not isinstance(v.value, str):
+            # §158: text, or a record naming the message and, optionally, the
+            # fix. `fail` is the one raise site whose message a program writes,
+            # and until now it had nowhere to put the continuation clause every
+            # other message in the language carries. No new syntax was needed —
+            # `fail <expr> as <tag>` already read any expression, so a record
+            # literal already parsed here in all three implementations; what
+            # refused it was this guard.
+            message, fix = v.value, None
+            if isinstance(v.value, dict):
+                message = v.value.get("message")
+                fix = v.value.get("fix")
+            if not isinstance(message, str):
                 raise PlanesError(
                     "fail-message-not-text",
-                    f"fail's message must be text, found {detail_value(v.value)}",
-                    "wrap it with text of")
+                    f"fail's message must be text, found {detail_value(message)}",
+                    'use text of it, or a record: fail { message: "...", '
+                    'fix: "..." } as tag')
+            if fix is not None and not isinstance(fix, str):
+                raise PlanesError(
+                    "fail-message-not-text",
+                    f"fail's fix must be text, found {detail_value(fix)}",
+                    "use text for the fix, or leave the field out")
+            # The `no_fix` marking is unconditional and stays exactly as it
+            # was: it records that *the language* names no fix at this raise,
+            # which is still true when the author names one. grammar_gen.py
+            # reads it statically off this call site, so it could not be
+            # conditional even if the reason had changed.
             raise PlanesError(
-                stmt.tag, v.value,
+                stmt.tag, message, fix or "",
                 no_fix="the message is the program's own, written at the "
                        "`fail`; naming a fix here would overwrite what the "
                        "author chose to say")

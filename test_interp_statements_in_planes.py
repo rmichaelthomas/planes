@@ -744,3 +744,27 @@ def test_deliberately_failing_program_agrees_on_the_tag():
         raise AssertionError("interp.py did not fail")
     except PlanesError as e:
         assert e.tag == "parse-error"
+
+
+# A.2: like test_core_check.py, this file had no `__main__` runner, so the gate
+# imported it and ran none of its 62 tests. Both were found by counting suite
+# files against suites that report a result — the count REPORT_HOST_BOUNDARY.md
+# §5 says to watch, applied to the file list rather than to the total.
+if __name__ == "__main__":
+    import sys
+
+    fails = []
+    tests = [(k, f) for k, f in sorted(globals().items())
+             if k.startswith("test_")]
+    for name, fn in tests:
+        try:
+            fn()
+            print(f"  ok    {name}")
+        except AssertionError as e:
+            print(f"  FAIL  {name}: {e}")
+            fails.append(name)
+        except Exception as e:  # noqa: BLE001
+            print(f"  ERROR {name}: {type(e).__name__}: {e}")
+            fails.append(name)
+    print(f"\n{len(tests) - len(fails)}/{len(tests)} passing")
+    sys.exit(1 if fails else 0)

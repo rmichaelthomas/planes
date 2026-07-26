@@ -61,3 +61,43 @@ def test_core_json_excludes_exactly_let_rule_when_why():
     with open("grammar/core.json", encoding="utf-8") as f:
         core = json.load(f)
     assert set(core["excluded_keywords"]) == {"let", "rule", "when", "why"}
+
+
+# A.2: this file had no `__main__` runner, so `python3 test_core_check.py` —
+# which is how scripts/ci.sh runs every suite — imported it and exited 0 having
+# executed nothing. Six tests sat inside a green gate without running. That is
+# the failure REPORT_HOST_BOUNDARY.md §5 records, found here a second time by
+# counting suite files (54) against suites that report a result (52).
+#
+# Two of the six take pytest's `tmp_path`, so the runner supplies one rather
+# than skipping them — a runner that silently skipped a fixture case would
+# reproduce the same fault one level down.
+if __name__ == "__main__":
+    import inspect
+    import pathlib
+    import tempfile
+
+    fails = []
+    tests = [(k, f) for k, f in sorted(globals().items())
+             if k.startswith("test_")]
+    for name, fn in tests:
+        params = list(inspect.signature(fn).parameters)
+        try:
+            if params == ["tmp_path"]:
+                with tempfile.TemporaryDirectory() as d:
+                    fn(pathlib.Path(d))
+            elif params:
+                raise AssertionError(
+                    f"unsupported fixture(s) {params} — this runner supplies "
+                    f"only tmp_path; add it here rather than skipping the test")
+            else:
+                fn()
+            print(f"  ok    {name}")
+        except AssertionError as e:
+            print(f"  FAIL  {name}: {e}")
+            fails.append(name)
+        except Exception as e:  # noqa: BLE001
+            print(f"  ERROR {name}: {type(e).__name__}: {e}")
+            fails.append(name)
+    print(f"\n{len(tests) - len(fails)}/{len(tests)} passing")
+    sys.exit(1 if fails else 0)

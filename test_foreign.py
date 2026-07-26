@@ -374,6 +374,85 @@ def test_the_demo_surface_is_complete():
     assert not s.has_unknowns(), "every foreign in the demo declares itself"
 
 
+
+# ================================== §160: an unknown effect name, in every position
+#
+# `read_effect_word` accepted any NAME, and only `parse_rule` checked membership
+# afterwards. `read_claim` — the `foreign ... doing` path — made no such check,
+# so `doing frobnicate` parsed and silently widened a vocabulary closed at
+# seven, while the same word in a rule was refused. The check moved into
+# `read_effect_word`, which is the only place that reads an effect name, so
+# both positions are now refused by one check and one message.
+
+
+def _refused(src):
+    try:
+        parse(src)
+    except PlanesSyntaxError as e:
+        return str(e)
+    raise AssertionError(f"accepted:\n{src}")
+
+
+def test_an_unknown_effect_name_after_doing_is_refused():
+    msg = _refused('foreign f of x from "m.f" doing frobnicate\n')
+    assert "expected an effect name after 'doing'" in msg, msg
+    assert "found 'frobnicate'" in msg, msg
+
+
+def test_an_unknown_effect_name_in_a_rule_is_still_refused():
+    msg = _refused("rule [r] s may not frobnicate\n")
+    assert "expected an effect name after 'may not'" in msg, msg
+    assert "found 'frobnicate'" in msg, msg
+
+
+def test_both_positions_are_refused_by_the_same_message():
+    """One message, not two saying the same thing in different words across
+    three implementations. Only the `after` clause differs, and it is the part
+    that says which position the reader is in."""
+    a = _refused('foreign f of x from "m.f" doing frobnicate\n')
+    b = _refused("rule [r] s may not frobnicate\n")
+    # Only the first occurrence: the message also names 'doing' in its
+    # continuation clause, where it means where `nothing` is allowed and not
+    # which position the reader is in.
+    assert a.replace("'doing'", "@", 1) == b.replace("'may not'", "@", 1), (a, b)
+
+
+def test_nothing_is_valid_after_doing_and_not_in_a_rule():
+    """`nothing` is a foreign's way of claiming it performs none. It means
+    nothing in a rule, and `allow_nothing` is a parameter rather than an
+    inference from the message text."""
+    parse('foreign f of x from "m.f" doing nothing\n')
+    for src in ("rule [r] s may not nothing\n", "rule [r] s may nothing\n"):
+        msg = _refused(src)
+        assert "found 'nothing'" in msg, msg
+
+
+def test_every_effect_kind_is_still_accepted_in_both_positions():
+    """The case a naive NAME-only check breaks: `show` and `write` arrive as
+    reserved-word tokens, not NAME, so a membership check that only looked at
+    NAME would start refusing two of the seven."""
+    for kind in sorted(EFFECT_KINDS):
+        parse(f'foreign f of x from "m.f" doing {kind}\n')
+        parse(f"rule [r] s may not {kind}\n")
+        parse(f"rule [r] s may {kind}\n")
+    assert len(EFFECT_KINDS) == 7
+
+
+def test_the_message_names_the_whole_closed_vocabulary():
+    msg = _refused('foreign f of x from "m.f" doing frobnicate\n')
+    for kind in EFFECT_KINDS:
+        assert kind in msg, (kind, msg)
+    assert "'nothing' after 'doing'" in msg, msg
+
+
+def test_a_declared_effect_still_reaches_the_surface():
+    """The refusal must not have cost the accepting path anything."""
+    s = analyse('foreign f of x from "m.f" doing ask "https://x.example.com"\n'
+                "r = f of 1\n")
+    assert ("ask", "https://x.example.com") in [(e.kind, e.target)
+                                                for e in s.effects]
+
+
 if __name__ == "__main__":
     fails = []
     tests = [(k, f) for k, f in sorted(globals().items()) if k.startswith("test_")]

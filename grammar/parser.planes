@@ -1956,16 +1956,49 @@ to is-effect-kind of kind:
   b = kind == "clock" or kind == "random" or kind == "env"
   give a or b
 
-to read-effect-word of cursor:
+# The seven kinds, written out, for the message. It has to stay in step with
+# `is-effect-kind` directly above -- the vocabulary is closed, and both places
+# that name it are the same list in a different shape.
+to effect-kinds-text:
+  give "ask, clock, env, random, read, show, write"
+
+# S160: the membership check lives HERE, so an unknown effect name is refused
+# in every position that reads one. It used to live in parse-rule, after the
+# call, and read-claim made no such check -- so
+# `foreign f of x from "m.f" doing frobnicate` parsed and silently widened a
+# vocabulary closed at seven, while the same word in a rule was refused.
+#
+# `allow-nothing` is an explicit argument rather than an inference from
+# `after`: `nothing` is valid after `doing` (a foreign that performs none) and
+# not in a rule, and reading that off the message text would tie the grammar to
+# the wording of a message.
+#
+# C4 also gives this message its continuation clause. It had none, so the
+# self-hosted parser refused in fewer words than parser.py and js/parser.mjs
+# did for the same input -- a fix-clause divergence nothing asserted, because
+# the self-hosted parser suites compare ASTs and error tags rather than text.
+to read-effect-word of cursor, after, allow-nothing:
   t = current of cursor
   ok = t.kind == "NAME" or t.kind == "NOTHING" or t.kind == "SHOW" or t.kind == "WRITE"
+  word = t.text
+  if word == "":
+    word = "nothing"
+  known = false
   if ok:
-    word = t.text
-    if word == "":
-      word = "nothing"
+    if is-effect-kind of word:
+      known = true
+    if allow-nothing:
+      if word == "nothing":
+        known = true
+  if known:
     give { word: word, cursor: (advance of cursor) }
   else:
-    fail "line " + (text of t.line) + ": expected an effect name after 'doing', found '" + t.text + "'" as parse-error
+    found = t.text
+    if ok:
+      found = word
+    if found == "":
+      found = "end of line"
+    fail "line " + (text of t.line) + ": expected an effect name after " + after + ", found '" + found + "'\n  valid kinds: " + (effect-kinds-text) + " — and 'nothing' after 'doing', for a foreign that performs none" as parse-error
 
 to param-includes of params, name:
   result = false
@@ -1975,7 +2008,7 @@ to param-includes of params, name:
   give result
 
 to read-claim of cursor, params:
-  ew = read-effect-word of cursor
+  ew = read-effect-word of cursor, "'doing'", true
   kind = ew.word
   after = ew.cursor
   if kind == "nothing":
@@ -2089,18 +2122,19 @@ to parse-rule of cursor:
     if not-try.matched:
       assertion = "forbid"
       after-assertion = not-try.cursor
+      verb = "may not"
     else:
       assertion = "permit"
       after-assertion = after-may
-    kind-tok = current of after-assertion
-    kind-result = read-effect-word of after-assertion
-    if not (is-effect-kind of kind-result.word):
-      fail "line " + (text of kind-tok.line) + ": '" + kind-result.word + "' is not an effect kind a rule can name" as parse-error
-    else:
-      target-result = parse-rule-target of kind-result.cursor
-      sup-result = parse-rule-supersedes of target-result.cursor
-      node = { kind: "Rule", name: name-expect.token.text, subject: subject-expect.token.text, rule-kind: kind-result.word, target: target-result.target, line: rule-tok.line, supersedes: sup-result.supersedes, assertion: assertion, supersedes-fingerprint: sup-result.fingerprint, annotation: nothing }
-      give { node: node, cursor: sup-result.cursor }
+      verb = "may"
+    # S160: one membership check, in read-effect-word, for both positions.
+    # `nothing` is a foreign's way of claiming no effect; it means nothing in
+    # a rule, so this caller does not allow it.
+    kind-result = read-effect-word of after-assertion, ("'" + verb + "'"), false
+    target-result = parse-rule-target of kind-result.cursor
+    sup-result = parse-rule-supersedes of target-result.cursor
+    node = { kind: "Rule", name: name-expect.token.text, subject: subject-expect.token.text, rule-kind: kind-result.word, target: target-result.target, line: rule-tok.line, supersedes: sup-result.supersedes, assertion: assertion, supersedes-fingerprint: sup-result.fingerprint, annotation: nothing }
+    give { node: node, cursor: sup-result.cursor }
 
 # ---- note: `note:` then an indented block of `from "..."` and
 # `derives-from [rule]` entries, or a single inline entry. Never executes.

@@ -6,10 +6,20 @@
 // real-filesystem NodeHost lives in host_node.mjs; the browser VFS host in
 // host_browser.mjs.
 //
-// host.py names eight required methods (each raises NotImplementedError there):
-// ask, read, write, show, clock, resolve, parseJson, toJson. `record` is an
-// optional no-op, not one of the eight. That count — eight — is the claim this
-// whole build tests; see REPORT_SECOND_HOST.md's seam verdict.
+// host.py names seven required methods (each raises NotImplementedError
+// there): ask, read, write, show, clock, resolve, parseJson. `record` is an
+// optional no-op, not one of the seven.
+//
+// It was eight until C4 counted what the reference actually calls rather than
+// what host.py declares. `toJson` had no caller anywhere: `interp.py`'s write
+// effect uses a *module-level* to_json that unwraps the value model first, and
+// the host method took an already-plain value, so it could not have served the
+// one site that serialises even if something had reached for it.
+// `test_host.py` checked the surface with `hasattr`, which is a declaration
+// check and cannot tell a dead method from a live one.
+//
+// The seam claim is restated at seven, not spent: seven methods, not a
+// rewrite. See REPORT_SECOND_HOST.md's seam verdict and REPORT_FAST_FOLLOW.md.
 
 // The host could not do what was asked. Distinct from a program error.
 export class HostError extends Error {
@@ -52,9 +62,6 @@ export class Host {
   parseJson(_text) {
     throw new HostError("parseJson: not implemented on the abstract host");
   }
-  toJson(_value) {
-    throw new HostError("toJson: not implemented on the abstract host");
-  }
 }
 
 // json.dumps(..., indent=2) escapes non-ASCII (ensure_ascii=True); JSON
@@ -71,8 +78,11 @@ export function ensureAscii(s) {
   return out;
 }
 
-// json.dumps(value, indent=2) with ensure_ascii — the write effect's and every
-// host's to_json serialisation.
+// json.dumps(value, indent=2) with ensure_ascii — the write effect's
+// serialisation, and the only one there is. `interp.mjs`'s module-level
+// `toJson` unwraps a Planes value and hands the result here; `interp.py`'s
+// does the same with `json.dumps(..., indent=2)`. C4: a `toJson` also sat on
+// the host surface, wrapping this, and nothing ever called it.
 export function pyJsonDumps(value) {
   return ensureAscii(JSON.stringify(value, null, 2));
 }
@@ -185,9 +195,6 @@ export class MemoryHost extends Host {
   }
   parseJson(text) {
     return JSON.parse(text);
-  }
-  toJson(value) {
-    return pyJsonDumps(value);
   }
 }
 

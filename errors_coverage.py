@@ -160,6 +160,101 @@ def coverage():
     }
 
 
+# ============================================ the self-hosted stack (C4 / §158)
+#
+# Everything above measures the reference implementation, whose raise sites are
+# Python. REPORT_DETAIL_CONVERGENCE.md §6 recorded that `grammar/interp.planes`
+# "cannot name a fix anywhere" and was outside the commitment as measured —
+# correctly, because there was no slot to name one in. §158 opened the slot:
+# `error-fix-of` exists, so the self-hosted files are now inside the
+# commitment and can be counted against it for the first time.
+#
+# The figure is reported on its own and is NOT merged into the reference's
+# work list. Two reasons. The reference's list is at zero and merging would
+# hide that; and driving this one to zero is a body of message-writing work
+# with its own ruling, not a side effect of opening the slot. A non-zero
+# self-hosted work list is the honest output of the build that made it
+# measurable.
+
+SELF_HOSTED_GLOB = ("interp.planes", "parser.planes", "lexer.planes",
+                    "json.planes")
+
+
+def self_hosted_sites():
+    """Every place a `grammar/*.planes` file raises, and whether it names a fix.
+
+    Three shapes, read off the source the same way grammar_gen.py reads the
+    Python raise sites — structurally, from the call, not from a hand-kept list:
+
+      error-fix-of of "tag", <detail>, <fix>   names a fix
+      error-of of "tag", <detail>              names none
+      fail <expr> as <tag>                     depends on <expr>
+
+    The last one splits. `fail d as unknown-name` re-raises a detail some other
+    site already wrote, which is the same shape as `or fail`'s re-tag and is
+    marked deliberate for the same stated reason: the message belongs to
+    whoever raised it. `fail "..." as tag` writes its own message here and has
+    nowhere put a fix, so it is shortfall.
+    """
+    import re
+
+    sites = {NAMES_FIX: [], DELIBERATE: [], SHORTFALL: []}
+    for name in SELF_HOSTED_GLOB:
+        path = os.path.join(REPO, "grammar", name)
+        if not os.path.exists(path):
+            continue
+        for n, line in enumerate(open(path, encoding="utf-8"), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            for _ in re.finditer(r"\berror-fix-of of ", line):
+                sites[NAMES_FIX].append((name, n, line.strip()[:96]))
+            for _ in re.finditer(r"(?<!-)\berror-of of ", line):
+                sites[SHORTFALL].append((name, n, line.strip()[:96]))
+            m = re.match(r"\s*fail\s+(.*?)\s+as\s+([\w-]+)\s*$", line)
+            if m:
+                arg = m.group(1)
+                # A bare name re-raises a message written elsewhere; anything
+                # else (a literal, a concatenation) is a message this site
+                # wrote, and it names no fix.
+                deliberate = re.fullmatch(r"[A-Za-z][\w-]*(\.[\w-]+)*", arg)
+                bucket = DELIBERATE if deliberate else SHORTFALL
+                sites[bucket].append((name, n, line.strip()[:96]))
+    return sites
+
+
+def render_self_hosted(sites):
+    total = sum(len(v) for v in sites.values())
+    lines = ["", "=" * 72, ""]
+    lines.append("SELF-HOSTED STACK — grammar/*.planes, measured for the first "
+                 "time (C4 / §158).")
+    lines.append("Before this build there was no slot for a fix in a "
+                 "self-hosted error, so these")
+    lines.append("sites were outside the commitment rather than failing it "
+                 "(REPORT_DETAIL_CONVERGENCE.md §6).")
+    lines.append("")
+    lines.append(f"  {total} raise sites across "
+                 f"{', '.join(SELF_HOSTED_GLOB)}:")
+    for label in STATES:
+        n = len(sites[label])
+        pct = f"{100 * n / total:.0f}%" if total else "-"
+        lines.append(f"  {label:<28} {n:>3} of {total}  ({pct})")
+    lines.append("")
+    lines.append(f"  THE SELF-HOSTED WORK LIST: {len(sites[SHORTFALL])}. "
+                 "Reported, not merged into the")
+    lines.append("  reference's list above, which is at zero — and not driven "
+                 "to zero here: that is")
+    lines.append("  message-writing work with its own ruling, not a side "
+                 "effect of opening the slot.")
+    lines.append("")
+    by_file: dict[str, int] = {}
+    for f, _, _ in sites[SHORTFALL]:
+        by_file[f] = by_file.get(f, 0) + 1
+    for f in SELF_HOSTED_GLOB:
+        if f in by_file:
+            lines.append(f"  {f:<20} {by_file[f]:>3} name no fix")
+    return "\n".join(lines)
+
+
 def render_report(cov):
     lines = []
     lines.append("errors_coverage: grammar/errors.json against "
@@ -240,10 +335,14 @@ def render_report(cov):
 def main(argv):
     args = argv[1:]
     cov = coverage()
+    sites = self_hosted_sites()
     if "--json" in args:
+        cov["self_hosted"] = {k: [{"file": f, "line": n, "source": s}
+                                  for f, n, s in v] for k, v in sites.items()}
         print(json.dumps(cov, indent=2))
     else:
         print(render_report(cov))
+        print(render_self_hosted(sites))
     return 0        # a report never fails
 
 

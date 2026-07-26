@@ -19,3 +19,6 @@ results.json
 processed.json
 cache.json
 config.json
+
+# CI runner logs, timings, and the leak record (scripts/run_suites.py).
+.ci-logs/

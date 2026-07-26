@@ -93,6 +93,10 @@ def _py(src):
 
 
 def _js_raw(src):
+    """One case, one node process — the original per-case path. Kept because
+    `scripts/verify_batch_equivalence.py` runs every case through *both* this
+    and the batch and asserts they answer identically; a batch mode with no
+    surviving per-case path could not be checked against anything."""
     with tempfile.TemporaryDirectory() as d:
         p = os.path.join(d, "p.planes")
         with open(p, "w", encoding="utf-8") as fh:
@@ -101,11 +105,70 @@ def _js_raw(src):
                               cwd=REPO, capture_output=True, text=True)
 
 
+def _three_way_src(expr, names):
+    return "".join(f"{k} = {_VAL_SRC[v]}\n" for k, v in names.items()) \
+        + f"show text of ({expr})\n"
+
+
+def batch_sources():
+    """Every program this suite sends to the JavaScript implementation.
+
+    A.1: the suite used to spawn one `node` per case — 528 of them, measured,
+    at roughly 130 ms of cold start each. Enumerating the cases up front lets
+    one process answer all of them. The enumeration is derived from the same
+    generators the tests iterate, so it cannot drift out of step with them.
+    """
+    srcs = [src for _, src in _builtin_cases()]
+    srcs += [src for _, src in _other_cases()]
+    srcs += [f"xs = [1, 2]\nshow text of ({n} of xs)\n"
+             for n in ("lower", "upper", "normalize")]
+    srcs += [src for _, src in RUNTIME_MESSAGES]
+    srcs += [_three_way_src(expr, names)
+             for _, expr, names in _three_way_cases()]
+    return list(dict.fromkeys(srcs))            # dedup, order preserved
+
+
+def run_batch(srcs):
+    """One node process for the whole list, keyed by source.
+
+    `run-batch` calls the same `runOne` the per-case `run` calls, so this
+    changes how many processes the caller pays for and nothing about what a
+    case reports. The case list goes through a file, not argv: it is well past
+    the platform's argument-length limit.
+    """
+    seen = list(dict.fromkeys(srcs))
+    cases = [{"id": str(i), "src": s, "config": CFG}
+             for i, s in enumerate(seen)]
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "cases.json")
+        with open(p, "w", encoding="utf-8") as fh:
+            json.dump(cases, fh)
+        r = subprocess.run([NODE, "js/cli.mjs", "run-batch", "@" + p],
+                           cwd=REPO, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return {seen[int(d2["id"])]: d2 for d2 in json.loads(r.stdout)}
+
+
+_BATCH: dict | None = None
+
+
+def _js_result(src):
+    """This case's result, out of the batch. The batch is computed once, on
+    first use. A source the enumeration missed falls back to its own call, so
+    the enumeration is an optimisation and never a source of a different
+    answer — a case cannot silently vanish by being left off the list."""
+    global _BATCH
+    if _BATCH is None:
+        _BATCH = run_batch(batch_sources())
+    if src not in _BATCH:
+        _BATCH.update(run_batch([src]))
+    return _BATCH[src]
+
+
 def _js(src):
-    r = _js_raw(src)
-    if r.returncode != 0:
-        return ("HOST-EXCEPTION", r.stderr.strip().split("\n")[0], [])
-    d2 = json.loads(r.stdout)
+    d2 = _js_result(src)
+    if "crash" in d2:
+        return ("HOST-EXCEPTION", d2["crash"].split("\n")[0], [])
     if d2["tag"]:
         return ("refused", "PARSE", []) if d2["tag"] == "PARSE" \
             else ("error", d2["tag"], [])
@@ -116,9 +179,9 @@ def _js_message(src):
     """The rendered runtime message, for the byte-identity assertions. `run`
     reports it alongside the tag (C2) because a tag is deliberately shared
     across many different messages, so tag agreement is not text agreement."""
-    r = _js_raw(src)
-    assert r.returncode == 0, r.stderr
-    return json.loads(r.stdout)["message"]
+    d2 = _js_result(src)
+    assert "crash" not in d2, d2["crash"]
+    return d2["message"]
 
 
 def _py_message(src):
@@ -560,11 +623,9 @@ def _outcome_py(expr, names):
 
 
 def _outcome_js(expr, names):
-    src = "".join(f"{k} = {_VAL_SRC[v]}\n" for k, v in names.items())
-    r = _js_raw(src + f"show text of ({expr})\n")
-    if r.returncode != 0:
-        return ("HOST", "crash", r.stderr.strip().split("\n")[0][:70])
-    d = json.loads(r.stdout)
+    d = _js_result(_three_way_src(expr, names))
+    if "crash" in d:
+        return ("HOST", "crash", d["crash"].split("\n")[0][:70])
     if d["tag"] == "PARSE":
         return ("parse", "PARSE", "")
     if d["tag"]:
