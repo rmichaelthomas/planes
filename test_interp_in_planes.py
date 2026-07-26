@@ -727,18 +727,56 @@ def test_call_arity_and_unknown_errors():
         assert e.tag == "unknown-function", e.tag
 
 
-def test_non_expression_body_fails_naming_build_2():
-    # A function whose body is not a single give-expression is control flow --
-    # build 2. interp.py evaluates it (statements are already built there), so
-    # this is asserted Planes-side: it must fail naming build 2, not stub.
+def test_multi_statement_body_now_runs_build_2():
+    # Build 1 refused any body that was not a single give-expression, failing
+    # with build-2-statements; this is the ONE build-1 test whose result
+    # changed, because it asserted a temporary limitation that build 2 (Phase 7)
+    # lifts. It is updated to assert the multi-statement body now evaluates and
+    # agrees with interp.py -- not passing for the wrong reason, but asserting a
+    # capability that has arrived.
     defs = ("to f of x:\n"
             "  let y = x + 1\n"
             "  give y\n")
+    assert_eval_program_agrees(defs, "f of 5")
+
+
+def _program_fail_tag(defs_src, expr_src, side, bindings=None):
+    """The error tag raised by one side evaluating expr against defs, or None
+    if it did not raise a PlanesError."""
     try:
-        planes_eval_program(defs, "f of 5")
-        raise AssertionError("expected build-2 failure")
+        if side == "py":
+            interp_eval_program(defs_src, expr_src, bindings)
+        else:
+            planes_eval_program(defs_src, expr_src, bindings)
+        return None
     except PlanesError as e:
-        assert e.tag == "build-2-statements", e.tag
+        return e.tag
+
+
+def test_lexical_scoping_callee_cannot_see_caller_binding():
+    # A.1, the divergence test. `inner` references `secret`, a name bound only
+    # in `outer`'s frame. Under dynamic scoping (build 1's `params + call-env`)
+    # `inner` sees `outer`'s `secret` and computes a value; under lexical
+    # scoping (`params + globals-of call-env`, and interp.py's Env(fn.env)) it
+    # does not, and both implementations fail with unknown-name. This is the
+    # only kind of program that distinguishes the two, and without it the fix
+    # is unpinned.
+    defs = ("to inner of x: give x + secret\n"
+            "to outer of secret: give inner of 1\n")
+    py = _program_fail_tag(defs, "outer of 5", "py")
+    planes = _program_fail_tag(defs, "outer of 5", "planes")
+    assert py == "unknown-name", f"interp.py tag {py!r} (dynamic scoping leak?)"
+    assert planes == "unknown-name", f"planes tag {planes!r} (dynamic scoping leak?)"
+
+
+def test_lexical_scoping_functions_still_globally_visible():
+    # The fix drops caller locals but must keep every function reachable at any
+    # depth: mutual recursion and calls between functions still resolve, because
+    # globals-of preserves the function bindings. A three-deep call chain agrees.
+    defs = ("to a of n: give b of (n + 1)\n"
+            "to b of n: give c of (n + 1)\n"
+            "to c of n: give n * 10\n")
+    assert_eval_program_agrees(defs, "a of 0")
 
 
 def test_env_first_match_wins_shadowing():

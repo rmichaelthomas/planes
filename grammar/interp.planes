@@ -122,56 +122,164 @@ to function-find of env, name:
           found = true
   give { found: found, value: result }
 
-# ================================================================ eval (A.1: flat, from the first line)
+# ================================================================ the status record (A.3)
 #
-# Dispatch on the parser's node kind with a flat if ... give sequence, each
-# arm returning when it matches and falling through when it does not -- never
-# a nested when/else ladder. An interpreter compounds recursion the way
-# self-parse did, so a deep dispatch ladder is itself deep enough to blow the
-# recursion ceiling when something walks it. A node kind this build does not
-# implement reaches the fall-through and fails, naming the kind -- an honest
-# failure, not a stub to a wrong value.
+# Every evaluation and execution step takes a status record and returns one.
+# All four fields are always present. `normal` carries a value; `give` carries
+# a given value up to the function boundary (Rule 2); `fail` carries a
+# { tag, detail } error outward until `or fail` catches it (Rule 3). The env
+# rides in the record (Rule 4), and a step never reads `value` without first
+# checking `status` (Rule 5). These three constructors are the only places the
+# record is built, so the shape is defined once.
 
-to eval of node, env:
+to normal-of of value, env:
+  give { status: "normal", value: value, env: env, error: nothing }
+
+to give-of of value, env:
+  give { status: "give", value: value, env: env, error: nothing }
+
+to fail-of of error, env:
+  give { status: "fail", value: nothing, env: env, error: error }
+
+# An error is the same { tag, detail } record `or fail as` produces (A.3), so a
+# self-hosted failure is not a second kind of error.
+to error-of of tag, detail:
+  give { tag: tag, detail: detail }
+
+# ================================================================ eval-node (A.1: flat; A.3: status-threaded)
+#
+# The evaluation step. Dispatch on the parser's node kind with a flat if ...
+# give sequence -- never a nested when/else ladder (A.1) -- and thread a status
+# record through every sub-evaluation (A.3): a sub-expression that fails or
+# gives is passed straight back (Rule 1), and the environment threads left to
+# right so an assignment inside an expression-position block is visible after
+# it. The value-producing helpers (apply-op, the builtins, equality) stay
+# value-returning and raise on a runtime error; each call site catches that raise
+# once, at the leaf, and turns it into a fail status -- so propagation is the
+# status record's job throughout, and a host exception is never the carrier.
+#
+# `eval` below is the value-returning adapter build 1's tests and the pipeline
+# call; eval-node is the step everything in build 2 threads.
+
+to eval-node of node, env, globals:
   k = node.kind
   if k == "Num":
-    give make-number of node.value
+    give normal-of of (make-number of node.value), env
   if k == "Str":
-    give make-text of node.value
+    give normal-of of (make-text of node.value), env
   if k == "Bool":
-    give make-boolean of node.value
+    give normal-of of (make-boolean of node.value), env
   if k == "Nothing":
-    give make-nothing
+    give normal-of of (make-nothing), env
   if k == "Var":
-    binding = env-find of env, node.name
-    if not binding.found:
-      fail "no name '" + node.name + "' here" as unknown-name
-    if binding.value.kind == "function":
-      give apply-function of binding.value, [], env, node.name
-    give binding.value
+    give eval-var of node, env, globals
   if k == "BinOp":
-    give eval-binop of node, env
+    give eval-binop-node of node, env, globals
   if k == "Not":
-    v = eval of node.expr, env
-    give make-boolean of (not (as-condition of v))
+    give eval-not-node of node, env, globals
   if k == "IsNothing":
-    v = eval of node.expr, env
-    give make-boolean of (v.kind == "nothing")
+    give eval-isnothing-node of node, env, globals
   if k == "ListLit":
-    give make-list of (list-items-from of node.items, env)
+    give eval-list-node of node, env, globals
   if k == "RecordLit":
-    give make-record of (record-fields-from of node.fields, env)
+    give eval-record-node of node, env, globals
   if k == "RecordUpdate":
-    give eval-record-update of node, env
+    give eval-record-update-node of node, env, globals
   if k == "ListPlus":
-    give eval-list-plus of node, env
+    give eval-list-plus-node of node, env, globals
   if k == "Field":
-    give eval-field of node, env
+    give eval-field-node of node, env, globals
   if k == "Round":
-    give eval-round of node, env
+    give eval-round-node of node, env, globals
   if k == "Call":
-    give eval-call of node, env
-  fail "cannot evaluate a node of kind '" + k + "'" as cannot-evaluate
+    give eval-call-node of node, env, globals
+  if k == "If":
+    give eval-if-node of node, env, globals
+  if k == "When":
+    give eval-when-node of node, env, globals
+  if k == "ForEach":
+    give eval-foreach-node of node, env, globals
+  if k == "OrFail":
+    give eval-orfail-node of node, env, globals
+  if k == "WriteTo":
+    give fail-of of (error-of of "build-3-effect", "writing a file is an effect -- effects are interp.planes build 3, not build 2"), env
+  give fail-of of (error-of of "cannot-evaluate", ("cannot evaluate a node of kind '" + k + "'")), env
+
+# A variable reference. A function value auto-calls only when no local variable
+# of the same name shadows it (interp.py: `name in funcs and not env.has`) --
+# env-find returns the innermost binding, so a shadowing local is returned as a
+# value and only a bare function name applies.
+to eval-var of node, env, globals:
+  binding = env-find of env, node.name
+  if not binding.found:
+    give fail-of of (error-of of "unknown-name", ("no name '" + node.name + "' here")), env
+  if binding.value.kind == "function":
+    give apply-function-node of binding.value, [], env, globals, node.name
+  give normal-of of binding.value, env
+
+# The value-returning adapter (build 1's `eval`): evaluate a node against an
+# environment, giving the value on success and re-raising a fail status as the
+# host error it names on failure. Build 1's tests and the pipeline reach the
+# evaluator through here; everything in build 2 threads eval-node directly.
+to eval of node, env:
+  r = eval-node of node, env, (globals-of of env)
+  if r.status == "fail":
+    give reraise of r.error
+  give r.value
+
+# Turn a fail status back into the host exception whose tag it carries, so the
+# value-returning adapter refuses exactly as build 1 did. The tags are the
+# finite set the evaluator raises; a self-hosted program's own custom `fail`
+# tags never reach here -- whole programs run through the status layer, not the
+# adapter -- so enumerating the built-in tags is complete. Flat, not nested.
+to reraise of err:
+  t = err.tag
+  d = err.detail
+  if t == "unknown-name":
+    fail d as unknown-name
+  if t == "divided-by-zero":
+    fail d as divided-by-zero
+  if t == "cannot-combine":
+    fail d as cannot-combine
+  if t == "cannot-compare":
+    fail d as cannot-compare
+  if t == "not-a-yes-no":
+    fail d as not-a-yes-no
+  if t == "not-a-number":
+    fail d as not-a-number
+  if t == "not-a-record":
+    fail d as not-a-record
+  if t == "not-a-list":
+    fail d as not-a-list
+  if t == "not-a-collection":
+    fail d as not-a-collection
+  if t == "not-text":
+    fail d as not-text
+  if t == "cannot-render":
+    fail d as cannot-render
+  if t == "cannot-join":
+    fail d as cannot-join
+  if t == "empty-list":
+    fail d as empty-list
+  if t == "cannot-evaluate":
+    fail d as cannot-evaluate
+  if t == "unknown-operator":
+    fail d as unknown-operator
+  if t == "unknown-builtin":
+    fail d as unknown-builtin
+  if t == "wrong-arity":
+    fail d as wrong-arity
+  if t == "unknown-function":
+    fail d as unknown-function
+  if t == "build-2-statements":
+    fail d as build-2-statements
+  if t == "build-3-effect":
+    fail d as build-3-effect
+  if t == "recursion-too-deep":
+    fail d as recursion-too-deep
+  if t == "fail-message-not-text":
+    fail d as fail-message-not-text
+  fail d as interp-error
 
 # ================================================================ source -> node (consumes parser.planes, A.4)
 #
@@ -200,47 +308,93 @@ to node-of-source of src:
 # -- produces the answer. 2 / 3 is one third here because it is one third
 # there; a float never enters.
 
-to eval-binop of node, env:
+to eval-binop-node of node, env, globals:
   op = node.op
   if op == "and":
-    give eval-and of node, env
+    give eval-and-node of node, env, globals
   if op == "or":
-    give eval-or of node, env
+    give eval-or-node of node, env, globals
   if op == "first":
-    give eval-first of node, env
-  left = eval of node.left, env
-  right = eval of node.right, env
-  give apply-op of op, left, right
+    give eval-first-node of node, env, globals
+  ls = eval-node of node.left, env, globals
+  if not (ls.status == "normal"):
+    give ls
+  rs = eval-node of node.right, ls.env, globals
+  if not (rs.status == "normal"):
+    give rs
+  v = (apply-op of op, ls.value, rs.value) or fail as e:
+    give fail-of of e, rs.env
+  give normal-of of v, rs.env
+
+# `not` / `is nothing`, threaded. `not` requires a yes/no value (interp.py's
+# condition()), so a non-boolean operand becomes a fail status at the leaf.
+to eval-not-node of node, env, globals:
+  v = eval-node of node.expr, env, globals
+  if not (v.status == "normal"):
+    give v
+  c = (as-condition of v.value) or fail as e:
+    give fail-of of e, v.env
+  give normal-of of (make-boolean of (not c)), v.env
+
+to eval-isnothing-node of node, env, globals:
+  v = eval-node of node.expr, env, globals
+  if not (v.status == "normal"):
+    give v
+  give normal-of of (make-boolean of (v.value.kind == "nothing")), v.env
 
 # `and` / `or` short-circuit, and -- like interp.py -- require both operands
 # to be yes/no values, returning the second operand's condition, not the
 # operand itself.
-to eval-and of node, env:
-  left = eval of node.left, env
-  if not (as-condition of left):
-    give make-boolean of false
-  right = eval of node.right, env
-  give make-boolean of (as-condition of right)
+to eval-and-node of node, env, globals:
+  ls = eval-node of node.left, env, globals
+  if not (ls.status == "normal"):
+    give ls
+  lc = (as-condition of ls.value) or fail as e:
+    give fail-of of e, ls.env
+  if not lc:
+    give normal-of of (make-boolean of false), ls.env
+  rs = eval-node of node.right, ls.env, globals
+  if not (rs.status == "normal"):
+    give rs
+  rc = (as-condition of rs.value) or fail as e2:
+    give fail-of of e2, rs.env
+  give normal-of of (make-boolean of rc), rs.env
 
-to eval-or of node, env:
-  left = eval of node.left, env
-  if as-condition of left:
-    give make-boolean of true
-  right = eval of node.right, env
-  give make-boolean of (as-condition of right)
+to eval-or-node of node, env, globals:
+  ls = eval-node of node.left, env, globals
+  if not (ls.status == "normal"):
+    give ls
+  lc = (as-condition of ls.value) or fail as e:
+    give fail-of of e, ls.env
+  if lc:
+    give normal-of of (make-boolean of true), ls.env
+  rs = eval-node of node.right, ls.env, globals
+  if not (rs.status == "normal"):
+    give rs
+  rc = (as-condition of rs.value) or fail as e2:
+    give fail-of of e2, rs.env
+  give normal-of of (make-boolean of rc), rs.env
 
 # `first n of x`: a list's first n items, or a text's first n code points.
 # interp.py takes `src.value[:int(n.value)]`; the native `first` operator is
 # that same prefix, taken on the tagged items for a list and on the raw
 # string for text.
-to eval-first of node, env:
-  n = eval of node.left, env
-  src = eval of node.right, env
-  if src.kind == "list":
-    give make-list of (first (n.value) of src.items)
-  if src.kind == "text":
-    give make-text of (first (n.value) of src.value)
-  fail "cannot take the first n of " + (canonical-of-value of src) as not-a-collection
+to eval-first-node of node, env, globals:
+  n = eval-node of node.left, env, globals
+  if not (n.status == "normal"):
+    give n
+  src = eval-node of node.right, n.env, globals
+  if not (src.status == "normal"):
+    give src
+  if src.value.kind == "list":
+    r = (first (n.value.value) of src.value.items) or fail as e:
+      give fail-of of e, src.env
+    give normal-of of (make-list of r), src.env
+  if src.value.kind == "text":
+    r2 = (first (n.value.value) of src.value.value) or fail as e2:
+      give fail-of of e2, src.env
+    give normal-of of (make-text of r2), src.env
+  give fail-of of (error-of of "not-a-collection", ("cannot take the first n of " + (canonical-of-value of src.value))), src.env
 
 to apply-op of op, a, b:
   if op == "+":
@@ -411,21 +565,39 @@ to member-of of a, b:
 
 # ================================================================ lists, records, field access (Phase 4)
 
-to list-items-from of item-nodes, env:
+# A list literal, threaded: each item evaluated left to right against the
+# threaded environment, and the first non-normal status short-circuits the rest
+# (Rule 1, expressed as an accumulator guard so the loop stays one `for each`
+# pass and takes no per-item recursion frame).
+to eval-list-node of node, env, globals:
   items = []
-  for each n in item-nodes:
-    items = items plus (eval of n, env)
-  give items
+  state = normal-of of nothing, env
+  for each n in node.items:
+    if state.status == "normal":
+      r = eval-node of n, state.env, globals
+      if r.status == "normal":
+        items = items plus r.value
+      state = r
+  if not (state.status == "normal"):
+    give state
+  give normal-of of (make-list of items), state.env
 
 # interp.py builds a record as a Python dict, so a repeated field keeps its
-# first position and its last value. record-fields-from reproduces that by
-# upserting: a new key appends, a repeated key replaces in place.
-to record-fields-from of field-nodes, env:
+# first position and its last value. eval-record-node reproduces that by
+# upserting: a new key appends, a repeated key replaces in place -- threading
+# status as the list literal does.
+to eval-record-node of node, env, globals:
   fields = []
-  for each fn in field-nodes:
-    val = eval of fn.value, env
-    fields = upsert-field of fields, fn.key, val
-  give fields
+  state = normal-of of nothing, env
+  for each fn in node.fields:
+    if state.status == "normal":
+      r = eval-node of fn.value, state.env, globals
+      if r.status == "normal":
+        fields = upsert-field of fields, fn.key, r.value
+      state = r
+  if not (state.status == "normal"):
+    give state
+  give normal-of of (make-record of fields), state.env
 
 to upsert-field of fields, key, val:
   if (field-in of fields, key).found:
@@ -444,44 +616,64 @@ to replace-field of fields, key, val:
 # `base with f: v, ...` -- a new record differing in the named fields, the
 # base untouched. interp.py's {**base, **updates}: existing keys update in
 # place, new keys append in update order.
-to eval-record-update of node, env:
-  base = eval of node.base, env
-  if not (base.kind == "record"):
-    fail "cannot update " + (canonical-of-value of base) + " with with" as not-a-record
-  fields = base.fields
+to eval-record-update-node of node, env, globals:
+  base = eval-node of node.base, env, globals
+  if not (base.status == "normal"):
+    give base
+  if not (base.value.kind == "record"):
+    give fail-of of (error-of of "not-a-record", ("cannot update " + (canonical-of-value of base.value) + " with with")), base.env
+  fields = base.value.fields
+  state = base
   for each fn in node.fields:
-    val = eval of fn.value, env
-    fields = upsert-field of fields, fn.key, val
-  give make-record of fields
+    if state.status == "normal":
+      r = eval-node of fn.value, state.env, globals
+      if r.status == "normal":
+        fields = upsert-field of fields, fn.key, r.value
+      state = r
+  if not (state.status == "normal"):
+    give state
+  give normal-of of (make-record of fields), state.env
 
 # `base plus item` -- a new list with item appended, the base untouched.
-to eval-list-plus of node, env:
-  base = eval of node.base, env
-  if not (base.kind == "list"):
-    fail "cannot append to " + (canonical-of-value of base) + " with plus" as not-a-list
-  item = eval of node.item, env
-  give make-list of (base.items plus item)
+to eval-list-plus-node of node, env, globals:
+  base = eval-node of node.base, env, globals
+  if not (base.status == "normal"):
+    give base
+  if not (base.value.kind == "list"):
+    give fail-of of (error-of of "not-a-list", ("cannot append to " + (canonical-of-value of base.value) + " with plus")), base.env
+  item = eval-node of node.item, base.env, globals
+  if not (item.status == "normal"):
+    give item
+  give normal-of of (make-list of (base.value.items plus item.value)), item.env
 
 # Field access. interp.py reads obj.value.get(name) -- a missing field is
 # `nothing`, not an error; only a non-record base is refused.
-to eval-field of node, env:
-  obj = eval of node.obj, env
-  if not (obj.kind == "record"):
-    fail "cannot read ." + node.name + " from " + (canonical-of-value of obj) as not-a-record
-  match = field-in of obj.fields, node.name
+to eval-field-node of node, env, globals:
+  obj = eval-node of node.obj, env, globals
+  if not (obj.status == "normal"):
+    give obj
+  if not (obj.value.kind == "record"):
+    give fail-of of (error-of of "not-a-record", ("cannot read ." + node.name + " from " + (canonical-of-value of obj.value))), obj.env
+  match = field-in of obj.value.fields, node.name
   if match.found:
-    give match.value
-  give make-nothing
+    give normal-of of match.value, obj.env
+  give normal-of of (make-nothing), obj.env
 
 # `round x to n places` -- reproduced metacircularly: the host's own round,
 # on the raw number, is interp.py's Number.round_to. Only a non-number base
 # is refused here; the host handles the places argument.
-to eval-round of node, env:
-  v = eval of node.value, env
-  p = eval of node.places-value, env
-  if not (v.kind == "number"):
-    fail "cannot round " + (canonical-of-value of v) as not-a-number
-  give make-number of (round (v.value) to (p.value) places)
+to eval-round-node of node, env, globals:
+  v = eval-node of node.value, env, globals
+  if not (v.status == "normal"):
+    give v
+  p = eval-node of node.places-value, v.env, globals
+  if not (p.status == "normal"):
+    give p
+  if not (v.value.kind == "number"):
+    give fail-of of (error-of of "not-a-number", ("cannot round " + (canonical-of-value of v.value))), p.env
+  r = (round (v.value.value) to (p.value.value) places) or fail as e:
+    give fail-of of e, p.env
+  give normal-of of (make-number of r), p.env
 
 # ================================================================ builtins (Phase 4)
 #
@@ -499,7 +691,7 @@ to is-builtin-name of name:
         found = true
   give found
 
-to eval-call of node, env:
+to eval-call-node of node, env, globals:
   name = node.name
   args = node.args
   # A user function wins over a builtin of the same name (interp.py: a name in
@@ -507,13 +699,19 @@ to eval-call of node, env:
   # relies on, here on the value environment.
   fn = function-find of env, name
   if fn.found:
-    give apply-function of fn.value, args, env, name
+    give apply-function-node of fn.value, args, env, globals, name
   if is-builtin-name of name:
     if not ((count of args) == 1):
-      fail "'" + name + "' takes 1 value, given " + (text of (count of args)) as wrong-arity
-    arg = eval of (first-item of args), env
-    give eval-builtin of name, arg
-  fail "no function named '" + name + "'" as unknown-function
+      give fail-of of (error-of of "wrong-arity", ("'" + name + "' takes 1 value, given " + (text of (count of args)))), env
+    a = eval-node of (first-item of args), env, globals
+    if not (a.status == "normal"):
+      give a
+    # eval-builtin is value-returning; ask/read raise the build-3 refusal, so
+    # the leaf catch turns any builtin failure into a fail status.
+    v = (eval-builtin of name, a.value) or fail as e:
+      give fail-of of e, a.env
+    give normal-of of v, a.env
+  give fail-of of (error-of of "unknown-function", ("no function named '" + name + "'")), env
 
 to eval-builtin of name, arg:
   if name == "count":
@@ -609,13 +807,39 @@ to builtin-rest of arg:
     fail "cannot take the rest of an empty list" as empty-list
   give make-list of (rest of arg.items)
 
+# ================================================================ lexical scoping (A.1)
+#
+# The environment a function is applied against is its *definition*
+# environment, not the caller's. interp.py gives each call a fresh Env(fn.env),
+# and every function in a program is defined at the top level (hoist folds even
+# nested defs into one flat funcs namespace), so a function's definition
+# environment is the globals: the function values, and nothing of the caller's
+# locals. globals-of keeps exactly the function bindings of an environment and
+# drops the rest, so a callee sees every function (mutual recursion) and its
+# own parameters, but never a name bound only in its caller -- the divergence a
+# dynamic-scoping evaluator produces, which build 1's tests could not detect
+# because its bodies had no locals to leak.
+#
+# This is also what stops the environment growing with call depth: with the
+# caller's locals dropped, a callee's environment is params + the fixed set of
+# function values, the same size at depth 1 and depth 100. There is no dead
+# binding to prune because none is ever carried down (A.1: do not implement
+# pruning; lexical scoping deletes the problem).
+to globals-of of env:
+  result = []
+  for each binding in env:
+    if binding.value.kind == "function":
+      result = result plus binding
+  give result
+
 # ================================================================ function application (Phase 5)
 #
-# A function is a tagged value living in the environment, applied against the
-# environment it is called in: its parameters are bound, prepended to that
-# environment, and the extended list passed down to the body (A.2). No stored
-# closure -- the environment always carries every function value at its base,
-# so recursion and calls between functions resolve without a cyclic record.
+# A function is a tagged value living in the environment, applied against its
+# definition environment: its parameters are bound and prepended to the globals
+# (globals-of the call environment), and that list -- not the caller's -- is
+# passed down to the body (A.1, A.2). No stored closure: the globals always
+# carry every function value, so recursion and calls between functions resolve
+# without a cyclic record, and no caller local ever reaches the callee.
 #
 # Build 1 applies functions whose body is a single give-expression. A
 # multi-statement body, or any body that is not a lone `give`, is control
@@ -625,28 +849,371 @@ to builtin-rest of arg:
 to make-function of funcdef:
   give { kind: "function", name: funcdef.name, params: funcdef.params, body: funcdef.body, deriv: nothing }
 
-to apply-function of fn, arg-nodes, call-env, name:
+to apply-function-node of fn, arg-nodes, call-env, globals, name:
   if not ((count of fn.params) == (count of arg-nodes)):
-    fail "'" + name + "' takes " + (text of (count of fn.params)) + " values, given " + (text of (count of arg-nodes)) as wrong-arity
-  if not ((count of fn.body) == 1):
-    fail "'" + name + "' has a multi-statement body -- statements are interp.planes build 2" as build-2-statements
-  stmt = first-item of fn.body
-  if not (stmt.kind == "Give"):
-    fail "'" + name + "' body is not a single give-expression -- control flow is interp.planes build 2" as build-2-statements
-  bindings = bind-params of fn.params, arg-nodes, call-env, []
-  new-env = bindings + call-env
-  give eval of stmt.expr, new-env
+    give fail-of of (error-of of "wrong-arity", ("'" + name + "' takes " + (text of (count of fn.params)) + " values, given " + (text of (count of arg-nodes)))), call-env
+  bound = eval-args of fn.params, arg-nodes, call-env, globals, []
+  if not (bound.status == "normal"):
+    give bound
+  # A.1: the callee runs against its parameters over the globals -- the fixed
+  # function set threaded from the entry point, never the caller's locals. The
+  # globals are computed once (globals-of the entry environment) and carried
+  # unchanged, so a call is an O(1) prepend, not a per-call scan of the env.
+  callee-env = bound.value + globals
+  give run-body of fn, callee-env, globals, call-env
 
 # Evaluate each argument in the calling environment, pairing it with its
-# parameter name. Structural recursion over the parameter list -- one frame
-# per parameter, and functions take few.
-to bind-params of params, arg-nodes, call-env, acc:
+# parameter name, threading status so an argument that fails stops the call.
+# Structural recursion over the parameter list -- one frame per parameter, and
+# functions take few. Returns a normal status whose value is the bindings list.
+to eval-args of params, arg-nodes, call-env, globals, acc:
   if (count of params) == 0:
-    give acc
-  p = first-item of params
+    give normal-of of acc, call-env
   a = first-item of arg-nodes
-  val = eval of a, call-env
-  give bind-params of (rest of params), (rest of arg-nodes), call-env, (acc plus { name: p, value: val })
+  r = eval-node of a, call-env, globals
+  if not (r.status == "normal"):
+    give r
+  p = first-item of params
+  give eval-args of (rest of params), (rest of arg-nodes), call-env, globals, (acc plus { name: p, value: r.value })
+
+# Run a function body as a block (Phase 7). The body threads a status record
+# from a normal start over the callee environment; a `give` anywhere in it
+# returns the function's value with the status reset to normal for the caller
+# (Rule 2), a `fail` propagates out unchanged (Rule 3), and a body that runs to
+# the end without a give returns nothing (interp.py's Traced(None)). The caller's
+# environment is restored either way -- the callee's locals do not escape. This
+# is where interpreted recursion becomes possible, and where the recursion
+# ceiling (A.7) is met and must be flattened rather than raised.
+to run-body of fn, callee-env, globals, call-env:
+  after = exec-block of fn.body, (normal-of of nothing, callee-env), globals
+  if after.status == "give":
+    give normal-of of after.value, call-env
+  if after.status == "fail":
+    give fail-of of after.error, call-env
+  give normal-of of (make-nothing), call-env
+
+# ================================================================ control flow as expressions (Phases 3, 5, 6)
+#
+# If / when / for each / or fail are expressions in interp.py's eval as well as
+# statements in exec_stmt -- the same block-running logic in both. eval-node
+# dispatches to these; each is filled in its phase. Until then a use reaches a
+# fail status naming the phase, never a wrong value.
+
+# `if cond: then else: els` (Phase 3). interp.py runs the chosen block in the
+# SAME environment -- no child scope, so a name a branch binds is visible after
+# the if -- and the if's value is the block's last result. Both hold here: the
+# block runs from a normal start over the (threaded) current env, and its final
+# status is returned directly, so a give or fail inside a branch propagates and
+# a binding rides out in the env. The condition must be a yes/no value
+# (interp.py's condition()), so a non-boolean is a fail at the leaf.
+to eval-if-node of node, env, globals:
+  c = eval-node of node.cond, env, globals
+  if not (c.status == "normal"):
+    give c
+  cond = (as-condition of c.value) or fail as e:
+    give fail-of of e, c.env
+  if cond:
+    give exec-block of node.then, (normal-of of nothing, c.env), globals
+  give exec-block of node.els, (normal-of of nothing, c.env), globals
+
+# `when subject is { pattern }: body else: els` (Phase 3, shape dispatch). The
+# subject must be a record; the pattern is a list of entries, each a `match`
+# (field: expr -- the field must be present and equal, through the same guarded
+# equality `==` uses, so a wrong-shaped field fails rather than silently missing)
+# or a `bind` (field -- the field's value bound under its name). A missing field
+# is no match. On a match the bindings are prepended to the environment and the
+# body runs; otherwise els runs. Like `if`, no child scope and the block's last
+# result is the value.
+to eval-when-node of node, env, globals:
+  subj = eval-node of node.subject, env, globals
+  if not (subj.status == "normal"):
+    give subj
+  if not (subj.value.kind == "record"):
+    give fail-of of (error-of of "not-a-record", ("cannot match " + (canonical-of-value of subj.value) + " against a shape")), subj.env
+  m = match-pattern of node.pattern, subj.value, subj.env, globals, []
+  if not (m.status == "normal"):
+    give m
+  if m.value.matched:
+    bound-env = m.value.bindings + subj.env
+    give exec-block of node.body, (normal-of of nothing, bound-env), globals
+  give exec-block of node.els, (normal-of of nothing, subj.env), globals
+
+# Walk the pattern entries, threading status (a match expression may fail), and
+# return { matched, bindings }. A missing field or an unequal match value stops
+# with matched false; a bind entry collects the field value under its name.
+to match-pattern of entries, subject, env, globals, bindings:
+  if (count of entries) == 0:
+    give normal-of of { matched: true, bindings: bindings }, env
+  entry = first-item of entries
+  found = field-in of subject.fields, entry.field
+  if not found.found:
+    give normal-of of { matched: false, bindings: [] }, env
+  if entry.matcher-tag == "match":
+    want = eval-node of entry.value, env, globals
+    if not (want.status == "normal"):
+      give want
+    eq = (values-equal of found.value, want.value) or fail as e:
+      give fail-of of e, want.env
+    if not eq:
+      give normal-of of { matched: false, bindings: [] }, want.env
+    give match-pattern of (rest of entries), subject, want.env, globals, bindings
+  give match-pattern of (rest of entries), subject, env, globals, (bindings plus { name: entry.field, value: found.value })
+
+# `for each v in source where cond: body` (Phase 5), both the statement form and
+# the comprehension (is-expr). interp.py runs each item in a fresh child scope
+# binding the loop variable, so the variable does not leak and a `let` inside the
+# body is per-iteration, while a reassignment of an OUTER variable walks to the
+# parent and persists (the accumulator idiom). Both hold here: each item runs
+# against [{ var, item }] over the current outer env, and after the item the
+# outer env is reconstructed with the body's reassignments applied and the
+# per-iteration additions dropped. A string iterates its code points (one-code-
+# point strings, the language's rule). Like interp.py, the result is always the
+# list of per-item body values -- the comprehension's list, discarded when the
+# form is used as a statement, while the env mutations ride out.
+#
+# The loop is one native `for each` pass, not per-item recursion, so a loop over
+# a long collection does not consume the recursion ceiling -- only the body's own
+# calls do.
+to eval-foreach-node of node, env, globals:
+  src = eval-node of node.source, env, globals
+  if not (src.status == "normal"):
+    give src
+  if src.value.kind == "list":
+    give run-foreach of node, src.value.items, src.env, globals
+  if src.value.kind == "text":
+    chars = []
+    for each c in src.value.value:
+      chars = chars plus (make-text of c)
+    give run-foreach of node, chars, src.env, globals
+  give fail-of of (error-of of "not-a-collection", ("cannot loop over " + (canonical-of-value of src.value))), src.env
+
+to run-foreach of node, items, start-env, globals:
+  outer = start-env
+  results = []
+  broke = false
+  carry = normal-of of nothing, start-env
+  for each item in items:
+    if not broke:
+      st = foreach-item-step of node, item, outer, globals
+      if st.broke:
+        broke = true
+        carry = st.status
+      else:
+        outer = st.env
+        if st.kept:
+          results = results plus st.value
+  if broke:
+    give carry
+  give normal-of of (make-list of results), outer
+
+# One item: bind the loop variable over the outer env, test the `where` clause
+# (a non-yes/no result fails at the leaf), and run the body (an expression for a
+# comprehension, a block for the statement form). Returns whether the loop broke
+# (a give or fail short-circuits the rest), whether the item was kept (survived
+# `where`), its value, and the next outer env with the body's outer-variable
+# reassignments applied.
+to foreach-item-step of node, item, outer, globals:
+  iter-env = [{ name: node.var, value: item }] + outer
+  keep = true
+  if not (node.where is nothing):
+    wr = eval-node of node.where, iter-env, globals
+    if not (wr.status == "normal"):
+      give { broke: true, status: wr, kept: false, value: nothing, env: outer }
+    kc = (as-condition of wr.value) or fail as e:
+      give { broke: true, status: (fail-of of e, iter-env), kept: false, value: nothing, env: outer }
+    keep = kc
+  if not keep:
+    give { broke: false, status: (normal-of of nothing, outer), kept: false, value: nothing, env: outer }
+  bs = foreach-body of node, iter-env, globals
+  if not (bs.status == "normal"):
+    give { broke: true, status: bs, kept: false, value: nothing, env: outer }
+  give { broke: false, status: bs, kept: true, value: bs.value, env: (rebind-outer of outer, bs.env) }
+
+to foreach-body of node, iter-env, globals:
+  if node.is-expr:
+    give eval-node of (first-item of node.body), iter-env, globals
+  give exec-block of node.body, (normal-of of nothing, iter-env), globals
+
+# Reconstruct the outer environment after an iteration: each outer name takes
+# its current value from the body's environment (so a reassignment persists),
+# and the per-iteration additions -- the loop variable and any body-local lets --
+# are dropped, keeping the outer env the same size across the loop.
+to rebind-outer of outer-env, body-env:
+  result = []
+  for each ob in outer-env:
+    looked = env-find of body-env, ob.name
+    if looked.found:
+      result = result plus { name: ob.name, value: looked.value }
+    else:
+      result = result plus ob
+  give result
+
+# `expr or fail as tag: handler` (Phase 6, Rule 3). Evaluate the guarded
+# expression; on success its value stands, and a `give` passes straight through
+# (interp.py catches _Give and re-raises it -- `or fail` never catches a give,
+# Rule 2). On a fail, if there is a handler the error record { tag, detail } is
+# bound under `tag` and the handler block runs, resetting the status to normal
+# and yielding the handler's result; with no handler the fail is re-tagged with
+# `tag` and propagates (interp.py's PlanesError(node.tag, e.detail)). The handler
+# runs in the same env -- no child scope -- so a name it binds rides out.
+to eval-orfail-node of node, env, globals:
+  r = eval-node of node.expr, env, globals
+  if r.status == "give":
+    give r
+  if r.status == "normal":
+    give r
+  if node.handler is nothing:
+    give fail-of of (error-of of node.tag, r.error.detail), r.env
+  err-value = make-error-value of r.error
+  handler-env = [{ name: node.tag, value: err-value }] + env
+  give exec-block of node.handler, (normal-of of nothing, handler-env), globals
+
+# The caught error as a record VALUE the handler can read with .tag and .detail
+# (interp.py binds error_record(error), a plain record). The path field A.4
+# carries on some errors is a derivation concern left to a later build; tag and
+# detail are what a handler reads.
+to make-error-value of err:
+  give make-record of [{ key: "tag", value: (make-text of err.tag) }, { key: "detail", value: (make-text of err.detail) }]
+
+# ================================================================ statement execution (Phase 2, A.3)
+#
+# A block is a list of statements executed in order, threading one status
+# record (Rule 4: the environment rides in it). exec-stmt begins by checking
+# the incoming status and, if it is not "normal", returns its input unchanged
+# without evaluating anything (Rule 1) -- the substitute for early exit, and the
+# mechanical heart of the build. run-stmt is only ever reached from the normal
+# branch, so it stands on a checked status (Rule 5).
+
+to exec-stmt of stmt, state, globals:
+  if not (state.status == "normal"):
+    give state
+  give run-stmt of stmt, state, globals
+
+to exec-block of stmts, state, globals:
+  threaded = state
+  for each stmt in stmts:
+    threaded = exec-stmt of stmt, threaded, globals
+  give threaded
+
+# Dispatch a single statement, flat (A.1). Assignment and give are here; show
+# is Phase 4 and fail is Phase 6. A definition, note, use, or rule is a no-op
+# during execution -- functions are hoisted before the block runs, an
+# annotation is display-only, a use only names a module, and a rule is a
+# constraint the checker reads, never an action. Everything else is an
+# expression evaluated for its value (and its effect on the threaded env),
+# which routes if / when / for each / or fail through eval-node's arms.
+to run-stmt of stmt, state, globals:
+  k = stmt.kind
+  if k == "Assign":
+    give exec-assign of stmt, state, globals
+  if k == "Give":
+    r = eval-node of stmt.expr, state.env, globals
+    if not (r.status == "normal"):
+      give r
+    give give-of of r.value, r.env
+  if k == "Show":
+    give exec-show of stmt, state, globals
+  if k == "Fail":
+    give exec-fail of stmt, state, globals
+  if k == "Note":
+    give state
+  if k == "Use":
+    give state
+  if k == "Rule":
+    give state
+  if k == "Foreign":
+    give state
+  if k == "FuncDef":
+    give state
+  r = eval-node of stmt, state.env, globals
+  if not (r.status == "normal"):
+    give r
+  give normal-of of r.value, r.env
+
+# Assignment (Phase 4). `let` binds a new name in this scope (bind_local:
+# prepend, innermost first, A.2). Reassignment (is-let false) rebinds an
+# existing name where it lives rather than shadowing it -- interp.py's env.set:
+# the first matching binding is replaced in place, so the environment does not
+# grow on a rebind and a loop that reassigns an accumulator stays flat; a name
+# not yet bound is bound locally. A binding value that fails to evaluate
+# propagates the fail status.
+to exec-assign of stmt, state, globals:
+  r = eval-node of stmt.expr, state.env, globals
+  if not (r.status == "normal"):
+    give r
+  if stmt.is-let:
+    give normal-of of r.value, ([{ name: stmt.name, value: r.value }] + r.env)
+  give normal-of of r.value, (set-in-env of r.env, stmt.name, r.value)
+
+# Rebind the first binding of `name` in place, or prepend one if `name` is new
+# (interp.py's env.set over a single flat scope). One `for each` pass, no growth
+# on a rebind.
+to set-in-env of env, name, value:
+  found = false
+  result = []
+  for each binding in env:
+    if (not found) and (binding.name == name):
+      result = result plus { name: name, value: value }
+      found = true
+    else:
+      result = result plus binding
+  if found:
+    give result
+  give [{ name: name, value: value }] + env
+
+# `show x` (Phase 4, the one effect in scope, A.5). interp.py renders the value
+# with fmt -- a plain display form, the same one `text of` produces -- and hands
+# the text to the host. interp.planes reproduces that by delegating through its
+# own `show`: the text form is `builtin-text of the value` (fmt exactly), and
+# executing `show` here runs the host's show on the outermost interpreter. No
+# effect is invented; the path is the host's. show returns the shown value.
+to exec-show of stmt, state, globals:
+  r = eval-node of stmt.expr, state.env, globals
+  if not (r.status == "normal"):
+    give r
+  txt = (builtin-text of r.value) or fail as e:
+    give fail-of of e, r.env
+  show (txt.value)
+  give normal-of of r.value, r.env
+
+# `fail "message" as tag` (Phase 6, Rule 3). The tag is static (from the parser);
+# the message is evaluated and must be text (interp.py's fail-message-not-text),
+# then becomes a fail status carrying { tag, detail: message } that propagates
+# outward until an `or fail` catches it or the program ends.
+to exec-fail of stmt, state, globals:
+  m = eval-node of stmt.message, state.env, globals
+  if not (m.status == "normal"):
+    give m
+  if not (m.value.kind == "text"):
+    give fail-of of (error-of of "fail-message-not-text", ("fail's message must be text, found " + (canonical-of-value of m.value))), m.env
+  give fail-of of (error-of of stmt.tag, m.value.value), m.env
+
+# ================================================================ whole-program execution (Phase 2 driver; Phase 8 finishes)
+#
+# Parse a program, hoist its function values into the globals, and run the
+# top-level statements as one block threading a status record from a normal
+# start. Returns the final status record: its env carries every top-level
+# binding, its status is normal (or give/fail if the program ended that way).
+# Phase 4 adds show output; Phase 8 drives the corpus through it.
+
+to execute-program of src:
+  nodes = program-nodes-of of src
+  globals = functions-env-of of src
+  start = { status: "normal", value: nothing, env: globals, error: nothing }
+  give run-top-level of nodes, start
+
+# The top level threads its status like any block, but the globals a called
+# function sees is the current top-level environment, not just the function
+# values: interp.py captures each function's env as the live global scope, so a
+# top-level `let` bound before a call is visible inside the callee. Refreshing
+# globals to the threaded env each statement reproduces that, while a caller's
+# own locals (params, body lets) are never in the top-level env and so stay
+# invisible to a callee -- the lexical-scoping guarantee (A.1) still holds.
+to run-top-level of nodes, state:
+  threaded = state
+  for each stmt in nodes:
+    threaded = exec-stmt of stmt, threaded, threaded.env
+  give threaded
 
 # ================================================================ building a function environment (A.4 pipeline support)
 #
