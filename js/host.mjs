@@ -96,6 +96,13 @@ function ensureAscii(s) {
   return out;
 }
 
+// json.dumps(value, indent=2) with ensure_ascii — the serialisation the write
+// effect and PythonHost.to_json both use. Exported so interp.mjs's to_json
+// produces byte-identical output to interp.py's.
+export function pyJsonDumps(value) {
+  return ensureAscii(JSON.stringify(value, null, 2));
+}
+
 // Python's sorted/max/min over a homogeneous list. The corpus's foreign.planes
 // calls builtins.sorted / max / min; these reproduce their default ordering
 // (numeric for numbers, code-point-lexicographic for strings) so a resolved
@@ -140,6 +147,9 @@ const NODE_TARGETS = {
   "builtins.sorted": (arr) => pySorted(arr),
   "builtins.max": (arr) => (Array.isArray(arr) ? pyMax(arr) : arr),
   "builtins.min": (arr) => (Array.isArray(arr) ? pyMin(arr) : arr),
+  // Python str(): a string passes through; a whole number prints without a
+  // trailing .0 (the marshalled foreign form is already an integer where whole).
+  "builtins.str": (x) => (typeof x === "string" ? x : String(x)),
   "time.time": () => Date.now() / 1000,
   "random.random": () => Math.random(),
   "os.getcwd": () => process.cwd(),
@@ -215,7 +225,7 @@ export class NodeHost extends Host {
   }
 
   toJson(value) {
-    return ensureAscii(JSON.stringify(value, null, 2));
+    return pyJsonDumps(value);
   }
 }
 

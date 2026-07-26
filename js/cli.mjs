@@ -16,6 +16,8 @@ import { loadGrammar } from "./loader_node.mjs";
 import { tokenize, PlanesSyntaxError } from "./lexer.mjs";
 import { parse, PlanesAmbiguity } from "./parser.mjs";
 import { canonicalProgram } from "./canonical.mjs";
+import { Interpreter, PlanesError } from "./interp.mjs";
+import { TestHost } from "./host.mjs";
 import { PlanesNumber, Fraction, Inexact } from "./planes_num.mjs";
 import {
   resolveStringEscapes,
@@ -234,6 +236,77 @@ switch (sub) {
         out(JSON.stringify({ error: "PlanesSyntaxError", message: e.message }));
       } else throw e;
     }
+    break;
+  }
+  case "run": {
+    // run <file> [hostconfig-json]. Runs a whole program and reports the show
+    // output, the terminal error tag, the effect log, and (with a TestHost) the
+    // files written — the shape run_corpus_through_planes.py compares, plus
+    // effects/files for effect agreement. A parse failure reports tag "PARSE".
+    loadGrammar();
+    const src = fs.readFileSync(rest[0], "utf-8");
+    // A TestHost captures show (into itp.output) instead of printing, so the
+    // program's output cannot pollute this command's JSON on stdout. Effect
+    // tests pass responses/files; a bare run gets an empty one.
+    const cfg =
+      rest[1] !== undefined && rest[1] !== "" ? JSON.parse(rest[1]) : {};
+    const host = new TestHost({
+      responses: cfg.responses ?? {},
+      files: cfg.files ?? {},
+      now: cfg.now ?? 1000000.0,
+    });
+    const itp = new Interpreter({ host });
+    let tag = null;
+    try {
+      itp.run(src);
+    } catch (e) {
+      if (e instanceof PlanesError) tag = e.tag;
+      else if (e instanceof PlanesSyntaxError) tag = "PARSE";
+      else if (e instanceof RangeError) tag = "recursion-too-deep";
+      else throw e;
+    }
+    out(
+      JSON.stringify({
+        output: itp.output,
+        tag,
+        effects: itp.effects,
+        files: itp.host.files ?? {},
+      }),
+    );
+    break;
+  }
+  case "run-file": {
+    // run-file <file> [hostconfig-json]. Like run, but resolves the module
+    // graph (use X -> sibling X.planes) via run_file.mjs, the port of
+    // interp.py's run_file. Node-only.
+    loadGrammar();
+    const cfg =
+      rest[1] !== undefined && rest[1] !== "" ? JSON.parse(rest[1]) : {};
+    const host = new TestHost({
+      responses: cfg.responses ?? {},
+      files: cfg.files ?? {},
+      now: cfg.now ?? 1000000.0,
+    });
+    const itp = new Interpreter({ host });
+    const { runFile } = await import("./run_file.mjs");
+    let tag = null;
+    try {
+      runFile(itp, rest[0]);
+    } catch (e) {
+      if (e instanceof PlanesError) tag = e.tag;
+      else if (e instanceof PlanesSyntaxError) tag = "PARSE";
+      else if (e instanceof RangeError) tag = "recursion-too-deep";
+      else if (e && e.name === "ModuleError") tag = "module-error";
+      else throw e;
+    }
+    out(
+      JSON.stringify({
+        output: itp.output,
+        tag,
+        effects: itp.effects,
+        files: itp.host.files ?? {},
+      }),
+    );
     break;
   }
   default:
