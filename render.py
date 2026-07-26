@@ -70,6 +70,7 @@ from lexer import (
     Why,
     WriteTo,
 )
+from planes_num import Number
 from planes_text import escape_string_literal
 from rules import check
 
@@ -201,6 +202,49 @@ def render_operand(node):
     return f"({text})" if isinstance(node, _COMPOUND) else text
 
 
+def _is_zero_literal(node):
+    """A `Num` node holding zero, whichever way the zero got there.
+
+    `parse_primary` builds a source `0` as `Num(Number.parse("0"))`;
+    `parse_unary` builds the zero it SYNTHESISES for a unary minus as
+    `Num(0)`, a raw Python int. Both mean the same literal, so both answer
+    yes here -- and `ast_equal` below compares numeric leaves by value for
+    the same reason.
+    """
+    return isinstance(node, Num) and _num_eq(node.value, 0)
+
+
+def _num_eq(a, b):
+    """Numeric leaf equality across the raw-int / Number split."""
+    if not (_is_num(a) and _is_num(b)):
+        return False
+    return Number.of(a) == Number.of(b)
+
+
+def _is_num(v):
+    return isinstance(v, (Number, int)) and not isinstance(v, bool)
+
+
+def _is_negation(node):
+    """A `BinOp` the parser SYNTHESISED for a unary minus, `-X`.
+
+    `parse_unary` desugars `-X` to `BinOp("-", Num(0), X)` -- a node no source
+    text writes directly, and so a node the grammar-derived composition matrix
+    could not reach. Rendering it as `0 - X` was arithmetically right and
+    canonically wrong twice over: it lost the source form, and it did not
+    round-trip, because the synthesised zero is a raw int where a parsed `0` is
+    a `Number` and `ast_equal` compared their Python types.
+
+    A subtraction from a literal zero renders as the unary form whether the
+    zero was synthesised or written, because the renderer cannot tell them
+    apart in the JavaScript implementation (whose parser builds a real
+    `PlanesNumber` zero) and the two implementations must render identically.
+    `0 - X` and `-X` are the same program; the canonical form picks the
+    shorter, source-idiomatic one.
+    """
+    return node.op == "-" and _is_zero_literal(node.left)
+
+
 def render_expr(node):
     if isinstance(node, Num):
         return node.value.text() if hasattr(node.value, "text") else str(node.value)
@@ -240,6 +284,9 @@ def render_expr(node):
             # either -- it wraps only _COMPOUND -- so wrap both, matching this
             # module's always-group philosophy.
             return f"first ({render_expr(node.left)}) of ({render_expr(node.right)})"
+        if _is_negation(node):
+            # The parser's synthesised unary minus, rendered back as itself.
+            return f"-{render_operand(node.right)}"
         return f"{render_operand(node.left)} {node.op} {render_operand(node.right)}"
     if isinstance(node, Not):
         return f"not {render_operand(node.expr)}"
@@ -596,7 +643,17 @@ def ast_equal(a, b):
     reparse against the original AST with plain `==` would fail on line
     numbers alone even when every other field matches, which is not the
     guarantee round-trip is supposed to check.
+
+    A numeric leaf is compared by VALUE, not by Python type, and so is tested
+    before the type test below. `Num(0)` — the zero `parse_unary` synthesises
+    for a negation — and `Num(Number.parse("0"))` — a zero the source wrote —
+    are the same literal; calling them different is a false negative about the
+    program, and it is the reason a negative literal did not round-trip
+    (S7, fixed here). The JavaScript `astEqual` has always compared
+    PlanesNumber leaves this way; this brings the two level.
     """
+    if _is_num(a) or _is_num(b):
+        return _num_eq(a, b)
     if type(a) is not type(b):
         return False
     if hasattr(a, "__dataclass_fields__"):

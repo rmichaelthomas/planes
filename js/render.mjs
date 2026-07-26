@@ -119,6 +119,35 @@ function fieldBase(node) {
 
 // ================================================================ expressions
 
+const ZERO = PlanesNumber.of(0);
+
+// A `Num` node holding zero, whichever way the zero got there: parse_primary
+// builds a source `0` with PlanesNumber.parse, parse_unary builds the zero it
+// SYNTHESISES for a unary minus directly. Both mean the same literal.
+function isZeroLiteral(node) {
+  return (
+    isNode(node) &&
+    node.__node === "Num" &&
+    node.value instanceof PlanesNumber &&
+    node.value.eq(ZERO)
+  );
+}
+
+// A BinOp the parser SYNTHESISED for a unary minus, `-X`.
+//
+// parse_unary desugars `-X` to BinOp("-", Num(0), X) — a node no source text
+// writes directly, and so a node the grammar-derived composition matrix could
+// not reach. Rendering it as `0 - X` was arithmetically right and canonically
+// wrong: it lost the source form, and on the Python side it did not round-trip,
+// because that parser's synthesised zero is a raw int where a parsed `0` is a
+// Number. A subtraction from a literal zero renders as the unary form whether
+// the zero was synthesised or written — `0 - X` and `-X` are the same program,
+// and the canonical form picks the shorter, source-idiomatic one. Identical to
+// render.py's `_is_negation`.
+function isNegation(node) {
+  return node.op === "-" && isZeroLiteral(node.left);
+}
+
 function renderOperand(node) {
   const text = renderExpr(node);
   return COMPOUND.has(node.__node) ? `(${text})` : text;
@@ -166,6 +195,10 @@ export function renderExpr(node) {
         // single closed primary — a bare Var count is otherwise swallowed as
         // `k of parts`, a sub-unary list is otherwise split by precedence.
         return `first (${renderExpr(node.left)}) of (${renderExpr(node.right)})`;
+      }
+      if (isNegation(node)) {
+        // The parser's synthesised unary minus, rendered back as itself.
+        return `-${renderOperand(node.right)}`;
       }
       return `${renderOperand(node.left)} ${node.op} ${renderOperand(node.right)}`;
     case "Not":
