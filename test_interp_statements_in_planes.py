@@ -477,3 +477,96 @@ def test_foreach_show_output_agrees():
     src = ("for each n in [1, 2, 3]:\n"
            "  show n\n")
     assert_output_agrees(src)
+
+
+# ============================================================ Phase 6: failure
+
+
+def assert_program_fails_agree(src, expected_tag):
+    state = planes_execute(src)
+    assert state["status"] == "fail", (src, state)
+    assert state["error"]["tag"] == expected_tag, (src, state["error"])
+    itp = Interpreter()
+    try:
+        itp.run(src)
+        raise AssertionError(f"interp.py did not fail on {src!r}")
+    except PlanesError as e:
+        assert e.tag == expected_tag, (src, e.tag, expected_tag)
+
+
+def test_fail_statement_top_level():
+    assert_program_fails_agree('fail "boom" as my-error\n', "my-error")
+
+
+def test_fail_statement_detail_is_the_message():
+    state = planes_execute('fail "something went wrong" as trouble\n')
+    assert state["error"]["tag"] == "trouble"
+    assert state["error"]["detail"] == "something went wrong"
+
+
+def test_fail_message_must_be_text():
+    assert_program_fails_agree("fail 5 as boom\n", "fail-message-not-text")
+
+
+def test_fail_halts_the_block():
+    # Rule 3: after a fail every later statement is pass-through.
+    src = ('x = 1\n'
+           'fail "stop" as halt\n'
+           'x = 999\n')
+    state = planes_execute(src)
+    assert state["status"] == "fail"
+    assert state["error"]["tag"] == "halt"
+    assert env_lookup(state, "x") == "1"
+
+
+def test_or_fail_catches_runtime_error_and_yields_tag():
+    src = ("answer = (1 / 0) or fail as e: e.tag\n")
+    assert_program_var_agrees(src, "answer")
+
+
+def test_or_fail_handler_default_value():
+    src = ("safe = (1 / 0) or fail as e: -1\n"
+           "ok = (2 + 3) or fail as e: -1\n")
+    assert_program_var_agrees(src, "safe")   # -1, the handler ran
+    assert_program_var_agrees(src, "ok")     # 5, the handler did not run
+
+
+def test_or_fail_reads_detail():
+    src = ('msg = (1 / 0) or fail as e: "caught: " + e.detail\n')
+    assert_program_var_agrees(src, "msg")
+
+
+def test_or_fail_no_handler_retags():
+    # `x or fail as tag` with no handler re-tags the failure and propagates.
+    assert_program_fails_agree("y = (1 / 0) or fail as wrapped\n", "wrapped")
+
+
+def test_fail_propagates_across_call_levels_caught_above():
+    # Rule 3, the boundary explicitly: a fail raised several call levels deep,
+    # caught by an or fail above all of them. The status resets to normal and
+    # the { tag, detail } arrives as the value (its .tag read here).
+    src = ("to level3 of x: give x / 0\n"
+           "to level2 of x: give level3 of x\n"
+           "to level1 of x: give level2 of x\n"
+           "answer = (level1 of 5) or fail as e: e.tag\n")
+    assert_program_var_agrees(src, "answer")
+
+
+def test_give_stops_at_boundary_fail_does_not():
+    # Rule 2 vs Rule 3, contrast: a function that gives is caught as a normal
+    # value at the boundary (the give does not escape); a function that fails
+    # sends the fail on past the boundary until or fail catches it.
+    give_src = ("to g: give 7\n"
+                "result = g\n")
+    gstate = planes_execute(give_src)
+    assert gstate["status"] == "normal"
+    assert env_lookup(gstate, "result") == "7"
+
+    fail_src = ("to bad of x: give x / 0\n"
+                "caught = (bad of 1) or fail as e: e.tag\n")
+    assert_program_var_agrees(fail_src, "caught")
+
+
+def test_or_fail_not_triggered_passes_value_through():
+    src = ("v = (10 * 5) or fail as e: 0\n")
+    assert_program_var_agrees(src, "v")

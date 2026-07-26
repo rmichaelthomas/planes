@@ -1045,8 +1045,32 @@ to rebind-outer of outer-env, body-env:
       result = result plus ob
   give result
 
+# `expr or fail as tag: handler` (Phase 6, Rule 3). Evaluate the guarded
+# expression; on success its value stands, and a `give` passes straight through
+# (interp.py catches _Give and re-raises it -- `or fail` never catches a give,
+# Rule 2). On a fail, if there is a handler the error record { tag, detail } is
+# bound under `tag` and the handler block runs, resetting the status to normal
+# and yielding the handler's result; with no handler the fail is re-tagged with
+# `tag` and propagates (interp.py's PlanesError(node.tag, e.detail)). The handler
+# runs in the same env -- no child scope -- so a name it binds rides out.
 to eval-orfail-node of node, env, globals:
-  give fail-of of (error-of of "todo-phase-6", "or fail is Phase 6"), env
+  r = eval-node of node.expr, env, globals
+  if r.status == "give":
+    give r
+  if r.status == "normal":
+    give r
+  if node.handler is nothing:
+    give fail-of of (error-of of node.tag, r.error.detail), r.env
+  err-value = make-error-value of r.error
+  handler-env = [{ name: node.tag, value: err-value }] + env
+  give exec-block of node.handler, (normal-of of nothing, handler-env), globals
+
+# The caught error as a record VALUE the handler can read with .tag and .detail
+# (interp.py binds error_record(error), a plain record). The path field A.4
+# carries on some errors is a derivation concern left to a later build; tag and
+# detail are what a handler reads.
+to make-error-value of err:
+  give make-record of [{ key: "tag", value: (make-text of err.tag) }, { key: "detail", value: (make-text of err.detail) }]
 
 # ================================================================ statement execution (Phase 2, A.3)
 #
@@ -1086,6 +1110,8 @@ to run-stmt of stmt, state, globals:
     give give-of of r.value, r.env
   if k == "Show":
     give exec-show of stmt, state, globals
+  if k == "Fail":
+    give exec-fail of stmt, state, globals
   if k == "Note":
     give state
   if k == "Use":
@@ -1146,6 +1172,18 @@ to exec-show of stmt, state, globals:
     give fail-of of e, r.env
   show (txt.value)
   give normal-of of r.value, r.env
+
+# `fail "message" as tag` (Phase 6, Rule 3). The tag is static (from the parser);
+# the message is evaluated and must be text (interp.py's fail-message-not-text),
+# then becomes a fail status carrying { tag, detail: message } that propagates
+# outward until an `or fail` catches it or the program ends.
+to exec-fail of stmt, state, globals:
+  m = eval-node of stmt.message, state.env, globals
+  if not (m.status == "normal"):
+    give m
+  if not (m.value.kind == "text"):
+    give fail-of of (error-of of "fail-message-not-text", ("fail's message must be text, found " + (canonical-of-value of m.value))), m.env
+  give fail-of of (error-of of stmt.tag, m.value.value), m.env
 
 # ================================================================ whole-program execution (Phase 2 driver; Phase 8 finishes)
 #
