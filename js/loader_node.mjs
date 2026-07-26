@@ -1,0 +1,20 @@
+// js/loader_node.mjs — the Node-only grammar loader.
+//
+// Reads grammar/vocabulary.json (and later rules.json / errors.json) from disk
+// and injects them into grammar_data.mjs. This is the only place in the JS
+// implementation that touches node:fs, so every other module loads unchanged in
+// a browser (Phase 6 sets the same data from an inlined copy instead).
+
+import fs from "node:fs";
+import { setVocabulary } from "./grammar_data.mjs";
+
+function readJson(relPath) {
+  const url = new URL(relPath, import.meta.url);
+  return JSON.parse(fs.readFileSync(url, "utf-8"));
+}
+
+// Load the grammar data from the repo's grammar/ directory, resolved relative
+// to this module so it works from any working directory.
+export function loadGrammar() {
+  setVocabulary(readJson("../grammar/vocabulary.json"));
+}

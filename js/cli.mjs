@@ -10,7 +10,10 @@
 //
 // Later phases add: tokens, ast, run.
 
+import fs from "node:fs";
 import { NodeHost, HostError, Host } from "./host.mjs";
+import { loadGrammar } from "./loader_node.mjs";
+import { tokenize, PlanesSyntaxError } from "./lexer.mjs";
 import { PlanesNumber, Fraction, Inexact } from "./planes_num.mjs";
 import {
   resolveStringEscapes,
@@ -193,6 +196,22 @@ switch (sub) {
   case "text":
     out(JSON.stringify(JSON.parse(rest[0]).map(textOp)));
     break;
+  case "tokens": {
+    // The canonical token form: [kind, value, line] per token, matching
+    // test_lexer_in_planes.py's (t.kind, t.value, t.line). On a syntax error,
+    // emit a tagged marker the Python side compares against its own raise.
+    loadGrammar();
+    const src = fs.readFileSync(rest[0], "utf-8");
+    try {
+      const toks = tokenize(src);
+      out(JSON.stringify(toks.map((t) => [t.kind, t.value, t.line])));
+    } catch (e) {
+      if (e instanceof PlanesSyntaxError) {
+        out(JSON.stringify({ error: "PlanesSyntaxError", message: e.message }));
+      } else throw e;
+    }
+    break;
+  }
   default:
     process.stderr.write(`unknown subcommand: ${sub}\n`);
     process.exit(2);
