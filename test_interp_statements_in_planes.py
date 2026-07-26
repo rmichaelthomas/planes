@@ -392,3 +392,88 @@ def test_non_show_effects_fail_naming_build_3():
         state = planes_execute(src)
         assert state["status"] == "fail", (src, state["status"])
         assert state["error"]["tag"] == "build-3-effect", (src, state["error"])
+
+
+# ============================================================ Phase 5: for each
+
+
+def test_foreach_accumulate_over_list():
+    src = ("total = 0\n"
+           "for each x in [10, 20, 30]:\n"
+           "  total = total + x\n")
+    assert_program_var_agrees(src, "total")
+
+
+def test_foreach_accumulate_over_string_code_points():
+    # A string iterates its code points -- one-code-point strings.
+    src = ('acc = []\n'
+           'for each c in "abc":\n'
+           "  acc = acc plus c\n"
+           "n = count of acc\n")
+    assert_program_var_agrees(src, "acc")
+    assert_program_var_agrees(src, "n")
+
+
+def test_foreach_string_builds_text():
+    src = ('out = ""\n'
+           'for each c in "planes":\n'
+           "  out = out + c\n")
+    assert_program_var_agrees(src, "out")
+
+
+def test_comprehension_with_where():
+    src = ("people = [{ owed: 5 }, { owed: 0 }, { owed: 3 }, { owed: 0 }]\n"
+           "owing = for each p in people where p.owed > 0: p\n"
+           "n = count of owing\n")
+    assert_program_var_agrees(src, "owing")
+    assert_program_var_agrees(src, "n")
+
+
+def test_comprehension_maps_values():
+    src = ("xs = [1, 2, 3, 4]\n"
+           "doubled = for each x in xs: x * 2\n")
+    assert_program_var_agrees(src, "doubled")
+
+
+def test_foreach_where_filters_before_body():
+    src = ("total = 0\n"
+           "for each x in [1, 2, 3, 4, 5, 6] where x > 3:\n"
+           "  total = total + x\n")
+    assert_program_var_agrees(src, "total")
+
+
+def test_foreach_loop_var_does_not_leak():
+    # The loop variable and body-local lets are per-iteration; neither persists.
+    src = ("marker = 1\n"
+           "for each x in [7, 8, 9]:\n"
+           "  y = x\n")
+    state = planes_execute(src)
+    assert env_lookup(state, "x") is None
+    assert env_lookup(state, "y") is None
+    assert env_lookup(state, "marker") == "1"
+    # interp.py agrees: x is not defined afterward.
+    itp = Interpreter()
+    itp.run(src)
+    assert not itp.env.has("x")
+
+
+def test_foreach_over_non_collection_fails():
+    src = ("for each x in 5:\n"
+           "  y = x\n")
+    state = planes_execute(src)
+    assert state["status"] == "fail"
+    assert state["error"]["tag"] == "not-a-collection"
+
+
+def test_foreach_nested_builds_pairs():
+    src = ("pairs = []\n"
+           "for each a in [1, 2]:\n"
+           "  for each b in [10, 20]:\n"
+           "    pairs = pairs plus (a + b)\n")
+    assert_program_var_agrees(src, "pairs")
+
+
+def test_foreach_show_output_agrees():
+    src = ("for each n in [1, 2, 3]:\n"
+           "  show n\n")
+    assert_output_agrees(src)

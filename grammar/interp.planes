@@ -956,8 +956,94 @@ to match-pattern of entries, subject, env, globals, bindings:
     give match-pattern of (rest of entries), subject, want.env, globals, bindings
   give match-pattern of (rest of entries), subject, env, globals, (bindings plus { name: entry.field, value: found.value })
 
+# `for each v in source where cond: body` (Phase 5), both the statement form and
+# the comprehension (is-expr). interp.py runs each item in a fresh child scope
+# binding the loop variable, so the variable does not leak and a `let` inside the
+# body is per-iteration, while a reassignment of an OUTER variable walks to the
+# parent and persists (the accumulator idiom). Both hold here: each item runs
+# against [{ var, item }] over the current outer env, and after the item the
+# outer env is reconstructed with the body's reassignments applied and the
+# per-iteration additions dropped. A string iterates its code points (one-code-
+# point strings, the language's rule). Like interp.py, the result is always the
+# list of per-item body values -- the comprehension's list, discarded when the
+# form is used as a statement, while the env mutations ride out.
+#
+# The loop is one native `for each` pass, not per-item recursion, so a loop over
+# a long collection does not consume the recursion ceiling -- only the body's own
+# calls do.
 to eval-foreach-node of node, env, globals:
-  give fail-of of (error-of of "todo-phase-5", "for each as an expression is Phase 5"), env
+  src = eval-node of node.source, env, globals
+  if not (src.status == "normal"):
+    give src
+  if src.value.kind == "list":
+    give run-foreach of node, src.value.items, src.env, globals
+  if src.value.kind == "text":
+    chars = []
+    for each c in src.value.value:
+      chars = chars plus (make-text of c)
+    give run-foreach of node, chars, src.env, globals
+  give fail-of of (error-of of "not-a-collection", ("cannot loop over " + (canonical-of-value of src.value))), src.env
+
+to run-foreach of node, items, start-env, globals:
+  outer = start-env
+  results = []
+  broke = false
+  carry = normal-of of nothing, start-env
+  for each item in items:
+    if not broke:
+      st = foreach-item-step of node, item, outer, globals
+      if st.broke:
+        broke = true
+        carry = st.status
+      else:
+        outer = st.env
+        if st.kept:
+          results = results plus st.value
+  if broke:
+    give carry
+  give normal-of of (make-list of results), outer
+
+# One item: bind the loop variable over the outer env, test the `where` clause
+# (a non-yes/no result fails at the leaf), and run the body (an expression for a
+# comprehension, a block for the statement form). Returns whether the loop broke
+# (a give or fail short-circuits the rest), whether the item was kept (survived
+# `where`), its value, and the next outer env with the body's outer-variable
+# reassignments applied.
+to foreach-item-step of node, item, outer, globals:
+  iter-env = [{ name: node.var, value: item }] + outer
+  keep = true
+  if not (node.where is nothing):
+    wr = eval-node of node.where, iter-env, globals
+    if not (wr.status == "normal"):
+      give { broke: true, status: wr, kept: false, value: nothing, env: outer }
+    kc = (as-condition of wr.value) or fail as e:
+      give { broke: true, status: (fail-of of e, iter-env), kept: false, value: nothing, env: outer }
+    keep = kc
+  if not keep:
+    give { broke: false, status: (normal-of of nothing, outer), kept: false, value: nothing, env: outer }
+  bs = foreach-body of node, iter-env, globals
+  if not (bs.status == "normal"):
+    give { broke: true, status: bs, kept: false, value: nothing, env: outer }
+  give { broke: false, status: bs, kept: true, value: bs.value, env: (rebind-outer of outer, bs.env) }
+
+to foreach-body of node, iter-env, globals:
+  if node.is-expr:
+    give eval-node of (first-item of node.body), iter-env, globals
+  give exec-block of node.body, (normal-of of nothing, iter-env), globals
+
+# Reconstruct the outer environment after an iteration: each outer name takes
+# its current value from the body's environment (so a reassignment persists),
+# and the per-iteration additions -- the loop variable and any body-local lets --
+# are dropped, keeping the outer env the same size across the loop.
+to rebind-outer of outer-env, body-env:
+  result = []
+  for each ob in outer-env:
+    looked = env-find of body-env, ob.name
+    if looked.found:
+      result = result plus { name: ob.name, value: looked.value }
+    else:
+      result = result plus ob
+  give result
 
 to eval-orfail-node of node, env, globals:
   give fail-of of (error-of of "todo-phase-6", "or fail is Phase 6"), env
