@@ -69,7 +69,7 @@ export async function load_graph(loader, location, seen = null, stack = null) {
   const src = await loader.read(location);
   stack.push({ location, key });
   const ordered = [];
-  for (const mod of uses_in(src)) {
+  for (const mod of cachedUsesIn(src)) {
     const target = resolve(loader, mod, location);
     if (target !== null) ordered.push(...(await load_graph(loader, target, seen, stack)));
   }
@@ -77,6 +77,19 @@ export async function load_graph(loader, location, seen = null, stack = null) {
   seen.set(key, true);
   ordered.push([location, src]);
   return ordered;
+}
+
+// load_graph's own recursive lookup of a file's `use` names — same
+// text-keyed caching as renames_in/scan_names above, and the same reasoning:
+// pure in src alone, so a cache hit is never stale.
+const usesInCache = new Map();
+function cachedUsesIn(src) {
+  let r = usesInCache.get(src);
+  if (r === undefined) {
+    r = uses_in(src);
+    usesInCache.set(src, r);
+  }
+  return r;
 }
 
 // Module names this source uses, read from tokens (not a full parse — a file may
@@ -129,13 +142,40 @@ export function renames_in(src) {
   return out;
 }
 
+// renames_in/scan_names are pure functions of a file's own source text —
+// nothing about them depends on which graph or which run asked. Caching them
+// by source text is always correct (a text change is a different cache key,
+// not a stale hit) and matters for a ticking program: without it, an
+// unchanging library file gets re-tokenized twice per file on every single
+// frame, forever, for text that never changes within a run.
+const renamesInCache = new Map();
+const scanNamesCache = new Map();
+
+function cachedRenamesIn(src) {
+  let r = renamesInCache.get(src);
+  if (r === undefined) {
+    r = renames_in(src);
+    renamesInCache.set(src, r);
+  }
+  return r;
+}
+
+function cachedScanNames(src) {
+  let r = scanNamesCache.get(src);
+  if (r === undefined) {
+    r = scan_names(src);
+    scanNamesCache.set(src, r);
+  }
+  return r;
+}
+
 // The name each file contributes, after the importer's renames. Returns
 // [location, original, effective] triples. `loader` supplies `label` for
 // deriving a location's own module name (its basename minus ".planes").
 export function effective_names(graph, loader) {
   const applied = {};
   for (const [, src] of graph) {
-    for (const [mod, pairs] of Object.entries(renames_in(src))) {
+    for (const [mod, pairs] of Object.entries(cachedRenamesIn(src))) {
       applied[mod] = { ...(applied[mod] ?? {}), ...pairs };
     }
   }
@@ -143,7 +183,7 @@ export function effective_names(graph, loader) {
   for (const [location, src] of graph) {
     const mod = loader.label(location).replace(/\.planes$/, "");
     const pairs = applied[mod] ?? {};
-    for (const name of scan_names(src).keys()) {
+    for (const name of cachedScanNames(src).keys()) {
       out.push([location, name, name in pairs ? pairs[name] : name]);
     }
   }
@@ -201,6 +241,24 @@ export function check_collisions(graph, loader) {
   );
 }
 
+// parse(src, known)'s result depends on `known` too, so it can't be cached by
+// source text alone the way renames_in/scan_names can — but for a fixed
+// program, `known` (every name in the graph) is the same set on every tick,
+// so a loader that opts in (an `astCache` Map — module_loader_browser.mjs's
+// per-run cache, not module_loader_node.mjs's one-shot CLI use) gets the same
+// win without ever risking a stale parse: a change to `src` or to which names
+// are in scope is a different cache key, not a hit.
+function parseCached(src, known, loader) {
+  if (!loader.astCache) return parse(src, known);
+  const key = src + " " + [...known].sort().join(",");
+  let prog = loader.astCache.get(key);
+  if (prog === undefined) {
+    prog = parse(src, known);
+    loader.astCache.set(key, prog);
+  }
+  return prog;
+}
+
 // Parse and hoist a resolved graph against `interp`, then execute the entry
 // location's own top-level statements. The synchronous half of running a
 // module graph — every location's source is already in hand by the time this
@@ -208,11 +266,24 @@ export function check_collisions(graph, loader) {
 // browser (browser_main.mjs) entry points, which differ only in how they
 // resolved `graph` and `targetKey` in the first place.
 export function hoistAndRun(interp, graph, targetKey, loader) {
-  const known = names_in_graph(graph, loader);
-  const renames = rename_map(graph, loader);
+  // `known` and `renames` both derive from effective_names, and computing it
+  // twice (once per derivation) means re-tokenizing every file in the graph
+  // twice, on every call — the difference between a one-off run and a
+  // per-frame one. One pass instead.
+  const entries = effective_names(graph, loader);
+  const known = new Set();
+  const renames = new Map();
+  for (const [location, original, effective] of entries) {
+    known.add(original);
+    known.add(effective);
+    if (original !== effective) {
+      if (!renames.has(location)) renames.set(location, {});
+      renames.get(location)[original] = effective;
+    }
+  }
   let entry = [];
   for (const [location, src] of graph) {
-    const prog = parse(src, known);
+    const prog = parseCached(src, known, loader);
     interp.hoist(prog, interp.env, renames.get(location) ?? {});
     if (loader.key(location) === targetKey) {
       entry = prog;

@@ -21,6 +21,10 @@ export class BrowserModuleLoader {
     // the same not-yet-cached module (two `use` sites this frame) share one
     // fetch instead of racing two.
     this._loaded = []; // {name, location} in first-fetched order, for display.
+    // modules.mjs's hoistAndRun opts into parse caching when this is present
+    // — a ticking program re-runs the same graph every frame, and a library
+    // file's text (and therefore its parse) never changes within one run.
+    this.astCache = new Map();
   }
 
   locate(name, fromLocation) {

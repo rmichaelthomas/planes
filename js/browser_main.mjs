@@ -67,7 +67,8 @@ const ENTRY = "__entry__";
 // one per Run/Play press, not per frame, so a ticking program issues exactly
 // one fetch per module for the life of that run.
 export async function runProgramGraph(src, { base, files = {}, responses = {}, loader = null } = {}) {
-  const fileBacked = uses_in(src).filter((name) => !BUILTIN_MODULES.has(name));
+  const used = uses_in(src);
+  const fileBacked = used.filter((name) => !BUILTIN_MODULES.has(name));
   if (fileBacked.length === 0) {
     return runProgram(src, { files, responses });
   }
@@ -78,7 +79,7 @@ export async function runProgramGraph(src, { base, files = {}, responses = {}, l
   try {
     const seen = new Map();
     const deps = [];
-    for (const mod of uses_in(src)) {
+    for (const mod of used) {
       const target = resolve(ldr, mod, null);
       if (target !== null) deps.push(...(await load_graph(ldr, target, seen, [])));
     }
@@ -122,7 +123,8 @@ export function analyseProgram(src) {
 // derive — accurate but useless to paint.html's surface pane once the three
 // example programs adopt the drawing library in Phase 6.
 export async function analyseProgramGraph(src, { base, loader = null } = {}) {
-  const fileBacked = uses_in(src).filter((name) => !BUILTIN_MODULES.has(name));
+  const used = uses_in(src);
+  const fileBacked = used.filter((name) => !BUILTIN_MODULES.has(name));
   if (fileBacked.length === 0) {
     return analyseProgram(src);
   }
@@ -131,7 +133,7 @@ export async function analyseProgramGraph(src, { base, loader = null } = {}) {
   try {
     const seen = new Map();
     const deps = [];
-    for (const mod of uses_in(src)) {
+    for (const mod of used) {
       const target = resolve(ldr, mod, null);
       if (target !== null) deps.push(...(await load_graph(ldr, target, seen, [])));
     }
