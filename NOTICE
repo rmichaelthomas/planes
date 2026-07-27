@@ -1,0 +1,28 @@
+Planes
+Copyright 2026 R. Michael Thomas
+
+This product includes software developed by R. Michael Thomas.
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+
+--------------------------------------------------------------------------
+THIRD-PARTY MATERIAL
+--------------------------------------------------------------------------
+
+Red Hat Display
+---------------
+identity/render_logo.py embeds the glyph outlines of the word "Planes", set
+in Red Hat Display at weight 700, as SVG path data (`WORDMARK_PATH`). The
+outlines were extracted once from the variable font and are used to render the
+wordmark in the identity assets under identity/; no font file is redistributed
+here.
+
+    Copyright 2019 Red Hat, Inc.
+    Licensed under the SIL Open Font License, Version 1.1
+
+    https://github.com/google/fonts/tree/main/ofl/redhatdisplay
+    https://scripts.sil.org/OFL
+
+The OFL permits embedding. Reserved Font Name restrictions apply to the font
+software itself, which this repository does not distribute or modify.
