@@ -31,6 +31,32 @@ should be given up.
 Rounding is available, but only where the program asks for it: `round total
 to 2 places` is an operation with a name, and it shows up in the derivation
 like any other.
+
+Exact, and approximate
+----------------------
+A number also carries whether it is exact. It is APPROXIMATE when the true
+result of the operation that produced it cannot be represented as a rational,
+and EXACT otherwise. Nothing in the language produced an approximate value
+until `sine` arrived; the property is carried by every number regardless, so
+that when one does appear it cannot cross a boundary unmarked.
+
+`approx` is that property AND its provenance in one field: `None` when the
+value is exact, and otherwise an immutable record naming where approximation
+entered and with what parameters. One field rather than a flag beside a
+record, because a flag that says "approximate" with no provenance beside it is
+a state the type should not be able to hold.
+
+Two rules that look like exceptions and are not:
+
+  * `round total to 2 places` on one third gives EXACTLY 0.33. Not one third —
+    but the exact result of the operation that was asked for. A deliberate,
+    named reduction in precision is not approximation, and if it were, every
+    invoice in the corpus would come out flagged and the exact-money claim
+    would be destroyed by the feature meant to make precision visible.
+  * `==` between two approximate values compares the underlying rationals and
+    answers plainly. No epsilon, no tolerance. A tolerance nobody chose is
+    exactly the silent behaviour this design refuses; `why` shows both sides'
+    entry points instead, which is what makes the plain answer defensible.
 """
 from fractions import Fraction
 
@@ -44,13 +70,46 @@ MAX_DENOMINATOR = 2 ** 4000
 ROUND_AFTER = MAX_DENOMINATOR
 
 
+class Approximation:
+    """Where a value stopped being exact, and with what parameters.
+
+    Immutable and shared: an approximate value's arithmetic results carry the
+    same record by reference, so a chain of a thousand operations off one
+    `sine` allocates one of these, not a thousand.
+    """
+
+    __slots__ = ("op", "detail")
+
+    def __init__(self, op, detail=""):
+        self.op = op
+        self.detail = detail
+
+    def __eq__(self, o):
+        return isinstance(o, Approximation) and (self.op, self.detail) == (o.op, o.detail)
+
+    def __hash__(self):
+        return hash((self.op, self.detail))
+
+    def __repr__(self):
+        return f"Approximation({self.op!r}, {self.detail!r})"
+
+
 class Number:
-    """An exact number. Wraps Fraction, renders like a person would write it."""
+    """A number, exact unless it says otherwise.
 
-    __slots__ = ("q",)
+    Wraps Fraction, renders like a person would write it, and carries `approx`
+    — `None` when exact, an Approximation when not.
+    """
 
-    def __init__(self, q):
+    __slots__ = ("q", "approx")
+
+    def __init__(self, q, approx=None):
         self.q = q if isinstance(q, Fraction) else Fraction(q)
+        self.approx = approx
+
+    @property
+    def is_exact(self):
+        return self.approx is None
 
     # ---- construction
 
@@ -58,6 +117,11 @@ class Number:
     def parse(cls, text):
         """From source. `0.1` is exactly one tenth, not the nearest float."""
         return cls(Fraction(text))
+
+    def with_approx(self, approx):
+        """The same rational, carrying this approximation. The one place a
+        value becomes approximate; `sine` is currently its only caller."""
+        return Number(self.q, approx)
 
     @classmethod
     def of(cls, v):
@@ -95,23 +159,31 @@ class Number:
             raise Inexact(op, self, r)
         return r
 
+    # exact + exact is exact; anything touching an approximate value is
+    # approximate, and inherits the FIRST entry point on the left-to-right
+    # reading of the expression. `why` on a comparison still shows both sides,
+    # because the derivation tree keeps both input branches and each branch's
+    # own number carries its own entry.
     def __add__(self, o):
-        return self._check(Number(self.q + Number.of(o).q), "+")
+        o = Number.of(o)
+        return self._check(Number(self.q + o.q, self.approx or o.approx), "+")
 
     def __sub__(self, o):
-        return self._check(Number(self.q - Number.of(o).q), "-")
+        o = Number.of(o)
+        return self._check(Number(self.q - o.q, self.approx or o.approx), "-")
 
     def __mul__(self, o):
-        return self._check(Number(self.q * Number.of(o).q), "*")
+        o = Number.of(o)
+        return self._check(Number(self.q * o.q, self.approx or o.approx), "*")
 
     def __truediv__(self, o):
         d = Number.of(o)
         if d.q == 0:
             raise ZeroDivisionError("divided by zero")
-        return self._check(Number(self.q / d.q), "/")
+        return self._check(Number(self.q / d.q, self.approx or d.approx), "/")
 
     def __neg__(self):
-        return Number(-self.q)
+        return Number(-self.q, self.approx)
 
     # ---- comparison
 
@@ -143,7 +215,13 @@ class Number:
     # ---- rounding, only when asked
 
     def round_to(self, places):
-        """Round to a number of decimal places. Named, visible, deliberate."""
+        """Round to a number of decimal places. Named, visible, deliberate.
+
+        The result carries whatever the input carried. Rounding an exact value
+        gives an exact one — `round (1/3) to 2 places` is exactly 0.33, the
+        exact result of the operation asked for — and rounding an approximate
+        one does not launder it back to exact.
+        """
         p = int(places)
         if p < 0:
             raise ValueError("places cannot be negative")
@@ -156,7 +234,7 @@ class Number:
         else:
             sign = -1 if n < 0 else 1
             rounded = sign * ((abs(n) * 2 + d) // (d * 2))
-        return Number(Fraction(rounded) / scale)
+        return Number(Fraction(rounded) / scale, self.approx)
 
     # ---- rendering
 

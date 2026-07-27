@@ -197,7 +197,7 @@ def _txt(s):
 
 
 def _num(n):
-    return {"kind": "number", "value": n, "deriv": None}
+    return {"kind": "number", "value": n, "approx": None, "deriv": None}
 
 
 def _lst(items):

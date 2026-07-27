@@ -43,7 +43,32 @@ use http
 # attached by the caller, at the sites interp.py builds a Deriv.
 
 to make-number of n:
-  give { kind: "number", value: n, deriv: nothing }
+  give make-number-carrying of n, nothing
+
+# EXACT, AND APPROXIMATE. A number value carries where it stopped being exact:
+# `approx` is `nothing` when the value is exact, and otherwise a record naming
+# the operation that introduced approximation and its parameters.
+#
+# This interpreter has no numeric tower of its own — `value` holds the HOST's
+# number and `a.value + b.value` is the host's own exact arithmetic — so it
+# would have been possible to let the host's property show through instead.
+# It is modelled here as a record field on purpose: a record field is how a
+# Planes program carries anything, this interpreter's values are records, and
+# an interpreter that could only report a property its host happened to track
+# would not be an implementation of the property at all. The self-hosted
+# `sine` (below) computes its series from exact parts and marks the result
+# itself, which is the case that decides it.
+to make-number-carrying of n, entry:
+  give { kind: "number", value: n, approx: entry, deriv: nothing }
+
+# exact + exact is exact; anything touching an approximate value is
+# approximate, and inherits the FIRST entry point on the left-to-right reading
+# of the expression. `why` still shows both sides of a comparison, because the
+# derivation tree keeps both branches and each carries its own entry.
+to first-approx of a, b:
+  if not (a.approx is nothing):
+    give a.approx
+  give b.approx
 
 to make-text of s:
   give { kind: "text", value: s, deriv: nothing }
@@ -677,11 +702,11 @@ to apply-op of op, a, b:
   if op == "+":
     give apply-plus of a, b
   if op == "-":
-    give make-number of ((num-of of a, op) - (num-of of b, op))
+    give make-number-carrying of ((num-of of a, op) - (num-of of b, op)), (first-approx of a, b)
   if op == "*":
-    give make-number of ((num-of of a, op) * (num-of of b, op))
+    give make-number-carrying of ((num-of of a, op) * (num-of of b, op)), (first-approx of a, b)
   if op == "/":
-    give make-number of ((num-of of a, op) / (num-of of b, op))
+    give make-number-carrying of ((num-of of a, op) / (num-of of b, op)), (first-approx of a, b)
   if op == "<":
     give make-boolean of (compare-values of op, a, b)
   if op == ">":
@@ -702,7 +727,7 @@ to apply-op of op, a, b:
 # kind depends on them (text, list, or number). Everything else is one arm.
 to apply-plus of a, b:
   if a.kind == "number" and b.kind == "number":
-    give make-number of (a.value + b.value)
+    give make-number-carrying of (a.value + b.value), (first-approx of a, b)
   if a.kind == "text" and b.kind == "text":
     give make-text of (a.value + b.value)
   if a.kind == "list" and b.kind == "list":

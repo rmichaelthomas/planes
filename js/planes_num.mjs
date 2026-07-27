@@ -13,6 +13,20 @@
 // Fraction of two BigInts, always in lowest terms with a positive denominator,
 // mirroring Python's fractions.Fraction. Every method is checked against
 // planes_num.py in test_js_num.py.
+//
+// EXACT, AND APPROXIMATE. A number also carries whether it is exact: it is
+// APPROXIMATE when the true result of the operation that produced it cannot be
+// represented as a rational, and EXACT otherwise. `approx` is that property
+// AND its provenance in one field — null when exact, an Approximation when not
+// — because a flag saying "approximate" with no provenance beside it is a
+// state the type should not be able to hold. Mirrors planes_num.py exactly.
+//
+// Two rules that look like exceptions and are not: `roundTo` on one third
+// gives EXACTLY 0.33 (a deliberate, named reduction in precision is not
+// approximation — if it were, every invoice in the corpus would come out
+// flagged), and `eq` between two approximate values compares the underlying
+// rationals with no epsilon and no tolerance (a tolerance nobody chose is the
+// silent behaviour this design refuses).
 
 // Roughly 4,000 bits — planes_num.py's MAX_DENOMINATOR = 2 ** 4000, unchanged.
 export const MAX_DENOMINATOR = 2n ** 4000n;
@@ -160,12 +174,39 @@ function exactDecimal(q) {
   return (neg ? "-" : "") + out;
 }
 
-// An exact number. Wraps a Fraction, renders like a person would write it.
-// The JS analogue of planes_num.Number (renamed to avoid colliding with JS's
-// global Number).
+// Where a value stopped being exact, and with what parameters. Immutable and
+// shared: an approximate value's arithmetic results carry the same record by
+// reference, so a chain of a thousand operations off one `sine` allocates one
+// of these, not a thousand. The JS analogue of planes_num.Approximation.
+export class Approximation {
+  constructor(op, detail = "") {
+    this.op = op;
+    this.detail = detail;
+    Object.freeze(this);
+  }
+  eq(o) {
+    return o instanceof Approximation && this.op === o.op && this.detail === o.detail;
+  }
+}
+
+// A number, exact unless it says otherwise. Wraps a Fraction, renders like a
+// person would write it, and carries `approx` — null when exact, an
+// Approximation when not. The JS analogue of planes_num.Number (renamed to
+// avoid colliding with JS's global Number).
 export class PlanesNumber {
-  constructor(q) {
+  constructor(q, approx = null) {
     this.q = q instanceof Fraction ? q : new Fraction(BigInt(q));
+    this.approx = approx;
+  }
+
+  get isExact() {
+    return this.approx === null;
+  }
+
+  // The same rational, carrying this approximation. The one place a value
+  // becomes approximate; `sine` is currently its only caller.
+  withApprox(approx) {
+    return new PlanesNumber(this.q, approx);
   }
 
   // ---- construction
@@ -210,22 +251,30 @@ export class PlanesNumber {
     if (r.q.d > MAX_DENOMINATOR) throw new Inexact(op);
     return r;
   }
+  // exact + exact is exact; anything touching an approximate value is
+  // approximate, and inherits the FIRST entry point on the left-to-right
+  // reading of the expression. `why` on a comparison still shows both sides,
+  // because the derivation tree keeps both input branches and each branch's
+  // own number carries its own entry.
   add(o) {
-    return this._check(new PlanesNumber(this.q.add(PlanesNumber.of(o).q)), "+");
+    const r = PlanesNumber.of(o);
+    return this._check(new PlanesNumber(this.q.add(r.q), this.approx ?? r.approx), "+");
   }
   sub(o) {
-    return this._check(new PlanesNumber(this.q.sub(PlanesNumber.of(o).q)), "-");
+    const r = PlanesNumber.of(o);
+    return this._check(new PlanesNumber(this.q.sub(r.q), this.approx ?? r.approx), "-");
   }
   mul(o) {
-    return this._check(new PlanesNumber(this.q.mul(PlanesNumber.of(o).q)), "*");
+    const r = PlanesNumber.of(o);
+    return this._check(new PlanesNumber(this.q.mul(r.q), this.approx ?? r.approx), "*");
   }
   div(o) {
     const d = PlanesNumber.of(o);
     if (d.q.n === 0n) throw new RangeError("divided by zero");
-    return this._check(new PlanesNumber(this.q.div(d.q)), "/");
+    return this._check(new PlanesNumber(this.q.div(d.q), this.approx ?? d.approx), "/");
   }
   neg() {
-    return new PlanesNumber(this.q.neg());
+    return new PlanesNumber(this.q.neg(), this.approx);
   }
 
   // ---- comparison
@@ -251,7 +300,10 @@ export class PlanesNumber {
     return this.q.n === 0n;
   }
 
-  // ---- rounding, only when asked; half away from zero, all integer arithmetic
+  // ---- rounding, only when asked; half away from zero, all integer
+  // arithmetic. The result carries whatever the input carried: rounding an
+  // exact value gives an exact one, and rounding an approximate one does not
+  // launder it back to exact.
   roundTo(places) {
     const p = Number(places);
     if (p < 0) throw new RangeError("places cannot be negative");
@@ -266,7 +318,7 @@ export class PlanesNumber {
       const sign = n < 0n ? -1n : 1n;
       rounded = sign * ((biAbs(n) * 2n + d) / (d * 2n));
     }
-    return new PlanesNumber(new Fraction(rounded).div(scale));
+    return new PlanesNumber(new Fraction(rounded).div(scale), this.approx);
   }
 
   // ---- rendering. A terminating expansion prints exactly; a non-terminating
