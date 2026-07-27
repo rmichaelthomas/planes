@@ -1,0 +1,92 @@
+# paint/draw.planes — one helper per verb in planes-drawing-protocol-v1.md,
+# and nothing else (specification §11, checkpoint v21.0 §250). The
+# specification's verb table and this file are the same thing written twice;
+# a test reads the table straight out of js/paint/protocol.mjs and asserts
+# the correspondence verb for verb, no extras, no omissions. `protocol`
+# itself is excluded — it is a stream directive, not a drawing verb, and a
+# program states its version once, directly, as `show "draw protocol 1"`.
+#
+# `label`, not `text`, and `corner`, not `join`: those two words are Planes
+# builtins, and a function definition here would shadow them across any
+# module graph that imports this file (specification §6.5) — `count of x`
+# would keep working, but `text of x` would silently call this file's
+# `label`-adjacent wrapper instead of the builtin, in every file that uses
+# this library.
+
+to stroke of l, c, h, a:
+  show "draw stroke " + text of l + " " + text of c + " " + text of h + " " + text of a
+
+to fill of l, c, h, a:
+  show "draw fill " + text of l + " " + text of c + " " + text of h + " " + text of a
+
+to width of w:
+  show "draw width " + text of w
+
+to cap of style:
+  show "draw cap " + style
+
+to corner of style:
+  show "draw corner " + style
+
+to line of x1, y1, x2, y2:
+  show "draw line " + text of x1 + " " + text of y1 + " " + text of x2 + " " + text of y2
+
+to rect of x, y, w, h:
+  show "draw rect " + text of x + " " + text of y + " " + text of w + " " + text of h
+
+to circle of x, y, r:
+  show "draw circle " + text of x + " " + text of y + " " + text of r
+
+to ellipse of x, y, rx, ry:
+  show "draw ellipse " + text of x + " " + text of y + " " + text of rx + " " + text of ry
+
+to arc of x, y, r, start, finish:
+  show "draw arc " + text of x + " " + text of y + " " + text of r + " " + text of start + " " + text of finish
+
+to triangle of x1, y1, x2, y2, x3, y3:
+  show "draw triangle " + text of x1 + " " + text of y1 + " " + text of x2 + " " + text of y2 + " " + text of x3 + " " + text of y3
+
+to shape:
+  show "draw shape"
+
+to vertex of x, y:
+  show "draw vertex " + text of x + " " + text of y
+
+to curve of cx1, cy1, cx2, cy2, x, y:
+  show "draw curve " + text of cx1 + " " + text of cy1 + " " + text of cx2 + " " + text of cy2 + " " + text of x + " " + text of y
+
+to close:
+  show "draw close"
+
+to end:
+  show "draw end"
+
+to push:
+  show "draw push"
+
+to pop:
+  show "draw pop"
+
+to translate of x, y:
+  show "draw translate " + text of x + " " + text of y
+
+to rotate of degrees:
+  show "draw rotate " + text of degrees
+
+to scale of sx, sy:
+  show "draw scale " + text of sx + " " + text of sy
+
+to label of x, y, message:
+  show "draw label " + text of x + " " + text of y + " " + message
+
+to size of n:
+  show "draw size " + text of n
+
+to align of style:
+  show "draw align " + style
+
+to background of l, c, h:
+  show "draw background " + text of l + " " + text of c + " " + text of h
+
+to clear:
+  show "draw clear"
