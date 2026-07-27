@@ -42,10 +42,12 @@ def test_a_host_is_five_capabilities_a_resolver_and_a_json_reader():
     was on this list and had no caller anywhere in the repo; it is gone, and
     the arithmetic below is now *used*, not merely declared.
 
-    The check is still `hasattr`, because what a host must *provide* is a
+    The check here is `hasattr`, because what a host must *provide* is a
     declaration question. What the reference actually *calls* is a different
-    question, and it is asked by scripts/verify_fast_follow.py, which greps the
-    call sites — the check that would have caught this one.
+    question — and it is the one that would have caught `to_json`. It lived
+    only in `scripts/verify_fast_follow.py`, which nothing ran; C6 retired that
+    script and graduated the check into
+    `test_the_used_host_surface_equals_the_declared_one` below.
     """
     required = {"ask", "read", "write", "show", "clock",
                 "resolve", "parse_json"}
@@ -55,6 +57,73 @@ def test_a_host_is_five_capabilities_a_resolver_and_a_json_reader():
     assert not hasattr(Host, "to_json"), (
         "to_json is back on the host surface; it had no caller when it was "
         "removed, so a new one is a decision to make deliberately")
+
+
+HOST_METHODS = ("ask", "read", "write", "show", "clock", "resolve",
+                "parse_json", "to_json")
+CAMEL = {"parse_json": "parseJson", "to_json": "toJson"}
+
+
+def _call_sites(method):
+    """Every host-OBJECT call of `method` in production code.
+
+    GRADUATED FROM `scripts/verify_fast_follow.py` (C6 / Ruling 3). Not
+    module-level functions of the same name, and not the tests of the method
+    itself — those are what let a dead method look alive, which is exactly how
+    `to_json` survived on the surface with no caller anywhere.
+    """
+    import os
+    import re
+    repo = os.path.dirname(os.path.abspath(__file__))
+    camel = CAMEL.get(method, method)
+    pat = re.compile(
+        rf"(?:self\.host|this\.host|\bhost|\b_host)\.(?:{method}|{camel})\b")
+    hits = []
+    for root, dirs, files in os.walk(repo):
+        dirs[:] = [d for d in dirs
+                   if d not in (".venv", "node_modules", "__pycache__",
+                                ".git", ".ci-logs", "test", ".mypy_cache",
+                                ".ruff_cache", ".pytest_cache")]
+        for f in sorted(files):
+            if not f.endswith((".py", ".mjs", ".planes")):
+                continue
+            if f.startswith("test_") or f.endswith(".test.mjs"):
+                continue
+            rel = os.path.relpath(os.path.join(root, f), repo)
+            with open(os.path.join(root, f), encoding="utf-8",
+                      errors="replace") as fh:
+                for n, line in enumerate(fh, 1):
+                    if line.lstrip().startswith(("#", "//")):
+                        continue
+                    if pat.search(line):
+                        # js/cli.mjs's `host <op>` probes exist to exercise the
+                        # method for its own test; not a use of it.
+                        kind = "probe" if rel == "js/cli.mjs" else "use"
+                        hits.append(f"{rel}:{n} ({kind})")
+    return hits
+
+
+def test_the_used_host_surface_equals_the_declared_one():
+    """A declared method with no caller is dead surface a second host would
+    have to implement for nothing. C4 found `to_json` in exactly that state and
+    removed it; this is the check that found it, run by the gate now rather
+    than by a script nobody executed."""
+    declared = [m for m in HOST_METHODS if hasattr(Host, m)]
+    used = [m for m in declared
+            if any(s.endswith("(use)") for s in _call_sites(m))]
+    assert len(declared) == 7, declared
+    assert set(used) == set(declared), {
+        "declared": sorted(declared), "used": sorted(used),
+        "dead": sorted(set(declared) - set(used))}
+
+
+def test_no_host_json_capability_is_reachable_from_the_self_hosted_stack():
+    """C1's result: `grammar/json.planes` reads and writes JSON in the
+    language, so the self-hosted path needs no host JSON at all. A call
+    appearing in a `.planes` file would silently undo that."""
+    reachable = [s for m in ("parse_json", "to_json")
+                 for s in _call_sites(m) if ".planes:" in s]
+    assert not reachable, reachable
 
 
 def test_the_host_surface_matches_the_effect_vocabulary():

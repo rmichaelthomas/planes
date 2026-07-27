@@ -33,7 +33,29 @@ if [ "${1:-}" = "--fast" ]; then FAST=1; fi
 # --fast IS NOT THE GATE. It is for iterating on a change without waiting for
 # the JavaScript agreement suites. Nothing may be merged on it: it skips the
 # cross-implementation agreement that invariant 2 exists to enforce.
+#
+# ---------------------------------------------------------------------------
+# THE RETIREMENT RULE (C6 / Ruling 3), stated where the next build reads it:
+#
+#   A VERIFICATION SCRIPT GRADUATES INTO A SUITE OR IS DELETED WHEN ITS BUILD
+#   MERGES. There is no third option, and there is no `scripts/verify_*.py`.
+#
+# A build's verification script is not product code and carries no maintenance
+# expectation, so a kept one is a stale assertion waiting to mislead. Seven of
+# them accumulated here and NOTHING ran any of them — not this script, not any
+# suite. By the time C6 counted, two were already broken on main:
+# `verify_annotation.py` asserted a reserved-word ceiling of 30 (it is 32) and
+# `verify_grammar_and_amber.py` crashed outright, and one had asserted the
+# opposite of the shipped `path` convention for a whole build.
+#
+# The remedy is not a fifth mechanism to watch. Every assertion worth failing a
+# build over a year from now belongs in a `test_*.py` this script runs, where
+# C5's silent-suite guard already covers it; everything else has served its
+# purpose and goes. `test_gate.py` asserts that no unrun verification script
+# comes back.
+# ---------------------------------------------------------------------------
 FAST_SKIP=(
+  --skip test_batch_equivalence.py         # 35.0s
   --skip test_js_render.py                 # 32.7s
   --skip test_interp_effects_in_planes.py  # 23.1s
   --skip test_js_shapes.py                 # 20.3s
@@ -46,6 +68,41 @@ FAST_SKIP=(
   --skip test_js_json.py                   #  7.6s
   --skip test_interp_statements_in_planes.py  # 4.8s
 )
+
+# Preflight (C6 / A.4). The gate's last two steps invoke `ruff` and `mypy`
+# bare, and this repo keeps both in ./.venv rather than on the default PATH. A
+# fresh shell therefore died at step nine with `command not found` — after the
+# whole suite, the JS tests and every checker had already run, which is the
+# most expensive possible place to learn that a linter is missing.
+#
+# It FAILS rather than skipping, deliberately. `node` is the one thing this
+# gate lets skip; a green gate that silently type-checked nothing is the same
+# dishonesty about its own coverage that the silent-suite guard exists to
+# prevent. The point is not that a missing linter is fatal — it is that you
+# find out at step one, with a sentence you can act on.
+NEED="ruff"
+FAST_ARG=""
+if [ "$FAST" -eq 1 ]; then
+  FAST_ARG=" --fast"                       # --fast does not run mypy
+else
+  NEED="$NEED mypy"
+fi
+MISSING=""
+for tool in $NEED; do
+  command -v "$tool" >/dev/null 2>&1 || MISSING="$MISSING $tool"
+done
+if [ -n "$MISSING" ]; then
+  echo "ci.sh: not on PATH:${MISSING}" >&2
+  echo "  this repo keeps them in ./.venv, which is not activated in this shell." >&2
+  echo "  run the gate with:" >&2
+  echo "      PATH=\"\$PWD/.venv/bin:\$PATH\" scripts/ci.sh${FAST_ARG}" >&2
+  echo "  or activate it first:  source .venv/bin/activate" >&2
+  if [ ! -d .venv ]; then
+    echo "  (no ./.venv here either — create one: python3 -m venv .venv &&" >&2
+    echo "   .venv/bin/pip install ruff mypy)" >&2
+  fi
+  exit 1
+fi
 
 mkdir -p .ci-logs
 TIMING_FILE="$PWD/.ci-logs/steps.tsv"

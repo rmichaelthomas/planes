@@ -196,11 +196,19 @@ def self_hosted_sites():
     whoever raised it. `fail "..." as tag` writes its own message here and has
     nowhere put a fix, so it is shortfall.
 
-    Each site is `(file, line, source, tag)`. The tag is read from the call —
-    a literal at `error-of of "..."`, the target of `fail ... as <tag>` — and
-    is None where the site names it dynamically (`error-of of stmt.tag`). C5
-    needs it to split the shortfall against the reference catalogue; None is
-    carried rather than guessed, and reported as its own figure.
+    Each site is `(file, line, source, tag, function)`.
+
+    The TAG is read from the call — a literal at `error-of of "..."`, the target
+    of `fail ... as <tag>` — and is None where the site names it dynamically
+    (`error-of of stmt.tag`). C5 needs it to split the shortfall against the
+    reference catalogue; None is carried rather than guessed, and reported as
+    its own figure.
+
+    The FUNCTION is the enclosing `to <name>`, tracked while walking. Every
+    definition in these files is at column 0 — Planes has no nested `to` — so
+    the nearest preceding one at lower indentation is simply the nearest
+    preceding one. C6 needs it for the second matching pass, because half the
+    reference catalogue has no tag to be found by.
     """
     import re
 
@@ -209,14 +217,24 @@ def self_hosted_sites():
         path = os.path.join(REPO, "grammar", name)
         if not os.path.exists(path):
             continue
+        fn = None
         for n, line in enumerate(open(path, encoding="utf-8"), 1):
             if line.lstrip().startswith("#"):
                 continue
+            defn = re.match(r"^to ([\w-]+)", line)
+            if defn:
+                fn = defn.group(1)
             src = line.strip()[:96]
             for m in re.finditer(r"\berror-fix-of of ", line):
-                sites[NAMES_FIX].append((name, n, src, _tag_at(line, m.end())))
+                if _defines(line, m.start()):
+                    continue
+                sites[NAMES_FIX].append(
+                    (name, n, src, _tag_at(line, m.end()), fn))
             for m in re.finditer(r"(?<!-)\berror-of of ", line):
-                sites[SHORTFALL].append((name, n, src, _tag_at(line, m.end())))
+                if _defines(line, m.start()):
+                    continue
+                sites[SHORTFALL].append(
+                    (name, n, src, _tag_at(line, m.end()), fn))
             m = re.match(r"\s*fail\s+(.*?)\s+as\s+([\w-]+)\s*$", line)
             if m:
                 arg = m.group(1)
@@ -225,8 +243,27 @@ def self_hosted_sites():
                 # wrote, and it names no fix.
                 deliberate = re.fullmatch(r"[A-Za-z][\w-]*(\.[\w-]+)*", arg)
                 bucket = DELIBERATE if deliberate else SHORTFALL
-                sites[bucket].append((name, n, src, m.group(2)))
+                sites[bucket].append((name, n, src, m.group(2), fn))
     return sites
+
+
+def _defines(line, start):
+    """Whether the match at `start` is a function DEFINITION, not a call.
+
+    C6 / Ruling 1. `to error-of of tag, detail:` and `to error-fix-of of tag,
+    detail, fix:` are the definitions of the two helpers this scanner looks
+    for, and it matched both — the first into the shortfall, the second into
+    names-a-fix. Two errors in opposite directions, which is why 113 and 72
+    looked stable across two builds while each was one high. `_tag_at`'s
+    docstring already named the case; nothing acted on it.
+
+    The test is the general one and not a list of two names: a match defines if
+    everything before it on the line is exactly `to`. It deliberately does NOT
+    skip every line beginning `to `, because Planes allows a single inline
+    statement as a function body, so `to f of x: give fail-of of (error-of of
+    "y", z), env` is a real raise site on a `to` line and must stay counted.
+    """
+    return line[:start].strip() == "to"
 
 
 def _tag_at(line, pos):
@@ -264,9 +301,41 @@ def _tag_at(line, pos):
 #
 # This produces a number. It ports nothing, and it does not merge into the
 # reference's work list, which is at zero.
+#
+# ------------------------------------- the second key: the function (C6/Ruling 2)
+#
+# C5's own finding was that a matcher whose key half the catalogue lacks is a
+# matcher that understates, and it left the 28 standing as a ceiling rather
+# than a measurement: 51 of the 109 catalogued reference errors carry no tag,
+# so `grammar/parser.planes`'s `fail "line 3: ..." as parse-error` could not
+# match `parser.py`'s syntax message however nearly identical the two are.
+#
+# Since #29 a catalogue id carries the enclosing function, promoted from the
+# `raised_in` field the entry already held. The self-hosted files are ports of
+# the reference and their functions carry corresponding names across one
+# spelling convention — `parser.py`'s `read_effect_word` against
+# `grammar/parser.planes`'s `read-effect-word`. So a second pass runs over
+# whatever the tag pass did not match, keyed on that name normalised across
+# `_` and `-`.
+#
+# A FUNCTION MATCH IS WEAKER EVIDENCE THAN A TAG MATCH and gets its own state
+# rather than being folded into the first. The correspondence is inferred from
+# a naming convention that nothing asserts, and a reference function may hold
+# several raises, so multiplicity bites harder here — both figures are reported.
+# A matcher that hides which key it used is worse than one that understates,
+# because the next build has to decide per site and must see which evidence it
+# is deciding on.
 
 HAS_TWIN = "has a reference twin"
+PROBABLE_TWIN = "has a probable twin"
 NO_TWIN = "no reference twin"
+
+
+def _normalise_fn(name):
+    """One spelling convention across two languages. `_resolve_subject` and
+    `resolve-subject` are the same function; a leading underscore is Python's
+    private marker and carries no meaning in Planes."""
+    return (name or "").replace("_", "-").strip("-")
 
 
 def reference_fix_tags():
@@ -291,99 +360,172 @@ def reference_fix_tags():
     return twins
 
 
+def reference_fix_functions():
+    """normalised function name -> the catalogued entries raised there that name
+    a fix. The second key, and the one that reaches the untagged half."""
+    cat = load(ERRORS_PATH)
+    amber_ok = amber_templates_all_name_a_fix(load(AMBER_PATH))
+    fns: dict[str, list[str]] = {}
+    for e in cat["entries"]:
+        if e.get("kind", ERROR_KIND) != ERROR_KIND:
+            continue
+        if e.get("raised_in") and classify(e, amber_ok) == NAMES_FIX:
+            fns.setdefault(_normalise_fn(e["raised_in"]), []).append(e["id"])
+    return fns
+
+
 def untagged_reference_entries():
-    """(entries with no tag, entries in total). The ceiling on what tag-matching
-    can ever see."""
+    """(entries with no tag, entries in total). The ceiling on what TAG-matching
+    can ever see — which is why there is a second key."""
     entries = [e for e in load(ERRORS_PATH)["entries"]
                if e.get("kind", ERROR_KIND) == ERROR_KIND]
     return sum(1 for e in entries if not e.get("tag")), len(entries)
 
 
-def split_shortfall(shortfall, twins=None):
-    """The 72, as port-versus-write. Sub-counts sum to the input, always.
+def split_shortfall(shortfall, twins=None, fns=None):
+    """The shortfall, as port-versus-write. Sub-counts sum to the input, always.
 
-    A site whose tag is unreadable (`error-of of stmt.tag`) cannot be matched
-    either way, so it falls to NO_TWIN — the conservative side, because the
-    alternative is claiming a clause exists to port when nothing checked. It is
-    also counted on its own below so the distortion stays visible.
+    Two passes, in order, and the order is the confidence ranking: a tag is
+    asserted at both sites, a function name is a convention nothing asserts.
+    Whatever survives both needs a clause written.
+
+    A site whose tag is unreadable (`error-of of stmt.tag`) still gets the
+    second pass — the enclosing function is readable even when the tag is not.
+    What survives falls to NO_TWIN, the conservative side, because the
+    alternative is claiming a clause exists to port when nothing checked.
     """
     twins = reference_fix_tags() if twins is None else twins
-    out = {HAS_TWIN: [], NO_TWIN: [], "multiplicity": [], "tag_unreadable": []}
+    fns = reference_fix_functions() if fns is None else fns
+    out = {HAS_TWIN: [], PROBABLE_TWIN: [], NO_TWIN: [],
+           "multiplicity": [], "multiplicity_by_function": [],
+           "tag_unreadable": []}
     for site in shortfall:
-        tag = site[3]
+        tag, fn = site[3], _normalise_fn(site[4])
+        if tag is None:
+            out["tag_unreadable"].append(site)
         if tag and tag in twins:
             out[HAS_TWIN].append(site)
             if len(twins[tag]) > 1:
                 out["multiplicity"].append(site)
+        elif fn and fn in fns:
+            out[PROBABLE_TWIN].append(site)
+            if len(fns[fn]) > 1:
+                out["multiplicity_by_function"].append(site)
         else:
             out[NO_TWIN].append(site)
-            if tag is None:
-                out["tag_unreadable"].append(site)
     return out
 
 
-def render_split(split, twins):
+def render_split(split, twins, fns):
     ambiguous = sorted({s[3] for s in split["multiplicity"]})
-    lines = ["", "  THE SHORTFALL SPLIT — port versus write (C5 / Ruling 2). "
-             "A number, not the clauses.", ""]
-    lines.append(f"  {HAS_TWIN:<28} {len(split[HAS_TWIN]):>3}  the reference "
-                 "raises this tag and names a fix;")
-    lines.append("                               "
-                 "  the clause exists — porting it is mechanical")
-    lines.append(f"  {NO_TWIN:<28} {len(split[NO_TWIN]):>3}  unique to the "
-                 "self-hosted stack; needs a clause written")
+    amb_fn = sorted({_normalise_fn(s[4]) for s in
+                     split["multiplicity_by_function"]})
+    lines = ["", "  THE SHORTFALL SPLIT — port versus write "
+             "(C5 / Ruling 2, extended C6). A number,", "  not the clauses.", ""]
+    lines.append(f"  {HAS_TWIN:<24} {len(split[HAS_TWIN]):>3}  by TAG — the "
+                 "reference raises this tag and")
+    lines.append("                             "
+                 "    names a fix; porting it is mechanical")
+    lines.append(f"  {PROBABLE_TWIN:<24} {len(split[PROBABLE_TWIN]):>3}  by "
+                 "FUNCTION — the reference answers this in a")
+    lines.append("                             "
+                 "    correspondingly-named function. Weaker evidence:")
+    lines.append("                             "
+                 "    the correspondence is a naming convention, not")
+    lines.append("                             "
+                 "    an assertion anywhere")
+    lines.append(f"  {NO_TWIN:<24} {len(split[NO_TWIN]):>3}  survives both "
+                 "passes; needs a clause written")
     lines.append("")
-    lines.append(f"  Of the {len(split[HAS_TWIN])} with a twin, "
-                 f"{len(split['multiplicity'])} carry a tag that maps to more "
-                 "than one catalogued")
-    lines.append(f"  entry — {len(ambiguous)} such tags:")
-    row = "     "
-    for tag in ambiguous:
-        if len(row) + len(tag) + 2 > 72:
-            lines.append(row)
-            row = "     "
-        row += f" {tag} ({len(twins[tag])})"
-    lines.append(row if ambiguous else "      none")
-    lines.append("  A tag is shared across messages by design, so a match is "
-                 "evidence a clause exists")
-    lines.append("  to port, NOT proof it is the right clause for that site. "
-                 "The next build decides")
-    lines.append("  per site; this one does not pretend the mapping is "
-                 "one-to-one.")
+    lines.append("  The two are NOT merged. A matcher that hides which key it "
+                 "used is worse than")
+    lines.append("  one that understates, because the next build decides per "
+                 "site and has to see")
+    lines.append("  which evidence it is deciding on.")
+    lines.append("")
+    lines.append(f"  Of the {len(split[HAS_TWIN])} matched by tag, "
+                 f"{len(split['multiplicity'])} carry a tag mapping to more "
+                 "than one entry")
+    lines.append(f"  — {len(ambiguous)} such tags:")
+    lines.extend(_wrap_counted(ambiguous, twins))
+    lines.append(f"  Of the {len(split[PROBABLE_TWIN])} matched by function, "
+                 f"{len(split['multiplicity_by_function'])} sit in a reference "
+                 "function holding")
+    lines.append(f"  more than one raise — {len(amb_fn)} such functions:")
+    lines.extend(_wrap_counted(amb_fn, fns))
+    lines.append("  Multiplicity bites harder on the second pass: a tag names "
+                 "one kind of failure,")
+    lines.append("  a function may raise several. Reported, never resolved.")
+
     if split["tag_unreadable"]:
         lines.append("")
         lines.append(f"  Tag unreadable at the site: "
-                     f"{len(split['tag_unreadable'])} — counted under "
-                     f"'{NO_TWIN}' because")
-        lines.append("  nothing checked, never because anything was ruled out:")
-        for f, n, s, _ in split["tag_unreadable"]:
-            lines.append(f"      {f}:{n}  {s}")
+                     f"{len(split['tag_unreadable'])} — these get the second "
+                     "pass anyway, because")
+        lines.append("  the enclosing function is readable when the tag is not:")
+        for f, n, src, _t, fn in split["tag_unreadable"]:
+            where = ("no twin" if (f, n, src, _t, fn) in split[NO_TWIN]
+                     else PROBABLE_TWIN)
+            lines.append(f"      {f}:{n}  [{where}]  {src}")
 
-    # The ceiling on the method itself. Half the catalogue has no tag to match
-    # on, so a self-hosted syntax error raised as `parse-error` can never match
-    # the reference's PlanesSyntaxError message however close the two are. So
-    # NO_TWIN is an upper bound on the authorship work, not a measurement of it
-    # — say so where it is read.
+    # THE CEILING, REWRITTEN. C5 left this saying what tag-matching could not
+    # see. The second pass moved it, and the honest statement is that a ceiling
+    # has moved, not that it has gone: say what is STILL unmatchable.
     untagged, entries = untagged_reference_entries()
-    by_file: dict[str, int] = {}
-    for f, _, _, _ in split[NO_TWIN]:
-        by_file[f] = by_file.get(f, 0) + 1
     lines.append("")
-    lines.append(f"  A CEILING, NOT A MEASUREMENT: {untagged} of the {entries} "
+    lines.append(f"  THE CEILING, MOVED — NOT GONE. {untagged} of the {entries} "
                  "catalogued reference errors")
     lines.append("  carry no tag at all (PlanesSyntaxError, RuleConflict, "
                  "PlanesAmbiguity, ModuleError,")
-    lines.append("  RuleNotSupported, and four PlanesError sites), so no "
-                 "amount of message overlap")
-    lines.append("  can make them a twin. The lexer and parser sites below are "
-                 "where that bites, and")
-    lines.append(f"  '{NO_TWIN}' overstates the authorship work by however many "
-                 "of them the")
-    lines.append("  reference already answers through an untagged class:")
-    for f in SELF_HOSTED_GLOB:
-        if f in by_file:
-            lines.append(f"      {f:<20} {by_file[f]:>3} with no twin")
+    lines.append("  RuleNotSupported, and four PlanesError sites). The function "
+                 "pass reaches into")
+    lines.append(f"  that half and matched "
+                 f"{len(split[PROBABLE_TWIN])} of them. What it CANNOT reach "
+                 "is a self-hosted")
+    lines.append("  function the port renamed, or one with no reference "
+                 "counterpart at all — and")
+    lines.append("  nothing distinguishes those two from each other here. So "
+                 f"{len(split[NO_TWIN])} remains an")
+    lines.append("  upper bound on the authorship work, a tighter one than "
+                 "before and still not a")
+    lines.append("  measurement.")
+    lines.append("")
+
+    # The population this phase exists for: the lexer and parser sites, which
+    # ALL landed in "no twin" under tag-matching alone. Named individually.
+    syntax = [s for s in split[HAS_TWIN] + split[PROBABLE_TWIN] + split[NO_TWIN]
+              if s[0] in ("parser.planes", "lexer.planes")]
+    state_of = {}
+    for label in (HAS_TWIN, PROBABLE_TWIN, NO_TWIN):
+        for s in split[label]:
+            state_of[(s[0], s[1])] = label
+    lines.append(f"  THE {len(syntax)} LEXER AND PARSER SITES — every one of "
+                 "them landed in 'no twin'")
+    lines.append("  under tag-matching alone, which is the whole reason for a "
+                 "second key:")
+    for s in sorted(syntax, key=lambda s: (s[0], s[1])):
+        label = state_of[(s[0], s[1])]
+        mark = {HAS_TWIN: "tag ", PROBABLE_TWIN: "fn  ", NO_TWIN: "--  "}[label]
+        lines.append(f"      [{mark}] {s[0]}:{s[1]:<5} {str(s[4]):<26} "
+                     f"{s[3] or '(dynamic)'}")
+    matched = sum(1 for s in syntax if state_of[(s[0], s[1])] != NO_TWIN)
+    lines.append(f"      {matched} of {len(syntax)} now matched; "
+                 f"{len(syntax) - matched} still need a clause written.")
     return "\n".join(lines)
+
+
+def _wrap_counted(names, table):
+    """A name list with each entry's catalogue count, wrapped to the report."""
+    if not names:
+        return ["      none"]
+    out, row = [], "     "
+    for name in names:
+        if len(row) + len(name) + 6 > 72:
+            out.append(row)
+            row = "     "
+        row += f" {name} ({len(table[name])})"
+    out.append(row)
+    return out
 
 
 def render_self_hosted(sites):
@@ -411,14 +553,15 @@ def render_self_hosted(sites):
                  "effect of opening the slot.")
     lines.append("")
     by_file: dict[str, int] = {}
-    for f, _, _, _ in sites[SHORTFALL]:
-        by_file[f] = by_file.get(f, 0) + 1
+    for site in sites[SHORTFALL]:
+        by_file[site[0]] = by_file.get(site[0], 0) + 1
     for f in SELF_HOSTED_GLOB:
         if f in by_file:
             lines.append(f"  {f:<20} {by_file[f]:>3} name no fix")
 
-    twins = reference_fix_tags()
-    lines.append(render_split(split_shortfall(sites[SHORTFALL], twins), twins))
+    twins, fns = reference_fix_tags(), reference_fix_functions()
+    lines.append(render_split(split_shortfall(sites[SHORTFALL], twins, fns),
+                              twins, fns))
     return "\n".join(lines)
 
 
@@ -505,22 +648,32 @@ def main(argv):
     sites = self_hosted_sites()
     if "--json" in args:
         def rows(v):
-            return [{"file": f, "line": n, "source": s, "tag": t}
-                    for f, n, s, t in v]
+            return [{"file": f, "line": n, "source": s, "tag": t,
+                     "function": fn} for f, n, s, t, fn in v]
 
-        twins = reference_fix_tags()
-        split = split_shortfall(sites[SHORTFALL], twins)
+        twins, fns = reference_fix_tags(), reference_fix_functions()
+        split = split_shortfall(sites[SHORTFALL], twins, fns)
         cov["self_hosted"] = {k: rows(v) for k, v in sites.items()}
         cov["self_hosted_split"] = {
             "has_a_reference_twin": rows(split[HAS_TWIN]),
+            "has_a_probable_twin": rows(split[PROBABLE_TWIN]),
             "no_reference_twin": rows(split[NO_TWIN]),
             "counts": {HAS_TWIN: len(split[HAS_TWIN]),
+                       PROBABLE_TWIN: len(split[PROBABLE_TWIN]),
                        NO_TWIN: len(split[NO_TWIN]),
-                       "sum": len(split[HAS_TWIN]) + len(split[NO_TWIN])},
+                       "sum": len(split[HAS_TWIN]) + len(split[PROBABLE_TWIN])
+                       + len(split[NO_TWIN])},
             "multiplicity": {
                 "sites": len(split["multiplicity"]),
                 "tags": {t: twins[t]
                          for t in sorted({s[3] for s in split["multiplicity"]})},
+            },
+            "multiplicity_by_function": {
+                "sites": len(split["multiplicity_by_function"]),
+                "functions": {
+                    f: fns[f] for f in
+                    sorted({_normalise_fn(s[4])
+                            for s in split["multiplicity_by_function"]})},
             },
             "tag_unreadable": rows(split["tag_unreadable"]),
         }

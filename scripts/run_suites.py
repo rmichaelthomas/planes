@@ -56,7 +56,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOGDIR = os.path.join(REPO, ".ci-logs")
+# PLANES_LOGDIR makes this runner RE-ENTRANT. `main()` clears the log directory
+# on entry, so a suite that invokes the runner as a subprocess — test_gate.py
+# does, to assert that a silent suite fails — would delete the logs of the run
+# it is running inside, and the parent would then fail to read them back. A
+# nested run points this at a temporary directory and the two never collide.
+LOGDIR = os.environ.get("PLANES_LOGDIR") or os.path.join(REPO, ".ci-logs")
 LEAK_RECORD = os.path.join(LOGDIR, "leaks.json")
 
 # Suites that mutate state another suite reads. Running them concurrently with
@@ -73,6 +78,10 @@ EXCLUSIVE = {
     "test_shapes.py",
     # Creates demo/_deriv_subject/ with .planes files — same hazard.
     "test_rules.py",
+    # C6: writes a runner-less test_*.py into the repo root and a stray .mjs
+    # under js/, to assert the gate refuses each. Every suite that walks js/ or
+    # that this runner would discover must not be running while it does.
+    "test_gate.py",
 }
 
 # Runs last, alone, once the leak record covering every other suite exists.
