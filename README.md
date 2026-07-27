@@ -324,6 +324,9 @@ still calls its own functions by their own names.
 
 ## Files
 
+An orientation, not an inventory — it names what the load-bearing files are
+for. For the complete list of what is in the repo, ask the repo: `git ls-files`.
+
 | File | What it is |
 |---|---|
 | `lexer.py` | Indentation-sensitive tokenizer + AST node definitions |
