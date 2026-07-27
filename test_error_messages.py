@@ -519,46 +519,70 @@ def test_the_two_fixed_messages_are_in_the_catalogue_as_naming_a_fix():
         assert ec.classify(e, True) == ec.NAMES_FIX, e["id"]
 
 
-# ============================ 6. the self-hosted shortfall, split (C5/Ruling 2)
+# ================= 6. the self-hosted commitment, met (D / §171)
 #
-# The 72 arrived as one number and is two bodies of work. A self-hosted message
-# whose tag the reference also raises with a catalogued fix already has a clause
-# written and tested on the Python side — porting it is mechanical. Only a site
-# with no reference twin needs authorship. These pin the split's arithmetic; the
-# clauses themselves are the next build's, not this one's.
+# `errors name the fix` has been a language-level commitment since unbound v1.1
+# §22. C2 drove the reference implementation's work list to 0 of 109. This
+# build drives the self-hosted stack's to 0 of 111, which is the endpoint: the
+# commitment is now kept in all three implementations.
+#
+# These replace C5 and C6's split-arithmetic assertions, which measured a
+# shortfall of 71 and its port-versus-write partition. That shortfall is gone,
+# so the numbers they pinned are gone with it; 0 is the stricter assertion, and
+# the split machinery is kept because it would light up again the moment a new
+# self-hosted raise site arrived without a clause.
 
 
-def test_the_split_sums_to_the_shortfall_it_splits():
-    """Invariant 6: a split that changes the number it splits is a defect.
-
-    C6 / Ruling 1 UPDATED these numbers rather than weakening them: they read
-    72 and 113 and now read 71 and 111. The scanner was counting the two helper
-    DEFINITIONS — `to error-of of tag, detail:` into the shortfall and
-    `to error-fix-of of tag, detail, fix:` into names-a-fix — so the totals
-    were each one high, in opposite directions, which is why they looked stable
-    across two builds."""
+def test_the_self_hosted_work_list_is_empty():
+    """The endpoint. Not "71 clauses were written" — three states, and the
+    third at zero, the same shape the reference reached 0 of 109 in."""
     ec = _coverage()
     sites = ec.self_hosted_sites()
-    split = ec.split_shortfall(sites[ec.SHORTFALL])
-    assert len(split[ec.HAS_TWIN]) + len(split[ec.PROBABLE_TWIN]) \
-        + len(split[ec.NO_TWIN]) == len(sites[ec.SHORTFALL])
-    assert len(sites[ec.SHORTFALL]) == 71, len(sites[ec.SHORTFALL])
-    assert sum(len(v) for v in sites.values()) == 111
+    total = sum(len(v) for v in sites.values())
+    assert len(sites[ec.SHORTFALL]) == 0, [
+        (s[0], s[1], s[2]) for s in sites[ec.SHORTFALL]]
+    assert total == 111, total
+    assert len(sites[ec.NAMES_FIX]) + len(sites[ec.DELIBERATE]) == total
+
+
+def test_the_reference_work_list_is_still_empty_too():
+    """Both halves, or the commitment is not met. C2 got the reference to zero
+    and nothing here may move it."""
+    ec = _coverage()
+    cov = ec.coverage()
+    assert cov["counts"][ec.SHORTFALL] == 0
+    assert cov["errors"] == 109, cov["errors"]
+
+
+def test_every_deliberate_self_hosted_silence_states_a_reason():
+    """A silence without a stated reason is shortfall, on this side too. Three
+    shapes qualify and no others: a bare-name re-raise (the message belongs to
+    whoever wrote it), `error-no-fix-of` with its reason as a literal, and
+    `fail`'s record form carrying `no-fix:` — the generic token gate, which
+    knows which token was due and not what the author meant."""
+    import re
+    ec = _coverage()
+    for f, n, src, _tag, _fn in ec.self_hosted_sites()[ec.DELIBERATE]:
+        # `src` is truncated for the report; read the whole line.
+        with open(os.path.join(REPO, "grammar", f), encoding="utf-8") as fh:
+            line = fh.read().split("\n")[n - 1].strip()
+        bare = re.match(r"fail\s+[A-Za-z][\w-]*(\.[\w-]+)*\s+as\s", line)
+        assert bare or "error-no-fix-of of " in line or "no-fix:" in line, \
+            (f, n, line)
 
 
 def test_the_scanner_does_not_count_its_own_helper_definitions():
-    """The defect C5 found and declined to fix, closed. Both definitions live
-    in grammar/interp.planes and neither raises anything."""
+    """C6's guard, still holding. Both definitions live in
+    grammar/interp.planes and neither raises anything."""
     ec = _coverage()
     sites = ec.self_hosted_sites()
     defs = [s for v in sites.values() for s in v
             if s[2].startswith("to error-of of ")
-            or s[2].startswith("to error-fix-of of ")]
+            or s[2].startswith("to error-fix-of of ")
+            or s[2].startswith("to error-no-fix-of of ")]
     assert not defs, defs
-    assert len(sites[ec.NAMES_FIX]) == 5, len(sites[ec.NAMES_FIX])
-    assert len(sites[ec.DELIBERATE]) == 35, len(sites[ec.DELIBERATE])
 
-    # The guard is the general one and not a list of two names. Planes allows a
+    # The guard is the general one and not a list of names. Planes allows a
     # single inline statement as a function body, so a raise on a `to` line is
     # real and must stay counted — a blanket `to `-line skip would trade an
     # over-count for an under-count.
@@ -568,52 +592,48 @@ def test_the_scanner_does_not_count_its_own_helper_definitions():
     assert not ec._defines(inline, inline.index("error-of of"))
 
 
-def test_the_reference_work_list_is_untouched_by_the_split():
-    """The self-hosted figure is reported on its own and never merged: the
-    reference's list is at zero and merging would hide that."""
+def test_a_fix_named_through_fails_record_form_is_seen():
+    """§158's record form is the ONLY way a `fail` site can name a fix, and
+    this scanner predated it. Without this the work list could not have reached
+    zero however many clauses were written."""
     ec = _coverage()
-    assert ec.coverage()["counts"][ec.SHORTFALL] == 0
+    named = [s for s in ec.self_hosted_sites()[ec.NAMES_FIX]
+             if s[2].startswith("fail { message:")]
+    assert named, "no fail-record site counted as naming a fix"
+    for f, n, src, _t, _fn in named:
+        # `src` is truncated for the report; read the whole line.
+        with open(os.path.join(REPO, "grammar", f), encoding="utf-8") as fh:
+            line = fh.read().split("\n")[n - 1]
+        assert "fix:" in line, (f, n, line)
 
 
-def test_a_twin_is_a_tag_the_reference_raises_and_names_a_fix_for():
+def test_a_fix_on_a_continuation_line_is_seen_through_one_helper():
+    """A syntax error names its fix inline, after a `\n  `, because both
+    implementations render one string and the two are byte-identical. The
+    reference half of this checker has read that shape since C2; the
+    self-hosted half now reads it too, including through the single message
+    helper the lexer composes its message in."""
     ec = _coverage()
-    twins = ec.reference_fix_tags()
-    assert twins, "no reference tag names a fix — the match would be vacuous"
-    for tag, ids in twins.items():
-        assert isinstance(tag, str) and ids
-    # A tag the reference raises WITHOUT ever naming a fix is not a twin.
-    fake = ec.split_shortfall(
-        [("x.planes", 1, "src", "no-such-tag-anywhere", "no-such-function")],
-        twins, ec.reference_fix_functions())
-    assert len(fake[ec.NO_TWIN]) == 1
+    helpers = ec._continuation_helpers("grammar/lexer.planes")
+    assert "unterminated-string-message" in helpers, sorted(helpers)
+    assert ec._names_fix_inline("unterminated-string-message of state.line",
+                                helpers)
+    assert ec._names_fix_inline('"line 1: x\\n  try: y"', set())
+    assert not ec._names_fix_inline('"line 1: x"', set())
 
 
-def test_multiplicity_is_reported_rather_than_resolved():
-    """A tag is shared across messages by design, so a tag match is evidence a
-    clause exists to port and not proof it is the right one. The figure has to
-    be visible or the next build reads a one-to-one mapping that is not there."""
-    ec = _coverage()
-    twins = ec.reference_fix_tags()
-    split = ec.split_shortfall(ec.self_hosted_sites()[ec.SHORTFALL], twins)
-    assert split["multiplicity"], "no multiplicity reported"
-    assert len(split["multiplicity"]) <= len(split[ec.HAS_TWIN])
-    for site in split["multiplicity"]:
-        assert len(twins[site[3]]) > 1, site
-
-
-def test_an_unreadable_tag_falls_to_the_side_nothing_checked():
-    """`error-of of stmt.tag` names its tag dynamically. It cannot be matched
-    either way, so it counts as needing authorship — the conservative side —
-    and is listed on its own so the distortion stays visible."""
+def test_the_split_of_an_empty_shortfall_is_empty():
+    """C5 and C6's port-versus-write machinery, kept and now describing an
+    empty set. It is not deleted: a new self-hosted raise site with no clause
+    lands back on the work list and this partitions it again."""
     ec = _coverage()
     split = ec.split_shortfall(ec.self_hosted_sites()[ec.SHORTFALL])
-    assert split["tag_unreadable"], "no unreadable-tag figure reported"
-    for site in split["tag_unreadable"]:
-        assert site[3] is None, site
-        # The TAG pass cannot see it. C6 gives it the function pass anyway,
-        # because the enclosing function is readable when the tag is not.
-        assert site not in split[ec.HAS_TWIN], site
-        assert site in split[ec.PROBABLE_TWIN] or site in split[ec.NO_TWIN]
+    assert not split[ec.HAS_TWIN]
+    assert not split[ec.PROBABLE_TWIN]
+    assert not split[ec.NO_TWIN]
+    assert not split["multiplicity"] and not split["tag_unreadable"]
+    # The two keys still resolve — the machinery works, there is just no work.
+    assert ec.reference_fix_tags() and ec.reference_fix_functions()
 
 
 def test_every_self_hosted_site_carries_its_tag_or_none():
@@ -626,96 +646,6 @@ def test_every_self_hosted_site_carries_its_tag_or_none():
             assert tag is None or (tag and " " not in tag), site
             # Every raise site in these files is inside a function.
             assert fn and " " not in fn, site
-
-
-# ================== 7. the second key: the enclosing function (C6 / Ruling 2)
-#
-# 51 of 109 catalogued reference errors carry no tag, so tag-matching could not
-# see PlanesSyntaxError at all and every lexer and parser site landed in "needs
-# authorship" when the reference already answers it. The second pass keys on the
-# enclosing function name, normalised across `_` and `-`. It is WEAKER evidence
-# and gets its own state; these pin that it stays separate.
-
-
-def test_the_split_has_three_states_and_they_stay_separate():
-    ec = _coverage()
-    split = ec.split_shortfall(ec.self_hosted_sites()[ec.SHORTFALL])
-    assert ec.HAS_TWIN != ec.PROBABLE_TWIN != ec.NO_TWIN
-    by_tag = {(s[0], s[1]) for s in split[ec.HAS_TWIN]}
-    by_fn = {(s[0], s[1]) for s in split[ec.PROBABLE_TWIN]}
-    none = {(s[0], s[1]) for s in split[ec.NO_TWIN]}
-    assert not (by_tag & by_fn) and not (by_tag & none) and not (by_fn & none)
-    assert len(by_tag) == 44 and len(by_fn) == 9 and len(none) == 18
-
-
-def test_the_tag_pass_runs_first_because_it_is_stronger_evidence():
-    """A tag is asserted at both sites; a function name is a convention nothing
-    asserts. A site the tag pass matches must never be demoted to the second."""
-    ec = _coverage()
-    twins, fns = ec.reference_fix_tags(), ec.reference_fix_functions()
-    # A site whose tag AND function both match lands in HAS_TWIN, not PROBABLE.
-    tag = next(t for t in twins)
-    fn = next(f for f in fns)
-    split = ec.split_shortfall([("x.planes", 1, "src", tag, fn)], twins, fns)
-    assert len(split[ec.HAS_TWIN]) == 1, split
-    assert not split[ec.PROBABLE_TWIN]
-
-
-def test_a_function_name_is_normalised_across_both_spellings():
-    """`parser.py`'s `read_effect_word` is `grammar/parser.planes`'s
-    `read-effect-word`, and Python's leading-underscore private marker carries
-    no meaning in Planes."""
-    ec = _coverage()
-    assert ec._normalise_fn("read_effect_word") == "read-effect-word"
-    assert ec._normalise_fn("_resolve_subject") == "resolve-subject"
-    assert ec._normalise_fn("parse-rule") == "parse-rule"
-    assert ec._normalise_fn(None) == ""
-
-
-def test_every_lexer_and_parser_site_is_individually_classified():
-    """The population this pass exists for. All seventeen landed in `no twin`
-    under tag-matching alone; the report names each one and which key, if any,
-    reached it."""
-    ec = _coverage()
-    split = ec.split_shortfall(ec.self_hosted_sites()[ec.SHORTFALL])
-    syntax = [s for label in (ec.HAS_TWIN, ec.PROBABLE_TWIN, ec.NO_TWIN)
-              for s in split[label]
-              if s[0] in ("parser.planes", "lexer.planes")]
-    assert len(syntax) == 17, len(syntax)
-    # Not one of them has a tag the reference names a fix for — that is the
-    # finding C5 recorded and this pass exists to act on.
-    assert not [s for s in split[ec.HAS_TWIN]
-                if s[0] in ("parser.planes", "lexer.planes")]
-    matched = [s for s in split[ec.PROBABLE_TWIN]
-               if s[0] in ("parser.planes", "lexer.planes")]
-    assert len(matched) == 9, [(s[0], s[1], s[4]) for s in matched]
-
-
-def test_multiplicity_on_the_second_pass_is_reported_too():
-    """It bites harder here: a tag names one kind of failure, a function may
-    raise several."""
-    ec = _coverage()
-    fns = ec.reference_fix_functions()
-    split = ec.split_shortfall(ec.self_hosted_sites()[ec.SHORTFALL], None, fns)
-    assert split["multiplicity_by_function"], "not reported"
-    for site in split["multiplicity_by_function"]:
-        assert len(fns[ec._normalise_fn(site[4])]) > 1, site
-        assert site in split[ec.PROBABLE_TWIN], site
-
-
-def test_the_ceiling_says_what_is_still_unmatchable_not_what_was():
-    """B.5: a ceiling has moved, not gone. Deleting the note would make the
-    output stop saying what it still cannot see."""
-    ec = _coverage()
-    sites = ec.self_hosted_sites()
-    twins, fns = ec.reference_fix_tags(), ec.reference_fix_functions()
-    text = ec.render_split(ec.split_shortfall(sites[ec.SHORTFALL], twins, fns),
-                           twins, fns)
-    assert "CEILING, MOVED — NOT GONE" in text, text[-400:]
-    assert "upper bound" in text
-    untagged, entries = ec.untagged_reference_entries()
-    assert f"{untagged} of the {entries}" in text
-    assert untagged == 51 and entries == 109, (untagged, entries)
 
 
 if __name__ == "__main__":

@@ -610,31 +610,43 @@ def _three_way_cases():
     return cases
 
 
+FIX_MARKER = "\n  try: "
+
+
+def _fix_of(message):
+    """The fix clause out of a rendered message. Both implementations render
+    `tag: detail` and then the clause on its own continuation line, and that
+    rendering is asserted byte-identical elsewhere in this file — so reading it
+    back is reading the same field, not a second source of truth."""
+    return message.split(FIX_MARKER, 1)[1] if FIX_MARKER in message else ""
+
+
 def _outcome_py(expr, names):
     itp = Interpreter(host=TestHost())
     src = "".join(f"{k} = {_VAL_SRC[v]}\n" for k, v in names.items())
     try:
         itp.run(src + f"show text of ({expr})\n")
     except PlanesError as e:
-        return ("error", e.tag, e.detail)
+        return ("error", e.tag, e.detail, e.fix)
     except PlanesSyntaxError:
-        return ("parse", "PARSE", "")
+        return ("parse", "PARSE", "", "")
     except Exception as e:                                   # noqa: BLE001
-        return ("HOST", type(e).__name__, str(e)[:70])
-    return ("ok", "", itp.output[-1] if itp.output else "")
+        return ("HOST", type(e).__name__, str(e)[:70], "")
+    return ("ok", "", itp.output[-1] if itp.output else "", "")
 
 
 def _outcome_js(expr, names):
     d = _js_result(_three_way_src(expr, names))
     if "crash" in d:
-        return ("HOST", "crash", d["crash"].split("\n")[0][:70])
+        return ("HOST", "crash", d["crash"].split("\n")[0][:70], "")
     if d["tag"] == "PARSE":
-        return ("parse", "PARSE", "")
+        return ("parse", "PARSE", "", "")
     if d["tag"]:
         head = d["message"].split("\n")[0]
         return ("error", d["tag"],
-                head.split(": ", 1)[1] if ": " in head else head)
-    return ("ok", "", d["output"][-1] if d["output"] else "")
+                head.split(": ", 1)[1] if ": " in head else head,
+                _fix_of(d["message"]))
+    return ("ok", "", d["output"][-1] if d["output"] else "", "")
 
 
 def _outcome_planes(expr, names):
@@ -652,11 +664,12 @@ def _outcome_planes(expr, names):
         node = i.call("node-of-source",
                       [_T(expr, _D("literal", "<src>", expr, []))], i.env)
         val = i.call("eval", [node, env], i.env)
-        return ("ok", "", i.call("builtin-text", [val], i.env).value.get("value"))
+        return ("ok", "",
+                i.call("builtin-text", [val], i.env).value.get("value"), "")
     except PlanesError as e:
-        return ("error", e.tag, e.detail)
+        return ("error", e.tag, e.detail, e.fix)
     except Exception as e:                                   # noqa: BLE001
-        return ("HOST", type(e).__name__, str(e)[:70])
+        return ("HOST", type(e).__name__, str(e)[:70], "")
 
 
 def test_no_host_exception_escapes_from_any_operand_pair():
@@ -672,11 +685,18 @@ def test_no_host_exception_escapes_from_any_operand_pair():
     assert not leaks, "host exceptions escaping:\n" + "\n".join(leaks)
 
 
-def test_all_three_implementations_agree_on_tag_and_detail():
+def test_all_three_implementations_agree_on_tag_detail_and_fix():
     """The convergence, asserted rather than claimed. Detail text, not just the
     tag — a tag is deliberately shared across many messages, which is why the
     self-hosted side could diverge on every detail while its suite stayed
-    green."""
+    green.
+
+    D: and the FIX clause. `errors name the fix` has been a language-level
+    commitment since unbound v1.1 §22, and until this build the self-hosted
+    implementation kept it nowhere. This sweep is the instrument that closes
+    it: for every shape it reaches, the correct self-hosted clause is not a
+    decision — it is whatever the reference emits for that same shape, and a
+    divergence here names both sides."""
     if NODE is None:
         return
     bad = []

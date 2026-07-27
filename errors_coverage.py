@@ -78,6 +78,11 @@ AMBER_PATH = os.path.join(REPO, "grammar", "messages", "amber.json")
 # indent the renderer adds is not part of the template.
 FIX_CONTINUATION = "\n"
 
+# The same clause, as it is written in Planes source: a literal backslash-n
+# inside a string, not a real newline. `classify()` reads the reference's
+# rendered template; the self-hosted scanner reads source text.
+FIX_CONTINUATION_LITERAL = "\\n  "
+
 NAMES_FIX = "names a fix"
 DELIBERATE = "deliberately names none"
 SHORTFALL = "should name one and does not"
@@ -218,6 +223,7 @@ def self_hosted_sites():
         if not os.path.exists(path):
             continue
         fn = None
+        continuing = _continuation_helpers(path)
         for n, line in enumerate(open(path, encoding="utf-8"), 1):
             if line.lstrip().startswith("#"):
                 continue
@@ -235,16 +241,86 @@ def self_hosted_sites():
                     continue
                 sites[SHORTFALL].append(
                     (name, n, src, _tag_at(line, m.end()), fn))
+            # D: the self-hosted counterpart of the reference's `no_fix`. The
+            # reason is a literal at the site, exactly as the message is, and
+            # is never rendered — it exists so a deliberate silence can be told
+            # from a gap on this side too.
+            for m in re.finditer(r"\berror-no-fix-of of ", line):
+                if _defines(line, m.start()):
+                    continue
+                sites[DELIBERATE].append(
+                    (name, n, src, _tag_at(line, m.end()), fn))
             m = re.match(r"\s*fail\s+(.*?)\s+as\s+([\w-]+)\s*$", line)
             if m:
                 arg = m.group(1)
                 # A bare name re-raises a message written elsewhere; anything
                 # else (a literal, a concatenation) is a message this site
-                # wrote, and it names no fix.
+                # wrote.
+                #
+                # D: and a message this site wrote can now name a fix, through
+                # §158's record form — `fail { message: ..., fix: ... } as tag`
+                # is the ONLY way a `fail` site can name one, and this scanner
+                # predated the form and could not see it. Without this branch
+                # the work list could never reach zero for the ~30 `fail`-shaped
+                # sites however many clauses were written.
                 deliberate = re.fullmatch(r"[A-Za-z][\w-]*(\.[\w-]+)*", arg)
-                bucket = DELIBERATE if deliberate else SHORTFALL
+                if deliberate:
+                    bucket = DELIBERATE
+                elif arg.lstrip().startswith("{") and re.search(r"(?<!-)\bfix:",
+                                                            arg):
+                    bucket = NAMES_FIX
+                elif arg.lstrip().startswith("{") and re.search(r"\bno-fix:",
+                                                                arg):
+                    # The self-hosted `no_fix`: a reason, as a literal at the
+                    # site. Ignored by all three interpreters exactly as the
+                    # reference's is never rendered, so the message is
+                    # unchanged and the silence is marked rather than silent.
+                    bucket = DELIBERATE
+                elif _names_fix_inline(arg, continuing):
+                    bucket = NAMES_FIX
+                else:
+                    bucket = SHORTFALL
                 sites[bucket].append((name, n, src, m.group(2), fn))
     return sites
+
+
+def _continuation_helpers(path):
+    """Functions in this file whose body writes a fix on a continuation line.
+
+    A syntax error names its fix the way the reference does — inline, after a
+    `\n  ` — rather than in a field, because both implementations render one
+    string and the two are asserted byte-identical. `classify()` already reads
+    exactly this shape on the reference side (FIX_CONTINUATION). The self-hosted
+    half could not, so a message composed in a helper (`fail
+    unterminated-string-message of line as ...`) read as a silence when the
+    clause was right there. One hop, resolved structurally, same as everything
+    else this scanner reads.
+    """
+    import re
+
+    helpers, current, body = set(), None, []
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            m = re.match(r"^to ([\w-]+)", line)
+            if m:
+                if current and any(FIX_CONTINUATION_LITERAL in b for b in body):
+                    helpers.add(current)
+                current, body = m.group(1), []
+            body.append(line)
+    if current and any(FIX_CONTINUATION_LITERAL in b for b in body):
+        helpers.add(current)
+    return helpers
+
+
+def _names_fix_inline(arg, helpers):
+    """Whether a `fail <arg> as tag` message carries its fix on a continuation
+    line — written here, or written by the one helper it calls."""
+    import re
+
+    if FIX_CONTINUATION_LITERAL in arg:
+        return True
+    head = re.match(r"\s*([A-Za-z][\w-]*)", arg)
+    return bool(head) and head.group(1) in helpers
 
 
 def _defines(line, start):

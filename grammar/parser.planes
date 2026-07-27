@@ -67,7 +67,7 @@ to digit-value of c:
       result = i
     i = i + 1
   if result == (0 - 1):
-    fail "not a digit: '" + c + "'" as parse-error
+    fail "not a digit: '" + c + "'" + "\n  a digit was expected here and the lexer only reaches this with one, so this is a defect in the lexer rather than in the program — worth reporting with the source that produced it" as parse-error
   else:
     give result
 
@@ -508,7 +508,7 @@ to canonical-of-node of node, indent:
     give canonical-of-foreign of node, indent
   if k == "Note":
     give canonical-of-note of node, indent
-  fail "no canonical form for node kind '" + k + "'" as unknown-node-kind
+  fail "no canonical form for node kind '" + k + "'" + "\n  the parser builds only the node kinds this canonical printer knows, so reaching this is a defect in the parser rather than in the program — worth reporting with the source" as unknown-node-kind
 
 # ================================================================ the cursor
 #
@@ -1083,14 +1083,14 @@ to expect-kind of cursor, kind:
     give { token: (current of cursor), cursor: (advance of cursor) }
   else:
     t = current of cursor
-    fail "line " + (text of t.line) + ": expected " + kind + ", found '" + t.text + "'" as parse-error
+    fail { message: ("line " + (text of t.line) + ": expected " + kind + ", found '" + t.text + "'"), no-fix: "this is the generic token gate, reached from every form in the grammar; it knows which token was due and not what the author meant by writing another, so a call site that can say more passes its own clause and a call site that cannot says nothing rather than guessing" } as parse-error
 
 to expect-op of cursor, value:
   if tok-at-value of cursor, "OP", value:
     give { token: (current of cursor), cursor: (advance of cursor) }
   else:
     t = current of cursor
-    fail "line " + (text of t.line) + ": expected '" + value + "', found '" + t.text + "'" as parse-error
+    fail { message: ("line " + (text of t.line) + ": expected '" + value + "', found '" + t.text + "'"), no-fix: "this is the generic token gate, reached from every form in the grammar; it knows which token was due and not what the author meant by writing another, so a call site that can say more passes its own clause and a call site that cannot says nothing rather than guessing" } as parse-error
 
 # ================================================================ paren-is-arglist lookahead
 #
@@ -1321,7 +1321,7 @@ to parse-record-field of cursor, known:
     value-result = parse-expr of colon-expect.cursor, known
     give { key: t.text, value: value-result.node, cursor: value-result.cursor }
   else:
-    fail "line " + (text of t.line) + ": expected a field name, found '" + t.text + "'" as parse-error
+    fail "line " + (text of t.line) + ": expected a field name, found '" + t.text + "'" + "\n  try: { name: value }" as parse-error
 
 to collect-record-fields of cursor, acc, known:
   after-ws = skip-bracket-ws of cursor
@@ -1388,7 +1388,7 @@ to parse-primary of cursor, known:
     inner = parse-expr of (advance of cursor), known
     closed = expect-op of inner.cursor, ")"
     give { node: inner.node, cursor: closed.cursor }
-  fail "line " + (text of t.line) + ": expected a value, found '" + t.text + "'" as parse-error
+  fail "line " + (text of t.line) + ": expected a value, found '" + t.text + "'" + "\n  a value starts with a number, a quoted string, true, false, nothing, a name, `not`, a list, a record, or a parenthesised expression — a statement word like `show` or `write` cannot stand in for one" as parse-error
 
 to continue-postfix of node, cursor:
   t = current of cursor
@@ -1551,7 +1551,7 @@ to parse-with-field of cursor, known:
     finished = trailing-or-fail of inner.node, inner.cursor, known
     give { key: key, value: finished.node, cursor: finished.cursor }
   else:
-    fail "line " + (text of t.line) + ": expected a field name, found '" + t.text + "'" as parse-error
+    fail "line " + (text of t.line) + ": expected a field name, found '" + t.text + "'" + "\n  try: with name: value" as parse-error
 
 to collect-with-fields of cursor, acc, known:
   comma = try-accept-value of cursor, "OP", ","
@@ -2000,6 +2000,28 @@ to read-effect-word of cursor, after, allow-nothing:
       found = "end of line"
     fail "line " + (text of t.line) + ": expected an effect name after " + after + ", found '" + found + "'\n  valid kinds: " + (effect-kinds-text) + " — and 'nothing' after 'doing', for a foreign that performs none" as parse-error
 
+# interp.py's `', '.join(...)`. `join of` concatenates with no separator, so a
+# comma-separated list is a fold. interp.planes carries the same fold under the
+# name `comma-list-of`; the names differ deliberately, because the two files
+# land in one module graph and Planes refuses two modules defining one name —
+# a copy has to be a copy, not a shadow.
+to names-joined-of of names:
+  if (count of names) == 0:
+    give ""
+  give names-joined-walk-of of (rest of names), (first-item of names)
+
+to names-joined-walk-of of remaining, acc:
+  if (count of remaining) == 0:
+    give acc
+  give names-joined-walk-of of (rest of remaining), (acc + ", " + (first-item of remaining))
+
+# `', '.join(params) or 'none'` — an empty parameter list says so in words
+# rather than trailing off after the colon.
+to params-display-of of params:
+  if (count of params) == 0:
+    give "none"
+  give names-joined-of of params
+
 to param-includes of params, name:
   result = false
   for each p in params:
@@ -2022,7 +2044,7 @@ to read-claim of cursor, params:
         give { claim: { kind: kind, target-tag: "param", target-value: t.text }, cursor: (advance of after) }
       else:
         if t.kind == "NAME":
-          fail "line " + (text of t.line) + ": '" + t.text + "' is not a parameter of this function, so it cannot be where '" + kind + "' goes" as parse-error
+          fail "line " + (text of t.line) + ": '" + t.text + "' is not a parameter of this function, so it cannot be where '" + kind + "' goes" + "\n  parameters: " + (params-display-of of params) as parse-error
         else:
           give { claim: { kind: kind, target-tag: "none", target-value: nothing }, cursor: after }
 
@@ -2115,7 +2137,7 @@ to parse-rule of cursor:
   may-tok = current of subject-expect.cursor
   is-may = may-tok.kind == "NAME" and may-tok.text == "may"
   if not is-may:
-    fail "line " + (text of may-tok.line) + ": expected 'may not' or 'may' after a rule's subject, found '" + may-tok.text + "'" as parse-error
+    fail "line " + (text of may-tok.line) + ": expected 'may not' or 'may' after a rule's subject, found '" + may-tok.text + "'" + "\n  try: rule [name] subject may not effect-kind  (forbid)\n    or: rule [name] subject may effect-kind  (permit)" as parse-error
   else:
     after-may = advance of subject-expect.cursor
     not-try = try-accept of after-may, "NOT"
@@ -2154,7 +2176,7 @@ to parse-note-entry of cursor:
       give { entry: { kind: "derives-from", value: name-expect.token.text }, cursor: close-expect.cursor }
     else:
       t = current of cursor
-      fail "line " + (text of t.line) + ": unrecognised entry in a note, found '" + t.text + "'" as parse-error
+      fail "line " + (text of t.line) + ": unrecognised entry in a note, found '" + t.text + "'" + "\n  try: from \"source\"  or  derives-from [rule-name]" as parse-error
 
 to collect-note-entries of state, ignored-token:
   if state.done:
@@ -2211,7 +2233,7 @@ to parse-when-pattern-entry of cursor, known:
       entry = { field: name, matcher-tag: "bind", value: name }
       give { entry: entry, cursor: after-name }
   else:
-    fail "line " + (text of t.line) + ": expected a field name, found '" + t.text + "'" as parse-error
+    fail "line " + (text of t.line) + ": expected a field name, found '" + t.text + "'" + "\n  try: { name: value }  or  { name }" as parse-error
 
 to collect-when-pattern of cursor, acc, known:
   comma = try-accept-value of cursor, "OP", ","
@@ -2238,7 +2260,7 @@ to parse-when of cursor, tokens, known:
   is-tok = current of subject-result.cursor
   is-is = is-tok.kind == "NAME" and is-tok.text == "is"
   if not is-is:
-    fail "line " + (text of is-tok.line) + ": expected is, found '" + is-tok.text + "'" as parse-error
+    fail { message: ("line " + (text of is-tok.line) + ": expected is, found '" + is-tok.text + "'"), no-fix: "this is the generic token gate, reached from every form in the grammar; it knows which token was due and not what the author meant by writing another, so a call site that can say more passes its own clause and a call site that cannot says nothing rather than guessing" } as parse-error
   else:
     brace-expect = expect-op of (advance of subject-result.cursor), "{"
     pattern-result = parse-when-pattern of brace-expect.cursor, known
@@ -2292,7 +2314,7 @@ to parse-foreach-expr of cursor, known:
 to finish-because of attach, cursor:
   t = current of cursor
   if not (t.kind == "STRING"):
-    fail "line " + (text of t.line) + ": 'because' needs a quoted reason" as parse-error
+    fail "line " + (text of t.line) + ": 'because' needs a quoted reason" + "\n  try: cap = 200 because \"the reason\"" as parse-error
   else:
     reason = strip-quotes of t.text
     because-node = { text: reason, line: t.line }
