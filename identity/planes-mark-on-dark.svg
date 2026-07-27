@@ -1,0 +1,52 @@
+<svg viewBox="-140 -140 280 280" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>planes</title>
+<desc>Four grid planes crossing at a shared origin: three mutually orthogonal coordinate planes and one oblique plane cutting across them.</desc>
+  <polygon points="-84.22,-4.85 10.34,-39.54 84.22,4.85 -10.34,39.54" fill="#F59E0B" fill-opacity="0.26" stroke="#F59E0B" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-68.46" y1="-10.64" x2="5.42" y2="33.76" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-71.91" y1="2.54" x2="22.65" y2="-32.14" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-52.7" y1="-16.42" x2="21.18" y2="27.98" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-59.59" y1="9.94" x2="34.97" y2="-24.74" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-22.2" x2="36.94" y2="22.2" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="17.34" x2="47.28" y2="-17.34" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-21.18" y1="-27.98" x2="52.7" y2="16.42" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-34.97" y1="24.74" x2="59.59" y2="-9.94" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-5.42" y1="-33.76" x2="68.46" y2="10.64" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-22.65" y1="32.14" x2="71.91" y2="-2.54" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-47.28,70.32 47.28,35.63 47.28,-70.32 -47.28,-35.63" fill="#3B82F6" fill-opacity="0.26" stroke="#3B82F6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-31.52" y1="64.54" x2="-31.52" y2="-41.42" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="52.66" x2="47.28" y2="17.98" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-15.76" y1="58.76" x2="-15.76" y2="-47.2" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="35" x2="47.28" y2="0.32" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="0" y1="52.98" x2="0" y2="-52.98" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="17.34" x2="47.28" y2="-17.34" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="15.76" y1="47.2" x2="15.76" y2="-58.76" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="-0.32" x2="47.28" y2="-35" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="31.52" y1="41.42" x2="31.52" y2="-64.54" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="-17.98" x2="47.28" y2="-52.66" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-36.94,30.78 36.94,75.17 36.94,-30.78 -36.94,-75.17" fill="#14B8A6" fill-opacity="0.26" stroke="#14B8A6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-24.63" y1="38.18" x2="-24.63" y2="-67.77" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="13.12" x2="36.94" y2="57.51" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-12.31" y1="45.58" x2="-12.31" y2="-60.38" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-4.54" x2="36.94" y2="39.86" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="0" y1="52.98" x2="0" y2="-52.98" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-22.2" x2="36.94" y2="22.2" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="12.31" y1="60.38" x2="12.31" y2="-45.58" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-39.86" x2="36.94" y2="4.54" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="24.63" y1="67.77" x2="24.63" y2="-38.18" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-57.51" x2="36.94" y2="-13.12" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-41.69,69.23 -27.07,13.32 41.69,-69.23 27.07,-13.32" fill="#8B5CF6" fill-opacity="0.26" stroke="#8B5CF6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-39.25" y1="59.91" x2="29.5" y2="-22.64" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-30.23" y1="55.47" x2="-15.61" y2="-0.44" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.82" y1="50.59" x2="31.94" y2="-31.95" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-18.77" y1="41.72" x2="-4.15" y2="-14.2" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-34.38" y1="41.27" x2="34.38" y2="-41.27" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-7.31" y1="27.96" x2="7.31" y2="-27.96" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.94" y1="31.95" x2="36.82" y2="-50.59" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="4.15" y1="14.2" x2="18.77" y2="-41.72" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-29.5" y1="22.64" x2="39.25" y2="-59.91" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="15.61" y1="0.44" x2="30.23" y2="-55.47" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-70.92" y1="26.01" x2="70.92" y2="-26.01" stroke="#F2F2F2" stroke-width="2"/>
+  <line x1="-0" y1="79.47" x2="0" y2="-79.47" stroke="#F2F2F2" stroke-width="2"/>
+  <line x1="-55.41" y1="-33.3" x2="55.41" y2="33.3" stroke="#F2F2F2" stroke-width="2"/>
+  <circle cx="0" cy="0" r="4" fill="#F2F2F2"/>
+</svg>

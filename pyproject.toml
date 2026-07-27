@@ -10,6 +10,12 @@ dev = ["ruff", "mypy", "coverage"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+# D / §4.1, a ruling: `identity/` holds the design-asset generator and its
+# output. It is not part of the language implementation, and holding it to the
+# language's linting and typing gate would create work with no payoff.
+# `test_gate.py` asserts the other half — that nothing in there can become a
+# gate dependency.
+exclude = ["identity"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
@@ -40,6 +46,8 @@ select = ["E", "F", "W", "I"]
 
 [tool.mypy]
 python_version = "3.10"
+# See the ruff exclusion above: `identity/` is outside the gate by ruling.
+exclude = ["^identity/"]
 ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
 # Permissive baseline (planes v3.0 section 53a) -- this codebase predates
@@ -53,7 +61,7 @@ warn_unused_ignores = false
 branch = true
 parallel = true
 source = ["."]
-omit = ["test_*.py", ".venv/*", "verify_*.py", "sitecustomize.py"]
+omit = ["test_*.py", ".venv/*", "identity/*", "sitecustomize.py"]
 
 [tool.coverage.paths]
 source = ["."]

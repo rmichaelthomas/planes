@@ -83,7 +83,7 @@ def _call_sites(method):
         dirs[:] = [d for d in dirs
                    if d not in (".venv", "node_modules", "__pycache__",
                                 ".git", ".ci-logs", "test", ".mypy_cache",
-                                ".ruff_cache", ".pytest_cache")]
+                                ".ruff_cache", ".pytest_cache", "identity")]
         for f in sorted(files):
             if not f.endswith((".py", ".mjs", ".planes")):
                 continue

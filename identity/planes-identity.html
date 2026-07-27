@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>planes — visual identity master sheet</title>
+<style>
+  :root {
+    --ink: #1a1a1a; --muted: #6b6b6b; --line: #e3e3e0; --bg: #fbfbf9;
+    --card: #ffffff; --code-bg: #f4f4f1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#f2f2f2; --muted:#9a9a97; --line:#2c2c2a; --bg:#0f0f0e;
+            --card:#171716; --code-bg:#1d1d1b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:3rem 1.5rem 5rem; background:var(--bg); color:var(--ink);
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+         line-height:1.65; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  header { border-bottom:1px solid var(--line); padding-bottom:2rem; margin-bottom:2.5rem; }
+  h1 { font-size:2rem; font-weight:500; margin:0 0 .35rem; letter-spacing:-.01em; }
+  h2 { font-size:1.15rem; font-weight:500; margin:3rem 0 1rem; padding-bottom:.5rem;
+       border-bottom:1px solid var(--line); }
+  h3 { font-size:.95rem; font-weight:500; margin:1.75rem 0 .6rem; }
+  p { margin:.65rem 0; }
+  .sub { color:var(--muted); font-size:.95rem; margin:0; }
+  code, pre { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  code { background:var(--code-bg); padding:.12em .4em; border-radius:4px; font-size:.88em; }
+  pre { background:var(--code-bg); border:1px solid var(--line); border-radius:8px;
+        padding:1rem 1.15rem; overflow-x:auto; font-size:.82rem; line-height:1.6; }
+  pre code { background:none; padding:0; font-size:inherit; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:1rem; }
+  .swatch-row { display:flex; align-items:center; gap:.7rem; padding:.5rem 0;
+                border-bottom:1px solid var(--line); }
+  .swatch-row:last-child { border-bottom:none; }
+  .chip { width:26px; height:26px; border-radius:5px; flex:none; }
+  .swatch-meta { font-size:.85rem; }
+  .swatch-meta .hex { color:var(--muted); font-family:ui-monospace,monospace; font-size:.78rem; }
+  table { width:100%; border-collapse:collapse; font-size:.87rem; margin:1rem 0; }
+  th, td { text-align:left; padding:.55rem .5rem; border-bottom:1px solid var(--line);
+           vertical-align:top; }
+  th { font-weight:500; color:var(--muted); font-size:.78rem; letter-spacing:.05em;
+       text-transform:uppercase; }
+  td code { font-size:.82em; }
+  .note { border-left:3px solid #F59E0B; background:var(--card); padding:.85rem 1.1rem;
+          border-radius:0 6px 6px 0; font-size:.9rem; margin:1.25rem 0; }
+  .specimen { background:var(--card); border:1px solid var(--line); border-radius:10px;
+              padding:1.5rem; display:flex; gap:1.5rem; align-items:center;
+              justify-content:center; flex-wrap:wrap; }
+  .specimen.dark { background:#0b0b0b; border-color:#262626; }
+  .spec svg { display:block; }
+  .cap { text-align:center; font-size:.75rem; color:var(--muted); margin-top:.5rem; }
+  footer { margin-top:4rem; padding-top:1.5rem; border-top:1px solid var(--line);
+           font-size:.83rem; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>planes — visual identity</h1>
+  <p class="sub">Master sheet and generation instructions · rough marker, not locked · July 24, 2026</p>
+</header>
+
+<h2>The mark</h2>
+<p>Four grid planes crossing at a shared origin. Three are mutually orthogonal — the XY, XZ, and YZ coordinate planes. The fourth is oblique, sitting at roughly 54.7° to all three, cutting across the point where they meet.</p>
+<p>The mark is <strong>3D geometry</strong>. Every flat file is a projection of it at a chosen camera angle, not a drawing. There is no canonical 2D artwork to edit — there is a canonical geometry and a render script.</p>
+
+<div class="note">
+<strong>Known limit of the 2D stills.</strong> A static projection cannot assert orthogonality; that is a 3D fact and a flat image has no way to carry it. In a still, the four planes read as "four planes at various angles." The animated version is where the structural claim — three perpendicular, one crossing — is actually legible. Treat the stills as the compressed form.
+</div>
+
+<h2>Plane colors</h2>
+<p>Provisional. The plane-to-color mapping is written down so it stops being arbitrary, but nothing here is locked.</p>
+<div class="card">
+  <div class="swatch-row"><span class="chip" style="background:#F59E0B"></span><span class="swatch-meta">rule<br><span class="hex">#F59E0B</span></span></div>
+  <div class="swatch-row"><span class="chip" style="background:#3B82F6"></span><span class="swatch-meta">instruction<br><span class="hex">#3B82F6</span></span></div>
+  <div class="swatch-row"><span class="chip" style="background:#14B8A6"></span><span class="swatch-meta">annotation<br><span class="hex">#14B8A6</span></span></div>
+  <div class="swatch-row"><span class="chip" style="background:#8B5CF6"></span><span class="swatch-meta">record<br><span class="hex">#8B5CF6</span> · the oblique plane</span></div>
+</div>
+<p>Ink (axes, origin, wordmark) is the only thing that flips between backgrounds: <code>#1A1A1A</code> on light, <code>#F2F2F2</code> on dark. Plane colors are identical in both.</p>
+
+<h2>Specimens</h2>
+<p>Every specimen below is inlined SVG. This sheet has no external file dependencies and renders correctly from any location.</p>
+<div class="specimen">
+<div><div class="spec"><svg width="150" height="150" viewBox="-140 -140 280 280" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>planes</title>
+<desc>Four grid planes crossing at a shared origin: three mutually orthogonal coordinate planes and one oblique plane cutting across them.</desc>
+  <polygon points="-82.68,-7.76 19.09,-33.63 82.68,7.76 -19.09,33.63" fill="#F59E0B" fill-opacity="0.26" stroke="#F59E0B" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-65.72" y1="-12.07" x2="-2.13" y2="29.32" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-72.08" y1="-0.87" x2="29.69" y2="-26.73" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-48.76" y1="-16.39" x2="14.83" y2="25.01" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-61.48" y1="6.03" x2="40.28" y2="-19.83" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.8" y1="-20.7" x2="31.8" y2="20.7" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-50.88" y1="12.93" x2="50.88" y2="-12.93" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-14.83" y1="-25.01" x2="48.76" y2="16.39" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-40.28" y1="19.83" x2="61.48" y2="-6.03" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="2.13" y1="-29.32" x2="65.72" y2="12.07" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-29.69" y1="26.73" x2="72.08" y2="0.87" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-50.88,67.74 50.88,41.88 50.88,-67.74 -50.88,-41.88" fill="#3B82F6" fill-opacity="0.26" stroke="#3B82F6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-33.92" y1="63.43" x2="-33.92" y2="-46.19" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-50.88" y1="49.47" x2="50.88" y2="23.61" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-16.96" y1="59.12" x2="-16.96" y2="-50.5" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-50.88" y1="31.2" x2="50.88" y2="5.34" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="0" y1="54.81" x2="0" y2="-54.81" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-50.88" y1="12.93" x2="50.88" y2="-12.93" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="16.96" y1="50.5" x2="16.96" y2="-59.12" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-50.88" y1="-5.34" x2="50.88" y2="-31.2" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="33.92" y1="46.19" x2="33.92" y2="-63.43" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-50.88" y1="-23.61" x2="50.88" y2="-49.47" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-31.8,34.12 31.8,75.51 31.8,-34.12 -31.8,-75.51" fill="#14B8A6" fill-opacity="0.26" stroke="#14B8A6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-21.2" y1="41.02" x2="-21.2" y2="-68.61" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.8" y1="15.85" x2="31.8" y2="57.24" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-10.6" y1="47.91" x2="-10.6" y2="-61.71" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.8" y1="-2.43" x2="31.8" y2="38.97" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="0" y1="54.81" x2="0" y2="-54.81" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.8" y1="-20.7" x2="31.8" y2="20.7" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="10.6" y1="61.71" x2="10.6" y2="-47.91" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.8" y1="-38.97" x2="31.8" y2="2.43" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="21.2" y1="68.61" x2="21.2" y2="-41.02" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.8" y1="-57.24" x2="31.8" y2="-15.85" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-47.25,65.36 -20.25,17.81 47.25,-65.36 20.25,-17.81" fill="#8B5CF6" fill-opacity="0.26" stroke="#8B5CF6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-42.75" y1="57.44" x2="24.75" y2="-25.73" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36" y1="51.5" x2="-9" y2="3.95" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-38.25" y1="49.51" x2="29.25" y2="-33.66" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-24.75" y1="37.64" x2="2.25" y2="-9.92" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-33.75" y1="41.59" x2="33.75" y2="-41.59" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-13.5" y1="23.78" x2="13.5" y2="-23.78" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-29.25" y1="33.66" x2="38.25" y2="-49.51" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-2.25" y1="9.92" x2="24.75" y2="-37.64" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-24.75" y1="25.73" x2="42.75" y2="-57.44" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="9" y1="-3.95" x2="36" y2="-51.5" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-76.32" y1="19.4" x2="76.32" y2="-19.4" stroke="#1A1A1A" stroke-width="2"/>
+  <line x1="-0" y1="82.22" x2="0" y2="-82.22" stroke="#1A1A1A" stroke-width="2"/>
+  <line x1="-47.69" y1="-31.04" x2="47.69" y2="31.04" stroke="#1A1A1A" stroke-width="2"/>
+  <circle cx="0" cy="0" r="4" fill="#1A1A1A"/>
+</svg></div><div class="cap" style="color:var(--muted)">hero · on light</div></div>
+<div><div class="spec"><svg width="150" height="150" viewBox="-140 -140 280 280" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>planes</title>
+<desc>Four grid planes crossing at a shared origin: three mutually orthogonal coordinate planes and one oblique plane cutting across them.</desc>
+  <polygon points="-84.22,-4.85 10.34,-39.54 84.22,4.85 -10.34,39.54" fill="#F59E0B" fill-opacity="0.26" stroke="#F59E0B" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-68.46" y1="-10.64" x2="5.42" y2="33.76" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-71.91" y1="2.54" x2="22.65" y2="-32.14" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-52.7" y1="-16.42" x2="21.18" y2="27.98" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-59.59" y1="9.94" x2="34.97" y2="-24.74" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-22.2" x2="36.94" y2="22.2" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="17.34" x2="47.28" y2="-17.34" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-21.18" y1="-27.98" x2="52.7" y2="16.42" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-34.97" y1="24.74" x2="59.59" y2="-9.94" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-5.42" y1="-33.76" x2="68.46" y2="10.64" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-22.65" y1="32.14" x2="71.91" y2="-2.54" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-47.28,70.32 47.28,35.63 47.28,-70.32 -47.28,-35.63" fill="#3B82F6" fill-opacity="0.26" stroke="#3B82F6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-31.52" y1="64.54" x2="-31.52" y2="-41.42" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="52.66" x2="47.28" y2="17.98" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-15.76" y1="58.76" x2="-15.76" y2="-47.2" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="35" x2="47.28" y2="0.32" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="0" y1="52.98" x2="0" y2="-52.98" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="17.34" x2="47.28" y2="-17.34" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="15.76" y1="47.2" x2="15.76" y2="-58.76" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="-0.32" x2="47.28" y2="-35" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="31.52" y1="41.42" x2="31.52" y2="-64.54" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="-17.98" x2="47.28" y2="-52.66" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-36.94,30.78 36.94,75.17 36.94,-30.78 -36.94,-75.17" fill="#14B8A6" fill-opacity="0.26" stroke="#14B8A6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-24.63" y1="38.18" x2="-24.63" y2="-67.77" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="13.12" x2="36.94" y2="57.51" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-12.31" y1="45.58" x2="-12.31" y2="-60.38" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-4.54" x2="36.94" y2="39.86" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="0" y1="52.98" x2="0" y2="-52.98" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-22.2" x2="36.94" y2="22.2" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="12.31" y1="60.38" x2="12.31" y2="-45.58" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-39.86" x2="36.94" y2="4.54" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="24.63" y1="67.77" x2="24.63" y2="-38.18" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-57.51" x2="36.94" y2="-13.12" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-41.69,69.23 -27.07,13.32 41.69,-69.23 27.07,-13.32" fill="#8B5CF6" fill-opacity="0.26" stroke="#8B5CF6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-39.25" y1="59.91" x2="29.5" y2="-22.64" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-30.23" y1="55.47" x2="-15.61" y2="-0.44" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.82" y1="50.59" x2="31.94" y2="-31.95" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-18.77" y1="41.72" x2="-4.15" y2="-14.2" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-34.38" y1="41.27" x2="34.38" y2="-41.27" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-7.31" y1="27.96" x2="7.31" y2="-27.96" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.94" y1="31.95" x2="36.82" y2="-50.59" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="4.15" y1="14.2" x2="18.77" y2="-41.72" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-29.5" y1="22.64" x2="39.25" y2="-59.91" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="15.61" y1="0.44" x2="30.23" y2="-55.47" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-70.92" y1="26.01" x2="70.92" y2="-26.01" stroke="#1A1A1A" stroke-width="2"/>
+  <line x1="-0" y1="79.47" x2="0" y2="-79.47" stroke="#1A1A1A" stroke-width="2"/>
+  <line x1="-55.41" y1="-33.3" x2="55.41" y2="33.3" stroke="#1A1A1A" stroke-width="2"/>
+  <circle cx="0" cy="0" r="4" fill="#1A1A1A"/>
+</svg></div><div class="cap" style="color:var(--muted)">mark · on light</div></div>
+<div><div class="spec"><svg width="150" height="150" viewBox="-120 -120 240 240" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>planes</title>
+<desc>Four grid planes crossing at a shared origin: three mutually orthogonal coordinate planes and one oblique plane cutting across them.</desc>
+  <polygon points="-84.22,-4.85 10.34,-39.54 84.22,4.85 -10.34,39.54" fill="#F59E0B" fill-opacity="0.42" stroke="#F59E0B" stroke-opacity="0.9" stroke-width="5"/>
+  <polygon points="-47.28,70.32 47.28,35.63 47.28,-70.32 -47.28,-35.63" fill="#3B82F6" fill-opacity="0.42" stroke="#3B82F6" stroke-opacity="0.9" stroke-width="5"/>
+  <polygon points="-36.94,30.78 36.94,75.17 36.94,-30.78 -36.94,-75.17" fill="#14B8A6" fill-opacity="0.42" stroke="#14B8A6" stroke-opacity="0.9" stroke-width="5"/>
+  <polygon points="-41.69,69.23 -27.07,13.32 41.69,-69.23 27.07,-13.32" fill="#8B5CF6" fill-opacity="0.42" stroke="#8B5CF6" stroke-opacity="0.9" stroke-width="5"/>
+  <line x1="-70.92" y1="26.01" x2="70.92" y2="-26.01" stroke="#1A1A1A" stroke-width="7"/>
+  <line x1="-0" y1="79.47" x2="0" y2="-79.47" stroke="#1A1A1A" stroke-width="7"/>
+  <line x1="-55.41" y1="-33.3" x2="55.41" y2="33.3" stroke="#1A1A1A" stroke-width="7"/>
+  <circle cx="0" cy="0" r="11" fill="#1A1A1A"/>
+</svg></div><div class="cap" style="color:var(--muted)">small · on light</div></div>
+</div>
+<div class="specimen dark" style="margin-top:1rem;">
+<div><div class="spec"><svg width="150" height="150" viewBox="-140 -140 280 280" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>planes</title>
+<desc>Four grid planes crossing at a shared origin: three mutually orthogonal coordinate planes and one oblique plane cutting across them.</desc>
+  <polygon points="-82.68,-7.76 19.09,-33.63 82.68,7.76 -19.09,33.63" fill="#F59E0B" fill-opacity="0.26" stroke="#F59E0B" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-65.72" y1="-12.07" x2="-2.13" y2="29.32" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-72.08" y1="-0.87" x2="29.69" y2="-26.73" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-48.76" y1="-16.39" x2="14.83" y2="25.01" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-61.48" y1="6.03" x2="40.28" y2="-19.83" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.8" y1="-20.7" x2="31.8" y2="20.7" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-50.88" y1="12.93" x2="50.88" y2="-12.93" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-14.83" y1="-25.01" x2="48.76" y2="16.39" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-40.28" y1="19.83" x2="61.48" y2="-6.03" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="2.13" y1="-29.32" x2="65.72" y2="12.07" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-29.69" y1="26.73" x2="72.08" y2="0.87" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-50.88,67.74 50.88,41.88 50.88,-67.74 -50.88,-41.88" fill="#3B82F6" fill-opacity="0.26" stroke="#3B82F6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-33.92" y1="63.43" x2="-33.92" y2="-46.19" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-50.88" y1="49.47" x2="50.88" y2="23.61" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-16.96" y1="59.12" x2="-16.96" y2="-50.5" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-50.88" y1="31.2" x2="50.88" y2="5.34" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="0" y1="54.81" x2="0" y2="-54.81" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-50.88" y1="12.93" x2="50.88" y2="-12.93" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="16.96" y1="50.5" x2="16.96" y2="-59.12" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-50.88" y1="-5.34" x2="50.88" y2="-31.2" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="33.92" y1="46.19" x2="33.92" y2="-63.43" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-50.88" y1="-23.61" x2="50.88" y2="-49.47" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-31.8,34.12 31.8,75.51 31.8,-34.12 -31.8,-75.51" fill="#14B8A6" fill-opacity="0.26" stroke="#14B8A6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-21.2" y1="41.02" x2="-21.2" y2="-68.61" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.8" y1="15.85" x2="31.8" y2="57.24" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-10.6" y1="47.91" x2="-10.6" y2="-61.71" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.8" y1="-2.43" x2="31.8" y2="38.97" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="0" y1="54.81" x2="0" y2="-54.81" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.8" y1="-20.7" x2="31.8" y2="20.7" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="10.6" y1="61.71" x2="10.6" y2="-47.91" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.8" y1="-38.97" x2="31.8" y2="2.43" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="21.2" y1="68.61" x2="21.2" y2="-41.02" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.8" y1="-57.24" x2="31.8" y2="-15.85" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-47.25,65.36 -20.25,17.81 47.25,-65.36 20.25,-17.81" fill="#8B5CF6" fill-opacity="0.26" stroke="#8B5CF6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-42.75" y1="57.44" x2="24.75" y2="-25.73" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36" y1="51.5" x2="-9" y2="3.95" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-38.25" y1="49.51" x2="29.25" y2="-33.66" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-24.75" y1="37.64" x2="2.25" y2="-9.92" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-33.75" y1="41.59" x2="33.75" y2="-41.59" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-13.5" y1="23.78" x2="13.5" y2="-23.78" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-29.25" y1="33.66" x2="38.25" y2="-49.51" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-2.25" y1="9.92" x2="24.75" y2="-37.64" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-24.75" y1="25.73" x2="42.75" y2="-57.44" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="9" y1="-3.95" x2="36" y2="-51.5" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-76.32" y1="19.4" x2="76.32" y2="-19.4" stroke="#F2F2F2" stroke-width="2"/>
+  <line x1="-0" y1="82.22" x2="0" y2="-82.22" stroke="#F2F2F2" stroke-width="2"/>
+  <line x1="-47.69" y1="-31.04" x2="47.69" y2="31.04" stroke="#F2F2F2" stroke-width="2"/>
+  <circle cx="0" cy="0" r="4" fill="#F2F2F2"/>
+</svg></div><div class="cap" style="color:#8d8d8a">hero · on dark</div></div>
+<div><div class="spec"><svg width="150" height="150" viewBox="-140 -140 280 280" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>planes</title>
+<desc>Four grid planes crossing at a shared origin: three mutually orthogonal coordinate planes and one oblique plane cutting across them.</desc>
+  <polygon points="-84.22,-4.85 10.34,-39.54 84.22,4.85 -10.34,39.54" fill="#F59E0B" fill-opacity="0.26" stroke="#F59E0B" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-68.46" y1="-10.64" x2="5.42" y2="33.76" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-71.91" y1="2.54" x2="22.65" y2="-32.14" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-52.7" y1="-16.42" x2="21.18" y2="27.98" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-59.59" y1="9.94" x2="34.97" y2="-24.74" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-22.2" x2="36.94" y2="22.2" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="17.34" x2="47.28" y2="-17.34" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-21.18" y1="-27.98" x2="52.7" y2="16.42" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-34.97" y1="24.74" x2="59.59" y2="-9.94" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-5.42" y1="-33.76" x2="68.46" y2="10.64" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-22.65" y1="32.14" x2="71.91" y2="-2.54" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-47.28,70.32 47.28,35.63 47.28,-70.32 -47.28,-35.63" fill="#3B82F6" fill-opacity="0.26" stroke="#3B82F6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-31.52" y1="64.54" x2="-31.52" y2="-41.42" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="52.66" x2="47.28" y2="17.98" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-15.76" y1="58.76" x2="-15.76" y2="-47.2" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="35" x2="47.28" y2="0.32" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="0" y1="52.98" x2="0" y2="-52.98" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="17.34" x2="47.28" y2="-17.34" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="15.76" y1="47.2" x2="15.76" y2="-58.76" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="-0.32" x2="47.28" y2="-35" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="31.52" y1="41.42" x2="31.52" y2="-64.54" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-47.28" y1="-17.98" x2="47.28" y2="-52.66" stroke="#3B82F6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-36.94,30.78 36.94,75.17 36.94,-30.78 -36.94,-75.17" fill="#14B8A6" fill-opacity="0.26" stroke="#14B8A6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-24.63" y1="38.18" x2="-24.63" y2="-67.77" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="13.12" x2="36.94" y2="57.51" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-12.31" y1="45.58" x2="-12.31" y2="-60.38" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-4.54" x2="36.94" y2="39.86" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="0" y1="52.98" x2="0" y2="-52.98" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-22.2" x2="36.94" y2="22.2" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="12.31" y1="60.38" x2="12.31" y2="-45.58" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-39.86" x2="36.94" y2="4.54" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="24.63" y1="67.77" x2="24.63" y2="-38.18" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.94" y1="-57.51" x2="36.94" y2="-13.12" stroke="#14B8A6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <polygon points="-41.69,69.23 -27.07,13.32 41.69,-69.23 27.07,-13.32" fill="#8B5CF6" fill-opacity="0.26" stroke="#8B5CF6" stroke-opacity="0.9" stroke-width="1.6"/>
+  <line x1="-39.25" y1="59.91" x2="29.5" y2="-22.64" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-30.23" y1="55.47" x2="-15.61" y2="-0.44" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-36.82" y1="50.59" x2="31.94" y2="-31.95" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-18.77" y1="41.72" x2="-4.15" y2="-14.2" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-34.38" y1="41.27" x2="34.38" y2="-41.27" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-7.31" y1="27.96" x2="7.31" y2="-27.96" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-31.94" y1="31.95" x2="36.82" y2="-50.59" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="4.15" y1="14.2" x2="18.77" y2="-41.72" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-29.5" y1="22.64" x2="39.25" y2="-59.91" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="15.61" y1="0.44" x2="30.23" y2="-55.47" stroke="#8B5CF6" stroke-opacity="0.45" stroke-width="0.9"/>
+  <line x1="-70.92" y1="26.01" x2="70.92" y2="-26.01" stroke="#F2F2F2" stroke-width="2"/>
+  <line x1="-0" y1="79.47" x2="0" y2="-79.47" stroke="#F2F2F2" stroke-width="2"/>
+  <line x1="-55.41" y1="-33.3" x2="55.41" y2="33.3" stroke="#F2F2F2" stroke-width="2"/>
+  <circle cx="0" cy="0" r="4" fill="#F2F2F2"/>
+</svg></div><div class="cap" style="color:#8d8d8a">mark · on dark</div></div>
+<div><div class="spec"><svg width="150" height="150" viewBox="-120 -120 240 240" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>planes</title>
+<desc>Four grid planes crossing at a shared origin: three mutually orthogonal coordinate planes and one oblique plane cutting across them.</desc>
+  <polygon points="-84.22,-4.85 10.34,-39.54 84.22,4.85 -10.34,39.54" fill="#F59E0B" fill-opacity="0.42" stroke="#F59E0B" stroke-opacity="0.9" stroke-width="5"/>
+  <polygon points="-47.28,70.32 47.28,35.63 47.28,-70.32 -47.28,-35.63" fill="#3B82F6" fill-opacity="0.42" stroke="#3B82F6" stroke-opacity="0.9" stroke-width="5"/>
+  <polygon points="-36.94,30.78 36.94,75.17 36.94,-30.78 -36.94,-75.17" fill="#14B8A6" fill-opacity="0.42" stroke="#14B8A6" stroke-opacity="0.9" stroke-width="5"/>
+  <polygon points="-41.69,69.23 -27.07,13.32 41.69,-69.23 27.07,-13.32" fill="#8B5CF6" fill-opacity="0.42" stroke="#8B5CF6" stroke-opacity="0.9" stroke-width="5"/>
+  <line x1="-70.92" y1="26.01" x2="70.92" y2="-26.01" stroke="#F2F2F2" stroke-width="7"/>
+  <line x1="-0" y1="79.47" x2="0" y2="-79.47" stroke="#F2F2F2" stroke-width="7"/>
+  <line x1="-55.41" y1="-33.3" x2="55.41" y2="33.3" stroke="#F2F2F2" stroke-width="7"/>
+  <circle cx="0" cy="0" r="11" fill="#F2F2F2"/>
+</svg></div><div class="cap" style="color:#8d8d8a">small · on dark</div></div>
+</div>
+
+<h2>Which variant to use</h2>
+<table>
+  <thead><tr><th>Variant</th><th>Use for</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>hero</code></td><td>Site headers, README, docs landing, slides</td>
+        <td>Shallower angle; most legible depth.</td></tr>
+    <tr><td><code>mark</code></td><td>General-purpose icon at 64px and above</td>
+        <td>Full grid detail. Degrades below ~48px.</td></tr>
+    <tr><td><code>small</code></td><td>Favicon, avatar, anything under 48px</td>
+        <td>No interior grid, heavier axes and origin.</td></tr>
+    <tr><td><code>animated</code></td><td>Web hero, loading state, splash</td>
+        <td>The only form that carries the full structural claim.</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+<strong>Verified at small sizes.</strong> Rasterized and inspected at 16, 24, 32, 48, and 64px. The <code>mark</code> variant turns to mud below 48px — interior grid lines are the first thing to die on downsampling. The <code>small</code> variant drops them entirely and thickens the ink; its origin dot and axis lines survive to 16px. At 16px it reads as a distinct shape rather than four legible planes, which is the honest floor for a four-plane crossing at that resolution.
+</div>
+
+<h2>Generating assets</h2>
+<p><code>render_logo.py</code> is the source of truth. It has no dependencies and writes one SVG per view per ink color, plus this sheet.</p>
+<pre><code>python3 render_logo.py</code></pre>
+<p>Output goes to <code>/mnt/user-data/outputs</code> by default; override with the <code>PLANES_OUT</code> environment variable:</p>
+<pre><code>PLANES_OUT=./assets python3 render_logo.py</code></pre>
+<p>Files are named <code>planes-{view}-on-{light|dark}.svg</code>. This sheet is regenerated too — edit the template in the script, never the emitted HTML.</p>
+
+<h3>Adding a camera angle</h3>
+<p>Add an entry to <code>VIEWS</code> and re-run. Two SVGs appear for it automatically, and it joins the specimen rows above.</p>
+<pre><code>VIEWS = {
+    "hero":  {"yaw": 32.0, "pitch": 24.0, "size": 280},
+    "mark":  {"yaw": 38.0, "pitch": 28.0, "size": 280},
+    "small": {"yaw": 38.0, "pitch": 28.0, "size": 240,
+              "divisions": 0, "axis_width": 7.0, "origin_r": 11.0,
+              "plane_stroke": 5.0, "fill_opacity": 0.42},
+    "wide":  {"yaw": 55.0, "pitch": 15.0, "size": 280},
+}</code></pre>
+
+<h3>View parameters</h3>
+<table>
+  <thead><tr><th>Key</th><th>Meaning</th><th>Default</th></tr></thead>
+  <tbody>
+    <tr><td><code>yaw</code></td><td>Rotation about the vertical axis, degrees</td><td>—</td></tr>
+    <tr><td><code>pitch</code></td><td>Tip toward the viewer, degrees</td><td>—</td></tr>
+    <tr><td><code>size</code></td><td>SVG viewBox edge length</td><td>—</td></tr>
+    <tr><td><code>divisions</code></td><td>Grid cells per side; <code>0</code> or <code>1</code> omits interior lines</td><td><code>6</code></td></tr>
+    <tr><td><code>axis_width</code></td><td>Stroke width of the x/y/z lines</td><td><code>2.0</code></td></tr>
+    <tr><td><code>origin_r</code></td><td>Radius of the origin dot</td><td><code>4.0</code></td></tr>
+    <tr><td><code>plane_stroke</code></td><td>Stroke width of each plane's border</td><td><code>1.6</code></td></tr>
+    <tr><td><code>fill_opacity</code></td><td>Plane fill opacity</td><td><code>0.26</code></td></tr>
+  </tbody>
+</table>
+<p>Avoid a near-isometric angle (yaw 45 / pitch 35.264). It makes the three coordinate planes symmetrical, which flattens the exact depth cue needed to tell them apart.</p>
+
+<h3>Changing the geometry</h3>
+<p>Edit <code>PLANES</code>. Each entry is two orthonormal basis vectors spanning the plane, plus a color. Keep <code>u</code> and <code>v</code> unit-length and perpendicular, or planes render sheared rather than square.</p>
+<pre><code>{"name": "record", "color": "#8B5CF6",
+ "u": (0.7071, 0.0, -0.7071),
+ "v": (0.4082, 0.8165, 0.4082)}</code></pre>
+<p>Global knobs: <code>HALF</code> (plane half-width), <code>AXIS</code> (axis half-length — how far the lines overhang the planes), <code>DIVISIONS</code> (default grid density).</p>
+
+<h3>Verifying geometry after an edit</h3>
+<p>Run this to confirm the basis vectors are still unit and perpendicular, and that the coordinate planes are still mutually orthogonal:</p>
+<pre><code>python3 -c "
+import itertools, math
+from render_logo import PLANES
+def cross(a,b): return (a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0])
+def dot(a,b): return sum(x*y for x,y in zip(a,b))
+def norm(a): return math.sqrt(dot(a,a))
+n={}
+for p in PLANES:
+    c=cross(p['u'],p['v']); L=norm(c); n[p['name']]=tuple(v/L for v in c)
+    print(p['name'], norm(p['u']), norm(p['v']), dot(p['u'],p['v']))
+for a,b in itertools.combinations(n,2):
+    ang=math.degrees(math.acos(max(-1,min(1,abs(dot(n[a],n[b]))))))
+    print(a, 'vs', b, round(ang,2))
+"</code></pre>
+<p>Expect lengths of 1.0, dot products of 0.0, 90.0° between each pair of coordinate planes, and ~54.74° between <code>record</code> and each of the other three.</p>
+
+<h3>Checking small sizes after an edit</h3>
+<pre><code>pip install cairosvg pillow
+python3 -c "
+import cairosvg
+from PIL import Image
+sizes=[16,24,32,48,64]
+for s in sizes:
+    cairosvg.svg2png(url='planes-small-on-light.svg', write_to='/tmp/t%d.png' % s,
+                     output_width=s, output_height=s, background_color='white')
+imgs=[Image.open('/tmp/t%d.png' % s).convert('RGB') for s in sizes]
+t=[im.resize((im.width*8,im.height*8), Image.NEAREST) for im in imgs]
+W=sum(i.width for i in t)+16*(len(t)+1); H=max(i.height for i in t)+32
+sheet=Image.new('RGB',(W,H),'#dddddd'); x=16
+for i in t:
+    sheet.paste(i,(x,16)); x+=i.width+16
+sheet.save('/tmp/contact_sheet.png')
+"</code></pre>
+<p>Then open <code>/tmp/contact_sheet.png</code> and look at it. Do not infer legibility from file size.</p>
+
+<h2>Files</h2>
+<table>
+  <thead><tr><th>File</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td><code>render_logo.py</code></td><td>Source of truth. Geometry, camera, emission, and this sheet's template.</td></tr>
+    <tr><td><code>planes-{view}-on-{ink}.svg</code></td><td>Generated. Do not hand-edit — regenerate.</td></tr>
+    <tr><td><code>planes-identity.html</code></td><td>Generated. This sheet, with specimens inlined.</td></tr>
+    <tr><td><code>planes-icon-animated.html</code></td><td>Animated icon. Ink follows system light/dark.</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+<strong>Not done.</strong> The animated version is hand-written CSS and is <em>not</em> generated from <code>render_logo.py</code> — its geometry duplicates the script's by hand and can drift. Unifying them is open work.
+</div>
+
+<footer>
+planes — visual identity master sheet. Rough marker; nothing locked. Regenerate everything with <code>python3 render_logo.py</code>.
+</footer>
+
+</div>
+</body>
+</html>
