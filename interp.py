@@ -1485,6 +1485,27 @@ def from_foreign(x):
 
 # ================================================================ why
 
+def approximations_in(traced, seen=None, found=None):
+    """Every distinct approximation entry reachable in this derivation.
+
+    A comparison between two approximate values has TWO of them, and showing
+    both is the whole reason the no-tolerance rule is defensible: the answer is
+    plain, and the explanation says where each side stopped being exact. One
+    epsilon nobody chose would replace both of these lines with silence.
+    """
+    seen = set() if seen is None else seen
+    found = [] if found is None else found
+    if id(traced) in seen:
+        return found
+    seen.add(id(traced))
+    v = getattr(traced, "value", None)
+    if isinstance(v, Number) and v.approx is not None and v.approx not in found:
+        found.append(v.approx)
+    for inp in getattr(traced, "inputs", ()) or ():
+        approximations_in(inp, seen, found)
+    return found
+
+
 def explain(traced, because=None):
     """`why`'s one-line derivation. `because`, when given, is display
     text beside it — never an input the derivation graph carries."""
@@ -1493,6 +1514,8 @@ def explain(traced, because=None):
     text = f"{fmt(traced.value)} from {render(inner)}"
     if because:
         text += f'\n  because "{escape_string_literal(because)}"'
+    for a in approximations_in(n):
+        text += f"\n  approximate — {a.op}: {a.detail}"
     return text
 
 

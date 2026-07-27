@@ -1225,11 +1225,31 @@ function fromForeign(x) {
 
 // ================================================================ why
 
+// Every distinct approximation entry reachable in a derivation. A comparison
+// between two approximate values has TWO of them, and showing both is the
+// whole reason the no-tolerance rule is defensible: the answer is plain, and
+// the explanation says where each side stopped being exact. Deduped by CONTENT
+// rather than by object identity, so two sides that entered the same way name
+// it once and two that entered differently name it twice.
+export function approximationsIn(node, seen = new Set(), found = []) {
+  if (node === null || typeof node !== "object" || seen.has(node)) return found;
+  seen.add(node);
+  const v = node.value;
+  if (v instanceof PlanesNumber && v.approx !== null && !found.some((a) => a.eq(v.approx))) {
+    found.push(v.approx);
+  }
+  for (const inp of node.inputs ?? []) approximationsIn(inp, seen, found);
+  return found;
+}
+
 export function explain(traced, because = null) {
   const n = traced.node;
   const inner = n.kind === "name" && n.inputs.length ? n.inputs[0] : n;
   let text = `${fmt(traced.value)} from ${render(inner)}`;
   if (because) text += `\n  because "${escapeStringLiteral(because)}"`;
+  for (const a of approximationsIn(n)) {
+    text += `\n  approximate — ${a.op}: ${a.detail}`;
+  }
   return text;
 }
 

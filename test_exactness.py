@@ -405,6 +405,110 @@ def test_sine_refuses_a_non_number():
     raise AssertionError("sine of text was accepted")
 
 
+# ---- `why` names where each side stopped being exact ------------------------
+
+
+def _why(src):
+    from host import TestHost
+    from interp import Interpreter
+    i = Interpreter(host=TestHost())
+    i.run(src)
+    return i.output
+
+
+def test_why_on_an_approximate_comparison_names_the_entry_point():
+    """The whole reason the no-tolerance rule is defensible.
+
+    `sine of 30` is not `1/2` — it is 0.4999999999999999999530..., and `==`
+    says so plainly, with no epsilon. What makes that honest rather than
+    surprising is the next line: `why` names where the left side stopped being
+    exact and with what parameters, so a reader can see that the difference is
+    the fifth of a trillionth of a trillionth the series stops at, and decide
+    for themselves whether they wanted a tolerance — rather than being handed
+    one nobody chose.
+    """
+    out = _why("a = sine of 30\nhalf = 1 / 2\nnear = a == half\nwhy near\n")
+    assert out[0].startswith("false from a (0.499999999999999999953058170618) == half (0.5)")
+    assert "approximate — sine:" in out[0]
+    assert "40 significant digits" in out[0]
+    assert "8-term Taylor series" in out[0]
+
+
+def test_why_names_the_entry_once_when_both_sides_entered_the_same_way():
+    """`sine of 30` and `sine of 150` ARE equal, and `==` says so.
+
+    Both entered through the same operation with the same parameters, so there
+    is one entry point to name, not two. The dedup is by CONTENT — the
+    operation and its parameters — and not by object identity, which is a trap
+    `why_tree` fell into once before (S8's named finding: identity dedup is
+    unreproducible in a value language).
+    """
+    out = _why("a = sine of 30\nb = sine of 150\nsame = a == b\nwhy same\n")
+    assert out[0].startswith("true from")
+    assert out[0].count("approximate — sine:") == 1, out[0]
+
+
+def test_why_says_nothing_about_approximation_when_there_is_none():
+    out = _why("a = 1 / 3\nb = a * 3\nwhy b\n")
+    assert "approximate" not in out[0], out[0]
+
+
+def test_both_implementations_render_the_same_why():
+    if NODE is None:
+        return
+    src = "a = sine of 30\nhalf = 1 / 2\nnear = a == half\nwhy near\n"
+    mine = _why(src)
+    import json
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".planes", delete=False) as f:
+        f.write(src)
+        path = f.name
+    try:
+        r = subprocess.run([NODE, "js/cli.mjs", "run", path],
+                           capture_output=True, text=True, cwd=REPO)
+        assert r.returncode == 0, r.stderr
+        assert json.loads(r.stdout)["output"] == mine
+    finally:
+        os.unlink(path)
+
+
+# ---- the seams this build was not allowed to move ---------------------------
+
+
+def test_sine_is_unary_and_the_builtin_count_moved_by_exactly_one():
+    import json
+    with open(os.path.join(REPO, "grammar", "vocabulary.json"), encoding="utf-8") as f:
+        vocab = json.load(f)
+    names = [b["name"] for b in vocab["builtins"]]
+    assert len(names) == 11, names
+    assert names.count("sine") == 1
+    entry = next(b for b in vocab["builtins"] if b["name"] == "sine")
+    assert entry["arity"] == 1, "the unary-builtin invariant holds"
+    assert all(b["arity"] == 1 for b in vocab["builtins"]), "every builtin is unary"
+    assert len(vocab["keywords"]) == 32, "no keyword was added"
+    assert len(vocab["effect_kinds"]) == 7, "no effect kind was added"
+
+
+def test_the_foreign_route_was_not_the_delivery_mechanism():
+    """`sharedTargets` is untouched, and no host gained a trigonometric target.
+
+    §251's portability argument for making this a builtin rather than a
+    `foreign` was that a foreign target names a host path and so forks a
+    shared library. That argument is FALSE — `js/host.mjs` exports
+    `sharedTargets()`, a host-independent table mapping Python-canonical names
+    onto each host's implementation, and `time.time` and `builtins.sorted`
+    already cross it. The CATEGORY argument stands and is what this build
+    rests on: `foreign` is for effect boundaries, and `sine` reaches nothing.
+    So the check is not that the route was unavailable — it is that it was not
+    taken.
+    """
+    for rel in ("js/host.mjs", "host.py"):
+        with open(os.path.join(REPO, rel), encoding="utf-8") as f:
+            src = f.read()
+        for target in ("math.sin", "math.cos", "math.tan"):
+            assert target not in src, f"{rel} gained a {target} target"
+
+
 # ---- the static surface answers it without running anything -----------------
 
 
