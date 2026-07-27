@@ -519,6 +519,80 @@ def test_the_two_fixed_messages_are_in_the_catalogue_as_naming_a_fix():
         assert ec.classify(e, True) == ec.NAMES_FIX, e["id"]
 
 
+# ============================ 6. the self-hosted shortfall, split (C5/Ruling 2)
+#
+# The 72 arrived as one number and is two bodies of work. A self-hosted message
+# whose tag the reference also raises with a catalogued fix already has a clause
+# written and tested on the Python side — porting it is mechanical. Only a site
+# with no reference twin needs authorship. These pin the split's arithmetic; the
+# clauses themselves are the next build's, not this one's.
+
+
+def test_the_split_sums_to_the_shortfall_it_splits():
+    """Invariant 6: a split that changes the number it splits is a defect."""
+    ec = _coverage()
+    sites = ec.self_hosted_sites()
+    split = ec.split_shortfall(sites[ec.SHORTFALL])
+    assert len(split[ec.HAS_TWIN]) + len(split[ec.NO_TWIN]) \
+        == len(sites[ec.SHORTFALL])
+    assert len(sites[ec.SHORTFALL]) == 72, len(sites[ec.SHORTFALL])
+    assert sum(len(v) for v in sites.values()) == 113
+
+
+def test_the_reference_work_list_is_untouched_by_the_split():
+    """The self-hosted figure is reported on its own and never merged: the
+    reference's list is at zero and merging would hide that."""
+    ec = _coverage()
+    assert ec.coverage()["counts"][ec.SHORTFALL] == 0
+
+
+def test_a_twin_is_a_tag_the_reference_raises_and_names_a_fix_for():
+    ec = _coverage()
+    twins = ec.reference_fix_tags()
+    assert twins, "no reference tag names a fix — the match would be vacuous"
+    for tag, ids in twins.items():
+        assert isinstance(tag, str) and ids
+    # A tag the reference raises WITHOUT ever naming a fix is not a twin.
+    fake = ec.split_shortfall([("x.planes", 1, "src", "no-such-tag-anywhere")],
+                              twins)
+    assert len(fake[ec.NO_TWIN]) == 1
+
+
+def test_multiplicity_is_reported_rather_than_resolved():
+    """A tag is shared across messages by design, so a tag match is evidence a
+    clause exists to port and not proof it is the right one. The figure has to
+    be visible or the next build reads a one-to-one mapping that is not there."""
+    ec = _coverage()
+    twins = ec.reference_fix_tags()
+    split = ec.split_shortfall(ec.self_hosted_sites()[ec.SHORTFALL], twins)
+    assert split["multiplicity"], "no multiplicity reported"
+    assert len(split["multiplicity"]) <= len(split[ec.HAS_TWIN])
+    for site in split["multiplicity"]:
+        assert len(twins[site[3]]) > 1, site
+
+
+def test_an_unreadable_tag_falls_to_the_side_nothing_checked():
+    """`error-of of stmt.tag` names its tag dynamically. It cannot be matched
+    either way, so it counts as needing authorship — the conservative side —
+    and is listed on its own so the distortion stays visible."""
+    ec = _coverage()
+    split = ec.split_shortfall(ec.self_hosted_sites()[ec.SHORTFALL])
+    assert split["tag_unreadable"], "no unreadable-tag figure reported"
+    for site in split["tag_unreadable"]:
+        assert site[3] is None, site
+        assert site in split[ec.NO_TWIN], site
+
+
+def test_every_self_hosted_site_carries_its_tag_or_none():
+    ec = _coverage()
+    for state, sites in ec.self_hosted_sites().items():
+        for site in sites:
+            assert len(site) == 4, (state, site)
+            f, n, src, tag = site
+            assert f.endswith(".planes") and n > 0 and src
+            assert tag is None or (tag and " " not in tag), site
+
+
 if __name__ == "__main__":
     fails = []
     tests = [(k, f) for k, f in sorted(globals().items())

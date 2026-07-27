@@ -195,6 +195,12 @@ def self_hosted_sites():
     marked deliberate for the same stated reason: the message belongs to
     whoever raised it. `fail "..." as tag` writes its own message here and has
     nowhere put a fix, so it is shortfall.
+
+    Each site is `(file, line, source, tag)`. The tag is read from the call —
+    a literal at `error-of of "..."`, the target of `fail ... as <tag>` — and
+    is None where the site names it dynamically (`error-of of stmt.tag`). C5
+    needs it to split the shortfall against the reference catalogue; None is
+    carried rather than guessed, and reported as its own figure.
     """
     import re
 
@@ -206,10 +212,11 @@ def self_hosted_sites():
         for n, line in enumerate(open(path, encoding="utf-8"), 1):
             if line.lstrip().startswith("#"):
                 continue
-            for _ in re.finditer(r"\berror-fix-of of ", line):
-                sites[NAMES_FIX].append((name, n, line.strip()[:96]))
-            for _ in re.finditer(r"(?<!-)\berror-of of ", line):
-                sites[SHORTFALL].append((name, n, line.strip()[:96]))
+            src = line.strip()[:96]
+            for m in re.finditer(r"\berror-fix-of of ", line):
+                sites[NAMES_FIX].append((name, n, src, _tag_at(line, m.end())))
+            for m in re.finditer(r"(?<!-)\berror-of of ", line):
+                sites[SHORTFALL].append((name, n, src, _tag_at(line, m.end())))
             m = re.match(r"\s*fail\s+(.*?)\s+as\s+([\w-]+)\s*$", line)
             if m:
                 arg = m.group(1)
@@ -218,8 +225,161 @@ def self_hosted_sites():
                 # wrote, and it names no fix.
                 deliberate = re.fullmatch(r"[A-Za-z][\w-]*(\.[\w-]+)*", arg)
                 bucket = DELIBERATE if deliberate else SHORTFALL
-                sites[bucket].append((name, n, line.strip()[:96]))
+                sites[bucket].append((name, n, src, m.group(2)))
     return sites
+
+
+def _tag_at(line, pos):
+    """The tag a `... of ` call names at `pos`, or None if it is not a literal.
+
+    `error-of of "not-a-record", ...` reads; `error-of of stmt.tag, ...` does
+    not, and neither does the two-line definition `to error-of of tag, detail:`.
+    """
+    import re
+
+    m = re.match(r'"([^"]+)"', line[pos:])
+    return m.group(1) if m else None
+
+
+# ------------------------------------------- the shortfall, split (C5 / Ruling 2)
+#
+# 72 of 113 self-hosted raise sites name no fix, and that arrived as one number.
+# It is two bodies of work, and only one of them needs anybody to write prose.
+#
+# The premise of the three-implementation convergence is that the answer does
+# not depend on which implementation ran the program. So any self-hosted message
+# whose tag the reference also raises with a catalogued `fix` already has a
+# clause written, tested, and byte-identical on the Python side; porting it is
+# mechanical. Only a site with no reference twin needs authorship.
+#
+# THE MATCH IS ON THE TAG, AND A TAG IS NOT A MESSAGE
+#
+# Tags are deliberately shared across many messages
+# (REPORT_DETAIL_CONVERGENCE.md §4 item 4 is explicit about this): ten of them
+# here map to more than one catalogued entry. A tag match is therefore evidence
+# that *a* clause exists to port, not proof it is the right clause for this
+# site. The multiplicity is reported as its own figure rather than resolved, so
+# the build that reads this number decides per site and is never told the
+# mapping is one-to-one when it is not.
+#
+# This produces a number. It ports nothing, and it does not merge into the
+# reference's work list, which is at zero.
+
+HAS_TWIN = "has a reference twin"
+NO_TWIN = "no reference twin"
+
+
+def reference_fix_tags():
+    """tag -> the catalogued reference entries that raise it AND name a fix.
+
+    Only `PlanesError` carries a tag. The other six error classes — chiefly
+    PlanesSyntaxError and PlanesAmbiguity — have none, so their entries are not
+    addressable by tag at all and cannot be twins however close the message is.
+    `untagged_reference_entries()` reports how many that is, because a matcher
+    whose key half the catalogue does not have is a matcher that understates.
+    """
+    cat = load(ERRORS_PATH)
+    amber_ok = amber_templates_all_name_a_fix(load(AMBER_PATH))
+    twins: dict[str, list[str]] = {}
+    for e in cat["entries"]:
+        if e.get("kind", ERROR_KIND) != ERROR_KIND:
+            continue
+        if e.get("tag") and classify(e, amber_ok) == NAMES_FIX:
+            twins.setdefault(e["tag"], []).append(e["id"])
+    return twins
+
+
+def untagged_reference_entries():
+    """(entries with no tag, entries in total). The ceiling on what tag-matching
+    can ever see."""
+    entries = [e for e in load(ERRORS_PATH)["entries"]
+               if e.get("kind", ERROR_KIND) == ERROR_KIND]
+    return sum(1 for e in entries if not e.get("tag")), len(entries)
+
+
+def split_shortfall(shortfall, twins=None):
+    """The 72, as port-versus-write. Sub-counts sum to the input, always.
+
+    A site whose tag is unreadable (`error-of of stmt.tag`) cannot be matched
+    either way, so it falls to NO_TWIN — the conservative side, because the
+    alternative is claiming a clause exists to port when nothing checked. It is
+    also counted on its own below so the distortion stays visible.
+    """
+    twins = reference_fix_tags() if twins is None else twins
+    out = {HAS_TWIN: [], NO_TWIN: [], "multiplicity": [], "tag_unreadable": []}
+    for site in shortfall:
+        tag = site[3]
+        if tag and tag in twins:
+            out[HAS_TWIN].append(site)
+            if len(twins[tag]) > 1:
+                out["multiplicity"].append(site)
+        else:
+            out[NO_TWIN].append(site)
+            if tag is None:
+                out["tag_unreadable"].append(site)
+    return out
+
+
+def render_split(split, twins):
+    ambiguous = sorted({s[3] for s in split["multiplicity"]})
+    lines = ["", "  THE SHORTFALL SPLIT — port versus write (C5 / Ruling 2). "
+             "A number, not the clauses.", ""]
+    lines.append(f"  {HAS_TWIN:<28} {len(split[HAS_TWIN]):>3}  the reference "
+                 "raises this tag and names a fix;")
+    lines.append("                               "
+                 "  the clause exists — porting it is mechanical")
+    lines.append(f"  {NO_TWIN:<28} {len(split[NO_TWIN]):>3}  unique to the "
+                 "self-hosted stack; needs a clause written")
+    lines.append("")
+    lines.append(f"  Of the {len(split[HAS_TWIN])} with a twin, "
+                 f"{len(split['multiplicity'])} carry a tag that maps to more "
+                 "than one catalogued")
+    lines.append(f"  entry — {len(ambiguous)} such tags:")
+    row = "     "
+    for tag in ambiguous:
+        if len(row) + len(tag) + 2 > 72:
+            lines.append(row)
+            row = "     "
+        row += f" {tag} ({len(twins[tag])})"
+    lines.append(row if ambiguous else "      none")
+    lines.append("  A tag is shared across messages by design, so a match is "
+                 "evidence a clause exists")
+    lines.append("  to port, NOT proof it is the right clause for that site. "
+                 "The next build decides")
+    lines.append("  per site; this one does not pretend the mapping is "
+                 "one-to-one.")
+    if split["tag_unreadable"]:
+        lines.append("")
+        lines.append(f"  Tag unreadable at the site: "
+                     f"{len(split['tag_unreadable'])} — counted under "
+                     f"'{NO_TWIN}' because")
+        lines.append("  nothing checked, never because anything was ruled out:")
+        for f, n, s, _ in split["tag_unreadable"]:
+            lines.append(f"      {f}:{n}  {s}")
+
+    # The ceiling on the method itself. Only PlanesError carries a tag; a
+    # self-hosted syntax error raised as `parse-error` can therefore never match
+    # the reference's PlanesSyntaxError message however close the two are,
+    # because that entry has no tag to match on. So NO_TWIN is an upper bound on
+    # the authorship work, not a measurement of it — say so where it is read.
+    untagged, entries = untagged_reference_entries()
+    by_file: dict[str, int] = {}
+    for f, _, _, _ in split[NO_TWIN]:
+        by_file[f] = by_file.get(f, 0) + 1
+    lines.append("")
+    lines.append(f"  A CEILING, NOT A MEASUREMENT: {untagged} of the {entries} "
+                 "catalogued reference errors")
+    lines.append("  carry no tag at all — only PlanesError has one — so no "
+                 "amount of message overlap")
+    lines.append("  can make them a twin. The lexer and parser sites below are "
+                 "where that bites, and")
+    lines.append(f"  '{NO_TWIN}' overstates the authorship work by however many "
+                 "of them the")
+    lines.append("  reference already answers through an untagged class:")
+    for f in SELF_HOSTED_GLOB:
+        if f in by_file:
+            lines.append(f"      {f:<20} {by_file[f]:>3} with no twin")
+    return "\n".join(lines)
 
 
 def render_self_hosted(sites):
@@ -247,11 +407,14 @@ def render_self_hosted(sites):
                  "effect of opening the slot.")
     lines.append("")
     by_file: dict[str, int] = {}
-    for f, _, _ in sites[SHORTFALL]:
+    for f, _, _, _ in sites[SHORTFALL]:
         by_file[f] = by_file.get(f, 0) + 1
     for f in SELF_HOSTED_GLOB:
         if f in by_file:
             lines.append(f"  {f:<20} {by_file[f]:>3} name no fix")
+
+    twins = reference_fix_tags()
+    lines.append(render_split(split_shortfall(sites[SHORTFALL], twins), twins))
     return "\n".join(lines)
 
 
@@ -337,8 +500,26 @@ def main(argv):
     cov = coverage()
     sites = self_hosted_sites()
     if "--json" in args:
-        cov["self_hosted"] = {k: [{"file": f, "line": n, "source": s}
-                                  for f, n, s in v] for k, v in sites.items()}
+        def rows(v):
+            return [{"file": f, "line": n, "source": s, "tag": t}
+                    for f, n, s, t in v]
+
+        twins = reference_fix_tags()
+        split = split_shortfall(sites[SHORTFALL], twins)
+        cov["self_hosted"] = {k: rows(v) for k, v in sites.items()}
+        cov["self_hosted_split"] = {
+            "has_a_reference_twin": rows(split[HAS_TWIN]),
+            "no_reference_twin": rows(split[NO_TWIN]),
+            "counts": {HAS_TWIN: len(split[HAS_TWIN]),
+                       NO_TWIN: len(split[NO_TWIN]),
+                       "sum": len(split[HAS_TWIN]) + len(split[NO_TWIN])},
+            "multiplicity": {
+                "sites": len(split["multiplicity"]),
+                "tags": {t: twins[t]
+                         for t in sorted({s[3] for s in split["multiplicity"]})},
+            },
+            "tag_unreadable": rows(split["tag_unreadable"]),
+        }
         print(json.dumps(cov, indent=2))
     else:
         print(render_report(cov))
