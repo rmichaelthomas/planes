@@ -266,7 +266,8 @@ def self_hosted_sites():
                 deliberate = re.fullmatch(r"[A-Za-z][\w-]*(\.[\w-]+)*", arg)
                 if deliberate:
                     bucket = DELIBERATE
-                elif arg.lstrip().startswith("{") and re.search(r"\bfix:", arg):
+                elif arg.lstrip().startswith("{") and re.search(r"(?<!-)\bfix:",
+                                                            arg):
                     bucket = NAMES_FIX
                 elif arg.lstrip().startswith("{") and re.search(r"\bno-fix:",
                                                                 arg):

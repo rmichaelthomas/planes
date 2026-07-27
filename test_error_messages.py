@@ -563,9 +563,12 @@ def test_every_deliberate_self_hosted_silence_states_a_reason():
     import re
     ec = _coverage()
     for f, n, src, _tag, _fn in ec.self_hosted_sites()[ec.DELIBERATE]:
-        bare = re.match(r"fail\s+[A-Za-z][\w-]*(\.[\w-]+)*\s+as\s", src)
-        assert bare or "error-no-fix-of of " in src or "no-fix:" in src, \
-            (f, n, src)
+        # `src` is truncated for the report; read the whole line.
+        with open(os.path.join(REPO, "grammar", f), encoding="utf-8") as fh:
+            line = fh.read().split("\n")[n - 1].strip()
+        bare = re.match(r"fail\s+[A-Za-z][\w-]*(\.[\w-]+)*\s+as\s", line)
+        assert bare or "error-no-fix-of of " in line or "no-fix:" in line, \
+            (f, n, line)
 
 
 def test_the_scanner_does_not_count_its_own_helper_definitions():
