@@ -742,6 +742,69 @@ def build_lockups():
     return written
 
 
+# ---------------------------------------------------------------------------
+# THE SOCIAL CARD — the repository's link preview
+# ---------------------------------------------------------------------------
+# GitHub's social preview, and whatever a link unfurl shows: 1280x640, the
+# size GitHub documents. Full-bleed rather than the lockup's inset card,
+# because an unfurl crops and rounds its own frame and a second border inside
+# that reads as a mistake.
+#
+# Same PLANES, same wordmark outlines, same ink-matching rule as the lockups —
+# it is the horizontal lockup at poster scale, so it cannot drift from the
+# rest of the identity. GitHub takes PNG/JPG/GIF and not SVG, so the committed
+# .png is this .svg rasterised; the SVG is the source and regenerates from
+# here. main() does NOT write the .png — rasterising needs a tool this script
+# deliberately does not depend on. Regenerate it after a change with:
+#
+#     sips -s format png identity/planes-social.svg --out identity/planes-social.png
+#
+# and re-upload it in the repository's Settings -> Social preview.
+
+SOCIAL_W = 1280.0
+SOCIAL_H = 640.0
+SOCIAL_MARK = 340.0     # the mark's on-card side
+SOCIAL_TYPE = 132.0     # wordmark size
+SOCIAL_GAP = 76.0
+
+
+def social_svg(ground="paper"):
+    bg, _line, ink = GROUNDS[ground]
+    text_w = SOCIAL_TYPE * WORDMARK_ADVANCE
+    cap = SOCIAL_TYPE * WORDMARK_CAP
+    total = SOCIAL_MARK + SOCIAL_GAP + text_w
+    left = (SOCIAL_W - total) / 2
+    view = VIEWS["hero"]
+    k = SOCIAL_MARK / view["size"]
+    return "\n".join([
+        f'<svg viewBox="0 0 {fmt(SOCIAL_W)} {fmt(SOCIAL_H)}" '
+        f'width="{fmt(SOCIAL_W)}" height="{fmt(SOCIAL_H)}" '
+        'xmlns="http://www.w3.org/2000/svg" role="img">',
+        "<title>Planes</title>",
+        "<desc>The planes mark beside the Planes wordmark: four grid planes "
+        "crossing at a shared origin.</desc>",
+        f'  <rect width="{fmt(SOCIAL_W)}" height="{fmt(SOCIAL_H)}" '
+        f'fill="{bg}"/>',
+        f'  <g transform="translate({fmt(left + SOCIAL_MARK / 2)}, '
+        f'{fmt(SOCIAL_H / 2)}) scale({k:.6f})">',
+        mark_body("hero", ink),
+        "  </g>",
+        f'  <g transform="translate({fmt(left + SOCIAL_MARK + SOCIAL_GAP)}, '
+        f'{fmt(SOCIAL_H / 2 + cap / 2)}) scale({SOCIAL_TYPE / WORDMARK_EM:.6f})" '
+        f'fill="{ink}">',
+        f'    <path d="{WORDMARK_PATH}"/>',
+        "  </g>",
+        "</svg>",
+    ]) + "\n"
+
+
+def build_social():
+    path = os.path.join(OUT_DIR, "planes-social.svg")
+    with open(path, "w") as fh:
+        fh.write(social_svg())
+    return path
+
+
 def build_sheet():
     """Emit the identity sheet with every specimen inlined, so it has no
     external file dependencies and renders correctly from any location."""
@@ -797,6 +860,7 @@ def main():
                 fh.write(svg)
             written.append(path)
     written.extend(build_lockups())
+    written.append(build_social())
     written.append(build_animated())
     written.append(build_sheet())
     for path in written:
