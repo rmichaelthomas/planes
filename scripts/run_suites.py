@@ -5,13 +5,15 @@ Every `test_*.py` in the repo root is a standalone script with a `__main__`
 runner that exits non-zero on failure. This runner dispatches them; it does not
 change what any of them asserts.
 
-Three things it adds over `for f in test_*.py; do python3 "$f"; done`:
+Four things it adds over `for f in test_*.py; do python3 "$f"; done`:
 
   * per-suite wall-clock timing, written to `.ci-logs/timings.tsv`, so the
     gate's cost is measured rather than guessed (A.0);
   * a worker pool, so the suites do not queue behind each other (A.2);
   * leak surveillance — it watches the repo root for `*.json` files appearing
-    while a suite runs, and records what it sees to `.ci-logs/leaks.json`.
+    while a suite runs, and records what it sees to `.ci-logs/leaks.json`;
+  * a silent-suite gate (C5, Ruling 1) — a suite file that reports no result
+    exits non-zero rather than printing a warning nobody reads.
 
 That last one is why the gate got most of its time back. `test_coverage.py`'s
 `test_the_suite_does_not_touch_the_real_world` re-ran *every other suite* as a
@@ -204,29 +206,47 @@ def main() -> int:
 
     failures = [n for n in names if by_name[n][0] != 0]
     oks = suites = 0
+    silent = []
     for name in names:
         with open(os.path.join(LOGDIR, name + ".log"), encoding="utf-8",
                   errors="replace") as fh:
             text = fh.read()
-        oks += sum(1 for line in text.splitlines()
-                   if line.startswith("  ok    "))
-        suites += sum(1 for line in text.splitlines() if line.endswith(" passing"))
+        lines = text.splitlines()
+        oks += sum(1 for line in lines if line.startswith("  ok    "))
+        reported = sum(1 for line in lines if line.endswith(" passing"))
+        suites += reported
+        if reported == 0:
+            silent.append(name)
 
     print(f"\n== suites: {len(names)} files, {suites} reporting, "
           f"{oks} oks, {jobs} job(s), {elapsed:.1f}s wall ==")
-    if suites != len(names):
-        # A file that reports nothing ran nothing. Two files sat in this state
-        # at b173190 (68 tests, all passing, none counted) because neither had
-        # a `__main__` runner — REPORT_HOST_BOUNDARY.md §5's failure, twice.
-        silent = [n for n in names
-                  if not open(os.path.join(LOGDIR, n + ".log"), encoding="utf-8",
-                              errors="replace").read().rstrip().endswith("passing")]
-        print(f"WARNING: {len(names) - suites} suite file(s) reported no "
-              f"result: {', '.join(silent)}", file=sys.stderr)
+    # A file that reports nothing ran nothing. Two files sat in this state at
+    # b173190 (68 tests, all passing, none counted) because neither had a
+    # `__main__` runner — REPORT_HOST_BOUNDARY.md §5's failure, twice; the whole
+    # of js/test/ was the third, at C4.
+    #
+    # C5 / Ruling 1: this FAILS the gate rather than warning. A warning depends
+    # on somebody reading it, which is exactly what did not happen the first
+    # three times. It is also a different category from errors_coverage.py's
+    # report-and-never-fail: a missing fix clause is a quality judgment, and a
+    # suite file that reports no result is the gate misstating its own coverage.
+    #
+    # `--fast`, `--only` and `--skip` are safe by construction and must stay
+    # that way: `names` is the *selected* set, so a deliberately skipped suite
+    # is never opened, never counted, and can never appear here.
+    #
+    # Detection is "no line ends in ' passing'" — the convention every suite's
+    # `__main__` runner prints. It is a convention rather than a contract, and
+    # that is deliberate: a suite that changes its output format should fail
+    # loudly and be fixed, not be silently exempted by a laxer test.
+    if silent:
+        print(f"SILENT: {len(silent)} suite file(s) reported no result: "
+              f"{', '.join(silent)}\n"
+              "  each ran nothing the gate can count — give it a `__main__` "
+              "runner that prints 'N/M passing'", file=sys.stderr)
     if failures:
         print("FAILED: " + ", ".join(failures), file=sys.stderr)
-        return 1
-    return 0
+    return 1 if (failures or silent) else 0
 
 
 if __name__ == "__main__":
