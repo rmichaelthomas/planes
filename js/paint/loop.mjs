@@ -12,7 +12,7 @@
 // it, and renders it back as next tick's `state` literal. `read` is never
 // used for state and no JSON parsing happens inside Planes.
 
-import { runProgram } from "../browser_main.mjs";
+import { runProgram, runProgramGraph } from "../browser_main.mjs";
 
 function stringLiteral(s) {
   let out = '"';
@@ -64,14 +64,11 @@ export function composePrelude({ tick, keys, pointer, state }) {
   );
 }
 
-// Runs one tick: composes the prelude, runs the whole program, paints
-// nothing itself (the caller does that with js/paint/painter.mjs) but reports
-// the output lines and the next state. Never throws — a program error comes
-// back as `error`, exactly as runProgram already reports it (rule 3: a
-// recursion-too-deep error is reported as itself, not swallowed).
-export function step(src, context) {
-  const prelude = composePrelude(context);
-  const { output, effects, files, error } = runProgram(prelude + "\n" + src, {});
+// The shared tail of a tick, once a runProgram-shaped result is in hand:
+// thread state.json back out as next tick's state, and corroborate the
+// static effect surface (A.3) — a tick's actual effects should never touch
+// the network boundary.
+function stepResult(context, { output, effects, files, error }) {
   if (error) {
     return { lines: output, state: context.state, surfaceSafe: false, error };
   }
@@ -90,11 +87,33 @@ export function step(src, context) {
     }
   }
 
-  // A runtime corroboration of the static effect surface this build promises
-  // (A.3): a tick's actual effects should never touch the network boundary.
   const surfaceSafe = !effects.some(([kind]) => kind === "ask");
-
   return { lines: output, state: nextState, surfaceSafe, error: null };
+}
+
+// Runs one tick: composes the prelude, runs the whole program, paints
+// nothing itself (the caller does that with js/paint/painter.mjs) but reports
+// the output lines and the next state. Never throws — a program error comes
+// back as `error`, exactly as runProgram already reports it (rule 3: a
+// recursion-too-deep error is reported as itself, not swallowed). Synchronous
+// and unchanged since before the module loader: a program with no file-backed
+// `use` never touches a loader at all.
+export function step(src, context) {
+  const prelude = composePrelude(context);
+  const result = runProgram(prelude + "\n" + src, {});
+  return stepResult(context, result);
+}
+
+// Like step, but resolves file-backed `use`d modules first via
+// runProgramGraph — the module-loader-aware tick a page passes a `loader` to.
+// The page awaits; the interpreter itself never does (checkpoint v21.0 §248):
+// once a module's text is cached, resolving it again costs a Map lookup, not
+// a fetch, so a ticking program pays the network cost once per module for the
+// life of the run, not once per frame.
+export async function stepGraph(src, context, { loader, base } = {}) {
+  const prelude = composePrelude(context);
+  const result = await runProgramGraph(prelude + "\n" + src, { base, loader });
+  return stepResult(context, result);
 }
 
 // Drives `step` from a scheduler — requestAnimationFrame in a real page, or
@@ -105,6 +124,12 @@ export function step(src, context) {
 //      is skipped rather than queued if the previous call has not returned;
 //   3. a recursion-too-deep error is reported as itself (step already does
 //      this — createLoop just doesn't hide it).
+// `loader`/`base`, when given, switch every tick to stepGraph instead of
+// step — the page awaits a module read, the interpreter still never does
+// (checkpoint v21.0 §248's "the page waits; the program does not," extended
+// per frame: once a `loader`'s cache is warm, awaiting an already-resolved
+// value costs a microtask, not a fetch). Omit both and this is unchanged from
+// before the module loader — synchronous, calling step() directly.
 export function createLoop({
   getSource,
   getKeys,
@@ -114,6 +139,8 @@ export function createLoop({
   schedule,
   cancel,
   stepEveryNFrames = 1,
+  loader = null,
+  base = null,
 }) {
   const sched =
     schedule ||
@@ -130,26 +157,31 @@ export function createLoop({
   let handle = null;
   let framesSinceStep = 0;
 
-  function frame() {
-    if (!running) return;
-    // requestAnimationFrame runs at the display's rate (commonly 60Hz), which
-    // is far too fast for a human to react to in a grid-stepped game like
-    // snake — the loop itself stays rAF (A.2), but a Planes tick need not
-    // land on every one of its callbacks. stepEveryNFrames > 1 skips callbacks
-    // between ticks; it never causes more than one runProgram call per
-    // animation frame, only fewer.
+  // requestAnimationFrame runs at the display's rate (commonly 60Hz), which is
+  // far too fast for a human to react to in a grid-stepped game like snake —
+  // the loop itself stays rAF (A.2), but a Planes tick need not land on every
+  // one of its callbacks. stepEveryNFrames > 1 skips callbacks between ticks;
+  // it never causes more than one step call per animation frame, only fewer.
+  // Returns true when this callback should actually step.
+  function dueToStep() {
     framesSinceStep += 1;
-    if (framesSinceStep < stepEveryNFrames) {
-      handle = sched(frame);
+    if (framesSinceStep < stepEveryNFrames) return false;
+    framesSinceStep = 0;
+    return true;
+  }
+
+  function frameSync() {
+    if (!running) return;
+    if (!dueToStep()) {
+      handle = sched(frameSync);
       return;
     }
-    framesSinceStep = 0;
     if (pending) {
       // The previous call has not returned — skip this frame rather than
-      // queue another on top of it (rule 2). step() is synchronous today, so
-      // this never actually triggers; it is here so the invariant holds if
-      // that ever changes.
-      handle = sched(frame);
+      // queue another on top of it (rule 2). step() is synchronous, so this
+      // never actually triggers here; it is the same guard frameAsync needs
+      // for real.
+      handle = sched(frameSync);
       return;
     }
     pending = true;
@@ -166,8 +198,41 @@ export function createLoop({
 
     state = result.state;
     onFrame(result);
-    handle = sched(frame);
+    handle = sched(frameSync);
   }
+
+  async function frameAsync() {
+    if (!running) return;
+    if (!dueToStep()) {
+      handle = sched(frameAsync);
+      return;
+    }
+    if (pending) {
+      // rule 2, and here it genuinely can trigger: stepGraph awaits a loader
+      // read, so a second scheduler callback can land before the first
+      // returns.
+      handle = sched(frameAsync);
+      return;
+    }
+    pending = true;
+    const context = { tick, keys: getKeys(), pointer: getPointer(), state };
+    const result = await stepGraph(getSource(), context, { loader, base });
+    pending = false;
+    tick += 1;
+    if (!running) return; // stop()/reset() landed while this tick awaited
+
+    if (result.error) {
+      running = false;
+      onFrame(result);
+      return; // rule 1: stop, don't skip
+    }
+
+    state = result.state;
+    onFrame(result);
+    handle = sched(frameAsync);
+  }
+
+  const frame = loader ? frameAsync : frameSync;
 
   return {
     start() {

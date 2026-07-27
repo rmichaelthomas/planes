@@ -110,6 +110,11 @@
     </div>
 
     <p class="hint" style="margin-top:1rem;">source (editable — Run/Play use whatever is here):</p>
+    <p class="hint">
+      base: <code id="paint-base">—</code> ·
+      modules: <span id="paint-modules">(none loaded)</span>
+      <button id="paint-reload-modules" class="tertiary" type="button">Reload modules ⟳</button>
+    </p>
     <textarea id="paint-source" spellcheck="false"></textarea>
 
     <p class="hint">output — lines the program showed that were not draw commands, or an error:</p>
@@ -132,9 +137,10 @@
     </footer>
 
     <script type="module">
-      import { runProgram, analyseProgram, surfaceReport } from "./js/browser_main.mjs";
+      import { analyseProgramGraph, surfaceReport } from "./js/browser_main.mjs";
       import { paint } from "./js/paint/painter.mjs";
-      import { step, createLoop } from "./js/paint/loop.mjs";
+      import { stepGraph, createLoop } from "./js/paint/loop.mjs";
+      import { BrowserModuleLoader } from "./js/module_loader_browser.mjs";
 
       const PROGRAMS = [
         { id: "turtle", file: "paint/turtle.planes", ticking: false, stepEveryNFrames: 1 },
@@ -151,10 +157,13 @@
       const runBtn = document.getElementById("paint-run");
       const playBtn = document.getElementById("paint-play");
       const resetBtn = document.getElementById("paint-reset");
+      const reloadModulesBtn = document.getElementById("paint-reload-modules");
       const canvas = document.getElementById("paint-canvas");
       const sourceEl = document.getElementById("paint-source");
       const outputEl = document.getElementById("paint-output");
       const surfaceEl = document.getElementById("paint-surface");
+      const baseEl = document.getElementById("paint-base");
+      const modulesEl = document.getElementById("paint-modules");
       const ctx = canvas.getContext("2d");
 
       const DIMENSIONS = { width: canvas.width, height: canvas.height, background: "#ffffff" };
@@ -162,6 +171,11 @@
       const sources = {};
       let current = PROGRAMS[0];
       let loop = null;
+      let currentLoader = null;
+      // Bumped by newLoader(), so an in-flight runOnce()/showSurface() call
+      // from a superseded run can tell it has been superseded and discard its
+      // result instead of painting a stale picture over a newer one.
+      let runGeneration = 0;
       const heldKeys = new Set();
       const pointer = { x: 0, y: 0, down: false };
 
@@ -175,8 +189,31 @@
         outputEl.classList.toggle("error", Boolean(isError));
       }
 
-      function showSurface(src) {
-        const { surface, error } = analyseProgram(src);
+      // One loader per run (checkpoint v21.0 §249.4): Run, Play, Reset and
+      // Reload modules each start fresh, so a module's cache — and the fetch
+      // it took to fill it — is scoped to one run and never rebuilt mid-run.
+      // A ticking program's per-frame stepGraph calls reuse this same
+      // instance via closure (js/paint/loop.mjs's stepGraph/createLoop take
+      // it as `loader`, not a base to re-resolve).
+      function newLoader() {
+        runGeneration += 1;
+        const base = new URL(current.file, window.location.href).href;
+        currentLoader = new BrowserModuleLoader({ base });
+        renderModuleInfo();
+        return currentLoader;
+      }
+
+      function renderModuleInfo() {
+        baseEl.textContent = current.file;
+        const loaded = currentLoader ? currentLoader.loadedModules() : [];
+        modulesEl.textContent = loaded.length ? loaded.map((m) => m.name).join(", ") : "(none loaded)";
+      }
+
+      async function showSurface(src) {
+        const generation = runGeneration;
+        const { surface, error } = await analyseProgramGraph(src, { loader: currentLoader });
+        if (generation !== runGeneration) return; // superseded by a later run
+        renderModuleInfo();
         if (error) {
           surfaceEl.textContent = `✗ ${error.tag}: ${error.message}`;
           return;
@@ -205,8 +242,10 @@
           getPointer: () => ({ ...pointer }),
           initialState: null,
           stepEveryNFrames: current.stepEveryNFrames,
+          loader: currentLoader,
           onFrame: (result) => {
             renderResult(result);
+            renderModuleInfo();
             if (result.error) playBtn.textContent = "Play ▸";
           },
         });
@@ -216,6 +255,7 @@
         stopLoop();
         current = PROGRAMS.find((p) => p.id === id);
         sourceEl.value = sources[id];
+        newLoader();
         loop = buildLoop();
         playBtn.disabled = !current.ticking;
         clearCanvas();
@@ -223,16 +263,21 @@
         runOnce();
       }
 
-      function runOnce() {
+      async function runOnce() {
+        const generation = runGeneration;
+        const loaderForThisRun = currentLoader;
         const context = { tick: 0, keys: [], pointer: { x: 0, y: 0, down: false }, state: null };
         clearCanvas();
-        const result = step(sourceEl.value, context);
+        const result = await stepGraph(sourceEl.value, context, { loader: loaderForThisRun });
+        if (generation !== runGeneration) return; // superseded by a later run
         renderResult(result);
+        renderModuleInfo();
         showSurface(sourceEl.value);
       }
 
       runBtn.addEventListener("click", () => {
         stopLoop();
+        newLoader();
         runOnce();
       });
 
@@ -242,6 +287,7 @@
           stopLoop();
         } else {
           clearCanvas();
+          newLoader();
           loop = buildLoop();
           loop.start();
           playBtn.textContent = "Pause ⏸";
@@ -250,10 +296,19 @@
 
       resetBtn.addEventListener("click", () => {
         stopLoop();
+        newLoader();
         loop = buildLoop();
         clearCanvas();
         showOutput([], false);
         showSurface(sourceEl.value);
+      });
+
+      reloadModulesBtn.addEventListener("click", () => {
+        stopLoop();
+        newLoader();
+        loop = buildLoop();
+        clearCanvas();
+        runOnce();
       });
 
       picker.addEventListener("change", () => selectProgram(picker.value));
@@ -278,6 +333,7 @@
         PROGRAMS.map((p) => fetch(p.file).then((r) => r.text()).then((src) => (sources[p.id] = src))),
       ).then(() => {
         sourceEl.value = sources[current.id];
+        newLoader();
         loop = buildLoop();
         playBtn.disabled = !current.ticking;
         clearCanvas();
