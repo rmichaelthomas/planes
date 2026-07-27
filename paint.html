@@ -70,13 +70,15 @@
     <h1>Planes draws</h1>
     <p class="sub">
       A canvas runtime that adds nothing to the language: a program draws by
-      emitting <code>show</code> lines in a fixed verb whitelist (pen, move,
-      line, circle, dot, rect, box, text, clear — see the footer), and the page
-      paints them. Input crosses in as a value, not an effect; state crosses
-      the tick boundary through <code>write state to "state.json"</code>, one
-      direction. The effect surface beside the canvas is computed, not
-      declared — the same analyser <code>index.html</code> uses — and it is
-      never hidden.
+      emitting <code>show</code> lines carrying the versioned drawing
+      protocol — every line prefixed <code>draw</code>, twenty-six verbs,
+      OKLCH colour (see the footer) — usually through <code>use draw</code>'s
+      helpers rather than assembled by hand, and the page paints them. Input
+      crosses in as a value, not an effect; state crosses the tick boundary
+      through <code>write state to "state.json"</code>, one direction. The
+      effect surface beside the canvas is computed, not declared — the same
+      analyser <code>index.html</code> uses, now following <code>use</code>
+      across the module graph too — and it is never hidden.
     </p>
 
     <div>
@@ -110,31 +112,47 @@
     </div>
 
     <p class="hint" style="margin-top:1rem;">source (editable — Run/Play use whatever is here):</p>
+    <p class="hint">
+      base: <code id="paint-base">—</code> ·
+      modules: <span id="paint-modules">(none loaded)</span>
+      <button id="paint-reload-modules" class="tertiary" type="button">Reload modules ⟳</button>
+    </p>
     <textarea id="paint-source" spellcheck="false"></textarea>
 
     <p class="hint">output — lines the program showed that were not draw commands, or an error:</p>
     <pre id="paint-output">(no output yet)</pre>
 
     <footer>
-      Verbs: <code>pen r g b</code>, <code>width n</code>, <code>move x y</code>,
-      <code>line x y</code>, <code>circle x y r</code>, <code>dot x y r</code>,
-      <code>rect x y w h</code>, <code>box x y w h</code>,
-      <code>text x y string…</code>, <code>clear</code>. A line matching none of
-      these goes to the output pane, never an error. Opens directly in Safari
-      or Firefox. Chrome blocks ES-module loading over <code>file://</code> as
-      a security policy — for Chrome, serve the folder with
-      <code>python3 -m http.server</code> and open
-      <code>http://localhost:8000/paint.html</code>. No bundler, no
+      Drawing Protocol v1 — twenty-six verbs, every line prefixed
+      <code>draw</code>: colour and line (<code>stroke</code>,
+      <code>fill</code>, <code>width</code>, <code>cap</code>,
+      <code>corner</code>), shapes (<code>line</code>, <code>rect</code>,
+      <code>circle</code>, <code>ellipse</code>, <code>arc</code>,
+      <code>triangle</code>), paths (<code>shape</code>, <code>vertex</code>,
+      <code>curve</code>, <code>close</code>, <code>end</code>), transforms
+      (<code>push</code>, <code>pop</code>, <code>translate</code>,
+      <code>rotate</code>, <code>scale</code>), text and canvas
+      (<code>label</code>, <code>size</code>, <code>align</code>,
+      <code>background</code>, <code>clear</code>). Colour is OKLCH
+      (<code>L C H</code>, plus <code>A</code> for <code>stroke</code>/<code>fill</code>).
+      A line not beginning with <code>draw</code> goes to the output pane as
+      text, unconditionally; a line that does begin with <code>draw</code> is
+      always a command, and a malformed one is reported as an error rather
+      than drawn. Opens directly in Safari or Firefox. Chrome blocks
+      ES-module loading over <code>file://</code> as a security policy — for
+      Chrome, serve the folder with <code>python3 -m http.server</code> and
+      open <code>http://localhost:8000/paint.html</code>. No bundler, no
       transpiler, no network dependency: the page loads the real
       <code>js/*.mjs</code> modules, the real <code>grammar/*.json</code> as
-      JSON modules, and the three <code>paint/*.planes</code> programs as
-      plain text, all from this same directory.
+      JSON modules, and the <code>paint/*.planes</code> programs and
+      libraries as plain text, all from this same directory.
     </footer>
 
     <script type="module">
-      import { runProgram, analyseProgram, surfaceReport } from "./js/browser_main.mjs";
+      import { analyseProgramGraph, surfaceReport } from "./js/browser_main.mjs";
       import { paint } from "./js/paint/painter.mjs";
-      import { step, createLoop } from "./js/paint/loop.mjs";
+      import { stepGraph, createLoop } from "./js/paint/loop.mjs";
+      import { BrowserModuleLoader } from "./js/module_loader_browser.mjs";
 
       const PROGRAMS = [
         { id: "turtle", file: "paint/turtle.planes", ticking: false, stepEveryNFrames: 1 },
@@ -151,10 +169,13 @@
       const runBtn = document.getElementById("paint-run");
       const playBtn = document.getElementById("paint-play");
       const resetBtn = document.getElementById("paint-reset");
+      const reloadModulesBtn = document.getElementById("paint-reload-modules");
       const canvas = document.getElementById("paint-canvas");
       const sourceEl = document.getElementById("paint-source");
       const outputEl = document.getElementById("paint-output");
       const surfaceEl = document.getElementById("paint-surface");
+      const baseEl = document.getElementById("paint-base");
+      const modulesEl = document.getElementById("paint-modules");
       const ctx = canvas.getContext("2d");
 
       const DIMENSIONS = { width: canvas.width, height: canvas.height, background: "#ffffff" };
@@ -162,6 +183,11 @@
       const sources = {};
       let current = PROGRAMS[0];
       let loop = null;
+      let currentLoader = null;
+      // Bumped by newLoader(), so an in-flight runOnce()/showSurface() call
+      // from a superseded run can tell it has been superseded and discard its
+      // result instead of painting a stale picture over a newer one.
+      let runGeneration = 0;
       const heldKeys = new Set();
       const pointer = { x: 0, y: 0, down: false };
 
@@ -175,8 +201,31 @@
         outputEl.classList.toggle("error", Boolean(isError));
       }
 
-      function showSurface(src) {
-        const { surface, error } = analyseProgram(src);
+      // One loader per run (checkpoint v21.0 §249.4): Run, Play, Reset and
+      // Reload modules each start fresh, so a module's cache — and the fetch
+      // it took to fill it — is scoped to one run and never rebuilt mid-run.
+      // A ticking program's per-frame stepGraph calls reuse this same
+      // instance via closure (js/paint/loop.mjs's stepGraph/createLoop take
+      // it as `loader`, not a base to re-resolve).
+      function newLoader() {
+        runGeneration += 1;
+        const base = new URL(current.file, window.location.href).href;
+        currentLoader = new BrowserModuleLoader({ base });
+        renderModuleInfo();
+        return currentLoader;
+      }
+
+      function renderModuleInfo() {
+        baseEl.textContent = current.file;
+        const loaded = currentLoader ? currentLoader.loadedModules() : [];
+        modulesEl.textContent = loaded.length ? loaded.map((m) => m.name).join(", ") : "(none loaded)";
+      }
+
+      async function showSurface(src) {
+        const generation = runGeneration;
+        const { surface, error } = await analyseProgramGraph(src, { loader: currentLoader });
+        if (generation !== runGeneration) return; // superseded by a later run
+        renderModuleInfo();
         if (error) {
           surfaceEl.textContent = `✗ ${error.tag}: ${error.message}`;
           return;
@@ -189,7 +238,11 @@
           showOutput([...result.lines, `✗ ${result.error.tag}: ${result.error.message}`], true);
           return;
         }
-        const { text } = paint(ctx, result.lines, DIMENSIONS);
+        const { text, errors } = paint(ctx, result.lines, DIMENSIONS);
+        if (errors.length) {
+          showOutput([...text, ...errors.map((e) => `✗ ${e.tag}: ${e.message}`)], true);
+          return;
+        }
         showOutput(text, false);
       }
 
@@ -205,8 +258,10 @@
           getPointer: () => ({ ...pointer }),
           initialState: null,
           stepEveryNFrames: current.stepEveryNFrames,
+          loader: currentLoader,
           onFrame: (result) => {
             renderResult(result);
+            renderModuleInfo();
             if (result.error) playBtn.textContent = "Play ▸";
           },
         });
@@ -216,6 +271,7 @@
         stopLoop();
         current = PROGRAMS.find((p) => p.id === id);
         sourceEl.value = sources[id];
+        newLoader();
         loop = buildLoop();
         playBtn.disabled = !current.ticking;
         clearCanvas();
@@ -223,16 +279,21 @@
         runOnce();
       }
 
-      function runOnce() {
+      async function runOnce() {
+        const generation = runGeneration;
+        const loaderForThisRun = currentLoader;
         const context = { tick: 0, keys: [], pointer: { x: 0, y: 0, down: false }, state: null };
         clearCanvas();
-        const result = step(sourceEl.value, context);
+        const result = await stepGraph(sourceEl.value, context, { loader: loaderForThisRun });
+        if (generation !== runGeneration) return; // superseded by a later run
         renderResult(result);
+        renderModuleInfo();
         showSurface(sourceEl.value);
       }
 
       runBtn.addEventListener("click", () => {
         stopLoop();
+        newLoader();
         runOnce();
       });
 
@@ -242,6 +303,7 @@
           stopLoop();
         } else {
           clearCanvas();
+          newLoader();
           loop = buildLoop();
           loop.start();
           playBtn.textContent = "Pause ⏸";
@@ -250,10 +312,19 @@
 
       resetBtn.addEventListener("click", () => {
         stopLoop();
+        newLoader();
         loop = buildLoop();
         clearCanvas();
         showOutput([], false);
         showSurface(sourceEl.value);
+      });
+
+      reloadModulesBtn.addEventListener("click", () => {
+        stopLoop();
+        newLoader();
+        loop = buildLoop();
+        clearCanvas();
+        runOnce();
       });
 
       picker.addEventListener("change", () => selectProgram(picker.value));
@@ -278,6 +349,7 @@
         PROGRAMS.map((p) => fetch(p.file).then((r) => r.text()).then((src) => (sources[p.id] = src))),
       ).then(() => {
         sourceEl.value = sources[current.id];
+        newLoader();
         loop = buildLoop();
         playBtn.disabled = !current.ticking;
         clearCanvas();

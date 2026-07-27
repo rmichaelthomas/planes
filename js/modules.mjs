@@ -1,15 +1,16 @@
 // js/modules.mjs — Planes module resolution, ported from modules.py.
 //
 // `use http` / `use file` name builtin capability modules; `use utils` names a
-// file utils.planes resolved relative to the importing file. Node-only: it
-// reads .planes files from disk. interp.mjs never imports it (it is pulled in
-// only by js/run_file.mjs, the Node entry that loads a module graph), so
-// interp.mjs stays browser-loadable.
+// file utils.planes resolved relative to the importing file. Pure: every
+// host-bound operation (turning a module name into a location, reading the
+// text at a location) is supplied by a loader — an ordinary object with
+// locate/read/key/label, not a Host method (js/host.mjs's seven-method
+// interface stays closed; see module_loader_node.mjs / module_loader_browser.mjs
+// for the two implementations). This file imports nothing from the outside
+// world, so it loads unchanged under Node and in a browser tab.
 
-import fs from "node:fs";
-import path from "node:path";
 import { tokenize } from "./lexer.mjs";
-import { scan_names } from "./parser.mjs";
+import { parse, scan_names } from "./parser.mjs";
 
 export const BUILTIN_MODULES = new Set(["http", "file"]);
 
@@ -25,13 +26,12 @@ export class ModuleError extends Error {
   }
 }
 
-// Locate the file for `use name`. Returns null for builtins.
-export function resolve(name, fromPath) {
-  if (BUILTIN_MODULES.has(name)) return null;
-  const base = fromPath ? path.dirname(path.resolve(fromPath)) : process.cwd();
-  const candidate = path.join(base, `${name}.planes`);
-  if (fs.existsSync(candidate)) return candidate;
-  throw new ModuleError(
+// The ModuleError a loader raises when `name` cannot be found — shared so
+// every loader's "not found" message is byte-identical, whether the check
+// happens synchronously (Node's existsSync, inside locate) or only after a
+// failed fetch (a browser, inside read).
+export function missingModuleError(name) {
+  return new ModuleError(
     name,
     `no module named '${name}'`,
     `create ${name}.planes next to this file, or use one of: ` +
@@ -39,32 +39,57 @@ export function resolve(name, fromPath) {
   );
 }
 
-// Load a file and everything it uses, depth first. Returns [path, source] pairs
-// in dependency order — imports before importers. Cycles raise.
-export function load_graph(p, seen = null, stack = null) {
+// Locate the file for `use name`. Returns null for builtins. `fromLocation` is
+// the importing file's own location, or null when there is none (the loader
+// resolves that case against its own base). Throws ModuleError (via the
+// loader) if `name` cannot be found.
+export function resolve(loader, name, fromLocation) {
+  if (BUILTIN_MODULES.has(name)) return null;
+  return loader.locate(name, fromLocation);
+}
+
+// Load a location and everything it uses, depth first, via `loader`. Returns
+// [location, source] pairs in dependency order — imports before importers.
+// Cycles raise. Async because a loader's `read` may be (a browser fetch).
+export async function load_graph(loader, location, seen = null, stack = null) {
   seen = seen ?? new Map();
   stack = stack ?? [];
-  const key = path.resolve(p);
+  const key = loader.key(location);
   if (seen.has(key)) return [];
-  if (stack.includes(key)) {
-    const cycle = [...stack, key].map((x) => path.basename(x)).join(" -> ");
+  if (stack.some((s) => s.key === key)) {
+    const cycle = [...stack, { location, key }]
+      .map((s) => loader.label(s.location))
+      .join(" -> ");
     throw new ModuleError(
-      path.basename(p),
+      loader.label(location),
       `module cycle: ${cycle}`,
       "break the cycle by moving shared code to a third file",
     );
   }
-  const src = fs.readFileSync(p, "utf-8");
-  stack.push(key);
+  const src = await loader.read(location);
+  stack.push({ location, key });
   const ordered = [];
-  for (const mod of uses_in(src)) {
-    const target = resolve(mod, p);
-    if (target !== null) ordered.push(...load_graph(target, seen, stack));
+  for (const mod of cachedUsesIn(src)) {
+    const target = resolve(loader, mod, location);
+    if (target !== null) ordered.push(...(await load_graph(loader, target, seen, stack)));
   }
   stack.pop();
   seen.set(key, true);
-  ordered.push([p, src]);
+  ordered.push([location, src]);
   return ordered;
+}
+
+// load_graph's own recursive lookup of a file's `use` names — same
+// text-keyed caching as renames_in/scan_names above, and the same reasoning:
+// pure in src alone, so a cache hit is never stale.
+const usesInCache = new Map();
+function cachedUsesIn(src) {
+  let r = usesInCache.get(src);
+  if (r === undefined) {
+    r = uses_in(src);
+    usesInCache.set(src, r);
+  }
+  return r;
 }
 
 // Module names this source uses, read from tokens (not a full parse — a file may
@@ -117,21 +142,49 @@ export function renames_in(src) {
   return out;
 }
 
+// renames_in/scan_names are pure functions of a file's own source text —
+// nothing about them depends on which graph or which run asked. Caching them
+// by source text is always correct (a text change is a different cache key,
+// not a stale hit) and matters for a ticking program: without it, an
+// unchanging library file gets re-tokenized twice per file on every single
+// frame, forever, for text that never changes within a run.
+const renamesInCache = new Map();
+const scanNamesCache = new Map();
+
+function cachedRenamesIn(src) {
+  let r = renamesInCache.get(src);
+  if (r === undefined) {
+    r = renames_in(src);
+    renamesInCache.set(src, r);
+  }
+  return r;
+}
+
+function cachedScanNames(src) {
+  let r = scanNamesCache.get(src);
+  if (r === undefined) {
+    r = scan_names(src);
+    scanNamesCache.set(src, r);
+  }
+  return r;
+}
+
 // The name each file contributes, after the importer's renames. Returns
-// [path, original, effective] triples.
-export function effective_names(graph) {
+// [location, original, effective] triples. `loader` supplies `label` for
+// deriving a location's own module name (its basename minus ".planes").
+export function effective_names(graph, loader) {
   const applied = {};
   for (const [, src] of graph) {
-    for (const [mod, pairs] of Object.entries(renames_in(src))) {
+    for (const [mod, pairs] of Object.entries(cachedRenamesIn(src))) {
       applied[mod] = { ...(applied[mod] ?? {}), ...pairs };
     }
   }
   const out = [];
-  for (const [p, src] of graph) {
-    const mod = path.basename(p).replace(".planes", "");
+  for (const [location, src] of graph) {
+    const mod = loader.label(location).replace(/\.planes$/, "");
     const pairs = applied[mod] ?? {};
-    for (const name of scan_names(src).keys()) {
-      out.push([p, name, name in pairs ? pairs[name] : name]);
+    for (const name of cachedScanNames(src).keys()) {
+      out.push([location, name, name in pairs ? pairs[name] : name]);
     }
   }
   return out;
@@ -139,51 +192,110 @@ export function effective_names(graph) {
 
 // Every callable name in a loaded graph, after renames (both original and
 // renamed forms).
-export function names_in_graph(graph) {
+export function names_in_graph(graph, loader) {
   const names = new Set();
-  for (const [, original, effective] of effective_names(graph)) {
+  for (const [, original, effective] of effective_names(graph, loader)) {
     names.add(original);
     names.add(effective);
   }
   return names;
 }
 
-// path -> {original name: name it is known by elsewhere}.
-export function rename_map(graph) {
+// location -> {original name: name it is known by elsewhere}.
+export function rename_map(graph, loader) {
   const out = new Map();
-  for (const [p, original, effective] of effective_names(graph)) {
+  for (const [location, original, effective] of effective_names(graph, loader)) {
     if (original !== effective) {
-      if (!out.has(p)) out.set(p, {});
-      out.get(p)[original] = effective;
+      if (!out.has(location)) out.set(location, {});
+      out.get(location)[original] = effective;
     }
   }
   return out;
 }
 
 // Two files defining the same function name is an error.
-export function check_collisions(graph) {
+export function check_collisions(graph, loader) {
   const owners = new Map();
-  for (const [p, , name] of effective_names(graph)) {
+  for (const [location, , name] of effective_names(graph, loader)) {
     if (!owners.has(name)) owners.set(name, []);
-    owners.get(name).push(p);
+    owners.get(name).push(location);
   }
   const clashes = [];
-  for (const [name, ps] of owners) {
-    if (new Set(ps).size > 1) clashes.push([name, ps]);
+  for (const [name, locs] of owners) {
+    if (new Set(locs).size > 1) clashes.push([name, locs]);
   }
   if (!clashes.length) return;
   clashes.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   const lines = [];
-  for (const [name, ps] of clashes) {
-    const where = [...new Set(ps.map((p) => path.basename(p)))].sort().join(", ");
+  for (const [name, locs] of clashes) {
+    const where = [...new Set(locs.map((l) => loader.label(l)))].sort().join(", ");
     lines.push(`'${name}' is defined in ${where}`);
   }
   const first = clashes[0][0];
-  const other = [...new Set(clashes[0][1].map((p) => path.basename(p)))].sort()[0];
-  const otherMod = other.replace(".planes", "");
+  const other = [...new Set(clashes[0][1].map((l) => loader.label(l)))].sort()[0];
+  const otherMod = other.replace(/\.planes$/, "");
   throw new ModuleError(
     first,
     "two modules define the same name:\n  " + lines.join("\n  "),
     `rename one at the point of use, e.g. \`use ${otherMod} with ${first} as my ${first}\``,
   );
+}
+
+// parse(src, known)'s result depends on `known` too, so it can't be cached by
+// source text alone the way renames_in/scan_names can — but for a fixed
+// program, `known` (every name in the graph) is the same set on every tick,
+// so a loader that opts in (an `astCache` Map — module_loader_browser.mjs's
+// per-run cache, not module_loader_node.mjs's one-shot CLI use) gets the same
+// win without ever risking a stale parse: a change to `src` or to which names
+// are in scope is a different cache key, not a hit.
+function parseCached(src, known, loader) {
+  if (!loader.astCache) return parse(src, known);
+  const key = src + " " + [...known].sort().join(",");
+  let prog = loader.astCache.get(key);
+  if (prog === undefined) {
+    prog = parse(src, known);
+    loader.astCache.set(key, prog);
+  }
+  return prog;
+}
+
+// Parse and hoist a resolved graph against `interp`, then execute the entry
+// location's own top-level statements. The synchronous half of running a
+// module graph — every location's source is already in hand by the time this
+// runs, so nothing here awaits anything. Shared by the Node (run_file.mjs) and
+// browser (browser_main.mjs) entry points, which differ only in how they
+// resolved `graph` and `targetKey` in the first place.
+export function hoistAndRun(interp, graph, targetKey, loader) {
+  // `known` and `renames` both derive from effective_names, and computing it
+  // twice (once per derivation) means re-tokenizing every file in the graph
+  // twice, on every call — the difference between a one-off run and a
+  // per-frame one. One pass instead.
+  const entries = effective_names(graph, loader);
+  const known = new Set();
+  const renames = new Map();
+  for (const [location, original, effective] of entries) {
+    known.add(original);
+    known.add(effective);
+    if (original !== effective) {
+      if (!renames.has(location)) renames.set(location, {});
+      renames.get(location)[original] = effective;
+    }
+  }
+  let entry = [];
+  for (const [location, src] of graph) {
+    const prog = parseCached(src, known, loader);
+    interp.hoist(prog, interp.env, renames.get(location) ?? {});
+    if (loader.key(location) === targetKey) {
+      entry = prog;
+    } else {
+      for (const stmt of prog) {
+        if (stmt.__node === "Use") interp.exec_stmt(stmt, interp.env);
+      }
+    }
+  }
+  for (const stmt of entry) {
+    if (stmt.__node === "Note") continue;
+    interp.exec_stmt(stmt, interp.env);
+  }
+  return interp.output;
 }

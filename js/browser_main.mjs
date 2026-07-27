@@ -14,7 +14,19 @@ import { setVocabulary, setAmberTemplates } from "./grammar_data.mjs";
 import { Interpreter, PlanesError } from "./interp.mjs";
 import { PlanesSyntaxError } from "./lexer.mjs";
 import { BrowserHost } from "./host_browser.mjs";
-import { analyse } from "./shapes.mjs";
+import { analyse, Analyser } from "./shapes.mjs";
+import { parse } from "./parser.mjs";
+import {
+  load_graph,
+  resolve,
+  check_collisions,
+  hoistAndRun,
+  uses_in,
+  names_in_graph,
+  rename_map,
+  BUILTIN_MODULES,
+} from "./modules.mjs";
+import { BrowserModuleLoader } from "./module_loader_browser.mjs";
 
 // Inject the grammar once, from the imported JSON — the browser analogue of
 // loader_node.mjs's fs reads.
@@ -40,6 +52,53 @@ export function runProgram(src, { files = {}, responses = {} } = {}) {
   }
 }
 
+// A sentinel location for the entry source itself — it is never fetched (the
+// caller already has `src` in hand), so it only has to be distinct from every
+// real fetched location, never equal to one.
+const ENTRY = "__entry__";
+
+// Like runProgram, but resolves `use`d file-backed modules first (checkpoint
+// v21.0 §248-249): a module path resolves relative to the importing source's
+// own location, or `base` for the entry source itself, which has none. When
+// `src` uses no file-backed module (the common case — every builtin-only
+// program, and every program with no `use` at all), this delegates straight
+// to runProgram: no fetch, no await cost. `loader` lets a caller reuse one
+// loader (and its per-run cache) across many calls — paint.html constructs
+// one per Run/Play press, not per frame, so a ticking program issues exactly
+// one fetch per module for the life of that run.
+export async function runProgramGraph(src, { base, files = {}, responses = {}, loader = null } = {}) {
+  const used = uses_in(src);
+  const fileBacked = used.filter((name) => !BUILTIN_MODULES.has(name));
+  if (fileBacked.length === 0) {
+    return runProgram(src, { files, responses });
+  }
+
+  const ldr = loader ?? new BrowserModuleLoader({ base });
+  const host = new BrowserHost({ files, responses });
+  const itp = new Interpreter({ host });
+  try {
+    const seen = new Map();
+    const deps = [];
+    for (const mod of used) {
+      const target = resolve(ldr, mod, null);
+      if (target !== null) deps.push(...(await load_graph(ldr, target, seen, [])));
+    }
+    const graph = [...deps, [ENTRY, src]];
+    check_collisions(graph, ldr);
+    const targetKey = ldr.key(ENTRY);
+    hoistAndRun(itp, graph, targetKey, ldr);
+    return { output: itp.output, effects: itp.effects, files: host.files, error: null };
+  } catch (e) {
+    let error;
+    if (e instanceof PlanesError) error = { tag: e.tag, message: e.message };
+    else if (e instanceof PlanesSyntaxError) error = { tag: "syntax", message: e.message };
+    else if (e instanceof RangeError) error = { tag: "recursion-too-deep", message: e.message };
+    else if (e && e.name === "ModuleError") error = { tag: "module-error", message: e.message };
+    else throw e;
+    return { output: itp.output, effects: itp.effects, files: host.files, error };
+  }
+}
+
 // The static effect surface of a program string, WITHOUT running it (A.5). The
 // browser analogue of shapes_cli.py — analyse(src) never executes anything, so
 // this says what the program *would* touch, not what it did. Returns
@@ -51,6 +110,54 @@ export function analyseProgram(src) {
   } catch (e) {
     if (e instanceof PlanesSyntaxError) {
       return { surface: null, error: { tag: "syntax", message: e.message } };
+    }
+    throw e;
+  }
+}
+
+// Like analyseProgram, but follows `use`d file-backed modules first — the
+// analyser analogue of runProgramGraph, and the browser counterpart of
+// js/shapes_node.mjs's analyseFile(follow=true). Without this, a program that
+// calls a draw.planes/math.planes helper would show those calls as
+// `unresolved calls: …` instead of the console boundary they actually
+// derive — accurate but useless to paint.html's surface pane once the three
+// example programs adopt the drawing library in Phase 6.
+export async function analyseProgramGraph(src, { base, loader = null } = {}) {
+  const used = uses_in(src);
+  const fileBacked = used.filter((name) => !BUILTIN_MODULES.has(name));
+  if (fileBacked.length === 0) {
+    return analyseProgram(src);
+  }
+
+  const ldr = loader ?? new BrowserModuleLoader({ base });
+  try {
+    const seen = new Map();
+    const deps = [];
+    for (const mod of used) {
+      const target = resolve(ldr, mod, null);
+      if (target !== null) deps.push(...(await load_graph(ldr, target, seen, [])));
+    }
+    const graph = [...deps, [ENTRY, src]];
+    check_collisions(graph, ldr);
+    const known = names_in_graph(graph, ldr);
+    const renames = rename_map(graph, ldr);
+    const targetKey = ldr.key(ENTRY);
+    const combined = new Analyser();
+    combined.entryFile = targetKey;
+    let entryProg = null;
+    for (const [location, fileSrc] of graph) {
+      const prog = parse(fileSrc, known);
+      const key = ldr.key(location);
+      combined.collectDeclarations(prog, renames.get(location) ?? {}, key);
+      if (key === targetKey) entryProg = prog;
+    }
+    return { surface: combined.analyseProg(entryProg), error: null };
+  } catch (e) {
+    if (e instanceof PlanesSyntaxError) {
+      return { surface: null, error: { tag: "syntax", message: e.message } };
+    }
+    if (e && e.name === "ModuleError") {
+      return { surface: null, error: { tag: "module-error", message: e.message } };
     }
     throw e;
   }

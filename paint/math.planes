@@ -1,0 +1,52 @@
+# paint/math.planes — `mod`, and nothing else.
+#
+# Harvest admitted `mod` alone (checkpoint v21.0 §250): hand-written,
+# independently, in both bloom.planes and snake.planes — two witnesses of
+# three, meeting the harvest bar (v19.1 §229). `triangle` (bloom's wave
+# function) stayed local, one witness only; nothing else was ever written
+# twice. Harvest establishes membership, not semantics: both witnesses agreed
+# with each other and both were wrong outside positive inputs — `mod of -7, 3`
+# returned `-7`, which is neither convention, and a negative divisor never
+# terminated. This definition is written, not copied.
+#
+# Floored, not truncated: the result takes the sign of the divisor. Forced by
+# colour — hue is degrees on a circle (planes-drawing-protocol-v1.md §4.1),
+# so `base - 30` must resolve to a point on the circle. Floored gives `330`
+# for `mod of -30, 360`, which is a hue; truncated gives `-30`, which is not.
+
+to positive-mod of a, b:
+  if a < b:
+    give a
+  else:
+    let doubled = positive-mod of a, (b * 2) because "doubling the divisor each step keeps this O(log(a/b)) deep instead of O(a/b) deep"
+    if doubled < b:
+      give doubled
+    else:
+      give doubled - b
+
+to mod of a, b:
+  if b == 0:
+    fail "cannot take the remainder by zero" as mod-by-zero
+  else:
+    if a >= 0:
+      if b > 0:
+        give positive-mod of a, b
+      else:
+        let r = positive-mod of a, -b
+        if r == 0:
+          give 0
+        else:
+          give r + b
+    else:
+      if b > 0:
+        let r = positive-mod of -a, b
+        if r == 0:
+          give 0
+        else:
+          give b - r
+      else:
+        let r = positive-mod of -a, -b
+        if r == 0:
+          give 0
+        else:
+          give -r
