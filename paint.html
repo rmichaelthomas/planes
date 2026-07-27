@@ -121,19 +121,29 @@
     <pre id="paint-output">(no output yet)</pre>
 
     <footer>
-      Verbs: <code>pen r g b</code>, <code>width n</code>, <code>move x y</code>,
-      <code>line x y</code>, <code>circle x y r</code>, <code>dot x y r</code>,
-      <code>rect x y w h</code>, <code>box x y w h</code>,
-      <code>text x y string…</code>, <code>clear</code>. A line matching none of
-      these goes to the output pane, never an error. Opens directly in Safari
-      or Firefox. Chrome blocks ES-module loading over <code>file://</code> as
-      a security policy — for Chrome, serve the folder with
-      <code>python3 -m http.server</code> and open
-      <code>http://localhost:8000/paint.html</code>. No bundler, no
+      Drawing Protocol v1 — twenty-six verbs, every line prefixed
+      <code>draw</code>: colour and line (<code>stroke</code>,
+      <code>fill</code>, <code>width</code>, <code>cap</code>,
+      <code>corner</code>), shapes (<code>line</code>, <code>rect</code>,
+      <code>circle</code>, <code>ellipse</code>, <code>arc</code>,
+      <code>triangle</code>), paths (<code>shape</code>, <code>vertex</code>,
+      <code>curve</code>, <code>close</code>, <code>end</code>), transforms
+      (<code>push</code>, <code>pop</code>, <code>translate</code>,
+      <code>rotate</code>, <code>scale</code>), text and canvas
+      (<code>label</code>, <code>size</code>, <code>align</code>,
+      <code>background</code>, <code>clear</code>). Colour is OKLCH
+      (<code>L C H</code>, plus <code>A</code> for <code>stroke</code>/<code>fill</code>).
+      A line not beginning with <code>draw</code> goes to the output pane as
+      text, unconditionally; a line that does begin with <code>draw</code> is
+      always a command, and a malformed one is reported as an error rather
+      than drawn. Opens directly in Safari or Firefox. Chrome blocks
+      ES-module loading over <code>file://</code> as a security policy — for
+      Chrome, serve the folder with <code>python3 -m http.server</code> and
+      open <code>http://localhost:8000/paint.html</code>. No bundler, no
       transpiler, no network dependency: the page loads the real
       <code>js/*.mjs</code> modules, the real <code>grammar/*.json</code> as
-      JSON modules, and the three <code>paint/*.planes</code> programs as
-      plain text, all from this same directory.
+      JSON modules, and the <code>paint/*.planes</code> programs and
+      libraries as plain text, all from this same directory.
     </footer>
 
     <script type="module">
@@ -226,7 +236,11 @@
           showOutput([...result.lines, `✗ ${result.error.tag}: ${result.error.message}`], true);
           return;
         }
-        const { text } = paint(ctx, result.lines, DIMENSIONS);
+        const { text, errors } = paint(ctx, result.lines, DIMENSIONS);
+        if (errors.length) {
+          showOutput([...text, ...errors.map((e) => `✗ ${e.tag}: ${e.message}`)], true);
+          return;
+        }
         showOutput(text, false);
       }
 
