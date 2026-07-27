@@ -31,6 +31,7 @@
 | D | reserved words still 32 | ✅ pass | 32 |
 | D | builtins still 10 | ✅ pass | 10 |
 | D | effect kinds still 7 | ✅ pass | 7 |
+| D | host methods still 7 | ✅ pass | ask, read, write, show, clock, resolve, parse_json |
 | D | token classes still 7 | ✅ pass | 7 |
 | D | js/test passes and is at least the 47 baseline | ✅ pass | 47 passing |
 | D | the suite passes | ✅ pass | exit 0 |

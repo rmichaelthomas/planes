@@ -42,9 +42,13 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 
 import errors_coverage as ec  # noqa: E402
+from host import Host  # noqa: E402
 from interp import Interpreter, PlanesError, error_record  # noqa: E402
 from lexer import EFFECT_KINDS, KEYWORDS  # noqa: E402
 from parser import BUILTIN_NAMES  # noqa: E402
+
+HOST_METHODS = ("ask", "read", "write", "show", "clock", "resolve",
+                "parse_json", "to_json")
 
 ROWS: list[tuple[str, str, bool, str]] = []
 NOTES: list[str] = []
@@ -346,6 +350,12 @@ def section_d(quick: bool) -> None:
     with open(os.path.join(REPO, "grammar", "vocabulary.json"),
               encoding="utf-8") as fh:
         vocab = json.load(fh)
+    # The fourth of the four counts is the host seam, which C4 moved 8 -> 7 by
+    # removing `to_json`. Token classes are also 7 and are checked alongside it
+    # so a reader cannot mistake one for the other.
+    check("D", "host methods still 7",
+          sum(1 for m in HOST_METHODS if hasattr(Host, m)) == 7,
+          ", ".join(m for m in HOST_METHODS if hasattr(Host, m)))
     check("D", "token classes still 7", len(vocab["token_classes"]) == 7,
           str(len(vocab["token_classes"])))
 

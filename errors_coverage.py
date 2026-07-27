@@ -272,9 +272,11 @@ NO_TWIN = "no reference twin"
 def reference_fix_tags():
     """tag -> the catalogued reference entries that raise it AND name a fix.
 
-    Only `PlanesError` carries a tag. The other six error classes — chiefly
-    PlanesSyntaxError and PlanesAmbiguity — have none, so their entries are not
-    addressable by tag at all and cannot be twins however close the message is.
+    Only PlanesError and GrammarDataError carry a tag, and four PlanesError
+    sites do not carry one either. Everything else — 29 PlanesSyntaxError
+    entries, 7 RuleConflict, 6 PlanesAmbiguity, 3 ModuleError, 2
+    RuleNotSupported — has no tag at all, so those entries are not addressable
+    by tag and cannot be twins however close the message is.
     `untagged_reference_entries()` reports how many that is, because a matcher
     whose key half the catalogue does not have is a matcher that understates.
     """
@@ -357,11 +359,11 @@ def render_split(split, twins):
         for f, n, s, _ in split["tag_unreadable"]:
             lines.append(f"      {f}:{n}  {s}")
 
-    # The ceiling on the method itself. Only PlanesError carries a tag; a
-    # self-hosted syntax error raised as `parse-error` can therefore never match
-    # the reference's PlanesSyntaxError message however close the two are,
-    # because that entry has no tag to match on. So NO_TWIN is an upper bound on
-    # the authorship work, not a measurement of it — say so where it is read.
+    # The ceiling on the method itself. Half the catalogue has no tag to match
+    # on, so a self-hosted syntax error raised as `parse-error` can never match
+    # the reference's PlanesSyntaxError message however close the two are. So
+    # NO_TWIN is an upper bound on the authorship work, not a measurement of it
+    # — say so where it is read.
     untagged, entries = untagged_reference_entries()
     by_file: dict[str, int] = {}
     for f, _, _, _ in split[NO_TWIN]:
@@ -369,7 +371,9 @@ def render_split(split, twins):
     lines.append("")
     lines.append(f"  A CEILING, NOT A MEASUREMENT: {untagged} of the {entries} "
                  "catalogued reference errors")
-    lines.append("  carry no tag at all — only PlanesError has one — so no "
+    lines.append("  carry no tag at all (PlanesSyntaxError, RuleConflict, "
+                 "PlanesAmbiguity, ModuleError,")
+    lines.append("  RuleNotSupported, and four PlanesError sites), so no "
                  "amount of message overlap")
     lines.append("  can make them a twin. The lexer and parser sites below are "
                  "where that bites, and")
