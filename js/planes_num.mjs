@@ -342,3 +342,105 @@ export class PlanesNumber {
     return this.text();
   }
 }
+
+// ---- sine (planes_checkpoint_v21_0 §§251-253) --------------------------------
+//
+// THE ALGORITHM, once. The port of planes_num.py's sine_degrees, on exactly the
+// same integers — which is what makes the two bit-identical rather than merely
+// close. grammar/interp.planes writes the same steps in Planes with `+ - * /`
+// and `round ... to 0 places`. The full derivation, and why this is scaled
+// integers rather than plain exact rationals, is in planes_num.py's comment;
+// the short version is that the rational form refuses outright at `sine of 60`
+// (a denominator of 10^1224, past MAX_DENOMINATOR) and costs ~3ms per call here
+// even where it does not, because gcd over 2000-bit BigInts dominates
+// everything.
+
+// pi/180 to 40 significant decimal digits, correctly rounded:
+//   0.01745329251994329576923690768488612713443
+// The error against the true value is under 1.3e-42. Byte-identical to
+// planes_num.py's literal.
+export const PI_OVER_180_NUM = 1745329251994329576923690768488612713443n;
+export const PI_OVER_180_DEN = 10n ** 41n;
+export const PI_OVER_180_DIGITS = 40;
+
+// Eight terms: x - x^3/3! + ... - x^15/15!. After the fold the series argument
+// is at most pi/4, where the first omitted term (x^17/17!) is 4.62e-17. That is
+// the accuracy of the answer; RESULT_PLACES is how much of it is kept, not a
+// claim about how much of it is right.
+export const SERIES_TERMS = 8;
+export const WORKING_PLACES = 50;
+const WORKING_SCALE = 10n ** BigInt(WORKING_PLACES);
+export const RESULT_PLACES = 30;
+const RESULT_SCALE = 10n ** BigInt(RESULT_PLACES);
+
+// Round n/d to the nearest integer, half away from zero. Integers only — the
+// same rule `round x to N places` uses, so a program that rounds by hand and
+// this series agree about what "nearest" means.
+function divRound(n, d) {
+  const sign = (n < 0n) !== (d < 0n) ? -1n : 1n;
+  const an = biAbs(n);
+  const ad = biAbs(d);
+  return sign * ((an * 2n + ad) / (ad * 2n));
+}
+
+// sin of (an/ad) degrees, as an integer scaled by WORKING_SCALE. `an/ad` is
+// already folded into [0, 45].
+function seriesScaled(an, ad) {
+  const x = divRound(an * PI_OVER_180_NUM * WORKING_SCALE, ad * PI_OVER_180_DEN);
+  const x2 = divRound(x * x, WORKING_SCALE);
+  let term = x;
+  let total = x;
+  for (let k = 1n; k < BigInt(SERIES_TERMS); k++) {
+    term = -divRound(term * x2, WORKING_SCALE * (2n * k) * (2n * k + 1n));
+    total += term;
+  }
+  return total;
+}
+
+// One record, shared by every value `sine` ever returns: the operation, and the
+// four numbers that decide how good the answer is.
+export const SINE_APPROXIMATION = new Approximation(
+  "sine",
+  `pi/180 to ${PI_OVER_180_DIGITS} significant digits, ` +
+    `an ${SERIES_TERMS}-term Taylor series, ` +
+    `${WORKING_PLACES} working decimal places, ` +
+    `a result rounded to ${RESULT_PLACES}`,
+);
+
+// `sine of d` — d in degrees, exact in, approximate out.
+//
+// Steps 1 and 2 are exact: `sine of 360000030` reduces to `sine of 30` with no
+// additional error at all, which is the property a float implementation cannot
+// offer.
+export function sineDegrees(value) {
+  const an = value.q.n;
+  const ad = value.q.d;
+
+  // 1. into [0, 360), FLOORED (BigInt division truncates toward zero, so the
+  //    negative case is stepped down explicitly), exactly
+  const m = 360n * ad;
+  let q = an / m;
+  if (an < 0n && q * m !== an) q -= 1n;
+  let rn = an - m * q;
+
+  // 2. into [0, 45], exactly — sign flips and subtractions only
+  let sign = 1n;
+  if (rn >= 180n * ad) {
+    rn -= 180n * ad;
+    sign = -1n;
+  }
+  if (rn > 90n * ad) rn = 180n * ad - rn;
+
+  // 3 and 4. the series, at the stated precisions
+  let s;
+  if (rn <= 45n * ad) {
+    s = seriesScaled(rn, ad);
+  } else {
+    // sin(a) = cos(90 - a) = 1 - 2 * sin((90 - a)/2)^2, and (90-a)/2 <= 22.5
+    const h = seriesScaled(90n * ad - rn, ad * 2n);
+    s = WORKING_SCALE - divRound(2n * h * h, WORKING_SCALE);
+  }
+
+  const scaled = divRound(sign * s * RESULT_SCALE, WORKING_SCALE);
+  return new PlanesNumber(new Fraction(scaled, RESULT_SCALE), SINE_APPROXIMATION);
+}

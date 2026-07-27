@@ -13,7 +13,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PlanesNumber, Approximation, Fraction } from "../planes_num.mjs";
+import {
+  PlanesNumber, Approximation, Fraction, sineDegrees,
+  PI_OVER_180_NUM, PI_OVER_180_DEN, PI_OVER_180_DIGITS,
+  SERIES_TERMS, WORKING_PLACES, RESULT_PLACES,
+} from "../planes_num.mjs";
 
 const n = (v) => PlanesNumber.of(v);
 const MARK = new Approximation("sine", "test scaffolding");
@@ -151,4 +155,90 @@ test("MAX_DENOMINATOR still refuses rather than silently approximating", async (
   const { Inexact, MAX_DENOMINATOR } = await import("../planes_num.mjs");
   let v = new PlanesNumber(new Fraction(1n, MAX_DENOMINATOR));
   assert.throws(() => v.div(n(3)), Inexact, "past the bound is a refusal, not a new kind of approximate");
+});
+
+// ---- `sine`, the eleventh builtin ---------------------------------------------
+
+test("sine at the quarter turns", () => {
+  // Three of these land EXACTLY on the right rational, because the fold
+  // reaches them without running the series at all.
+  assert.equal(sineDegrees(n(0)).text(), "0");
+  assert.equal(sineDegrees(n(90)).text(), "1");
+  assert.equal(sineDegrees(n(180)).text(), "0");
+  assert.equal(sineDegrees(n(270)).text(), "-1");
+  assert.equal(sineDegrees(n(360)).text(), "0");
+});
+
+test("every sine result is approximate, including the exact-looking ones", () => {
+  // `sine of 0` is 0 and is APPROXIMATE. The operation's true result being
+  // representable at one argument does not make the operation exact — the
+  // opposite of what square root will do, and the cleanest illustration of
+  // why square root is the harder case.
+  for (const d of [0, 30, 45, 90, 180, 270, 360, -30, 1000000]) {
+    const v = sineDegrees(n(d));
+    assert.equal(v.isExact, false, `sine of ${d}`);
+    assert.equal(v.approx.op, "sine");
+    for (const part of ["40 significant digits", "8-term", "50 working decimal places", "rounded to 30"]) {
+      assert.ok(v.approx.detail.includes(part), part);
+    }
+  }
+});
+
+test("sine symmetry: sine of -d is -(sine of d), and sine of (180-d) is sine of d", () => {
+  for (const d of [0, 7, 30, 45, 60, 89, 90, 123, 179, 250, 359]) {
+    assert.ok(sineDegrees(n(-d)).eq(sineDegrees(n(d)).neg()), `sine of -${d}`);
+    assert.ok(sineDegrees(n(180 - d)).eq(sineDegrees(n(d))), `sine of (180 - ${d})`);
+  }
+});
+
+test("argument reduction is exact at any magnitude", () => {
+  // Math.sin(360000030 * Math.PI / 180) is 0.5000000001..., wrong in the tenth
+  // decimal place. This is the same value as sine of 30, bit for bit — the
+  // property a float implementation cannot offer.
+  const base = sineDegrees(n(30));
+  for (const k of [1, 2, 1000, 1000000, -1, -1000]) {
+    assert.ok(sineDegrees(n(30 + 360 * k)).eq(base), `30 + 360*${k}`);
+  }
+  assert.ok(sineDegrees(n(360000030)).eq(base));
+});
+
+test("a sine result carries a bounded denominator", () => {
+  const bound = 10n ** BigInt(RESULT_PLACES);
+  for (const d of [30, 45, 60, 123, 359]) {
+    assert.ok(sineDegrees(n(d)).q.d <= bound, `sine of ${d}`);
+  }
+});
+
+test("the stated parameters are the ones the code uses", () => {
+  assert.equal(PI_OVER_180_DIGITS, 40);
+  assert.equal(String(PI_OVER_180_NUM).length, 40, "the constant has 40 significant digits");
+  assert.equal(PI_OVER_180_DEN, 10n ** 41n);
+  assert.equal(SERIES_TERMS, 8);
+  assert.equal(WORKING_PLACES, 50);
+  assert.equal(RESULT_PLACES, 30);
+  // The constant is within 1.3e-42 of pi/180. Checked against a 50-digit
+  // expansion held here as an integer, not against Math.PI, which is a double
+  // and so knows only sixteen of the forty digits this constant carries.
+  //   pi/180 = 0.0174532925199432957692369076848861271344287188854172545...
+  const REF = 17453292519943295769236907684886127134428718885417n;  // * 10^-51
+  const ours = PI_OVER_180_NUM * 10n ** 10n;                        // * 10^-51
+  const diff = ours > REF ? ours - REF : REF - ours;
+  assert.ok(diff < 13n * 10n ** 8n, `constant drifted: ${diff} * 10^-51`);
+  assert.ok(diff > 10n ** 8n, "the check would pass for a wildly wrong constant too");
+});
+
+test("sine propagates: anything downstream of it is approximate", () => {
+  const s = sineDegrees(n(30));
+  assert.equal(s.add(n(1)).isExact, false);
+  assert.equal(s.mul(n(100)).roundTo(2).isExact, false, "rounding does not launder it");
+  assert.equal(n(1).sub(s).approx.op, "sine", "and the entry point is still named");
+});
+
+test("no host trigonometric function is reachable from the numeric tower", async () => {
+  const fs = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  for (const rel of ["../planes_num.mjs", "../interp.mjs"]) {
+    const src = fs.readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+    assert.doesNotMatch(src, /Math\.(sin|cos|tan|atan|asin|acos)\b/, rel);
+  }
 });

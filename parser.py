@@ -119,7 +119,7 @@ class Parser:
 
         * a reserved word where a NAME was wanted gets its own message,
           because that is never a punctuation slip — it is the 42-name
-          reserved surface (32 keywords + 10 builtins) being hit. The
+          reserved surface (32 keywords + 11 builtins) being hit. The
           builtin half already errored naming the collision
           (check_binding_name); this is the keyword half, in the same voice.
         * every other site may pass `fix=`, a clause naming what to write

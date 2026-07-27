@@ -8,7 +8,7 @@
 // agreement on the corpus (test_js_interp.py). interp.py is the specification.
 
 import { MemoryHost, TestHost, HostError, pyJsonDumps } from "./host.mjs";
-import { PlanesNumber, Inexact } from "./planes_num.mjs";
+import { PlanesNumber, Inexact, sineDegrees } from "./planes_num.mjs";
 import {
   escapeStringLiteral,
   codePoints,
@@ -829,6 +829,22 @@ export class Interpreter {
       const n = PlanesNumber.of(arg.value).roundTo(0);
       return new Traced(n, new Deriv("op", "whole of", n, [arg.node]));
     }
+    if (name === "sine") {
+      // The eleventh builtin, and the only operation in the language that
+      // returns an approximate value (checkpoint v21.0 §§251-253). Takes
+      // DEGREES, consistent with the drawing protocol's `rotate`: degrees are
+      // whole numbers and stay exact under this language's arithmetic, where
+      // radians would arrive already approximated.
+      if (!isNum(arg.value)) {
+        throw new PlanesError(
+          "not-a-number",
+          `cannot take the sine of ${detailValue(arg.value)}`,
+          "sine takes an angle in degrees as a number — e.g. sine of 30",
+        );
+      }
+      const n = sineDegrees(arg.value);
+      return new Traced(n, new Deriv("op", "sine of", n, [arg.node]));
+    }
     if (name === "text") {
       const v = fmt(arg.value);
       return new Traced(v, new Deriv("op", "text of", v, [arg.node]));
@@ -866,7 +882,7 @@ export class Interpreter {
     throw new PlanesError(
       "unknown-builtin",
       `no builtin is named '${name}'`,
-      "the ten builtins are fixed and the lexer recognises only those, so reaching this is a " +
+      "the eleven builtins are fixed and the lexer recognises only those, so reaching this is a " +
         "defect in the interpreter rather than in the program — worth reporting with the source",
     );
   }

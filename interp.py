@@ -9,7 +9,7 @@ from typing import Any, Optional
 from host import HostError, PythonHost, TestHost
 from lexer import *
 from parser import BUILTIN_NAMES, parse
-from planes_num import Inexact, Number
+from planes_num import Inexact, Number, sine_degrees
 from planes_text import escape_string_literal
 
 
@@ -1025,6 +1025,20 @@ class Interpreter:
             n = Number.of(arg.value).round_to(0)
             return Traced(n, Deriv("op", "whole of", n, [arg.node]))
 
+        if node.name == "sine":
+            # The eleventh builtin, and the only operation in the language that
+            # returns an approximate value (checkpoint v21.0 §§251-253). Takes
+            # DEGREES, consistent with the drawing protocol's `rotate`: degrees
+            # are whole numbers and stay exact under this language's
+            # arithmetic, where radians would arrive already approximated.
+            if not isinstance(arg.value, Number):
+                raise PlanesError(
+                    "not-a-number",
+                    f"cannot take the sine of {detail_value(arg.value)}",
+                    "sine takes an angle in degrees as a number — e.g. sine of 30")
+            n = sine_degrees(arg.value)
+            return Traced(n, Deriv("op", "sine of", n, [arg.node]))
+
         if node.name == "text":
             v = fmt(arg.value)
             return Traced(v, Deriv("op", "text of", v, [arg.node]))
@@ -1078,7 +1092,7 @@ class Interpreter:
 
         raise PlanesError(
             "unknown-builtin", f"no builtin is named '{node.name}'",
-            "the ten builtins are fixed and the lexer recognises only those, "
+            "the eleven builtins are fixed and the lexer recognises only those, "
             "so reaching this is a defect in the interpreter rather than in "
             "the program — worth reporting with the source")
 

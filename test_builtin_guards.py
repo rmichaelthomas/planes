@@ -49,7 +49,7 @@ from modules import ModuleError
 NODE = shutil.which("node")
 REPO = os.path.dirname(os.path.abspath(__file__))
 
-# The ten builtins, and one value of every kind the language has.
+# The eleven builtins, and one value of every kind the language has.
 BUILTINS = ("count", "text", "lower", "upper", "whole", "normalize", "join",
             "rest", "ask", "read")
 VALUES = (("number", "5"), ("text", '"ab"'), ("list", "[1, 2]"),
