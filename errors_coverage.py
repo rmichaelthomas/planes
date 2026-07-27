@@ -214,8 +214,12 @@ def self_hosted_sites():
                 continue
             src = line.strip()[:96]
             for m in re.finditer(r"\berror-fix-of of ", line):
+                if _defines(line, m.start()):
+                    continue
                 sites[NAMES_FIX].append((name, n, src, _tag_at(line, m.end())))
             for m in re.finditer(r"(?<!-)\berror-of of ", line):
+                if _defines(line, m.start()):
+                    continue
                 sites[SHORTFALL].append((name, n, src, _tag_at(line, m.end())))
             m = re.match(r"\s*fail\s+(.*?)\s+as\s+([\w-]+)\s*$", line)
             if m:
@@ -227,6 +231,25 @@ def self_hosted_sites():
                 bucket = DELIBERATE if deliberate else SHORTFALL
                 sites[bucket].append((name, n, src, m.group(2)))
     return sites
+
+
+def _defines(line, start):
+    """Whether the match at `start` is a function DEFINITION, not a call.
+
+    C6 / Ruling 1. `to error-of of tag, detail:` and `to error-fix-of of tag,
+    detail, fix:` are the definitions of the two helpers this scanner looks
+    for, and it matched both — the first into the shortfall, the second into
+    names-a-fix. Two errors in opposite directions, which is why 113 and 72
+    looked stable across two builds while each was one high. `_tag_at`'s
+    docstring already named the case; nothing acted on it.
+
+    The test is the general one and not a list of two names: a match defines if
+    everything before it on the line is exactly `to`. It deliberately does NOT
+    skip every line beginning `to `, because Planes allows a single inline
+    statement as a function body, so `to f of x: give fail-of of (error-of of
+    "y", z), env` is a real raise site on a `to` line and must stay counted.
+    """
+    return line[:start].strip() == "to"
 
 
 def _tag_at(line, pos):

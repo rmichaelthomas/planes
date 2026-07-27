@@ -47,6 +47,41 @@ FAST_SKIP=(
   --skip test_interp_statements_in_planes.py  # 4.8s
 )
 
+# Preflight (C6 / A.4). The gate's last two steps invoke `ruff` and `mypy`
+# bare, and this repo keeps both in ./.venv rather than on the default PATH. A
+# fresh shell therefore died at step nine with `command not found` — after the
+# whole suite, the JS tests and every checker had already run, which is the
+# most expensive possible place to learn that a linter is missing.
+#
+# It FAILS rather than skipping, deliberately. `node` is the one thing this
+# gate lets skip; a green gate that silently type-checked nothing is the same
+# dishonesty about its own coverage that the silent-suite guard exists to
+# prevent. The point is not that a missing linter is fatal — it is that you
+# find out at step one, with a sentence you can act on.
+NEED="ruff"
+FAST_ARG=""
+if [ "$FAST" -eq 1 ]; then
+  FAST_ARG=" --fast"                       # --fast does not run mypy
+else
+  NEED="$NEED mypy"
+fi
+MISSING=""
+for tool in $NEED; do
+  command -v "$tool" >/dev/null 2>&1 || MISSING="$MISSING $tool"
+done
+if [ -n "$MISSING" ]; then
+  echo "ci.sh: not on PATH:${MISSING}" >&2
+  echo "  this repo keeps them in ./.venv, which is not activated in this shell." >&2
+  echo "  run the gate with:" >&2
+  echo "      PATH=\"\$PWD/.venv/bin:\$PATH\" scripts/ci.sh${FAST_ARG}" >&2
+  echo "  or activate it first:  source .venv/bin/activate" >&2
+  if [ ! -d .venv ]; then
+    echo "  (no ./.venv here either — create one: python3 -m venv .venv &&" >&2
+    echo "   .venv/bin/pip install ruff mypy)" >&2
+  fi
+  exit 1
+fi
+
 mkdir -p .ci-logs
 TIMING_FILE="$PWD/.ci-logs/steps.tsv"
 : > "$TIMING_FILE"

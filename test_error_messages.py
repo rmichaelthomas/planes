@@ -529,14 +529,43 @@ def test_the_two_fixed_messages_are_in_the_catalogue_as_naming_a_fix():
 
 
 def test_the_split_sums_to_the_shortfall_it_splits():
-    """Invariant 6: a split that changes the number it splits is a defect."""
+    """Invariant 6: a split that changes the number it splits is a defect.
+
+    C6 / Ruling 1 UPDATED these numbers rather than weakening them: they read
+    72 and 113 and now read 71 and 111. The scanner was counting the two helper
+    DEFINITIONS — `to error-of of tag, detail:` into the shortfall and
+    `to error-fix-of of tag, detail, fix:` into names-a-fix — so the totals
+    were each one high, in opposite directions, which is why they looked stable
+    across two builds."""
     ec = _coverage()
     sites = ec.self_hosted_sites()
     split = ec.split_shortfall(sites[ec.SHORTFALL])
     assert len(split[ec.HAS_TWIN]) + len(split[ec.NO_TWIN]) \
         == len(sites[ec.SHORTFALL])
-    assert len(sites[ec.SHORTFALL]) == 72, len(sites[ec.SHORTFALL])
-    assert sum(len(v) for v in sites.values()) == 113
+    assert len(sites[ec.SHORTFALL]) == 71, len(sites[ec.SHORTFALL])
+    assert sum(len(v) for v in sites.values()) == 111
+
+
+def test_the_scanner_does_not_count_its_own_helper_definitions():
+    """The defect C5 found and declined to fix, closed. Both definitions live
+    in grammar/interp.planes and neither raises anything."""
+    ec = _coverage()
+    sites = ec.self_hosted_sites()
+    defs = [s for v in sites.values() for s in v
+            if s[2].startswith("to error-of of ")
+            or s[2].startswith("to error-fix-of of ")]
+    assert not defs, defs
+    assert len(sites[ec.NAMES_FIX]) == 5, len(sites[ec.NAMES_FIX])
+    assert len(sites[ec.DELIBERATE]) == 35, len(sites[ec.DELIBERATE])
+
+    # The guard is the general one and not a list of two names. Planes allows a
+    # single inline statement as a function body, so a raise on a `to` line is
+    # real and must stay counted — a blanket `to `-line skip would trade an
+    # over-count for an under-count.
+    definition = "to error-of of tag, detail:"
+    inline = 'to f of x: give fail-of of (error-of of "y", z), env'
+    assert ec._defines(definition, definition.index("error-of of"))
+    assert not ec._defines(inline, inline.index("error-of of"))
 
 
 def test_the_reference_work_list_is_untouched_by_the_split():
