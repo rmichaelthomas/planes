@@ -38,7 +38,12 @@ if [ "${1:-}" = "--fast" ]; then FAST=1; fi
 # THE RETIREMENT RULE (C6 / Ruling 3), stated where the next build reads it:
 #
 #   A VERIFICATION SCRIPT GRADUATES INTO A SUITE OR IS DELETED WHEN ITS BUILD
-#   MERGES. There is no third option, and there is no `scripts/verify_*.py`.
+#   MERGES. There is no third option, in any language: no `verify_*.py` and no
+#   `verify-*.mjs`. The rule was first written for Python because that is the
+#   shape the problem had; three JavaScript builds then shipped
+#   `scripts/verify-*.mjs`, one of which reported BLOCKING FAILURE on green
+#   main for two builds because nothing ran it. `test_gate.py` now matches the
+#   NAME in either spelling and every executable extension.
 #
 # A build's verification script is not product code and carries no maintenance
 # expectation, so a kept one is a stale assertion waiting to mislead. Seven of
@@ -49,10 +54,11 @@ if [ "${1:-}" = "--fast" ]; then FAST=1; fi
 # opposite of the shipped `path` convention for a whole build.
 #
 # The remedy is not a fifth mechanism to watch. Every assertion worth failing a
-# build over a year from now belongs in a `test_*.py` this script runs, where
-# C5's silent-suite guard already covers it; everything else has served its
-# purpose and goes. `test_gate.py` asserts that no unrun verification script
-# comes back.
+# build over a year from now belongs in a suite this script runs — a
+# `test_*.py`, where C5's silent-suite guard already covers it, or a
+# `js/test/*.test.mjs`, which the `node --test` step below runs — and
+# everything else has served its purpose and goes. `test_gate.py` asserts that
+# no unrun verification script comes back.
 # ---------------------------------------------------------------------------
 FAST_SKIP=(
   --skip test_batch_equivalence.py         # 35.0s

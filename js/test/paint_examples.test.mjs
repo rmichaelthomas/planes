@@ -19,6 +19,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { runProgramGraph, analyseProgramGraph } from "../browser_main.mjs";
 import { stepGraph } from "../paint/loop.mjs";
 import { BrowserModuleLoader } from "../module_loader_browser.mjs";
+import { VERBS } from "../paint/protocol.mjs";
+import { paint } from "../paint/painter.mjs";
 
 const PAINT_DIR = fileURLToPath(new URL("../../paint/", import.meta.url));
 
@@ -46,6 +48,95 @@ function installFsFetch() {
     else delete globalThis.fetch;
   };
 }
+
+// A no-op 2D context: `paint` is a pure function of what it is handed, so a
+// recording-nothing stub is enough to collect the errors a stream provokes.
+function silentCtx() {
+  let transform = "identity";
+  return {
+    strokeStyle: null, fillStyle: null, lineWidth: null, lineCap: null,
+    lineJoin: null, font: null, textAlign: null,
+    beginPath() {}, moveTo() {}, lineTo() {}, arc() {}, ellipse() {}, rect() {},
+    closePath() {}, bezierCurveTo() {}, stroke() {}, fill() {}, fillRect() {},
+    fillText() {}, translate() {}, rotate() {}, scale() {},
+    getTransform() { return transform; },
+    setTransform(t) { transform = t; },
+    resetTransform() { transform = "identity"; },
+  };
+}
+const DIMENSIONS = { width: 480, height: 360, background: "#ffffff" };
+
+// Every `draw`-prefixed line the corpus emits, over a run of each program
+// long enough to reach the frames that are not the first one. snake is driven
+// into a wall on purpose: `align` is only ever set on the game-over frame,
+// and a coverage test that never dies would report it missing.
+async function collectCorpusStream() {
+  const verbs = new Set();
+  const errors = [];
+  const record = (label, lines) => {
+    for (const line of lines) {
+      const m = /^\s*draw\s+(\S+)/.exec(line);
+      if (m) verbs.add(m[1]);
+    }
+    for (const e of paint(silentCtx(), lines, DIMENSIONS).errors) {
+      errors.push(`${label}: ${e.tag}: ${e.message}`);
+    }
+  };
+  const ctx = (tick, keys, state) => ({ tick, keys, pointer: { x: 0, y: 0, down: false }, state });
+
+  const turtle = await runProgramGraph(readExample("turtle"), { base: baseFor("turtle") });
+  assert.equal(turtle.error, null);
+  record("turtle", turtle.output);
+
+  const bloomSrc = readExample("bloom");
+  const bloomLoader = new BrowserModuleLoader({ base: baseFor("bloom") });
+  for (const tick of [0, 17, 96]) {
+    const r = await stepGraph(bloomSrc, ctx(tick, [], null), { loader: bloomLoader });
+    assert.equal(r.error, null);
+    record(`bloom tick ${tick}`, r.lines);
+  }
+
+  const snakeSrc = readExample("snake");
+  const snakeLoader = new BrowserModuleLoader({ base: baseFor("snake") });
+  let state = null;
+  for (let tick = 0; tick < 40; tick++) {
+    const r = await stepGraph(snakeSrc, ctx(tick, ["ArrowLeft"], state), { loader: snakeLoader });
+    assert.equal(r.error, null);
+    state = r.state;
+    record(`snake tick ${tick}`, r.lines);
+    if (!state.alive) break;
+  }
+  assert.equal(state.alive, false, "snake must reach its game-over frame, which is the only one that sets align");
+
+  return { verbs, errors };
+}
+
+// Empty, and the PR says so: after the Phase A refinement every verb in the
+// table is drawn by one of the three programs. A verb that genuinely cannot
+// be placed honestly belongs here with the reason it could not, rather than
+// forced into a program that has no use for it.
+const COVERAGE_ALLOWLIST = new Map();
+
+test("every drawing verb is exercised somewhere in the corpus", async () => {
+  const restore = installFsFetch();
+  try {
+    const { verbs } = await collectCorpusStream();
+    const missing = VERBS.filter((v) => !verbs.has(v) && !COVERAGE_ALLOWLIST.has(v));
+    assert.deepEqual(missing, [], `verbs the corpus never draws: ${missing.join(", ")}`);
+  } finally {
+    restore();
+  }
+});
+
+test("the corpus emits no protocol error on any frame", async () => {
+  const restore = installFsFetch();
+  try {
+    const { errors } = await collectCorpusStream();
+    assert.deepEqual(errors, []);
+  } finally {
+    restore();
+  }
+});
 
 for (const name of ["turtle", "bloom", "snake"]) {
   test(`${name}.planes contains no \`foreign\` declaration`, () => {

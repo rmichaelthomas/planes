@@ -2,24 +2,44 @@
 # no input, no state threaded across ticks (A.6). Motion needs no event: the
 # whole picture is a pure function of `tick`, recomputed fresh on every call.
 #
-# `mod` comes from math.planes now (checkpoint v21.0 §250 — harvested from
-# this file and snake.planes, two witnesses of three, floored rather than
-# either witness's original truncated definition). The local ramp-up-ramp-
-# down wave `mod`'s sudden snap-back-to-zero gets folded into stayed local —
-# one witness only, and the harvest rule does not admit on one — but it is
-# named `pulse` here rather than its old name `triangle`: that name now
-# belongs to draw.planes's shape verb, and a module graph cannot hold two
-# functions of the same name (checkpoint v21.0 §250's own worked example is a
-# `mod` collision; this is the same rule catching a different one).
+# `mod` comes from math.planes (checkpoint v21.0 §250 — harvested from this
+# file and snake.planes, two witnesses of three, floored rather than either
+# witness's original truncated definition). The local ramp-up-ramp-down wave
+# `mod`'s snap-back-to-zero gets folded into stayed local — one witness only,
+# and the harvest rule does not admit on one — but it is named `pulse` here
+# rather than its old name `triangle`: that name now belongs to draw.planes's
+# shape verb, and a module graph cannot hold two functions of the same name.
 #
 # Colour is OKLCH throughout (planes-drawing-protocol-v1.md §4): the whole
 # palette's hue rotates with `tick`, and each ring is offset from the last by
 # a fixed 18 degrees — an analogous harmony spreading outward through the
 # rings, computed by addition on hue rather than hand-mixed per-channel
 # arithmetic, and wrapped with the same floored `mod` hue arithmetic needs.
+#
+# What alpha changes here is what the program *is*. Opaque strokes occlude:
+# ten of them is ten outlines stacked front-to-back, and the eye reads the
+# stacking order. A low-alpha fill under a higher-alpha edge mixes instead,
+# and ten of those read as one glazed thing made of light. Independent fill
+# and stroke, and any alpha between 0 and 1, are what make that expressible;
+# neither existed in this corpus before.
+#
+# The petal is the only path in the corpus. Everything else the protocol can
+# draw is a shape it already names — a circle, a rectangle, an ellipse. A
+# petal is not, and never will be: `shape`/`vertex`/`curve`/`close`/`end` is
+# how the vocabulary stops being a fixed menu. It is drawn once at a fixed
+# size, in its own frame with its base at the origin, and `push`/`rotate`/
+# `scale`/`pop` puts it where it belongs — so `petal` takes no arguments at
+# all and the transform stack carries every difference between one petal and
+# the next.
 
 use draw
 use math
+
+let ring-count = 10
+let ring-period = 48 because "the pulse's half-period in ticks: at sixty frames a second a ring swells and falls back roughly every 1.6 seconds, slow enough to read as breathing rather than flicker"
+let ring-stagger = 12 because "each ring's pulse is offset twelve ticks from the last, so the swell travels outward through the rings instead of all ten beating in lockstep"
+let ring-harmony = 18 because "an analogous harmony: each ring eighteen degrees further round the hue circle than the last (planes-drawing-protocol-v1.md §4.1 — 25 degrees is the classic analogous step, and a little under it keeps ten rings inside one family)"
+let petal-turn = 36 because "ten petals thirty-six degrees apart close the circle exactly once, so no petal doubles another"
 
 to pulse of t, half-period:
   let folded = mod of t, (half-period * 2)
@@ -28,31 +48,83 @@ to pulse of t, half-period:
   else:
     give (half-period * 2) - folded
 
-to rings of ring-index, ring-count, tick, center-x, center-y, base-hue:
+# The petal: base at the origin, tip straight up the negative y axis, drawn
+# once at one fixed size. Two cubics out and back, closed at the base.
+to petal:
+  shape
+  vertex of 0, 0
+  curve of -19, -14, -13, -39, 0, -46
+  curve of 13, -39, 19, -14, 0, 0
+  close
+  end
+
+to rings of ring-index, tick, base-hue:
   if ring-index >= ring-count:
     give nothing
   else:
-    let period = 48
-    let offset = ring-index * 12
-    let phase = pulse of (tick + offset), period because "each ring is offset from the last by twelve ticks, so the pulse travels outward through the rings instead of all of them beating in lockstep"
-    let radius = 16 + phase * 1.6
-    let lightness = 0.45 + (phase / period) * 0.35 because "the pulse modulates lightness now, in place of the old hand-mixed red/green channels"
-    let hue = mod of (base-hue + ring-index * 18), 360 because "an analogous harmony: each ring eighteen degrees further round the wheel than the last, wrapped by the shared floored mod"
+    let offset = ring-index * ring-stagger
+    let phase = pulse of (tick + offset), ring-period
+    let glow = phase / ring-period because "0 at the pulse's trough and 1 at its crest — one fraction, and radius, lightness and both alphas are all read off it"
+    let radius = 20 + phase * 2.6 because "twenty pixels at the trough and a hundred and forty-five at the crest: the widest ring nearly fills the 360-tall canvas, so the bloom is the picture rather than a motif floating in a lot of empty ground"
+    let lightness = 0.45 + glow * 0.35 because "the pulse modulates lightness, in place of the old hand-mixed red and green channels"
+    let hue = mod of (base-hue + ring-index * ring-harmony), 360 because "each ring further round the wheel than the last, wrapped by the shared floored mod so a hue is always a point on the circle"
 
-    stroke of lightness, 0.15, hue, 1
-    circle of center-x, center-y, radius
+    let body-alpha = 0.06 + glow * 0.09 because "an ABSOLUTE swing of nine hundredths, not a proportion of the 0.06 base: a ring at 0.06 alpha animated by a *fraction* of 0.06 moves by thousandths, which is invisible, and the canvas looks frozen. Translucency has to be animated in alpha units"
+    let edge-alpha = 0.35 + glow * 0.3 because "the edge carries four to six times the body's alpha, so a ring reads as a bounded thing full of light rather than as a soft blur with no shape"
 
-    rings of (ring-index + 1), ring-count, tick, center-x, center-y, base-hue
+    fill of lightness, 0.13, hue, body-alpha
+    stroke of (lightness + 0.15), 0.19, hue, edge-alpha
+    circle of 0, 0, radius
+
+    let petal-scale = radius / 64 because "the petal is drawn once at one size and scaled into place, so it breathes with its ring — and because scale carries the pen with it, the outline thins as the petal shrinks instead of staying a fixed weight"
+    let petal-angle = mod of (ring-index * petal-turn + tick * 2), 360 because "the whole flower turns two degrees a tick, wrapped so the emitted angle stays a number a reader can hold rather than climbing forever"
+
+    push
+    rotate of petal-angle
+    scale of petal-scale, petal-scale
+    petal
+    pop
+
+    rings of (ring-index + 1), tick, base-hue
 
 clear
+
+let ground-lightness = 0.17 because "luminous colour needs a dark substrate: translucent fills over white wash out toward white however they are mixed, and the whole point of the low alphas above is that they add up to light"
+let ground-chroma = 0.03
+let ground-hue = 265
+background of ground-lightness, ground-chroma, ground-hue
+
+# The petal is one closed path with a real joint where its two curves meet at
+# the tip; a round join is what keeps that tip from growing a spike as the
+# outline thickens.
+corner of "round"
 width of 2
 
 let drift-x = pulse of tick, 110 because "a smooth ramp from 0 to 110 and back, so the bloom's centre drifts sideways instead of sitting still"
 let drift-y = pulse of (tick + 30), 70 because "offsetting the vertical drift's phase from the horizontal one is what keeps the centre off a single straight line"
-let center-x = 90 + drift-x
-let center-y = 100 + drift-y
+let center-x = 215 + drift-x * 0.5 because "halving the drift keeps the widest ring inside the 480-wide canvas at both ends of the ramp"
+let center-y = 155 + drift-y * 0.5
 
 let base-hue = mod of (tick * 2), 360 because "the whole palette rotates through hue over time, wrapping at 360 the same way the per-ring offset does"
 
-let ring-count = 10
-rings of 0, ring-count, tick, center-x, center-y, base-hue
+# The whole bloom is drawn at the origin and placed once, the way turtle's
+# tree is: every ring, every petal and the highlight arc below are written in
+# the flower's own coordinates, and where it sits on the page is one
+# translate. Nothing inside knows the canvas exists.
+push
+translate of center-x, center-y
+
+rings of 0, tick, base-hue
+
+# One arc, outside the rings: a highlight sweeping round the bloom's widest
+# edge. An arc is a curve and not a wedge (planes-drawing-protocol-v1.md §7),
+# so this is a bright stroke of exactly 120 degrees and nothing is filled.
+let outer-phase = pulse of (tick + (ring-count - 1) * ring-stagger), ring-period
+let outer-radius = 20 + outer-phase * 2.6
+let sweep-start = mod of (tick * 4), 360
+let sweep-end = mod of (sweep-start + 120), 360 because "wrapping the end means it lands at or below the start for a third of every revolution, which is the case §7 pins: add 360 to the end until it exceeds the start, so the sweep is 120 degrees clockwise either way"
+stroke of 0.97, 0.11, base-hue, 0.75
+width of 3
+arc of 0, 0, (outer-radius + 9), sweep-start, sweep-end
+
+pop

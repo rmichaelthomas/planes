@@ -26,6 +26,8 @@ use file
 let grid-columns = 24
 let grid-rows = 18
 let cell-size = 20
+let board-width = grid-columns * cell-size because "the board's own size in pixels, so the drawing below centres text on the board's midpoint rather than on a hand-tuned number that happens to look centred"
+let board-height = grid-rows * cell-size
 
 to advance of old, keys:
   if not old.alive:
@@ -93,7 +95,39 @@ else:
 
 write next to "state.json"
 
+# ---- drawing ---------------------------------------------------------------
+#
+# Everything below the state write is picture, and nothing below it can change
+# the game. The two helpers here are drawing helpers and live with the
+# drawing.
+
+to grid-verticals of i:
+  if i >= grid-columns:
+    give nothing
+  else:
+    let x = i * cell-size
+    line of x, 0, x, board-height
+    grid-verticals of (i + 1)
+
+to grid-horizontals of j:
+  if j >= grid-rows:
+    give nothing
+  else:
+    let y = j * cell-size
+    line of 0, y, board-width, y
+    grid-horizontals of (j + 1)
+
 clear
+
+# The grid goes down first, under everything else. Any grey solid enough to
+# see used to compete with the play field; at a tenth of an alpha it reads as
+# ruling on paper and the eye stops noticing it after a second.
+let grid-alpha = 0.12 because "the lowest alpha that still resolves as a line on both a light and a dark page — the grid has to be legible enough to count cells with and faint enough to disappear behind the game"
+stroke of 0.5, 0, 0, grid-alpha
+width of 1
+grid-verticals of 1
+grid-horizontals of 1
+
 # dot/box never had an outline; fill+circle/rect now stroke by default, so an
 # explicit transparent stroke keeps the borderless look.
 stroke of 0, 0, 0, 0
@@ -103,19 +137,42 @@ apple-cx = next.apple-x * cell-size + (cell-size / 2)
 apple-cy = next.apple-y * cell-size + (cell-size / 2)
 circle of apple-cx, apple-cy, (cell-size * 0.4)
 
-fill of 0.55, 0.14, 145, 1
+# `body` is oldest-segment-first, so the running index counts from the tail
+# tip toward the head — and lightness rising along it is what makes which way
+# the snake is travelling readable in a still frame.
+segment-count = count of next.body
+ramp-index = 0
 for each seg in next.body:
+  nearness = (ramp-index + 1) / segment-count
+  fill of (0.36 + nearness * 0.26), 0.14, 145, 1
   seg-px = seg.x * cell-size + 1
   seg-py = seg.y * cell-size + 1
   rect of seg-px, seg-py, (cell-size - 2), (cell-size - 2)
+  ramp-index = ramp-index + 1
 
-fill of 0.78, 0.17, 130, 1
-head-px = next.head-x * cell-size + 1
-head-py = next.head-y * cell-size + 1
-rect of head-px, head-py, (cell-size - 2), (cell-size - 2)
+# The head is a triangle rather than a square, pointed the way the snake is
+# going. `dir-x`/`dir-y` is a unit vector and its perpendicular is the same
+# two numbers swapped with one negated, so the three corners are arithmetic —
+# no rotation and no angle.
+fill of 0.82, 0.17, 128, 1
+head-cx = next.head-x * cell-size + (cell-size / 2)
+head-cy = next.head-y * cell-size + (cell-size / 2)
+head-reach = cell-size * 0.46
+perp-x = 0 - next.dir-y
+perp-y = next.dir-x
+tip-x = head-cx + next.dir-x * head-reach
+tip-y = head-cy + next.dir-y * head-reach
+back-x = head-cx - next.dir-x * head-reach
+back-y = head-cy - next.dir-y * head-reach
+triangle of tip-x, tip-y, (back-x + perp-x * head-reach), (back-y + perp-y * head-reach), (back-x - perp-x * head-reach), (back-y - perp-y * head-reach)
 
+let score-size = 14 because "a deliberate size rather than the renderer's default: the score is a caption, and at the default sixteen it competed with the board"
+size of score-size
 fill of 0.15, 0, 0, 1
-label of 8, 16, ("score: " + text of next.score)
+label of 8, 18, ("score: " + text of next.score)
 
 if not next.alive:
-  label of 140, 180, "GAME OVER  -  press Reset to play again"
+  size of 18
+  align of "center"
+  fill of 0.42, 0.2, 25, 1
+  label of (board-width / 2), (board-height / 2), "GAME OVER  -  press Reset to play again"

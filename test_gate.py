@@ -212,6 +212,18 @@ def test_the_preflight_runs_before_the_first_timed_step():
 # not exist. A verification script graduates into a suite or is deleted when
 # its build merges. This is the assertion that makes the rule self-checking,
 # which is the first thing five instances of one failure class has earned.
+#
+# THE SIXTH INSTANCE ARRIVED IN A DIFFERENT LANGUAGE. This check was written
+# for `verify_*.py` because that is the shape the problem had at the time, and
+# three JavaScript builds then shipped `scripts/verify-*.mjs` — hyphens, .mjs —
+# which walked straight past it. `verify-canvas-runtime.mjs` reported BLOCKING
+# FAILURE on green main for two builds, still asserting a retired ten-verb
+# whitelist, and nobody knew, because nobody ran it. A guard written to the
+# shape of the last instance catches only the last instance; this one matches
+# the NAME, in either spelling, in any language the repo executes.
+
+
+VERIFY_SUFFIXES = (".py", ".mjs", ".js", ".ts", ".sh")
 
 
 def _verify_scripts():
@@ -222,7 +234,8 @@ def _verify_scripts():
                                 "node_modules", ".mypy_cache", ".ruff_cache",
                                 ".pytest_cache")]
         for f in files:
-            if f.startswith("verify_") and f.endswith(".py"):
+            named_verify = f.startswith("verify_") or f.startswith("verify-")
+            if named_verify and f.endswith(VERIFY_SUFFIXES):
                 rel = os.path.relpath(os.path.join(dirpath, f), REPO)
                 found.append(rel.replace(os.sep, "/"))
     return sorted(found)
@@ -232,12 +245,15 @@ def test_no_verification_script_exists_for_the_gate_not_to_run():
     """The rule, enforced: a build's verification script is not product code
     and carries no maintenance expectation, so a kept one is a stale assertion
     waiting to mislead. If you are reading this because it failed, the two
-    options are the whole of it — move the assertions into a `test_*.py` this
-    gate runs, or delete the script."""
+    options are the whole of it — move the assertions into a suite this gate
+    runs (`test_*.py`, or `js/test/*.test.mjs` for the JavaScript side), or
+    delete the script. Both spellings and every executable extension count:
+    the rule is about the category, not about Python."""
     found = _verify_scripts()
     assert not found, (
         "verification script(s) the gate does not run: " + ", ".join(found)
-        + " — graduate the durable assertions into a test_*.py, delete the rest")
+        + " — graduate the durable assertions into a suite the gate runs"
+          " (test_*.py, or js/test/*.test.mjs), delete the rest")
 
 
 def test_the_retirement_rule_is_stated_where_the_next_build_reads_it():

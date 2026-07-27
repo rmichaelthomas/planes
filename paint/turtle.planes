@@ -14,32 +14,71 @@
 # after recursing into it, so the transform it leaves behind on return is
 # exactly the transform it was called with — the function never leaks a
 # rotation or an offset into its caller.
+#
+# Everything that varies down the tree — thickness, lightness, chroma, hue,
+# alpha, the leaf's size — is a function of `remaining-depth` and nothing
+# else. There is no palette table and no per-generation special case: one
+# fraction, `climb`, drives all of it, which is what makes a taller or
+# shorter tree a one-number change.
+#
+# The leaf at depth 0 is an `ellipse` drawn at the local origin, so it points
+# wherever its branch points. Nothing about it is computed here — the branch's
+# own frame, already translated and rotated by its parents, is the whole of
+# its orientation. A leaf sets its own fill and a transparent stroke; a branch
+# never sets fill at all, because a line has no interior to fill, in either
+# renderer.
 
 use draw
 
-to tree of branch-length, angle, remaining-depth:
+to tree of branch-length, angle, remaining-depth, max-depth:
   if remaining-depth <= 0:
+    let leaf-width = branch-length * 0.45
+    let leaf-length = branch-length * 1.1
+    let leaf-center = -branch-length * 0.8 because "the leaf sits just past the twig's tip rather than centred on it, so it reads as growing from the branch instead of skewered by it"
+    stroke of 0, 0, 0, 0
+    fill of 0.74, 0.15, 138, 0.9
+    ellipse of 0, leaf-center, leaf-width, leaf-length
     give nothing
   else:
+    let climb = (max-depth - remaining-depth) / max-depth because "0 at the trunk and 1 at the tips, so every ramp below is one fraction of the way up the tree rather than a per-generation table"
+    let tipward = climb * climb because "the same fraction squared: near zero across most of the tree and rising sharply only in the last generations, which is the shape anything that should happen at the tips and nowhere else wants"
+
+    let lightness = 0.32 + climb * 0.42 because "OKLCH lightness is perceptual, so an evenly-spaced ramp reads as an even climb from shaded bark to lit twig; the same numbers in RGB would bunch at the dark end and stall at the light one"
+    let chroma = 0.05 + climb * 0.07 because "bark is nearly grey and new growth is not, so saturation climbs alongside lightness instead of holding still"
+    let hue = 40 + tipward * 95 because "40 degrees is brown and 135 is green, and hue is degrees on a circle (planes-drawing-protocol-v1.md §4.1), so drifting from one to the other is addition — squared, because a trunk that is already olive halfway up is not a tree"
+    let haze = tipward * 0.3 because "the fade is almost nothing across most of the tree and only the outermost generations go translucent: depth haze, not an overall wash"
+    let thickness = 0.8 + remaining-depth * 0.6 because "a trunk five pixels thick tapering to a twig under one and a half; thickness is what tells the generations apart at a glance"
+
+    stroke of lightness, chroma, hue, (1 - haze)
+    width of thickness
     line of 0, 0, 0, -branch-length
 
-    let child-length = branch-length * 0.72 because "each generation noticeably shorter than its parent is what makes the recursion read as a tree"
+    let child-length = round (branch-length * 0.72) to 3 places because "each generation noticeably shorter than its parent is what makes the recursion read as a tree — rounded, because these numbers are exact rationals and eight compounded multiplications carry every coordinate out to thirty-odd digits, none of which a pixel can express and all of which the program pays to format and the renderer pays to read"
+    let other-length = round (child-length * 1.09) to 3 places because "the two children are NOT the same length. `random` is one of the seven effect kinds and this program declares none, so the irregularity that keeps the canopy from being a machined scallop has to come from a constant — one branch of every pair a ninth longer, compounded eight times, is the whole of it"
 
     push
     translate of 0, -branch-length
     rotate of -angle
-    tree of child-length, angle, (remaining-depth - 1)
+    tree of child-length, angle, (remaining-depth - 1), max-depth
     pop
 
     push
     translate of 0, -branch-length
     rotate of angle
-    tree of child-length, angle, (remaining-depth - 1)
+    tree of other-length, angle, (remaining-depth - 1), max-depth
     pop
 
 clear
-stroke of 0.45, 0.09, 60, 1
-width of 2
+
+let ground-lightness = 0.95 because "a warm paper ground, so the tree sits on a chosen surface rather than on whatever the page's own background happens to be — light mode and dark mode then paint the same picture"
+let ground-chroma = 0.014
+let ground-hue = 95
+background of ground-lightness, ground-chroma, ground-hue
+
+# Segments meeting at an angle leave a notch at the joint under the default
+# butt cap, and the tree reads as assembled sticks. A round cap closes the
+# notch, and it reads as continuous growth.
+cap of "round"
 
 let trunk-x = 240 because "centered on the 480-pixel-wide canvas paint.html gives this page"
 let trunk-y = 350 because "near the bottom of the 360-tall canvas, so the tree grows upward into the frame"
@@ -48,4 +87,4 @@ let branch-angle = 24 because "a fixed angle at every split, now that rotate exi
 let starting-depth = 8
 
 translate of trunk-x, trunk-y
-tree of trunk-length, branch-angle, starting-depth
+tree of trunk-length, branch-angle, starting-depth, starting-depth
