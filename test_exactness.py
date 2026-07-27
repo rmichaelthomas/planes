@@ -405,6 +405,82 @@ def test_sine_refuses_a_non_number():
     raise AssertionError("sine of text was accepted")
 
 
+# ---- the static surface answers it without running anything -----------------
+
+
+def _surface(path):
+    from shapes import analyse_file
+    return analyse_file(os.path.join(REPO, path), follow=True)
+
+
+def test_the_surface_says_bloom_produces_approximate_values_without_running_it():
+    """Checkpoint §232's third question — a computed fact about a program —
+    answered for numerics, and with a witness anyone can look at."""
+    s = _surface("paint/bloom.planes")
+    assert s.produces_approximate()
+    routes = s.approximation_routes()
+    assert "(top level)  ->  wave  ->  cosine  ->  sine" in routes, routes
+    assert "numbers: approximate" in s.render()
+    assert "wave  ->  cosine  ->  sine" in s.render()
+
+
+def test_the_surface_says_turtle_and_snake_do_not():
+    for name in ("turtle", "snake"):
+        s = _surface(f"paint/{name}.planes")
+        assert not s.produces_approximate(), (name, s.approximation_routes())
+        assert "approximate" not in s.render(), name
+
+
+def test_importing_a_module_that_can_approximate_is_not_producing_one():
+    """snake `use`s math, which now declares `cosine` and `tangent`. It calls
+    neither, and it produces no approximate values.
+
+    This is where approximation and effects part company, deliberately. An
+    effect is AUTHORITY — a library that re-exports a clock makes its consumer
+    impure whether or not the consumer calls it. Approximation is PRODUCTION.
+    Reporting it the other way would flag every program that touches the maths
+    module for anything at all, and the fact would be worth nothing.
+    """
+    snake = _surface("paint/snake.planes")
+    assert "math" in snake.modules
+    assert not snake.produces_approximate()
+    # and the library, asked on its own, says yes
+    lib = _surface("paint/math.planes")
+    assert lib.produces_approximate()
+    assert lib.approximation_routes() == ["cosine  ->  sine", "tangent  ->  sine"]
+
+
+def test_a_user_function_named_sine_shadows_the_builtin_and_the_fact():
+    from shapes import analyse
+    s = analyse("to sine of x:\n  give x * 2\nshow text of (sine of 3)\n")
+    assert not s.produces_approximate(), s.approximation_routes()
+
+
+def test_the_route_is_the_shortest_one_and_crosses_files():
+    from shapes import analyse
+    s = analyse("to a of x:\n  give b of x\nto b of x:\n  give sine of x\n"
+                "to direct of x:\n  give sine of x\nshow text of (a of 1)\n")
+    assert s.approximation_routes()[0] == "(top level)  ->  a  ->  b  ->  sine"
+    assert "direct  ->  sine" in s.approximation_routes()
+
+
+def test_both_analysers_agree_on_the_approximation_routes():
+    """The port has to see the same call graph, or the fact is only true where
+    it happens to be asked."""
+    import json
+    if NODE is None:
+        return
+    for name in ("turtle", "bloom", "snake", "math", "draw"):
+        path = os.path.join("paint", f"{name}.planes")
+        mine = _surface(path)
+        r = subprocess.run([NODE, "js/cli.mjs", "shapes", path],
+                           capture_output=True, text=True, cwd=REPO)
+        assert r.returncode == 0, r.stderr
+        theirs = json.loads(r.stdout)
+        assert theirs.get("approximate", []) == [list(p) for p in mine.approximate], (
+            name, theirs.get("approximate"), mine.approximate)
+
+
 # ---- the three implementations agree on the property ------------------------
 
 # One battery, three implementations, same answers. Each entry is

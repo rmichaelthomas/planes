@@ -1,4 +1,4 @@
-# paint/math.planes — `mod`, and nothing else.
+# paint/math.planes — `mod`, and the two companions `sine` was specified with.
 #
 # Harvest admitted `mod` alone (checkpoint v21.0 §250): hand-written,
 # independently, in both bloom.planes and snake.planes — two witnesses of
@@ -13,6 +13,20 @@
 # colour — hue is degrees on a circle (planes-drawing-protocol-v1.md §4.1),
 # so `base - 30` must resolve to a point on the circle. Floored gives `330`
 # for `mod of -30, 360`, which is a hue; truncated gives `-30`, which is not.
+#
+# COSINE AND TANGENT ARE HERE BY EXCEPTION, AND THE EXCEPTION IS STATED SO IT
+# IS NOT READ AS A PRECEDENT. The harvest rule admits a helper on two-of-three
+# witnesses (v19.1 §229) and NEITHER of these has one — no program in this
+# repo had written either, because until `sine` became the eleventh builtin
+# neither could be written at all. They are admitted as the specified
+# companions of a builtin (checkpoint v21.0 §252), which is a different
+# argument entirely: `sine` is the only trigonometric function the language
+# adds, and a library that offered sine and made a reader derive the other two
+# would be withholding two one-line definitions to keep a rule tidy.
+#
+# Both take DEGREES, like `sine` and like the drawing protocol's `rotate`.
+# Both return APPROXIMATE values, because `sine` does and the property
+# propagates through arithmetic — which is the whole point of the property.
 
 to positive-mod of a, b:
   if a < b:
@@ -50,3 +64,25 @@ to mod of a, b:
           give 0
         else:
           give -r
+
+# cos(d) = sin(d + 90). One identity, no second series, and exact in the
+# argument: adding 90 to a degree measure loses nothing.
+to cosine of d:
+  give sine of (d + 90)
+
+# tan(d) = sin(d) / cos(d), undefined where the cosine is zero — at 90 degrees
+# and every 180 from it. The refusal is named rather than left to a divide-by-
+# zero, because "tangent is undefined at 90 degrees" is a fact about the
+# function and `cannot divide by zero` is a fact about the arithmetic that
+# happened to implement it.
+#
+# The test is `== 0` on an APPROXIMATE value, with no tolerance and none
+# wanted: the fold reaches 90, 270 and their multiples without running the
+# series, so `cosine of 90` is exactly 0 and this comparison is exact where it
+# matters. A tolerance here would refuse angles near 90 that have a perfectly
+# good tangent.
+to tangent of d:
+  let bottom = cosine of d
+  if bottom == 0:
+    fail "the tangent is undefined at " + text of d + " degrees, where the cosine is zero" as tangent-undefined
+  give (sine of d) / bottom

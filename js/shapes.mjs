@@ -204,12 +204,14 @@ export class Surface {
     modules = new Set(),
     unresolved = [],
     foreign = [],
+    approximate = [],
   } = {}) {
     this.effects = effects; // what running this file performs
     this.functions = functions; // Map name -> sorted Effect[]
     this.modules = modules;
     this.unresolved = unresolved;
     this.foreign = foreign;
+    this.approximate = approximate; // routes from an entry point to `sine`
   }
 
   // Every effect any function here can perform, plus top-level ones. Includes
@@ -254,6 +256,18 @@ export class Surface {
   }
   isPure() {
     return this.declared.length === 0;
+  }
+
+  // The third question (checkpoint §232), answered for numerics. Does this
+  // program produce APPROXIMATE values? Derivable without running it: does the
+  // call graph reach `sine`, the only operation in the language that
+  // introduces approximation. Reported beside the effect kinds, never hidden.
+  producesApproximate() {
+    return this.approximate.length > 0;
+  }
+
+  approximationRoutes() {
+    return this.approximate.map((path) => path.join("  ->  "));
   }
   hasUnknowns() {
     return this.declared.some((e) => e.kind === "unknown");
@@ -316,7 +330,16 @@ export class Surface {
 
   render() {
     const lines = [];
-    if (this.isPure()) return "pure — this program touches nothing outside itself";
+    if (this.isPure()) {
+      if (this.producesApproximate()) {
+        return (
+          "pure — this program touches nothing outside itself\n" +
+          "numbers: approximate — this program reaches `sine`\n" +
+          this.approximationRoutes().map((r) => `  ${r}`).join("\n")
+        );
+      }
+      return "pure — this program touches nothing outside itself";
+    }
     if (this.isLibrary()) {
       lines.push(
         "(library — nothing runs at load; these are what its functions can do)",
@@ -333,6 +356,10 @@ export class Surface {
         seen.add(key);
         lines.push(`  ${e}`);
       }
+    }
+    if (this.producesApproximate()) {
+      lines.push("numbers: approximate — this program reaches `sine`");
+      for (const route of this.approximationRoutes()) lines.push(`  ${route}`);
     }
     if (this.unresolved.length) {
       const uniq = [...new Set(this.unresolved)].sort(pyStrCmp);
@@ -370,6 +397,34 @@ class Consts {
 }
 
 // ---- small AST helpers, so the walk reads like shapes.py's isinstance chain.
+
+// ================================================================ approximation
+//
+// The only operation in the language that introduces approximation is `sine`,
+// so "does this program produce approximate values" is a reachability question
+// over the call graph — answerable WITHOUT RUNNING ANYTHING, which is the whole
+// claim. The route is reported too: "yes" without "how" is the kind of answer
+// this analyser exists not to give.
+
+const APPROXIMATION_SOURCE = "sine";
+
+// Every name a subtree calls or reads. Structure-generic rather than a case
+// per node kind: a node type added later cannot hide a call from this pass the
+// way it could from a switch someone forgot to extend.
+function calledNames(node, out) {
+  if (Array.isArray(node)) {
+    for (const x of node) calledNames(x, out);
+    return out;
+  }
+  if (node === null || typeof node !== "object") return out;
+  if (node.__node === "Call" || node.__node === "Var") out.add(node.name);
+  for (const [k, v] of Object.entries(node)) {
+    if (k === "__node") continue;
+    calledNames(v, out);
+  }
+  return out;
+}
+
 function is(node, kind) {
   return node !== null && node !== undefined && node.__node === kind;
 }
@@ -448,12 +503,70 @@ export class Analyser {
     }
 
     return new Surface({
+      approximate: this.approximationRoutes(prog),
       effects: top.sorted(),
       functions,
       modules: new Set(this.modules),
       unresolved: [...this.unresolved],
       foreign: foreignSet.sorted(),
     });
+  }
+
+
+  // Every route from an entry point to `sine`, shortest first. Two entry
+  // points, mirroring the effects/declared split that exists for the same
+  // reason: the top level is the right question for an application, and each
+  // declared function is the right question for a library, whose top level is
+  // empty and whose numbers are produced behind a function the consumer calls.
+  //
+  // Only functions declared in THIS file are entry points, unlike effects, and
+  // the difference is the difference between the two questions. An effect is
+  // authority: a library that re-exports a clock makes its consumer not pure
+  // whether or not the consumer calls it. Approximation is production: a
+  // program that imports `cosine` and never calls it produces no approximate
+  // values, and saying otherwise would flag every program that uses the maths
+  // module for anything at all.
+  //
+  // A user function named `sine` shadows the builtin (the names mandate), and
+  // then nothing here is a source of approximation at all.
+  approximationRoutes(prog) {
+    if (this.funcs.has(APPROXIMATION_SOURCE)) return [];
+
+    const calls = new Map();
+    for (const [name, fn] of this.funcs) {
+      calls.set(name, calledNames(fn.body, new Set()));
+    }
+    const topCalls = calledNames(
+      prog.filter((st) => !is(st, "FuncDef")),
+      new Set(),
+    );
+
+    // Breadth-first, so the route reported is the shortest one.
+    const routeFrom = (entry, seeds) => {
+      const queue = [...seeds].sort(pyStrCmp).map((n) => [n, [entry, n]]);
+      const seen = new Set(seeds);
+      while (queue.length) {
+        const [name, path] = queue.shift();
+        if (name === APPROXIMATION_SOURCE) return path;
+        for (const nxt of [...(calls.get(name) ?? [])].sort(pyStrCmp)) {
+          if (!seen.has(nxt)) {
+            seen.add(nxt);
+            queue.push([nxt, [...path, nxt]]);
+          }
+        }
+      }
+      return null;
+    };
+
+    const found = [];
+    const top = routeFrom("(top level)", topCalls);
+    if (top !== null) found.push(top);
+    for (const name of [...this.funcs.keys()].sort(pyStrCmp)) {
+      if ((this.funcFile.get(name) ?? this.entryFile) !== this.entryFile) continue;
+      const r = routeFrom(name, calls.get(name));
+      if (r !== null) found.push(r);
+    }
+    return found;
   }
 
   collectDeclarations(prog, renames = null, file = null) {
@@ -1173,6 +1286,9 @@ export function asJson(surface, path) {
       target: e.target,
     })),
     unresolved_calls: [...new Set(surface.unresolved)].sort(pyStrCmp),
+    // The third question, in the machine-readable report too: does this
+    // program produce approximate values, and by what route.
+    approximate: surface.approximate.map((p) => [...p]),
   };
 }
 

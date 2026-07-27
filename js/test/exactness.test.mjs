@@ -242,3 +242,55 @@ test("no host trigonometric function is reachable from the numeric tower", async
     assert.doesNotMatch(src, /Math\.(sin|cos|tan|atan|asin|acos)\b/, rel);
   }
 });
+
+// ---- the static surface answers it without running anything -------------------
+
+test("the surface says bloom produces approximate values, and by what route", async () => {
+  const fs = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const { loadGrammar } = await import("../loader_node.mjs");
+  loadGrammar();
+  const { analyseFile } = await import("../shapes_node.mjs");
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+
+  const bloom = await analyseFile(`${root}paint/bloom.planes`, { follow: true });
+  assert.equal(bloom.producesApproximate(), true);
+  assert.ok(
+    bloom.approximationRoutes().includes("(top level)  ->  wave  ->  cosine  ->  sine"),
+    bloom.approximationRoutes().join(" | "),
+  );
+  assert.match(bloom.render(), /numbers: approximate/);
+
+  for (const name of ["turtle", "snake"]) {
+    const s = await analyseFile(`${root}paint/${name}.planes`, { follow: true });
+    assert.equal(s.producesApproximate(), false, name);
+    assert.doesNotMatch(s.render(), /approximate/, name);
+  }
+
+  // The library, asked on its own, says yes — the same split the effects
+  // surface makes between "what this file runs" and "what its functions can do".
+  const math = await analyseFile(`${root}paint/math.planes`, { follow: true });
+  assert.equal(math.producesApproximate(), true);
+  assert.deepEqual(math.approximationRoutes(), ["cosine  ->  sine", "tangent  ->  sine"]);
+  assert.ok(fs.existsSync(`${root}paint/math.planes`));
+});
+
+test("a user function named sine shadows the builtin and the fact", async () => {
+  const { loadGrammar } = await import("../loader_node.mjs");
+  loadGrammar();
+  const { analyse } = await import("../shapes.mjs");
+  const s = analyse("to sine of x:\n  give x * 2\nshow text of (sine of 3)\n");
+  assert.equal(s.producesApproximate(), false);
+});
+
+test("the route reported is the shortest one", async () => {
+  const { loadGrammar } = await import("../loader_node.mjs");
+  loadGrammar();
+  const { analyse } = await import("../shapes.mjs");
+  const s = analyse(
+    "to a of x:\n  give b of x\nto b of x:\n  give sine of x\n" +
+      "to direct of x:\n  give sine of x\nshow text of (a of 1)\n",
+  );
+  assert.equal(s.approximationRoutes()[0], "(top level)  ->  a  ->  b  ->  sine");
+  assert.ok(s.approximationRoutes().includes("direct  ->  sine"));
+});

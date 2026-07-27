@@ -14,7 +14,8 @@ call graph, not a tree walk.
 """
 import os
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, is_dataclass
+from dataclasses import fields as dc_fields
 from typing import Any, Optional
 
 from lexer import *
@@ -93,6 +94,8 @@ class Surface:
     unresolved: list = field(default_factory=list)  # calls to unknown functions
     foreign: list = field(default_factory=list)     # effects of every foreign
                                                     # declaration, called or not
+    approximate: list = field(default_factory=list)  # routes from an entry
+                                                     # point to `sine`
 
     # ---- the declared surface
 
@@ -150,6 +153,21 @@ class Surface:
 
     def is_pure(self):
         return not self.declared
+
+    # ---- the third question (checkpoint §232), answered for numerics
+    #
+    # Does this program produce APPROXIMATE values? Derivable without running
+    # it: does the call graph reach `sine`, which is the only operation in the
+    # language that introduces approximation. The analyser already walks the
+    # call graph for effects; this is the same walk answering a second
+    # question, and it is reported beside the effect kinds rather than hidden.
+
+    def produces_approximate(self):
+        return bool(self.approximate)
+
+    def approximation_routes(self):
+        """Each route, as `entry -> ... -> sine`, shortest first."""
+        return ["  ->  ".join(path) for path in self.approximate]
 
     def has_unknowns(self):
         """True if any foreign function declined to state its effects."""
@@ -215,6 +233,10 @@ class Surface:
     def render(self):
         lines = []
         if self.is_pure():
+            if self.produces_approximate():
+                return ("pure — this program touches nothing outside itself\n"
+                        + "numbers: approximate — this program reaches `sine`\n"
+                        + "\n".join(f"  {r}" for r in self.approximation_routes()))
             return "pure — this program touches nothing outside itself"
         if self.is_library():
             lines.append("(library — nothing runs at load; these are what "
@@ -231,6 +253,10 @@ class Surface:
                     continue
                 seen.add(key)
                 lines.append(f"  {e}")
+        if self.produces_approximate():
+            lines.append("numbers: approximate — this program reaches `sine`")
+            for route in self.approximation_routes():
+                lines.append(f"  {route}")
         if self.unresolved:
             lines.append(f"unresolved calls: {', '.join(sorted(set(self.unresolved)))}")
         if self.has_unknowns():
@@ -304,6 +330,36 @@ class Consts:
         return Consts(self)
 
 
+
+# ================================================================ approximation
+#
+# The only operation in the language that introduces approximation is `sine`,
+# so "does this program produce approximate values" is a reachability question
+# over the call graph — answerable WITHOUT RUNNING ANYTHING, which is the whole
+# claim. The route is reported too, because "yes" without "how" is the kind of
+# answer this analyser exists not to give.
+
+APPROXIMATION_SOURCE = "sine"
+
+
+def called_names(node, out):
+    """Every name a subtree calls or reads.
+
+    Dataclass-generic rather than a hand-written case per node kind: a node
+    type added later cannot hide a call from this pass the way it could from a
+    switch someone forgot to extend.
+    """
+    if isinstance(node, (Call, Var)):
+        out.add(node.name)
+    if is_dataclass(node) and not isinstance(node, type):
+        for f in dc_fields(node):
+            called_names(getattr(node, f.name), out)
+    elif isinstance(node, (list, tuple)):
+        for x in node:
+            called_names(x, out)
+    return out
+
+
 # ================================================================ analyser
 
 class Analyser:
@@ -370,6 +426,7 @@ class Analyser:
             top |= self.walk(stmt, fn_effects, top_consts)
 
         surface = Surface(
+            approximate=self.approximation_routes(prog),
             effects=sorted(top, key=lambda e: (e.boundary, e.kind, e.target)),
             functions={n: sorted(s, key=lambda e: (e.boundary, e.kind, e.target))
                        for n, s in fn_effects.items()},
@@ -381,6 +438,65 @@ class Analyser:
                 key=lambda e: (e.boundary, e.kind, e.target)),
         )
         return surface
+
+
+    def approximation_routes(self, prog):
+        """Every route from an entry point to `sine`, shortest first.
+
+        Two entry points, mirroring the effects/declared split that exists for
+        the same reason: the top level is the right question for an
+        application, and each declared function is the right question for a
+        library, whose top level is empty and whose numbers are produced
+        behind a function the consumer calls.
+
+        Only functions declared in THIS file are entry points, unlike effects,
+        and the difference is the difference between the two questions. An
+        effect is authority: a library that re-exports a clock makes its
+        consumer not pure, whether or not the consumer calls it. Approximation
+        is production: a program that imports `cosine` and never calls it
+        produces no approximate values, and saying otherwise would flag every
+        program that uses the maths module for anything at all — which would
+        make the fact worth nothing.
+
+        A user function named `sine` shadows the builtin (the names mandate),
+        and then nothing here is a source of approximation at all.
+        """
+        if APPROXIMATION_SOURCE in self.funcs:
+            return []
+
+        calls = {}
+        for name, fn in self.funcs.items():
+            calls[name] = called_names(fn.body, set())
+        top_calls = called_names(
+            [st for st in prog if not isinstance(st, FuncDef)], set())
+
+        def route_from(entry, seeds):
+            """Breadth-first, so the route reported is the shortest one."""
+            queue = [(n, [entry, n]) for n in sorted(seeds)]
+            seen = set(seeds)
+            while queue:
+                name, path = queue.pop(0)
+                if name == APPROXIMATION_SOURCE:
+                    return path
+                for nxt in sorted(calls.get(name, ())):
+                    if nxt not in seen:
+                        seen.add(nxt)
+                        queue.append((nxt, path + [nxt]))
+            return None
+
+        found = []
+        top = route_from("(top level)", top_calls)
+        if top is not None:
+            found.append(tuple(top))
+        for name in sorted(self.funcs):
+            if self.func_file.get(name, self.entry_file) != self.entry_file:
+                continue
+            r = route_from(name, calls[name])
+            if r is not None:
+                found.append(tuple(r))
+        # A library reports every function that can produce one; an
+        # application's own top-level route comes first.
+        return found
 
     def collect_declarations(self, prog, renames=None, file=None):
         """Functions and modules, at any depth.
