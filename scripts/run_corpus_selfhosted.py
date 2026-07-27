@@ -54,7 +54,7 @@ def _t(v):
 
 
 def _num(n):
-    return {"kind": "number", "value": Number.of(n), "deriv": None}
+    return {"kind": "number", "value": Number.of(n), "approx": None, "deriv": None}
 
 
 def _lst(items):

@@ -82,7 +82,7 @@ def _tagged(x):
     if isinstance(x, bool):
         return {"kind": "boolean", "value": x, "deriv": None}
     if isinstance(x, (int, float, Number)):
-        return {"kind": "number", "value": Number.of(x), "deriv": None}
+        return {"kind": "number", "value": Number.of(x), "approx": None, "deriv": None}
     if isinstance(x, str):
         return {"kind": "text", "value": x, "deriv": None}
     if isinstance(x, list):

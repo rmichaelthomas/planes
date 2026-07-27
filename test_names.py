@@ -69,9 +69,9 @@ def test_every_builtin_name_works_inside_a_multiword_name():
     assert not failures, "\n  ".join(failures)
 
 
-def test_effective_reserved_surface_is_42():
-    """The effective reserved surface is 42: the 32 structural keywords plus
-    the 10 builtins, which spend from the same name budget (S3a A.4).
+def test_effective_reserved_surface_is_43():
+    """The effective reserved surface is 43: the 32 structural keywords plus
+    the 11 builtins, which spend from the same name budget (S3a A.4).
 
     A builtin name is not a keyword — `count`, `text`, `read` can each still
     NAME a function (`to count of x:` shadows the builtin, the names
@@ -82,10 +82,16 @@ def test_effective_reserved_surface_is_42():
     sense, even though it is not structural, and the prior framing that the
     ceiling guarded keywords but not builtins was a distinction with no
     difference to anyone writing Planes — it let `join` and `rest` look free
-    when they spent from the same 42-name budget."""
+    when they spent from the same 42-name budget.
+
+    `sine` took the budget from 42 to 43 — the first word added to the
+    reserved surface since the ceiling was argued word by word. The argument
+    for it is checkpoint v21.0 §251's, which retracts v20.0 §238's ruling that
+    trigonometry is not a builtin: §238's stated reason was SILENT rounding,
+    and a value that carries whether it is exact removes the silence."""
     assert len(KEYWORDS) == 32, f"keyword count is {len(KEYWORDS)}, expected 32"
-    assert len(BUILTIN_NAMES) == 10, f"builtin count is {len(BUILTIN_NAMES)}, expected 10"
-    assert len(KEYWORDS | BUILTIN_NAMES) == 42, "keywords and builtins must be disjoint at 42"
+    assert len(BUILTIN_NAMES) == 11, f"builtin count is {len(BUILTIN_NAMES)}, expected 11"
+    assert len(KEYWORDS | BUILTIN_NAMES) == 43, "keywords and builtins must be disjoint at 43"
     # the two sets are disjoint -- no word is both a keyword and a builtin
     assert not (KEYWORDS & BUILTIN_NAMES)
 
@@ -135,7 +141,7 @@ def test_a_function_may_still_be_named_after_a_builtin():
 def test_reserved_list_is_only_structural_words():
     """A word stays a KEYWORD only if the parser must see it to know the
     shape of a statement (builtins are reserved too, but as names, not as
-    structure -- see test_effective_reserved_surface_is_42).
+    structure -- see test_effective_reserved_surface_is_43).
 
     The ceiling is 32, and every rise is argued for in a report:
 

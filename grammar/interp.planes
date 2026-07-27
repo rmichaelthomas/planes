@@ -43,7 +43,32 @@ use http
 # attached by the caller, at the sites interp.py builds a Deriv.
 
 to make-number of n:
-  give { kind: "number", value: n, deriv: nothing }
+  give make-number-carrying of n, nothing
+
+# EXACT, AND APPROXIMATE. A number value carries where it stopped being exact:
+# `approx` is `nothing` when the value is exact, and otherwise a record naming
+# the operation that introduced approximation and its parameters.
+#
+# This interpreter has no numeric tower of its own — `value` holds the HOST's
+# number and `a.value + b.value` is the host's own exact arithmetic — so it
+# would have been possible to let the host's property show through instead.
+# It is modelled here as a record field on purpose: a record field is how a
+# Planes program carries anything, this interpreter's values are records, and
+# an interpreter that could only report a property its host happened to track
+# would not be an implementation of the property at all. The self-hosted
+# `sine` (below) computes its series from exact parts and marks the result
+# itself, which is the case that decides it.
+to make-number-carrying of n, entry:
+  give { kind: "number", value: n, approx: entry, deriv: nothing }
+
+# exact + exact is exact; anything touching an approximate value is
+# approximate, and inherits the FIRST entry point on the left-to-right reading
+# of the expression. `why` still shows both sides of a comparison, because the
+# derivation tree keeps both branches and each carries its own entry.
+to first-approx of a, b:
+  if not (a.approx is nothing):
+    give a.approx
+  give b.approx
 
 to make-text of s:
   give { kind: "text", value: s, deriv: nothing }
@@ -677,11 +702,11 @@ to apply-op of op, a, b:
   if op == "+":
     give apply-plus of a, b
   if op == "-":
-    give make-number of ((num-of of a, op) - (num-of of b, op))
+    give make-number-carrying of ((num-of of a, op) - (num-of of b, op)), (first-approx of a, b)
   if op == "*":
-    give make-number of ((num-of of a, op) * (num-of of b, op))
+    give make-number-carrying of ((num-of of a, op) * (num-of of b, op)), (first-approx of a, b)
   if op == "/":
-    give make-number of ((num-of of a, op) / (num-of of b, op))
+    give make-number-carrying of ((num-of of a, op) / (num-of of b, op)), (first-approx of a, b)
   if op == "<":
     give make-boolean of (compare-values of op, a, b)
   if op == ">":
@@ -702,7 +727,7 @@ to apply-op of op, a, b:
 # kind depends on them (text, list, or number). Everything else is one arm.
 to apply-plus of a, b:
   if a.kind == "number" and b.kind == "number":
-    give make-number of (a.value + b.value)
+    give make-number-carrying of (a.value + b.value), (first-approx of a, b)
   if a.kind == "text" and b.kind == "text":
     give make-text of (a.value + b.value)
   if a.kind == "list" and b.kind == "list":
@@ -997,7 +1022,11 @@ to eval-round-node of node, env, globals:
     give fail-of of (error-fix-of of "not-a-number", ("cannot round " + (detail-of-value of v.value)), "round only works on numbers"), p.env
   r = (round (v.value.value) to (p.value.value) places) or fail as e:
     give fail-of of e, p.env
-  give normal-of of (derived of (make-number of r), "op", ("round to " + (fmt-of of p.value) + " places"), [v.value.deriv]), p.env
+  # The rounded value carries whatever the input carried. Rounding an exact
+  # value gives an exact one -- `round (1/3) to 2 places` is exactly 0.33, the
+  # exact result of the operation asked for -- and rounding an approximate one
+  # does not launder it back to exact.
+  give normal-of of (derived of (make-number-carrying of r, v.value.approx), "op", ("round to " + (fmt-of of p.value) + " places"), [v.value.deriv]), p.env
 
 # ================================================================ builtins (Phase 4)
 #
@@ -1061,6 +1090,8 @@ to eval-builtin of name, arg:
     give make-text of (normalize of (require-text-of of arg, "normalize", "normalize"))
   if name == "whole":
     give builtin-whole of arg
+  if name == "sine":
+    give builtin-sine of arg
   if name == "join":
     give builtin-join of arg
   if name == "rest":
@@ -1069,7 +1100,116 @@ to eval-builtin of name, arg:
     fail { message: "ask is an effect -- effects are interp.planes build 3, not build 1", fix: "run it through the build-3 entry point, which threads the effect log; build 1 evaluates expressions only" } as build-3-effect
   if name == "read":
     fail { message: "read is an effect -- effects are interp.planes build 3, not build 1", fix: "run it through the build-3 entry point, which threads the effect log; build 1 evaluates expressions only" } as build-3-effect
-  fail { message: "unknown builtin '" + name + "'", fix: "the ten builtins are fixed and the lexer recognises only those, so reaching this is a defect in the interpreter rather than in the program — worth reporting with the source" } as unknown-builtin
+  fail { message: "unknown builtin '" + name + "'", fix: "the eleven builtins are fixed and the lexer recognises only those, so reaching this is a defect in the interpreter rather than in the program — worth reporting with the source" } as unknown-builtin
+
+# ================================================================ sine
+#
+# THE ELEVENTH BUILTIN, AND THE ONE IMPLEMENTATION THAT CAN SHOW ITS WORKING.
+#
+# An FPU cannot tell you how it got an answer. A truncated Taylor series
+# literally IS an approximation computed to a stated depth, and here it is
+# written in the language it belongs to, with `+ - * /` and `round ... to 0
+# places` and nothing else -- no host trigonometry, no exponentiation, no pi.
+#
+# pi IS NOT EXPRESSIBLE. A Taylor series takes radians; converting degrees to
+# radians needs pi; this interpreter has four operators. So the conversion
+# factor is a STATED rational: 40 significant decimal digits of pi/180,
+# written as a literal numerator over a literal denominator, the same two
+# literals planes_num.py and js/planes_num.mjs carry. It is the FIRST place
+# approximation enters, before any truncation.
+#
+# Working values are INTEGERS scaled by sine-working-scale, and every
+# multiply-then-descale rounds half away from zero. Not a performance tweak:
+# on plain exact rationals x carries a denominator of 10^41, x^15 carries
+# 10^615, and the half-angle path squares that to 10^1224 -- past this
+# language's own MAX_DENOMINATOR, so `sine of 60` would REFUSE. Scaled
+# integers also make the three implementations bit-identical by construction:
+# integer arithmetic with one rounding rule cannot drift the way three
+# separate readings of "reduce a fraction" can.
+
+# pi/180 to 40 significant decimal digits, correctly rounded:
+#   0.01745329251994329576923690768488612713443
+# The error against the true value is under 1.3e-42.
+to sine-pi-numerator:
+  give 1745329251994329576923690768488612713443
+
+to sine-pi-denominator:
+  give 100000000000000000000000000000000000000000
+
+# Every intermediate is an integer scaled by 10^50: twenty digits past the
+# result and ten past the constant, so nothing here is what limits the answer.
+to sine-working-scale:
+  give 100000000000000000000000000000000000000000000000000
+
+# The result is reduced to 30 decimal places. Left unbounded, one `sine` hands
+# the rest of a program a fraction whose denominator grows through every
+# operation after it.
+to sine-result-scale:
+  give 1000000000000000000000000000000
+
+# `round ... to 0 places` is already half away from zero, which is the rule
+# `round x to N places` gives a program -- so a program that rounds by hand and
+# this series agree about what "nearest" means.
+to sine-round of x:
+  give round x to 0 places
+
+# Floor, from a round that goes half away from zero: the rounded value is
+# within one of the true one, so a result above it steps down. `whole of`
+# cannot serve here -- it rounds, it does not floor.
+to sine-floor of x:
+  w = round x to 0 places
+  if w > x:
+    give w - 1
+  give w
+
+# Eight terms: x - x^3/3! + ... - x^15/15!, as scaled integers. After the fold
+# the series argument is at most pi/4, where the first omitted term (x^17/17!)
+# is 4.62e-17 -- that is the accuracy of the answer, and the result precision
+# above is how much of it is kept, not a claim about how much of it is right.
+to sine-series of degrees:
+  scale = sine-working-scale
+  x = sine-round of (degrees * (sine-pi-numerator) * scale / (sine-pi-denominator))
+  x2 = sine-round of (x * x / scale)
+  term = x
+  total = x
+  for each k in [1, 2, 3, 4, 5, 6, 7]:
+    term = 0 - (sine-round of (term * x2 / (scale * (2 * k) * ((2 * k) + 1))))
+    total = total + term
+  give total
+
+# `sine of d` -- d in degrees, exact in, approximate out.
+#
+# Steps 1 and 2 are EXACT: `sine of 360000030` reduces to `sine of 30` with no
+# additional error at all, which is the property a float implementation cannot
+# offer.
+to sine-of-degrees of d:
+  scale = sine-working-scale
+  # 1. into [0, 360), floored, exactly
+  r = d - (360 * (sine-floor of (d / 360)))
+  # 2. into [0, 45], exactly -- sign flips and subtractions only
+  sign = 1
+  if r >= 180:
+    r = r - 180
+    sign = 0 - 1
+  if r > 90:
+    r = 180 - r
+  # 3 and 4. the series, at the stated precisions
+  s = 0
+  if r <= 45:
+    s = sine-series of r
+  else:
+    # sin(a) = cos(90 - a) = 1 - 2 * sin((90 - a)/2)^2, and (90-a)/2 <= 22.5
+    h = sine-series of ((90 - r) / 2)
+    s = scale - (sine-round of (2 * h * h / scale))
+  give (sine-round of (sign * s * (sine-result-scale) / scale)) / (sine-result-scale)
+
+# The value `sine` gives back, carrying the four numbers that decide how good
+# the answer is. This is the ONE place in the self-hosted interpreter where a
+# value is born approximate.
+to builtin-sine of arg:
+  if not (arg.kind == "number"):
+    fail { message: "cannot take the sine of " + (detail-of-value of arg), fix: "sine takes an angle in degrees as a number — e.g. sine of 30" } as not-a-number
+  give make-number-carrying of (sine-of-degrees of arg.value), { op: "sine", detail: "pi/180 to 40 significant digits, an 8-term Taylor series, 50 working decimal places, a result rounded to 30" }
 
 # count of a list is its item count, of text its code-point count, of a
 # record its field count -- interp.py's len(arg.value) over each shape.
@@ -1129,7 +1269,7 @@ to require-target-of of v, what, spelled:
 
 to builtin-whole of arg:
   if arg.kind == "number":
-    give make-number of (whole of arg.value)
+    give make-number-carrying of (whole of arg.value), arg.approx
   fail { message: "cannot take the whole part of " + (detail-of-value of arg), fix: "whole of rounds a number toward zero; Planes has no text-to-number builtin, so a number has to arrive as one — from a literal, from arithmetic, or from a field of something read as JSON" } as not-a-number
 
 # Fold a list of text into one string. A non-list, or any non-text element,

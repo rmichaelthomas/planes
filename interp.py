@@ -9,7 +9,7 @@ from typing import Any, Optional
 from host import HostError, PythonHost, TestHost
 from lexer import *
 from parser import BUILTIN_NAMES, parse
-from planes_num import Inexact, Number
+from planes_num import Inexact, Number, sine_degrees
 from planes_text import escape_string_literal
 
 
@@ -1025,6 +1025,20 @@ class Interpreter:
             n = Number.of(arg.value).round_to(0)
             return Traced(n, Deriv("op", "whole of", n, [arg.node]))
 
+        if node.name == "sine":
+            # The eleventh builtin, and the only operation in the language that
+            # returns an approximate value (checkpoint v21.0 §§251-253). Takes
+            # DEGREES, consistent with the drawing protocol's `rotate`: degrees
+            # are whole numbers and stay exact under this language's
+            # arithmetic, where radians would arrive already approximated.
+            if not isinstance(arg.value, Number):
+                raise PlanesError(
+                    "not-a-number",
+                    f"cannot take the sine of {detail_value(arg.value)}",
+                    "sine takes an angle in degrees as a number — e.g. sine of 30")
+            n = sine_degrees(arg.value)
+            return Traced(n, Deriv("op", "sine of", n, [arg.node]))
+
         if node.name == "text":
             v = fmt(arg.value)
             return Traced(v, Deriv("op", "text of", v, [arg.node]))
@@ -1078,7 +1092,7 @@ class Interpreter:
 
         raise PlanesError(
             "unknown-builtin", f"no builtin is named '{node.name}'",
-            "the ten builtins are fixed and the lexer recognises only those, "
+            "the eleven builtins are fixed and the lexer recognises only those, "
             "so reaching this is a defect in the interpreter rather than in "
             "the program — worth reporting with the source")
 
@@ -1471,6 +1485,27 @@ def from_foreign(x):
 
 # ================================================================ why
 
+def approximations_in(traced, seen=None, found=None):
+    """Every distinct approximation entry reachable in this derivation.
+
+    A comparison between two approximate values has TWO of them, and showing
+    both is the whole reason the no-tolerance rule is defensible: the answer is
+    plain, and the explanation says where each side stopped being exact. One
+    epsilon nobody chose would replace both of these lines with silence.
+    """
+    seen = set() if seen is None else seen
+    found = [] if found is None else found
+    if id(traced) in seen:
+        return found
+    seen.add(id(traced))
+    v = getattr(traced, "value", None)
+    if isinstance(v, Number) and v.approx is not None and v.approx not in found:
+        found.append(v.approx)
+    for inp in getattr(traced, "inputs", ()) or ():
+        approximations_in(inp, seen, found)
+    return found
+
+
 def explain(traced, because=None):
     """`why`'s one-line derivation. `because`, when given, is display
     text beside it — never an input the derivation graph carries."""
@@ -1479,6 +1514,8 @@ def explain(traced, because=None):
     text = f"{fmt(traced.value)} from {render(inner)}"
     if because:
         text += f'\n  because "{escape_string_literal(because)}"'
+    for a in approximations_in(n):
+        text += f"\n  approximate — {a.op}: {a.detail}"
     return text
 
 

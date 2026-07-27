@@ -79,6 +79,9 @@ def as_json(surface, path):
             for e in surface.used_but_undeclared()
         ],
         "unresolved_calls": sorted(set(surface.unresolved)),
+        # The third question, in the machine-readable report too: does this
+        # program produce approximate values, and by what route.
+        "approximate": [list(p) for p in surface.approximate],
     }
 
 

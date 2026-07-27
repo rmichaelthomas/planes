@@ -309,6 +309,20 @@ switch (sub) {
     out(JSON.stringify(runOne(src, cfg)));
     break;
   }
+  case "exactness": {
+    // exactness <source>. Runs a program and reports, for the binding `v`,
+    // the rendered text and whether the value is exact. The Python oracle
+    // (test_exactness.py) drives this so the two towers are compared on the
+    // PROPERTY, not only on the digits — a port that agreed on every rendered
+    // number and disagreed on whether it was exact would pass every existing
+    // agreement test.
+    loadGrammar();
+    const itp = new Interpreter(new TestHost());
+    itp.run(rest[0]);
+    const v = itp.env.get("v").value;
+    out(JSON.stringify({ text: itp.output[0], exact: v.isExact === true }));
+    break;
+  }
   case "run-batch": {
     // run-batch <cases-json>. `cases-json` is either inline JSON or, when it
     // starts with '@', the path of a file holding it — an argv big enough to

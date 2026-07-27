@@ -38,7 +38,7 @@ Not a single network call was made to produce that surface.
 |---|---|
 | [Run it](#run-it) | the three implementations, and a browser |
 | [Three implementations](#three-implementations) | what self-hosting buys, and what "they agree" means |
-| [The vocabulary](#the-vocabulary) | 32 words, 10 builtins, 7 effect kinds |
+| [The vocabulary](#the-vocabulary) | 32 words, 11 builtins, 7 effect kinds |
 | [The language](#the-language) | syntax, in one page |
 | [Numbers are exact](#numbers-are-exact) | rationals, not floats |
 | [Effect surface](#effect-surface) | what a program *can* do |
@@ -122,8 +122,8 @@ JavaScript stack too, so neither guarantee depends on Python.
 
 ## The vocabulary
 
-Closed, and asserted. The whole reserved surface is 42 names — 32 keywords plus
-10 builtins — and both counts are pinned by the test suite, so adding a word is
+Closed, and asserted. The whole reserved surface is 43 names — 32 keywords plus
+11 builtins — and both counts are pinned by the test suite, so adding a word is
 a visible decision rather than a drift. For scale: Python has 35 keywords. The
 small number here is not the vocabulary, it is [the host](#the-host) — seven
 methods, which is what makes the effect surface computable at all.
@@ -137,11 +137,14 @@ nothing  of  or   places plus  round rule   show
 to   true  use   when   where  why   with   write
 ```
 
-**10 builtins** — ordinary functions, not keywords, called as `count of xs`:
+**11 builtins** — ordinary functions, not keywords, called as `count of xs`:
 
 ```
-ask  count  join  lower  normalize  read  rest  text  upper  whole
+ask  count  join  lower  normalize  read  rest  sine  text  upper  whole
 ```
+
+`sine` takes **degrees** and is the only operation in the language that
+returns an approximate value — see [Exact, and approximate](#exact-and-approximate).
 
 **7 effect kinds** — the closed vocabulary a host can be asked for:
 
@@ -436,14 +439,14 @@ every error names its fix, and that is counted rather than asserted:
 
 ```
 $ python3 errors_coverage.py
-  names a fix                  104 of 109  (95%)
-  deliberately names none        5 of 109  (5%)
-  should name one and does not   0 of 109  (0%)
+  names a fix                  105 of 110  (95%)
+  deliberately names none        5 of 110  (5%)
+  should name one and does not   0 of 110  (0%)
 
-  111 raise sites across interp.planes, parser.planes, lexer.planes, json.planes:
-  names a fix                   71 of 111  (64%)
-  deliberately names none       40 of 111  (36%)
-  should name one and does not   0 of 111  (0%)
+  112 raise sites across interp.planes, parser.planes, lexer.planes, json.planes:
+  names a fix                   72 of 112  (64%)
+  deliberately names none       40 of 112  (36%)
+  should name one and does not   0 of 112  (0%)
 ```
 
 **Both work lists are zero** — the commitment is kept in the reference

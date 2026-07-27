@@ -80,6 +80,7 @@
     {"name": "read", "arity": 1, "note": "shadowable by a user function of the same name"},
     {"name": "normalize", "arity": 1, "note": "shadowable by a user function of the same name; NFC form; never an effect kind"},
     {"name": "join", "arity": 1, "note": "concatenates a list of text into one string, in order, in O(n); no separator argument (a separator is for-each's job); an empty list joins to the empty string; a non-text element is an error, never a silent coercion; shadowable by a user function of the same name; never an effect kind"},
+    {"name": "sine", "arity": 1, "note": "shadowable by a user function of the same name; takes DEGREES, consistent with the drawing protocol's `rotate` -- degrees are whole numbers and stay exact under this language's arithmetic, where radians would arrive already approximated; the only operation in the language that returns an approximate value, and it returns one for EVERY input including `sine of 0` -- the operation's true result being representable at one argument does not make the operation exact"},
     {"name": "rest", "arity": 1, "note": "the list without its first element; lists only (for a text prefix use `first n of`); the rest of an empty list is an error, not a silent empty list; shadowable by a user function of the same name; never an effect kind"}
   ],
 

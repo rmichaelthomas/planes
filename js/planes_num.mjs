@@ -13,6 +13,20 @@
 // Fraction of two BigInts, always in lowest terms with a positive denominator,
 // mirroring Python's fractions.Fraction. Every method is checked against
 // planes_num.py in test_js_num.py.
+//
+// EXACT, AND APPROXIMATE. A number also carries whether it is exact: it is
+// APPROXIMATE when the true result of the operation that produced it cannot be
+// represented as a rational, and EXACT otherwise. `approx` is that property
+// AND its provenance in one field — null when exact, an Approximation when not
+// — because a flag saying "approximate" with no provenance beside it is a
+// state the type should not be able to hold. Mirrors planes_num.py exactly.
+//
+// Two rules that look like exceptions and are not: `roundTo` on one third
+// gives EXACTLY 0.33 (a deliberate, named reduction in precision is not
+// approximation — if it were, every invoice in the corpus would come out
+// flagged), and `eq` between two approximate values compares the underlying
+// rationals with no epsilon and no tolerance (a tolerance nobody chose is the
+// silent behaviour this design refuses).
 
 // Roughly 4,000 bits — planes_num.py's MAX_DENOMINATOR = 2 ** 4000, unchanged.
 export const MAX_DENOMINATOR = 2n ** 4000n;
@@ -160,12 +174,39 @@ function exactDecimal(q) {
   return (neg ? "-" : "") + out;
 }
 
-// An exact number. Wraps a Fraction, renders like a person would write it.
-// The JS analogue of planes_num.Number (renamed to avoid colliding with JS's
-// global Number).
+// Where a value stopped being exact, and with what parameters. Immutable and
+// shared: an approximate value's arithmetic results carry the same record by
+// reference, so a chain of a thousand operations off one `sine` allocates one
+// of these, not a thousand. The JS analogue of planes_num.Approximation.
+export class Approximation {
+  constructor(op, detail = "") {
+    this.op = op;
+    this.detail = detail;
+    Object.freeze(this);
+  }
+  eq(o) {
+    return o instanceof Approximation && this.op === o.op && this.detail === o.detail;
+  }
+}
+
+// A number, exact unless it says otherwise. Wraps a Fraction, renders like a
+// person would write it, and carries `approx` — null when exact, an
+// Approximation when not. The JS analogue of planes_num.Number (renamed to
+// avoid colliding with JS's global Number).
 export class PlanesNumber {
-  constructor(q) {
+  constructor(q, approx = null) {
     this.q = q instanceof Fraction ? q : new Fraction(BigInt(q));
+    this.approx = approx;
+  }
+
+  get isExact() {
+    return this.approx === null;
+  }
+
+  // The same rational, carrying this approximation. The one place a value
+  // becomes approximate; `sine` is currently its only caller.
+  withApprox(approx) {
+    return new PlanesNumber(this.q, approx);
   }
 
   // ---- construction
@@ -210,22 +251,30 @@ export class PlanesNumber {
     if (r.q.d > MAX_DENOMINATOR) throw new Inexact(op);
     return r;
   }
+  // exact + exact is exact; anything touching an approximate value is
+  // approximate, and inherits the FIRST entry point on the left-to-right
+  // reading of the expression. `why` on a comparison still shows both sides,
+  // because the derivation tree keeps both input branches and each branch's
+  // own number carries its own entry.
   add(o) {
-    return this._check(new PlanesNumber(this.q.add(PlanesNumber.of(o).q)), "+");
+    const r = PlanesNumber.of(o);
+    return this._check(new PlanesNumber(this.q.add(r.q), this.approx ?? r.approx), "+");
   }
   sub(o) {
-    return this._check(new PlanesNumber(this.q.sub(PlanesNumber.of(o).q)), "-");
+    const r = PlanesNumber.of(o);
+    return this._check(new PlanesNumber(this.q.sub(r.q), this.approx ?? r.approx), "-");
   }
   mul(o) {
-    return this._check(new PlanesNumber(this.q.mul(PlanesNumber.of(o).q)), "*");
+    const r = PlanesNumber.of(o);
+    return this._check(new PlanesNumber(this.q.mul(r.q), this.approx ?? r.approx), "*");
   }
   div(o) {
     const d = PlanesNumber.of(o);
     if (d.q.n === 0n) throw new RangeError("divided by zero");
-    return this._check(new PlanesNumber(this.q.div(d.q)), "/");
+    return this._check(new PlanesNumber(this.q.div(d.q), this.approx ?? d.approx), "/");
   }
   neg() {
-    return new PlanesNumber(this.q.neg());
+    return new PlanesNumber(this.q.neg(), this.approx);
   }
 
   // ---- comparison
@@ -251,7 +300,10 @@ export class PlanesNumber {
     return this.q.n === 0n;
   }
 
-  // ---- rounding, only when asked; half away from zero, all integer arithmetic
+  // ---- rounding, only when asked; half away from zero, all integer
+  // arithmetic. The result carries whatever the input carried: rounding an
+  // exact value gives an exact one, and rounding an approximate one does not
+  // launder it back to exact.
   roundTo(places) {
     const p = Number(places);
     if (p < 0) throw new RangeError("places cannot be negative");
@@ -266,7 +318,7 @@ export class PlanesNumber {
       const sign = n < 0n ? -1n : 1n;
       rounded = sign * ((biAbs(n) * 2n + d) / (d * 2n));
     }
-    return new PlanesNumber(new Fraction(rounded).div(scale));
+    return new PlanesNumber(new Fraction(rounded).div(scale), this.approx);
   }
 
   // ---- rendering. A terminating expansion prints exactly; a non-terminating
@@ -289,4 +341,106 @@ export class PlanesNumber {
   toString() {
     return this.text();
   }
+}
+
+// ---- sine (planes_checkpoint_v21_0 §§251-253) --------------------------------
+//
+// THE ALGORITHM, once. The port of planes_num.py's sine_degrees, on exactly the
+// same integers — which is what makes the two bit-identical rather than merely
+// close. grammar/interp.planes writes the same steps in Planes with `+ - * /`
+// and `round ... to 0 places`. The full derivation, and why this is scaled
+// integers rather than plain exact rationals, is in planes_num.py's comment;
+// the short version is that the rational form refuses outright at `sine of 60`
+// (a denominator of 10^1224, past MAX_DENOMINATOR) and costs ~3ms per call here
+// even where it does not, because gcd over 2000-bit BigInts dominates
+// everything.
+
+// pi/180 to 40 significant decimal digits, correctly rounded:
+//   0.01745329251994329576923690768488612713443
+// The error against the true value is under 1.3e-42. Byte-identical to
+// planes_num.py's literal.
+export const PI_OVER_180_NUM = 1745329251994329576923690768488612713443n;
+export const PI_OVER_180_DEN = 10n ** 41n;
+export const PI_OVER_180_DIGITS = 40;
+
+// Eight terms: x - x^3/3! + ... - x^15/15!. After the fold the series argument
+// is at most pi/4, where the first omitted term (x^17/17!) is 4.62e-17. That is
+// the accuracy of the answer; RESULT_PLACES is how much of it is kept, not a
+// claim about how much of it is right.
+export const SERIES_TERMS = 8;
+export const WORKING_PLACES = 50;
+const WORKING_SCALE = 10n ** BigInt(WORKING_PLACES);
+export const RESULT_PLACES = 30;
+const RESULT_SCALE = 10n ** BigInt(RESULT_PLACES);
+
+// Round n/d to the nearest integer, half away from zero. Integers only — the
+// same rule `round x to N places` uses, so a program that rounds by hand and
+// this series agree about what "nearest" means.
+function divRound(n, d) {
+  const sign = (n < 0n) !== (d < 0n) ? -1n : 1n;
+  const an = biAbs(n);
+  const ad = biAbs(d);
+  return sign * ((an * 2n + ad) / (ad * 2n));
+}
+
+// sin of (an/ad) degrees, as an integer scaled by WORKING_SCALE. `an/ad` is
+// already folded into [0, 45].
+function seriesScaled(an, ad) {
+  const x = divRound(an * PI_OVER_180_NUM * WORKING_SCALE, ad * PI_OVER_180_DEN);
+  const x2 = divRound(x * x, WORKING_SCALE);
+  let term = x;
+  let total = x;
+  for (let k = 1n; k < BigInt(SERIES_TERMS); k++) {
+    term = -divRound(term * x2, WORKING_SCALE * (2n * k) * (2n * k + 1n));
+    total += term;
+  }
+  return total;
+}
+
+// One record, shared by every value `sine` ever returns: the operation, and the
+// four numbers that decide how good the answer is.
+export const SINE_APPROXIMATION = new Approximation(
+  "sine",
+  `pi/180 to ${PI_OVER_180_DIGITS} significant digits, ` +
+    `an ${SERIES_TERMS}-term Taylor series, ` +
+    `${WORKING_PLACES} working decimal places, ` +
+    `a result rounded to ${RESULT_PLACES}`,
+);
+
+// `sine of d` — d in degrees, exact in, approximate out.
+//
+// Steps 1 and 2 are exact: `sine of 360000030` reduces to `sine of 30` with no
+// additional error at all, which is the property a float implementation cannot
+// offer.
+export function sineDegrees(value) {
+  const an = value.q.n;
+  const ad = value.q.d;
+
+  // 1. into [0, 360), FLOORED (BigInt division truncates toward zero, so the
+  //    negative case is stepped down explicitly), exactly
+  const m = 360n * ad;
+  let q = an / m;
+  if (an < 0n && q * m !== an) q -= 1n;
+  let rn = an - m * q;
+
+  // 2. into [0, 45], exactly — sign flips and subtractions only
+  let sign = 1n;
+  if (rn >= 180n * ad) {
+    rn -= 180n * ad;
+    sign = -1n;
+  }
+  if (rn > 90n * ad) rn = 180n * ad - rn;
+
+  // 3 and 4. the series, at the stated precisions
+  let s;
+  if (rn <= 45n * ad) {
+    s = seriesScaled(rn, ad);
+  } else {
+    // sin(a) = cos(90 - a) = 1 - 2 * sin((90 - a)/2)^2, and (90-a)/2 <= 22.5
+    const h = seriesScaled(90n * ad - rn, ad * 2n);
+    s = WORKING_SCALE - divRound(2n * h * h, WORKING_SCALE);
+  }
+
+  const scaled = divRound(sign * s * RESULT_SCALE, WORKING_SCALE);
+  return new PlanesNumber(new Fraction(scaled, RESULT_SCALE), SINE_APPROXIMATION);
 }
