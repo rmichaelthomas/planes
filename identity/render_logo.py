@@ -94,6 +94,58 @@ VIEWS = {
     },
 }
 
+# The UI palette the lockups sit on. Distinct from INK_LIGHT/INK_DARK below:
+# those are the mark's own ink for a generic light or dark ground, and a lockup
+# targets these two specific grounds instead.
+UI_PAPER = "#F7F2E9"
+UI_GRAPHITE = "#211D19"
+UI_LINE = "#D6C9B4"
+UI_LINE_DARK = "#3A332C"
+
+WORDMARK = "Planes"
+# The wordmark as OUTLINES, not live text — so a lockup renders identically on
+# a machine with no fonts installed at all.
+#
+# Provenance: "Planes" set in Red Hat Display, variable font instanced at
+# wght=700, from google/fonts (ofl/redhatdisplay, SIL Open Font License 1.1).
+# Glyphs are laid out left to right at their real advances and Y-flipped into
+# SVG's coordinate sense, so the path is in a 1000-unit em box with its origin
+# at the left end of the baseline. Extracted once with fontTools and embedded
+# here rather than vendoring the font binary: regeneration then needs no font
+# installed, no network, and no extra dependency.
+WORDMARK_EM = 1000.0        # units per em of the box the path is drawn in
+WORDMARK_ADVANCE = 3.079    # width of "Planes" in ems, at the real advances
+WORDMARK_CAP = 0.700        # Red Hat Display's cap height, for optical centring
+WORDMARK_PATH = (
+    "M68 0V-700H404Q473 -700 525 -673Q577 -646 606 -597Q635 -549 635 -486Q635 -"
+    "424 606 -376Q577 -328 524 -301Q472 -273 404 -273H191V0ZM191 -377H391Q446 -"
+    "377 478 -407Q511 -436 511 -485Q511 -534 478 -563Q446 -593 391 -593H191ZM72"
+    "8 0V-700L845 -721V0ZM1121 9Q1066 9 1023 -11Q981 -31 957 -66Q933 -102 933 -"
+    "148Q933 -222 988 -263Q1044 -304 1141 -304Q1213 -304 1275 -280V-326Q1275 -3"
+    "76 1245 -401Q1216 -426 1158 -426Q1124 -426 1086 -416Q1048 -406 999 -383L95"
+    "7 -471Q1016 -498 1069 -512Q1122 -525 1176 -525Q1278 -525 1334 -476Q1390 -4"
+    "27 1390 -338V0H1275V-41Q1242 -15 1204 -3Q1166 9 1121 9ZM1044 -151Q1044 -11"
+    "7 1073 -97Q1102 -76 1150 -76Q1187 -76 1218 -87Q1250 -97 1275 -118V-200Q124"
+    "8 -213 1218 -219Q1189 -226 1154 -226Q1103 -226 1074 -206Q1044 -186 1044 -1"
+    "51ZM1501 0V-515H1618V-467Q1677 -525 1768 -525Q1827 -525 1873 -499Q1918 -47"
+    "3 1944 -428Q1970 -382 1970 -321V0H1853V-303Q1853 -359 1821 -391Q1789 -423 "
+    "1735 -423Q1697 -423 1667 -408Q1638 -392 1618 -364V0ZM2329 9Q2252 9 2190 -2"
+    "6Q2129 -61 2092 -122Q2056 -182 2056 -257Q2056 -332 2091 -392Q2126 -452 218"
+    "5 -488Q2244 -523 2317 -523Q2390 -523 2446 -487Q2503 -451 2536 -390Q2569 -3"
+    "28 2569 -250V-219H2175Q2183 -181 2205 -152Q2227 -123 2261 -106Q2295 -90 23"
+    "34 -90Q2370 -90 2402 -101Q2435 -112 2457 -133L2533 -61Q2487 -25 2438 -8Q23"
+    "89 9 2329 9ZM2174 -304H2453Q2446 -340 2426 -367Q2406 -394 2378 -410Q2349 -"
+    "425 2315 -425Q2280 -425 2251 -410Q2221 -395 2202 -368Q2182 -341 2174 -304Z"
+    "M2843 10Q2774 10 2715 -9Q2656 -28 2613 -64L2673 -142Q2716 -110 2757 -95Q27"
+    "99 -79 2841 -79Q2891 -79 2922 -98Q2953 -116 2953 -146Q2953 -170 2935 -184Q"
+    "2917 -198 2879 -204L2783 -218Q2706 -229 2667 -266Q2628 -304 2628 -365Q2628"
+    " -413 2654 -449Q2679 -484 2726 -504Q2773 -524 2836 -524Q2892 -524 2945 -50"
+    "8Q2997 -492 3044 -459L2987 -382Q2944 -409 2905 -422Q2866 -434 2826 -434Q27"
+    "84 -434 2758 -417Q2733 -401 2733 -373Q2733 -348 2751 -335Q2769 -321 2811 -"
+    "315L2906 -301Q2983 -291 3023 -253Q3063 -216 3063 -156Q3063 -108 3034 -71Q3"
+    "005 -33 2955 -12Q2906 10 2843 10Z"
+)
+
 INK_LIGHT = "#1A1A1A"   # for placement on light backgrounds
 INK_DARK = "#F2F2F2"    # for placement on dark backgrounds
 
@@ -296,6 +348,19 @@ SHEET_TEMPLATE = r"""<!DOCTYPE html>
 </div>
 <p>Ink (axes, origin, wordmark) is the only thing that flips between backgrounds: <code>#1A1A1A</code> on light, <code>#F2F2F2</code> on dark. Plane colors are identical in both.</p>
 
+<h2>Lockup — mark and wordmark together</h2>
+<p>Two orientations: horizontal for headers and wide layouts, vertical/squared for anywhere a compact square footprint is needed — app icons, social avatars, stacked cards. Both are emitted as files; what you see here is the same SVG inlined, so the sheet and the files cannot diverge. No tagline is locked; neither orientation includes one.</p>
+<p>The wordmark is <strong>outlines, not live text</strong> — "Planes" set in Red Hat Display at weight 700 and converted to a path, so a lockup renders identically on a machine with no fonts installed.</p>
+
+<h3>Horizontal</h3>
+{lockup_row}
+<p class="contrast-note">Mark ink is matched to each ground (graphite on paper, light ink on graphite) rather than using the mark's own default light/dark ink — this lockup targets the UI palette specifically, not the mark's standalone light/dark backgrounds shown in Specimens below.</p>
+
+<h3>Vertical / squared</h3>
+<p>Mark centered above the wordmark, built for a square or near-square footprint. Uses the <code>mark</code> camera view rather than <code>hero</code> — its steeper angle reads better in a compact frame. Minimum recommended footprint is 160px square; below that, use the <code>small</code> view from Specimens instead of shrinking this lockup.</p>
+{lockup_square_row}
+<p class="contrast-note">Same ink-matching rule as the horizontal lockup. Wordmark size is reduced relative to the horizontal lockup to keep the stack visually balanced at a square aspect rather than tall and narrow.</p>
+
 <h2>Specimens</h2>
 <p>Every specimen below is inlined SVG. This sheet has no external file dependencies and renders correctly from any location.</p>
 <div class="specimen">
@@ -408,13 +473,14 @@ sheet.save('/tmp/contact_sheet.png')
   <tbody>
     <tr><td><code>render_logo.py</code></td><td>Source of truth. Geometry, camera, emission, and this sheet's template.</td></tr>
     <tr><td><code>planes-{{view}}-on-{{ink}}.svg</code></td><td>Generated. Do not hand-edit — regenerate.</td></tr>
-    <tr><td><code>planes-identity.html</code></td><td>Generated. This sheet, with specimens inlined.</td></tr>
+    <tr><td><code>planes-{{kind}}-on-{{ground}}.svg</code></td><td>Generated. The four lockups, standalone. Wordmark is outlines.</td></tr>
+    <tr><td><code>planes-identity.html</code></td><td>Generated. This sheet, with every specimen and lockup inlined.</td></tr>
     <tr><td><code>planes-icon-animated.html</code></td><td>Animated icon. Ink follows system light/dark.</td></tr>
   </tbody>
 </table>
 
 <div class="note">
-<strong>Not done.</strong> The animated version is hand-written CSS and is <em>not</em> generated from <code>render_logo.py</code> — its geometry duplicates the script's by hand and can drift. Unifying them is open work.
+<strong>One source.</strong> Every asset here — the six view SVGs, the four lockups, the animated icon, and this sheet — is emitted from <code>render_logo.py</code>. Nothing is hand-written, so nothing can drift from the geometry.
 </div>
 
 <footer>
@@ -427,9 +493,13 @@ planes — visual identity master sheet. Rough marker; nothing locked. Regenerat
 """
 
 def inline_svg(svg, px):
-    """Strip the XML prolog and force a display size for embedding in HTML."""
+    """Strip the XML prolog and force a display size for embedding in HTML.
+
+    `px=None` keeps the drawing's own width/height — a lockup is not square and
+    already carries the size it wants."""
     body = svg.strip()
-    body = body.replace("<svg ", f'<svg width="{px}" height="{px}" ', 1)
+    if px is not None:
+        body = body.replace("<svg ", f'<svg width="{px}" height="{px}" ', 1)
     return body
 
 
@@ -560,6 +630,118 @@ def build_animated():
     return path
 
 
+# ---------------------------------------------------------------------------
+# LOCKUPS — the mark and the wordmark together
+# ---------------------------------------------------------------------------
+# Two orientations, each on both UI grounds. They existed only as inlined SVG
+# inside the identity sheet, so using one meant hand-extracting it; they are
+# emitted as files here and the sheet inlines the same output, which is what
+# stops the two from drifting.
+#
+# THE INK-MATCHING RULE, which the sheet states in prose and this encodes:
+# graphite ink on paper, light ink on graphite. Not the mark's own light/dark
+# default — a lockup targets the UI palette specifically.
+#
+# THE WORDMARK IS LIVE TEXT, NOT OUTLINES. Red Hat Display is not installed on
+# the machine this was generated on and no font file is vendored in the repo,
+# so there are no glyph outlines to convert; drawing them by hand would be
+# fabricating a wordmark. `textLength` with `lengthAdjust="spacingAndGlyphs"`
+# is the compensation: the box is exact everywhere, and a machine without the
+# font gets correct layout in a substituted face rather than a broken one.
+
+LOCKUPS = {
+    "lockup": {          # horizontal — headers and wide layouts
+        "view": "hero",
+        "mark_px": 96.0,
+        "type_px": 40.0,     # 2.5rem
+        "gap": 28.0,         # 1.75rem
+        "pad_x": 44.0,       # 2.75rem
+        "pad_y": 40.0,       # 2.5rem
+        "stacked": False,
+    },
+    "lockup-square": {   # vertical — app icons, avatars, stacked cards
+        "view": "mark",
+        "mark_px": 84.0,
+        "type_px": 27.2,     # 1.7rem
+        "gap": 14.4,         # 0.9rem
+        "pad_x": 40.0,
+        "pad_y": 40.0,
+        "stacked": True,
+    },
+}
+
+GROUNDS = {
+    "paper": (UI_PAPER, UI_LINE, UI_GRAPHITE),
+    "graphite": (UI_GRAPHITE, UI_LINE_DARK, INK_DARK),
+}
+
+
+def mark_body(view_name, ink):
+    """The mark's SVG children, without its own <svg> wrapper, so it can be
+    placed inside a larger drawing. Same `render()` the standalone files use."""
+    view = VIEWS[view_name]
+    svg = render(view["yaw"], view["pitch"], view["size"], ink, view)
+    lines = svg.strip().split("\n")
+    return "\n".join(lines[1:-1])      # drop <svg ...> and </svg>
+
+
+def lockup_svg(kind, ground):
+    """One lockup, whole and standalone: ground, border, mark and wordmark."""
+    spec = LOCKUPS[kind]
+    bg, line, ink = GROUNDS[ground]
+    mark, type_px, gap = spec["mark_px"], spec["type_px"], spec["gap"]
+    pad_x, pad_y = spec["pad_x"], spec["pad_y"]
+    text_w = type_px * WORDMARK_ADVANCE
+    cap = type_px * WORDMARK_CAP
+    type_k = type_px / WORDMARK_EM
+
+    if spec["stacked"]:
+        w = 2 * pad_x + max(mark, text_w)
+        h = 2 * pad_y + mark + gap + cap
+        mark_cx, mark_cy = w / 2, pad_y + mark / 2
+        text_x = (w - text_w) / 2
+        text_y = pad_y + mark + gap + cap
+    else:
+        w = 2 * pad_x + mark + gap + text_w
+        h = 2 * pad_y + mark
+        mark_cx, mark_cy = pad_x + mark / 2, h / 2
+        text_x = pad_x + mark + gap
+        text_y = h / 2 + cap / 2
+
+    view = VIEWS[spec["view"]]
+    k = mark / view["size"]
+    out = [
+        f'<svg viewBox="0 0 {fmt(w)} {fmt(h)}" width="{fmt(w)}" height="{fmt(h)}" '
+        'xmlns="http://www.w3.org/2000/svg" role="img">',
+        f"<title>planes — {kind} on {ground}</title>",
+        f"<desc>The planes mark with the Planes wordmark, {spec['view']} view, "
+        f"ink matched to the {ground} ground.</desc>",
+        f'  <rect x="0.5" y="0.5" width="{fmt(w - 1)}" height="{fmt(h - 1)}" '
+        f'rx="10" fill="{bg}" stroke="{line}"/>',
+        f'  <g transform="translate({fmt(mark_cx)}, {fmt(mark_cy)}) scale({k:.6f})">',
+        mark_body(spec["view"], ink),
+        "  </g>",
+        f'  <g transform="translate({fmt(text_x)}, {fmt(text_y)}) '
+        f'scale({type_k:.6f})" fill="{ink}">',
+        f'    <path d="{WORDMARK_PATH}"/>',
+        "  </g>",
+        "</svg>",
+    ]
+    return "\n".join(out) + "\n"
+
+
+def build_lockups():
+    """The four lockups, as files. Returns the paths, in emission order."""
+    written = []
+    for kind in LOCKUPS:
+        for ground in GROUNDS:
+            path = os.path.join(OUT_DIR, f"planes-{kind}-on-{ground}.svg")
+            with open(path, "w") as fh:
+                fh.write(lockup_svg(kind, ground))
+            written.append(path)
+    return written
+
+
 def build_sheet():
     """Emit the identity sheet with every specimen inlined, so it has no
     external file dependencies and renders correctly from any location."""
@@ -586,10 +768,17 @@ def build_sheet():
         for p in PLANES
     )
 
+    def lockup_row(kind):
+        return "\n".join(
+            f'<div style="margin:1rem 0">{inline_svg(lockup_svg(kind, g), None)}'
+            f'</div>' for g in GROUNDS)
+
     html = SHEET_TEMPLATE.format(
         swatches=swatches,
         light_row=row("light"),
         dark_row=row("dark"),
+        lockup_row=lockup_row("lockup"),
+        lockup_square_row=lockup_row("lockup-square"),
     )
     path = os.path.join(OUT_DIR, "planes-identity.html")
     with open(path, "w") as fh:
@@ -607,6 +796,7 @@ def main():
             with open(path, "w") as fh:
                 fh.write(svg)
             written.append(path)
+    written.extend(build_lockups())
     written.append(build_animated())
     written.append(build_sheet())
     for path in written:

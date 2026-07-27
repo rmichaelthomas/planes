@@ -9,9 +9,10 @@
 | **2** | `f60e9a4` | Retire MANIFEST.md |
 | **3** | `1e94c6e` | The animated mark is generated, not hand-written |
 | | `2715ddc` | The scanner tells `fix:` from `no-fix:` — a defect in Phase 1, §5.5 |
+| | pre-merge | Four review items: the lockups, `read-claim`, and two confirmations (§8) |
 
-**Gate:** green, exit 0. **56 files, 56 reporting, 1114 oks**, 47 JS tests,
-44.7 s wall, `mypy` 91 files, `ruff` clean. Counts **32 / 10 / 7 / 7**. Corpus
+**Gate:** green, exit 0. **56 files, 56 reporting, 1116 oks**, 47 JS tests,
+45.0 s wall, `mypy` 91 files, `ruff` clean. Counts **32 / 10 / 7 / 7**. Corpus
 **50 / 50** self-hosted. `core_check` clean on all four `grammar/*.planes`.
 348 shapes, **0 divergences on tag, detail and fix**.
 
@@ -39,7 +40,8 @@ differently in a specific way.
 | **named by the three-way sweep** | **25** | the sweep reported the divergence and printed both sides; nothing to decide |
 | **the rest of `interp.planes`, from the catalogue** | **28** | the sweep does not exercise them; matched by tag *and detail template* against `grammar/errors.json` |
 | **already carried a clause the scanner could not see** | **4** | 3 in `lexer.planes`, 1 in `parser.planes` — not missing, invisible |
-| **written by hand** | **11** | 10 in `parser.planes`, 1 in `json.planes` |
+| **written by hand** | **10** | 9 in `parser.planes`, 1 in `json.planes` |
+| **ported after review** | **1** | `read-claim`, §8.2 — byte-identical to `parser.py`'s |
 | **marked a deliberate silence** | **3** | the parser's generic token gate |
 | | **71** | |
 
@@ -59,8 +61,9 @@ is why it reported an unresolvable ambiguity that resolves on sight.
 **And the 18 was three different things.** Four of them were never missing —
 `lexer.planes` and one `parser.planes` site already named their fix inline on a
 continuation line, exactly as the reference's syntax errors do, and the scanner
-could not read that shape. Three more are deliberate silences. Eleven were real
-authorship.
+could not read that shape. Three more are deliberate silences. Eleven were
+authorship — and one of those, `read-claim`, turned out to be a divergence
+rather than a weaker message and was converged at review (§8.2).
 
 ### Three shapes the scanner could not see, and none of them was a clause
 
@@ -113,8 +116,13 @@ what each load-bearing file is *for*, which a checksum table never did. One
 sentence added there says so and points at `git ls-files`. No generator was
 built.
 
-It claimed 55 files and 217 tests against a repo with 56 suite files and 1114
+It claimed 55 files and 217 tests against a repo with 56 suite files and 1116
 oks. Nothing outside the historical `REPORT_*.md` referenced it.
+
+**Confirmed at review (§8.3):** deleted in `f60e9a4`, absent from the tree, and
+referenced by nothing in `.py`, `.sh`, `.mjs`, `.toml`, `.json` or `.planes`.
+The only two mentions left are in `REPORT_SCANNER_AND_RETIREMENT.md`, which
+flagged it as stale, and in this report.
 
 ---
 
@@ -213,7 +221,7 @@ out.
 ### Smaller things, recorded
 
 * **`README.md` is stale** in the same way `MANIFEST.md` was: it opens "29
-  reserved words" (32), "45 tests" (1114 oks), "No design documents", and its
+  reserved words" (32), "45 tests" (1116 oks), "No design documents", and its
   `## Files` table names test counts from many builds ago. The gate is green
   and no program is wrong, so it is recorded here and not touched.
 * **`pyproject.toml`'s coverage `omit` listed `verify_*.py`**, which C6 deleted
@@ -253,5 +261,93 @@ out.
 **Phase 3** — `identity/` (new: `render_logo.py`, six SVGs, the identity sheet,
 the generated animated mark), `pyproject.toml`, `test_gate.py`, `test_host.py`.
 
+**Review (§8)** — `identity/render_logo.py` (the lockup emitter and the embedded
+wordmark outlines), `identity/planes-lockup{,-square}-on-{paper,graphite}.svg`
+(new), `identity/planes-identity.html` (the sheet, with the lockup section),
+`grammar/parser.planes`, `test_parser_in_planes.py`.
+
 No reserved word, builtin, effect kind or host method was added or removed. No
 reference-side message changed.
+
+---
+
+## §8 — The four review items, before merge
+
+### 8.1 — The lockups are files now, and the wordmark is outlines
+
+Four lockups rendered only as inlined SVG inside the identity sheet, so using
+one meant hand-extracting it. `render_logo.py` emits them:
+
+| file | orientation | camera | ground | mark ink |
+|---|---|---|---|---|
+| `planes-lockup-on-paper.svg` | horizontal | `hero` | `#F7F2E9` | graphite `#211D19` |
+| `planes-lockup-on-graphite.svg` | horizontal | `hero` | `#211D19` | light `#F2F2F2` |
+| `planes-lockup-square-on-paper.svg` | vertical | `mark` | `#F7F2E9` | graphite `#211D19` |
+| `planes-lockup-square-on-graphite.svg` | vertical | `mark` | `#211D19` | light `#F2F2F2` |
+
+The ink-matching rule the sheet documents — graphite ink on paper, light ink on
+graphite, *not* the mark's own light/dark default — is encoded in `GROUNDS`
+rather than restated per file. **The sheet inlines the same `lockup_svg()`
+output**, so the sheet and the files cannot diverge; that was the whole failure
+mode the animated mark had.
+
+**The wordmark is outlines.** "Planes" set in Red Hat Display, the variable font
+instanced at `wght=700`, from `google/fonts` (`ofl/redhatdisplay`, SIL Open Font
+License 1.1); glyphs laid out at their real advances and Y-flipped into SVG's
+coordinate sense. Extracted once with `fontTools` and embedded in
+`render_logo.py` as a constant rather than vendoring the font binary —
+regeneration then needs no font installed, no network, and no dependency beyond
+the standard library. A lockup renders identically on a machine with no fonts at
+all.
+
+Real metrics replaced an estimate that had been wrong: the advance of "Planes"
+is **3.079 em**, not the 2.62 a first pass guessed off the rendered sheet, and
+the cap height is the font's own 0.700.
+
+The six view SVGs still regenerate byte-identical to the handover, and the whole
+run is idempotent.
+
+### 8.2 — `read-claim` converged
+
+`read_claim`'s clause is the one parser message whose fix is **data** — it lists
+the function's parameters. The self-hosted side shipped different wording
+because `parser.planes` had no comma-joiner, and a clause that lands in two of
+three implementations is a divergence, not a weaker message (invariant 2,
+`REPORT_DETAIL_CONVERGENCE.md` §3).
+
+The joiner is copied across and the two are now byte-identical:
+
+```
+line 1: 'zzz' is not a parameter of this function, so it cannot be where 'ask' goes
+  parameters: a, b
+```
+
+Asserted in `test_parser_in_planes.py` over three shapes — several parameters,
+one, and none (`parameters: none`, matching `', '.join(params) or 'none'`).
+
+**The copy could not keep the name.** `interp.planes` and `parser.planes` land
+in one module graph, and Planes refuses two modules defining one name —
+`check_collisions` raised on `comma-list-of` the moment both had it. The parser's
+copy is `names-joined-of`, and a test asserts neither file defines the other's
+name. That is the module system working, not a workaround: a copy has to be a
+copy and not a shadow.
+
+### 8.3 — MANIFEST.md
+
+Confirmed retired and unreferenced — see §3.
+
+### 8.4 — The ok count
+
+**1116 → 1116.** Phase 1 removed eleven of C5 and C6's split-arithmetic
+assertions along with the shortfall they measured and added six asserting the
+endpoint (−5); Phase 3 added three for the `identity/` ruling (+3); §8.2 added
+two for the converged clause (+2). The build ended where it started, having
+replaced measurement of a gap with measurement of its absence.
+
+### 8.5 — `digit-value` and `canonical-of-node`, left as they are
+
+Both say "this is a defect in the lexer/parser, not your program". That claim
+rests on **inferred** unreachability — read off the call sites, not proved.
+There is no counterpart clause to port and no mechanical remedy, so it is
+recorded here as a caveat on two of the ten authored clauses and nothing
+follows from it.

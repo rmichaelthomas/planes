@@ -21,7 +21,7 @@ per-file corpus agreement table this harness produces.
 """
 import sys
 
-from interp import Deriv, Interpreter, Traced
+from interp import Deriv, Interpreter, PlanesError, Traced
 from lexer import (
     Assign,
     Because,
@@ -56,7 +56,7 @@ from lexer import (
     Why,
     WriteTo,
 )
-from parser import parse
+from parser import PlanesSyntaxError, parse
 from planes_text import escape_string_literal
 
 # ================================================================ the canonical form (Python side)
@@ -526,6 +526,66 @@ def test_self_parse_vocabulary_agrees():
     py = canonical_program(parse(src))
     pl = planes_canonical_program(src)
     assert py == pl, "grammar/vocabulary.planes self-parse diverged"
+
+
+# ================== the fix clause, byte-identical across the two parsers (D)
+#
+# `read_claim` is the one parser message whose fix clause is DATA — it lists
+# the function's parameters — and the self-hosted side shipped a differently
+# worded clause because `parser.planes` had no comma-joiner. A clause that
+# lands in two of three implementations is a divergence and not a weaker
+# message (invariant 2, REPORT_DETAIL_CONVERGENCE.md §3), so the joiner was
+# copied across and the two now say the same thing byte for byte.
+
+
+def _py_refusal(src):
+    try:
+        parse(src)
+    except PlanesSyntaxError as e:
+        return str(e)
+    raise AssertionError(f"parser.py did not refuse:\n{src}")
+
+
+def _planes_refusal(src):
+    i = _get_interp()
+    try:
+        i.call("canonical-of-program-source", [_traced(src)], i.env)
+    except PlanesError as e:
+        return e.detail
+    raise AssertionError(f"grammar/parser.planes did not refuse:\n{src}")
+
+
+def test_the_read_claim_clause_is_byte_identical_in_both_parsers():
+    """It lists the parameters, so it is the one clause the two could disagree
+    on while every fixed-text clause agreed."""
+    for src, expected_tail in (
+            ('foreign f of a, b from "m.f" doing ask zzz\n',
+             "\n  parameters: a, b"),
+            ('foreign f of only from "m.f" doing ask zzz\n',
+             "\n  parameters: only"),
+            ('foreign f from "m.f" doing ask zzz\n',
+             "\n  parameters: none"),
+    ):
+        py, pl = _py_refusal(src), _planes_refusal(src)
+        assert py == pl, f"{src!r}\n  py={py!r}\n  pl={pl!r}"
+        assert py.endswith(expected_tail), (src, py)
+
+
+def test_the_two_comma_joiners_are_copies_under_different_names():
+    """Both files carry the same fold, because `join of` concatenates with no
+    separator. They cannot share a NAME: the two land in one module graph and
+    Planes refuses two modules defining one — a copy has to be a copy, not a
+    shadow. What has to agree is the clause, and the test above asserts that."""
+    with open("grammar/parser.planes", encoding="utf-8") as fh:
+        parser_src = fh.read()
+    with open("grammar/interp.planes", encoding="utf-8") as fh:
+        interp_src = fh.read()
+    assert "to names-joined-of of names:" in parser_src
+    assert "to comma-list-of of names:" in interp_src
+    # And neither DEFINES the other's name, which is what the module graph
+    # refuses — `check_collisions` raises on two modules defining one name.
+    assert "to comma-list-of" not in parser_src
+    assert "to names-joined-of" not in interp_src
 
 
 if __name__ == "__main__":

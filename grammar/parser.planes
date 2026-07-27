@@ -2000,6 +2000,28 @@ to read-effect-word of cursor, after, allow-nothing:
       found = "end of line"
     fail "line " + (text of t.line) + ": expected an effect name after " + after + ", found '" + found + "'\n  valid kinds: " + (effect-kinds-text) + " — and 'nothing' after 'doing', for a foreign that performs none" as parse-error
 
+# interp.py's `', '.join(...)`. `join of` concatenates with no separator, so a
+# comma-separated list is a fold. interp.planes carries the same fold under the
+# name `comma-list-of`; the names differ deliberately, because the two files
+# land in one module graph and Planes refuses two modules defining one name —
+# a copy has to be a copy, not a shadow.
+to names-joined-of of names:
+  if (count of names) == 0:
+    give ""
+  give names-joined-walk-of of (rest of names), (first-item of names)
+
+to names-joined-walk-of of remaining, acc:
+  if (count of remaining) == 0:
+    give acc
+  give names-joined-walk-of of (rest of remaining), (acc + ", " + (first-item of remaining))
+
+# `', '.join(params) or 'none'` — an empty parameter list says so in words
+# rather than trailing off after the colon.
+to params-display-of of params:
+  if (count of params) == 0:
+    give "none"
+  give names-joined-of of params
+
 to param-includes of params, name:
   result = false
   for each p in params:
@@ -2022,7 +2044,7 @@ to read-claim of cursor, params:
         give { claim: { kind: kind, target-tag: "param", target-value: t.text }, cursor: (advance of after) }
       else:
         if t.kind == "NAME":
-          fail "line " + (text of t.line) + ": '" + t.text + "' is not a parameter of this function, so it cannot be where '" + kind + "' goes" + "\n  the claim has to name one of this function's parameters, or a quoted literal" as parse-error
+          fail "line " + (text of t.line) + ": '" + t.text + "' is not a parameter of this function, so it cannot be where '" + kind + "' goes" + "\n  parameters: " + (params-display-of of params) as parse-error
         else:
           give { claim: { kind: kind, target-tag: "none", target-value: nothing }, cursor: after }
 
