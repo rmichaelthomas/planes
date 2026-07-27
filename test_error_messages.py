@@ -540,8 +540,8 @@ def test_the_split_sums_to_the_shortfall_it_splits():
     ec = _coverage()
     sites = ec.self_hosted_sites()
     split = ec.split_shortfall(sites[ec.SHORTFALL])
-    assert len(split[ec.HAS_TWIN]) + len(split[ec.NO_TWIN]) \
-        == len(sites[ec.SHORTFALL])
+    assert len(split[ec.HAS_TWIN]) + len(split[ec.PROBABLE_TWIN]) \
+        + len(split[ec.NO_TWIN]) == len(sites[ec.SHORTFALL])
     assert len(sites[ec.SHORTFALL]) == 71, len(sites[ec.SHORTFALL])
     assert sum(len(v) for v in sites.values()) == 111
 
@@ -582,8 +582,9 @@ def test_a_twin_is_a_tag_the_reference_raises_and_names_a_fix_for():
     for tag, ids in twins.items():
         assert isinstance(tag, str) and ids
     # A tag the reference raises WITHOUT ever naming a fix is not a twin.
-    fake = ec.split_shortfall([("x.planes", 1, "src", "no-such-tag-anywhere")],
-                              twins)
+    fake = ec.split_shortfall(
+        [("x.planes", 1, "src", "no-such-tag-anywhere", "no-such-function")],
+        twins, ec.reference_fix_functions())
     assert len(fake[ec.NO_TWIN]) == 1
 
 
@@ -609,17 +610,112 @@ def test_an_unreadable_tag_falls_to_the_side_nothing_checked():
     assert split["tag_unreadable"], "no unreadable-tag figure reported"
     for site in split["tag_unreadable"]:
         assert site[3] is None, site
-        assert site in split[ec.NO_TWIN], site
+        # The TAG pass cannot see it. C6 gives it the function pass anyway,
+        # because the enclosing function is readable when the tag is not.
+        assert site not in split[ec.HAS_TWIN], site
+        assert site in split[ec.PROBABLE_TWIN] or site in split[ec.NO_TWIN]
 
 
 def test_every_self_hosted_site_carries_its_tag_or_none():
     ec = _coverage()
     for state, sites in ec.self_hosted_sites().items():
         for site in sites:
-            assert len(site) == 4, (state, site)
-            f, n, src, tag = site
+            assert len(site) == 5, (state, site)
+            f, n, src, tag, fn = site
             assert f.endswith(".planes") and n > 0 and src
             assert tag is None or (tag and " " not in tag), site
+            # Every raise site in these files is inside a function.
+            assert fn and " " not in fn, site
+
+
+# ================== 7. the second key: the enclosing function (C6 / Ruling 2)
+#
+# 51 of 109 catalogued reference errors carry no tag, so tag-matching could not
+# see PlanesSyntaxError at all and every lexer and parser site landed in "needs
+# authorship" when the reference already answers it. The second pass keys on the
+# enclosing function name, normalised across `_` and `-`. It is WEAKER evidence
+# and gets its own state; these pin that it stays separate.
+
+
+def test_the_split_has_three_states_and_they_stay_separate():
+    ec = _coverage()
+    split = ec.split_shortfall(ec.self_hosted_sites()[ec.SHORTFALL])
+    assert ec.HAS_TWIN != ec.PROBABLE_TWIN != ec.NO_TWIN
+    by_tag = {(s[0], s[1]) for s in split[ec.HAS_TWIN]}
+    by_fn = {(s[0], s[1]) for s in split[ec.PROBABLE_TWIN]}
+    none = {(s[0], s[1]) for s in split[ec.NO_TWIN]}
+    assert not (by_tag & by_fn) and not (by_tag & none) and not (by_fn & none)
+    assert len(by_tag) == 44 and len(by_fn) == 9 and len(none) == 18
+
+
+def test_the_tag_pass_runs_first_because_it_is_stronger_evidence():
+    """A tag is asserted at both sites; a function name is a convention nothing
+    asserts. A site the tag pass matches must never be demoted to the second."""
+    ec = _coverage()
+    twins, fns = ec.reference_fix_tags(), ec.reference_fix_functions()
+    # A site whose tag AND function both match lands in HAS_TWIN, not PROBABLE.
+    tag = next(t for t in twins)
+    fn = next(f for f in fns)
+    split = ec.split_shortfall([("x.planes", 1, "src", tag, fn)], twins, fns)
+    assert len(split[ec.HAS_TWIN]) == 1, split
+    assert not split[ec.PROBABLE_TWIN]
+
+
+def test_a_function_name_is_normalised_across_both_spellings():
+    """`parser.py`'s `read_effect_word` is `grammar/parser.planes`'s
+    `read-effect-word`, and Python's leading-underscore private marker carries
+    no meaning in Planes."""
+    ec = _coverage()
+    assert ec._normalise_fn("read_effect_word") == "read-effect-word"
+    assert ec._normalise_fn("_resolve_subject") == "resolve-subject"
+    assert ec._normalise_fn("parse-rule") == "parse-rule"
+    assert ec._normalise_fn(None) == ""
+
+
+def test_every_lexer_and_parser_site_is_individually_classified():
+    """The population this pass exists for. All seventeen landed in `no twin`
+    under tag-matching alone; the report names each one and which key, if any,
+    reached it."""
+    ec = _coverage()
+    split = ec.split_shortfall(ec.self_hosted_sites()[ec.SHORTFALL])
+    syntax = [s for label in (ec.HAS_TWIN, ec.PROBABLE_TWIN, ec.NO_TWIN)
+              for s in split[label]
+              if s[0] in ("parser.planes", "lexer.planes")]
+    assert len(syntax) == 17, len(syntax)
+    # Not one of them has a tag the reference names a fix for — that is the
+    # finding C5 recorded and this pass exists to act on.
+    assert not [s for s in split[ec.HAS_TWIN]
+                if s[0] in ("parser.planes", "lexer.planes")]
+    matched = [s for s in split[ec.PROBABLE_TWIN]
+               if s[0] in ("parser.planes", "lexer.planes")]
+    assert len(matched) == 9, [(s[0], s[1], s[4]) for s in matched]
+
+
+def test_multiplicity_on_the_second_pass_is_reported_too():
+    """It bites harder here: a tag names one kind of failure, a function may
+    raise several."""
+    ec = _coverage()
+    fns = ec.reference_fix_functions()
+    split = ec.split_shortfall(ec.self_hosted_sites()[ec.SHORTFALL], None, fns)
+    assert split["multiplicity_by_function"], "not reported"
+    for site in split["multiplicity_by_function"]:
+        assert len(fns[ec._normalise_fn(site[4])]) > 1, site
+        assert site in split[ec.PROBABLE_TWIN], site
+
+
+def test_the_ceiling_says_what_is_still_unmatchable_not_what_was():
+    """B.5: a ceiling has moved, not gone. Deleting the note would make the
+    output stop saying what it still cannot see."""
+    ec = _coverage()
+    sites = ec.self_hosted_sites()
+    twins, fns = ec.reference_fix_tags(), ec.reference_fix_functions()
+    text = ec.render_split(ec.split_shortfall(sites[ec.SHORTFALL], twins, fns),
+                           twins, fns)
+    assert "CEILING, MOVED — NOT GONE" in text, text[-400:]
+    assert "upper bound" in text
+    untagged, entries = ec.untagged_reference_entries()
+    assert f"{untagged} of the {entries}" in text
+    assert untagged == 51 and entries == 109, (untagged, entries)
 
 
 if __name__ == "__main__":
