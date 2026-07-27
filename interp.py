@@ -413,6 +413,18 @@ class Interpreter:
         self.funcs = {}
         self.foreigns = {}       # name -> Foreign declaration
         self.modules = set()
+        # Every line the program produced, in order — and a SUPERSET of what
+        # the host was asked to emit, which is the one thing to know before
+        # reading it. `show` lands here AND goes to `host.show`; `why` lands
+        # here ONLY, because a derivation query is not an effect and logs none.
+        #
+        #     show "a" ; why x   ->  output  ['a', '5 from 5']
+        #                            host    ['a']
+        #                            effects [('show', 'a')]
+        #
+        # So an embedder printing `output` while running on a host that also
+        # prints doubles every `show`; one that prints neither loses every
+        # `why`. planes.py hit the first of those — see its `CliHost`.
         self.output = []
         self.effects = []            # ordered record of what the program did
         self.annotations = {}        # name -> latest `because` text, display-only

@@ -9,9 +9,30 @@
 import os
 import sys
 
+from host import PythonHost
 from interp import Interpreter, PlanesError, origins, why_tree
 from modules import ModuleError
 from parser import PlanesSyntaxError
+
+
+class CliHost(PythonHost):
+    """The default host, with `show` silenced — because this CLI prints.
+
+    `show` is a host capability: the interpreter records the line in
+    `i.output` AND hands it to `host.show`, which is what makes a `show`
+    reach stdout for an embedded caller. This CLI then printed `i.output`
+    as well, so every `show` line appeared twice — including in
+    `money.planes`, the example this README quotes.
+
+    Printing `i.output` is the half that has to stay: a `why` statement
+    inside a program body lands there too and is NOT a host effect, so
+    dropping the loop would silence it. Silencing the echo instead keeps
+    one emitter, keeps `show` and `why` interleaved in program order, and
+    leaves `PythonHost` — the one an embedding caller gets — untouched.
+    """
+
+    def show(self, text):
+        pass
 
 
 def main(argv):
@@ -39,7 +60,7 @@ def main(argv):
             return 1
         src = open(path).read()
 
-    i = Interpreter()
+    i = Interpreter(host=CliHost())
     try:
         if args[0] == "-e":
             lines = i.run(src)

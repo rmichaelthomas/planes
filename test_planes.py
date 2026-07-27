@@ -1,6 +1,7 @@
 """Planes test suite. Every claim is testable; every feature has a case."""
 import glob
 import json
+import os
 import re
 import sys
 
@@ -415,6 +416,122 @@ def test_ordinary_program_is_traceable():
     assert "avg = 25" in tree
     assert "count of = 3" in tree
     assert "for each p where ..." in tree
+
+
+# ==================================== README.md states numbers; pin them
+#
+# A record nothing maintains goes stale and then misleads — which is why
+# MANIFEST.md was retired. The README carries the language's vocabulary and the
+# catalogue's counts, and both are derivable, so they are checked here rather
+# than hand-kept. Prose is not checked; numbers and word lists are.
+
+
+def _readme():
+    with open("README.md", encoding="utf-8") as f:
+        return f.read()
+
+
+def _fenced_words(readme, first_word):
+    """The word list from the fenced block that starts with `first_word`."""
+    m = re.search(r"```\n(" + re.escape(first_word) + r".*?)\n```",
+                  readme, re.S)
+    assert m, f"README has no fenced block starting {first_word!r}"
+    return set(m.group(1).split())
+
+
+def test_the_readme_lists_the_real_vocabulary():
+    from lexer import EFFECT_KINDS, KEYWORDS
+    from parser import BUILTIN_NAMES
+    r = _readme()
+    assert _fenced_words(r, "and  as") == set(KEYWORDS)
+    assert _fenced_words(r, "ask  count") == set(BUILTIN_NAMES)
+    assert _fenced_words(r, "ask  clock") == set(EFFECT_KINDS)
+
+
+def test_the_readme_states_the_real_counts():
+    from lexer import EFFECT_KINDS, KEYWORDS
+    from parser import BUILTIN_NAMES
+    r = _readme()
+    for claim in (f"**{len(KEYWORDS)} keywords**",
+                  f"**{len(BUILTIN_NAMES)} builtins**",
+                  f"**{len(EFFECT_KINDS)} effect kinds**",
+                  f"{len(KEYWORDS) + len(BUILTIN_NAMES)} names"):
+        assert claim in r, claim
+
+
+def test_the_readme_states_the_real_host_surface():
+    from host import Host
+    known = ("ask", "read", "write", "show", "clock", "resolve", "parse_json",
+             "to_json")
+    live = [m for m in known if hasattr(Host, m)]
+    r = _readme()
+    assert f"**{len(live)} methods**" in r, f"{len(live)} host methods"
+    for m in live:
+        assert f"| `{m}` |" in r, m
+
+
+def test_the_readme_states_the_real_catalogue_counts():
+    """Both work lists are zero, and the README says so in both halves."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import errors_coverage as ec
+    cov, sh = ec.coverage(), ec.self_hosted_sites()
+    r = _readme()
+    total = sum(len(v) for v in sh.values())
+    for claim in (
+            f"names a fix                  {cov['counts'][ec.NAMES_FIX]:>3} "
+            f"of {cov['errors']}",
+            f"should name one and does not   {cov['counts'][ec.SHORTFALL]} "
+            f"of {cov['errors']}",
+            f"{total} raise sites",
+            f"names a fix                   {len(sh[ec.NAMES_FIX])} of {total}",
+            f"deliberately names none       {len(sh[ec.DELIBERATE])} of {total}",
+    ):
+        assert claim in r, claim
+
+
+# ============================================ the CLI prints each line once
+#
+# `show` is a host capability: the interpreter records the line in `i.output`
+# AND hands it to `host.show`. `planes.py` then printed `i.output` too, so
+# every `show` line appeared twice — including in `money.planes`, the example
+# README.md quotes. The loop is the half that has to stay (a `why` inside a
+# program body lands in `i.output` and is not a host effect), so the CLI
+# silences the echo instead.
+
+
+def _cli(*args):
+    import subprocess
+    r = subprocess.run([sys.executable, "planes.py", *args],
+                       capture_output=True, text=True)
+    return r
+
+
+def test_the_cli_prints_each_show_line_exactly_once():
+    out = _cli("money.planes").stdout.splitlines()
+    assert out == ["subtotal 59.97", "tax      4.947525",
+                   "total    64.917525", "due      64.92"], out
+
+
+def test_the_cli_still_prints_why_which_is_not_a_host_effect():
+    """`why` writes to `i.output` and never reaches `host.show`, so silencing
+    the echo must not silence it."""
+    out = _cli("-e", "x = 5; y = 3; z = x + y; why z").stdout.splitlines()
+    assert out == ["8 from x (5) + y (3)"], out
+
+
+def test_show_and_why_stay_in_program_order():
+    out = _cli("annotated.planes").stdout.splitlines()
+    assert out[0].startswith("200 from 200"), out
+    assert out[-1].startswith("refund 150 approved:"), out
+
+
+def test_the_embedding_host_still_emits_show_itself():
+    """`PythonHost.show` printing is the contract for a caller embedding the
+    interpreter; only the CLI's own host silences it."""
+    from host import PythonHost
+    from planes import CliHost
+    assert issubclass(CliHost, PythonHost)
+    assert PythonHost.show is not CliHost.show
 
 
 if __name__ == "__main__":
