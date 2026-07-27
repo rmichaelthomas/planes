@@ -352,7 +352,7 @@ switch (sub) {
     const { runFile } = await import("./run_file.mjs");
     let tag = null;
     try {
-      runFile(itp, rest[0]);
+      await runFile(itp, rest[0]);
     } catch (e) {
       if (e instanceof PlanesError) tag = e.tag;
       else if (e instanceof PlanesSyntaxError) tag = "PARSE";
@@ -489,7 +489,7 @@ switch (sub) {
     const { asJson } = await import("./shapes.mjs");
     const { analyseFile } = await import("./shapes_node.mjs");
     const follow = !rest.includes("--no-follow");
-    const surface = analyseFile(rest[0], follow);
+    const surface = await analyseFile(rest[0], follow);
     out(JSON.stringify(asJson(surface, rest[0])));
     break;
   }
@@ -499,7 +499,7 @@ switch (sub) {
     const { functionsBreakdown } = await import("./shapes.mjs");
     const { analyseFile } = await import("./shapes_node.mjs");
     const follow = !rest.includes("--no-follow");
-    out(JSON.stringify(functionsBreakdown(analyseFile(rest[0], follow))));
+    out(JSON.stringify(functionsBreakdown(await analyseFile(rest[0], follow))));
     break;
   }
   case "shapes-deriv": {
@@ -530,7 +530,7 @@ switch (sub) {
     if (sub === "rules") {
       const pathmod = await import("node:path");
       const { analyseFile } = await import("./shapes_node.mjs");
-      surface = analyseFile(rest[0], true);
+      surface = await analyseFile(rest[0], true);
       declaringFile = pathmod.resolve(rest[0]);
     } else {
       const { analyse } = await import("./shapes.mjs");
@@ -590,7 +590,7 @@ switch (sub) {
       json: "grammar/json.planes",
     }[stage];
     const stageItp = new Interpreter({ host: new TestHost() });
-    runFile(stageItp, stageFile);
+    await runFile(stageItp, stageFile);
 
     const num = (v) => (v instanceof PlanesNumber ? Number(v.asInt()) : v);
     const results = [];

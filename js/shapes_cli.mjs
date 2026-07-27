@@ -73,7 +73,7 @@ function surfaceKind(s) {
   return s.isLibrary() ? "library" : s.isPure() ? "pure" : "program";
 }
 
-function main(args) {
+async function main(args) {
   if (!args.length) {
     process.stderr.write("usage: shapes_cli --index|--search|--diff ...\n");
     return 2;
@@ -92,7 +92,7 @@ function main(args) {
     const rows = [];
     for (const p of paths) {
       try {
-        rows.push([p, analyseFile(p)]);
+        rows.push([p, await analyseFile(p)]);
       } catch (e) {
         if (e instanceof PlanesSyntaxError) {
           process.stderr.write(`${p}: syntax error — ${e.message}\n`);
@@ -121,7 +121,7 @@ function main(args) {
     for (const p of paths) {
       let s;
       try {
-        s = analyseFile(p);
+        s = await analyseFile(p);
       } catch (e) {
         if (e instanceof PlanesSyntaxError) {
           process.stderr.write(`${p}: syntax error — ${e.message}\n`);
@@ -150,8 +150,8 @@ function main(args) {
       process.stderr.write("--diff needs two files\n");
       return 2;
     }
-    const before = analyseFile(args[1]);
-    const after = analyseFile(args[2]);
+    const before = await analyseFile(args[1]);
+    const after = await analyseFile(args[2]);
     const d = diff(before, after);
     emit(`${args[1]} -> ${args[2]}`);
     emit(d.render());
@@ -163,4 +163,4 @@ function main(args) {
   return 2;
 }
 
-process.exit(main(process.argv.slice(2)));
+process.exit(await main(process.argv.slice(2)));
