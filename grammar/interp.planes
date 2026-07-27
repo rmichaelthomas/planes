@@ -245,10 +245,11 @@ to fail-of of error, env:
 # so a self-hosted failure is not a second kind of error.
 #
 # C4 / §158: the third field. `fix` is always present and `nothing` when this
-# error names none -- the opposite convention to the `path` field, and
-# deliberately, because a missing field is no match under `when`, so
+# error names none, because a missing field is no match under `when`, so
 # `when e is { fix: f }:` would skip every error without one. A field a program
-# is expected to read has to be there to be read.
+# is expected to read has to be there to be read. C5 / Ruling 3 converged
+# `path` onto the same convention, so there is now one rule for an absent field
+# rather than two; see `make-error-value`.
 #
 # `error-of` keeps its two arguments so the ~20 sites that raise without a fix
 # read as they did; `error-fix-of` is the site that names one. Until this build
@@ -1439,11 +1440,20 @@ to eval-orfail-node of node, env, globals:
   give exec-block of node.handler, (normal-of of nothing, handler-env), globals
 
 # The caught error as a record VALUE the handler can read with .tag and .detail
-# (interp.py binds error_record(error), a plain record). The path field A.4
-# carries on some errors is a derivation concern left to a later build; tag and
-# detail are what a handler reads.
+# (interp.py binds error_record(error), a plain record).
+#
+# C5 / Ruling 3: four fields, and `fix` and `path` follow ONE convention --
+# always present, `nothing` when they do not apply. `path` was absent here
+# entirely, which is the same divergence the reference carried in a different
+# shape: a program asking `when e is { path }` got a bind on interp.py and no
+# match here, and that is exactly the cross-implementation difference invariant
+# 1 exists to prevent. The FIELD converges now; the STEPS do not, because this
+# interpreter's `values-equal` raises `cannot-compare` without accumulating a
+# path at all. So `path` is honestly `nothing` on every error this
+# implementation raises, and computing real steps stays the derivation concern
+# a later build was always going to answer.
 to make-error-value of err:
-  give make-record of [{ key: "tag", value: (make-text of err.tag) }, { key: "detail", value: (make-text of err.detail) }, { key: "fix", value: (make-fix-value of err.fix) }]
+  give make-record of [{ key: "tag", value: (make-text of err.tag) }, { key: "detail", value: (make-text of err.detail) }, { key: "fix", value: (make-fix-value of err.fix) }, { key: "path", value: make-nothing }]
 
 # `fix` is text or `nothing`, and a value has to be one of the language's own
 # kinds either way -- an absent fix is the `nothing` value, not an absent field.

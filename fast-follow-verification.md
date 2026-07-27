@@ -6,9 +6,9 @@
 | A | run and run-batch answer identically | ✅ pass | 481/481 identical |
 | A | PLANES_JOBS=1 passes | ✅ pass | exit 0 |
 | A | parallel run passes | ✅ pass | exit 0 |
-| A | serial and parallel totals match | ✅ pass | serial=(54, 54, 1085) parallel=(54, 54, 1085) |
+| A | serial and parallel totals match | ✅ pass | serial=(54, 54, 1092) parallel=(54, 54, 1092) |
 | A | every suite file reports a result | ✅ pass | 54 of 54 files reporting |
-| A | ok total is at least the 996 baseline | ✅ pass | 1085 oks |
+| A | ok total is at least the 996 baseline | ✅ pass | 1092 oks |
 | B | fail accepts a record naming message and fix | ✅ pass | tag=t fix='f' |
 | B | fail still accepts plain text, naming no fix | ✅ pass | fix='' |
 | B | the record form's fix reaches e.fix | ✅ pass | py=['inner', 'boom', 'hold it right'] js=['inner', 'boom', 'hold it right'] planes=['inner', 'boom', 'hold it right'] |
@@ -16,7 +16,7 @@
 | B | when e is { fix } binds a named fix | ✅ pass | py=['bound: do it this way'] js=['bound: do it this way'] planes=['bound: do it this way'] |
 | B | when e is { fix } binds on an error with none | ✅ pass | py=['bound: nothing'] js=['bound: nothing'] planes=['bound: nothing'] |
 | B | or fail carries a caught fix forward | ✅ pass | py=['re-tagged', 'deep', 'the original fix'] js=['re-tagged', 'deep', 'the original fix'] planes=['re-tagged', 'deep', 'the original fix'] |
-| B | path keeps the opposite convention (reported, not fixed) | ✅ pass | ['no path field'] |
+| B | path follows fix's convention (C5 inverted C4's divergence) | ✅ pass | py=['bound: nothing'] js=['bound: nothing'] planes=['bound: nothing'] |
 | C | declared host surface is seven | ✅ pass | declared: ask, read, write, show, clock, resolve, parse_json |
 | C | used host surface equals declared | ✅ pass | used: ask, clock, parse_json, read, resolve, show, write |
 | C | to_json is gone from the surface | ✅ pass |  |
@@ -39,13 +39,13 @@ C — host method call sites (production code only):
 
 | method | declared | uses | sites |
 |---|---|---|---|
-| `ask` | yes | 2 | interp.py:936 (use), js/interp.mjs:753 (use) |
-| `read` | yes | 3 | grammar_gen.py:20 (use), interp.py:963 (use), js/cli.mjs:84 (probe), js/interp.mjs:782 (use) |
-| `write` | yes | 2 | interp.py:794 (use), js/cli.mjs:92 (probe), js/interp.mjs:628 (use) |
-| `show` | yes | 2 | interp.py:585 (use), js/interp.mjs:415 (use) |
-| `clock` | yes | 2 | interp.py:453 (use), js/cli.mjs:97 (probe), js/interp.mjs:327 (use) |
-| `resolve` | yes | 3 | interp.py:1194 (use), js/cli.mjs:67 (probe), js/cli.mjs:74 (probe), js/interp.mjs:992 (use), scripts/run_corpus_through_planes.py:112 (use) |
-| `parse_json` | yes | 2 | interp.py:949 (use), js/cli.mjs:60 (probe), js/interp.mjs:768 (use) |
+| `ask` | yes | 2 | interp.py:947 (use), js/interp.mjs:757 (use) |
+| `read` | yes | 3 | grammar_gen.py:20 (use), interp.py:974 (use), js/cli.mjs:84 (probe), js/interp.mjs:786 (use) |
+| `write` | yes | 2 | interp.py:805 (use), js/cli.mjs:92 (probe), js/interp.mjs:632 (use) |
+| `show` | yes | 2 | interp.py:596 (use), js/interp.mjs:419 (use) |
+| `clock` | yes | 2 | interp.py:464 (use), js/cli.mjs:97 (probe), js/interp.mjs:331 (use) |
+| `resolve` | yes | 3 | interp.py:1205 (use), js/cli.mjs:67 (probe), js/cli.mjs:74 (probe), js/interp.mjs:996 (use), scripts/run_corpus_through_planes.py:112 (use) |
+| `parse_json` | yes | 2 | interp.py:960 (use), js/cli.mjs:60 (probe), js/interp.mjs:772 (use) |
 | `to_json` | **removed** | 0 | — |
 
 Before C4: declared 8, used 7 (`to_json` had 0). After: declared 7, used 7.

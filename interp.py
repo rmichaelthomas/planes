@@ -328,22 +328,33 @@ def records_from_json(doc):
 
 def error_record(e):
     """A caught error, as an ordinary record — discriminated by shape
-    (§74), never by type. `path` (A.4) is present only when the error
-    carries one; a path step is a Planes number (list index) or the field
-    name itself (already a string).
+    (§74), never by type.
 
-    `fix` (§158) is always present and `nothing` when the error names none.
-    That is the opposite convention to `path`, deliberately and by ruling: a
-    missing field is no match under `when` (`When` below: a field not in the
-    subject sets matched = False), so `when e is { fix: f }:` would silently
-    skip every error without one if `fix` were absent rather than nothing. A
-    field a program is expected to *read* has to be there to be read. `path`
-    keeps its own convention in this build; converging the two is a ruling
-    nobody has made."""
-    rec = {"tag": e.tag, "detail": e.detail, "fix": e.fix or None}
-    if e.path is not None:
-        rec["path"] = [Number.of(p) if isinstance(p, int) else p for p in e.path]
-    return rec
+    ONE CONVENTION FOR AN ABSENT FIELD (C5, Ruling 3). `fix` (§158) and `path`
+    (A.4) are both always present and both `nothing` when they do not apply.
+    The record carried two conventions for one job until this build, and the
+    deciding argument is not symmetry — it is that absence-as-meaning is a
+    silent signal. A field not in the subject sets matched = False (`When`
+    below), so `when e is { path }:` fell to the else branch for every error
+    without a path, and an author could not tell that from failing to match an
+    error record at all. Same shape as `[1] < [2]` answering `true`: a
+    confident wrong turn where a refusal belongs.
+
+    Planes already has an explicit way to say absent — `nothing`, with
+    `is nothing` to test it. Using structural absence for the same job
+    duplicates it and does it worse.
+
+    A path that does apply is unchanged: the same steps, each a Planes number
+    (list index) or the field name itself (already a string). An empty path is
+    an empty list and not `nothing` — a top-level mismatch has a path, and it
+    has no steps."""
+    return {
+        "tag": e.tag,
+        "detail": e.detail,
+        "fix": e.fix or None,
+        "path": None if e.path is None else
+        [Number.of(p) if isinstance(p, int) else p for p in e.path],
+    }
 
 
 # ================================================================ env

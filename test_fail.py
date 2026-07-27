@@ -264,19 +264,39 @@ def test_when_binds_the_fix_field_on_every_error():
     assert unnamed.output == ["bound: nothing"], unnamed.output
 
 
-def test_the_path_field_keeps_the_opposite_convention():
-    """Not a bug and not fixed here — a divergence this build reports. `path`
-    is absent when it does not apply, so the same `when` that binds on every
-    error does not match on one without a path. Converging the two is a ruling
-    for the architect."""
+def test_the_path_field_keeps_the_same_convention_as_fix():
+    """C5, Ruling 3 — this assertion is INVERTED from the one it replaces, not
+    weakened. It read `["no path field"]` and pinned the divergence C4 reported:
+    `path` was absent when it did not apply, so the same `when` that binds on
+    every error fell to the else branch for one without a path — and an author
+    could not tell that from failing to match an error record at all.
+
+    The two conventions have converged. `path` binds on every error and is
+    `nothing` where none applies, exactly as
+    `test_when_binds_the_fix_field_on_every_error` asserts for `fix`. This is
+    still the only place in the suite that has ever looked at the question,
+    which is why it is rewritten rather than deleted."""
     i = interp('to risky:\n'
                '  fail "plain" as inner\n'
                'x = risky() or fail as e:\n'
                '  when e is { path }:\n'
-               '    show "matched path"\n'
+               '    show "bound: " + (text of path)\n'
                '  else:\n'
                '    show "no path field"\n')
-    assert i.output == ["no path field"]
+    assert i.output == ["bound: nothing"], i.output
+
+
+def test_an_error_that_carries_a_real_path_still_carries_the_same_steps():
+    """The converging convention changes when the field is present, never what
+    is in it. A nested comparison mismatch still reports the list-index and
+    field-name steps from the root, in order."""
+    i = interp('x = ({a: [1, "2"]} == {a: [1, 2]})\n'
+               '  or fail as e:\n'
+               '    show text of (count of e.path)\n'
+               '    show join of (for each s in e.path: text of s)\n')
+    # The record field "a", then list index 1 — the steps from the root to the
+    # mismatch, a field name as text and a list index as a Planes number.
+    assert i.output == ["2", "a1"], i.output
 
 
 def test_or_fail_carries_a_caught_fix_forward_and_it_stays_readable():
