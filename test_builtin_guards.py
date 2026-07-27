@@ -94,9 +94,11 @@ def _py(src):
 
 def _js_raw(src):
     """One case, one node process — the original per-case path. Kept because
-    `scripts/verify_batch_equivalence.py` runs every case through *both* this
-    and the batch and asserts they answer identically; a batch mode with no
-    surviving per-case path could not be checked against anything."""
+    `test_batch_equivalence.py` runs every case through *both* this and the
+    batch and asserts they answer identically; a batch mode with no surviving
+    per-case path could not be checked against anything. That suite is where
+    C6 graduated the assertion from `scripts/verify_batch_equivalence.py`,
+    which made the claim and which nothing ever ran."""
     with tempfile.TemporaryDirectory() as d:
         p = os.path.join(d, "p.planes")
         with open(p, "w", encoding="utf-8") as fh:

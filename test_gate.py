@@ -202,6 +202,67 @@ def test_the_preflight_runs_before_the_first_timed_step():
     assert guard < first_step, (guard, first_step)
 
 
+# ================= 4. no checker the gate does not run (C6 / Ruling 3)
+#
+# Seven `verify_*.py` scripts accumulated in this repo and NOTHING ran any of
+# them. Two were already broken on main by the time C6 counted, and one had
+# asserted the opposite of the shipped `path` convention for a whole build.
+#
+# The remedy is not a fifth mechanism to watch — it is that the category does
+# not exist. A verification script graduates into a suite or is deleted when
+# its build merges. This is the assertion that makes the rule self-checking,
+# which is the first thing five instances of one failure class has earned.
+
+
+def _verify_scripts():
+    found = []
+    for dirpath, dirs, files in os.walk(REPO):
+        dirs[:] = [d for d in dirs
+                   if d not in (".git", ".venv", "__pycache__", ".ci-logs",
+                                "node_modules", ".mypy_cache", ".ruff_cache",
+                                ".pytest_cache")]
+        for f in files:
+            if f.startswith("verify_") and f.endswith(".py"):
+                rel = os.path.relpath(os.path.join(dirpath, f), REPO)
+                found.append(rel.replace(os.sep, "/"))
+    return sorted(found)
+
+
+def test_no_verification_script_exists_for_the_gate_not_to_run():
+    """The rule, enforced: a build's verification script is not product code
+    and carries no maintenance expectation, so a kept one is a stale assertion
+    waiting to mislead. If you are reading this because it failed, the two
+    options are the whole of it — move the assertions into a `test_*.py` this
+    gate runs, or delete the script."""
+    found = _verify_scripts()
+    assert not found, (
+        "verification script(s) the gate does not run: " + ", ".join(found)
+        + " — graduate the durable assertions into a test_*.py, delete the rest")
+
+
+def test_the_retirement_rule_is_stated_where_the_next_build_reads_it():
+    """A rule that lives only in a report is a rule the next build does not
+    see."""
+    text = _ci_text()
+    assert "RETIREMENT RULE" in text, "the rule is not stated in scripts/ci.sh"
+    assert "graduates into a suite or is deleted" in text.lower(), text[:0]
+
+
+def test_the_graduated_assertion_is_in_a_suite_the_gate_runs():
+    """`run-batch` answering what `run` answers was asserted only by
+    `scripts/verify_batch_equivalence.py`, which nothing ran. It is the one
+    claim among the seven with no counterpart anywhere in the suite."""
+    graduated = os.path.join(REPO, "test_batch_equivalence.py")
+    assert os.path.exists(graduated), "the graduated suite is missing"
+    with open(graduated, encoding="utf-8") as fh:
+        src = fh.read()
+    assert "batch_sources" in src and "_js_raw" in src
+    # It is discovered by the runner, which is what "the gate runs it" means.
+    r = _py("scripts/check_js_tests.py")   # cheap; proves the tree is sane
+    assert r.returncode == 0
+    assert os.path.basename(graduated).startswith("test_")
+
+
 if __name__ == "__main__":
     fails = []
     tests = [(n, f) for n, f in sorted(globals().items())

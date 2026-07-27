@@ -33,7 +33,29 @@ if [ "${1:-}" = "--fast" ]; then FAST=1; fi
 # --fast IS NOT THE GATE. It is for iterating on a change without waiting for
 # the JavaScript agreement suites. Nothing may be merged on it: it skips the
 # cross-implementation agreement that invariant 2 exists to enforce.
+#
+# ---------------------------------------------------------------------------
+# THE RETIREMENT RULE (C6 / Ruling 3), stated where the next build reads it:
+#
+#   A VERIFICATION SCRIPT GRADUATES INTO A SUITE OR IS DELETED WHEN ITS BUILD
+#   MERGES. There is no third option, and there is no `scripts/verify_*.py`.
+#
+# A build's verification script is not product code and carries no maintenance
+# expectation, so a kept one is a stale assertion waiting to mislead. Seven of
+# them accumulated here and NOTHING ran any of them — not this script, not any
+# suite. By the time C6 counted, two were already broken on main:
+# `verify_annotation.py` asserted a reserved-word ceiling of 30 (it is 32) and
+# `verify_grammar_and_amber.py` crashed outright, and one had asserted the
+# opposite of the shipped `path` convention for a whole build.
+#
+# The remedy is not a fifth mechanism to watch. Every assertion worth failing a
+# build over a year from now belongs in a `test_*.py` this script runs, where
+# C5's silent-suite guard already covers it; everything else has served its
+# purpose and goes. `test_gate.py` asserts that no unrun verification script
+# comes back.
+# ---------------------------------------------------------------------------
 FAST_SKIP=(
+  --skip test_batch_equivalence.py         # 35.0s
   --skip test_js_render.py                 # 32.7s
   --skip test_interp_effects_in_planes.py  # 23.1s
   --skip test_js_shapes.py                 # 20.3s
