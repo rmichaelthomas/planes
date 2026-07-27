@@ -1,12 +1,15 @@
 # Planes
 
-A small language that answers two questions about a program without being
-trusted to answer them honestly — because both answers are checked by three
-independent implementations that must agree.
+**A general-purpose programming language that shows its work.**
 
-**What can this program do?** — the effect surface, computed without running it.
+Ask what a program can do to the outside world, and Planes computes the answer
+without running it — every network call, file write and clock read, with its
+destination. Ask where a value came from, and it traces back to the boundary it
+entered through.
 
-**Where did this value come from?** — the derivation, carried on the value itself.
+No other general-purpose language answers either question. Planes answers both,
+and neither answer is trusted: three independent implementations must agree, and
+one of them is written in Planes.
 
 ```
 $ python3 planes.py -e 'x = 5; y = 3; z = x + y; why z'
@@ -115,9 +118,11 @@ JavaScript stack too, so neither guarantee depends on Python.
 
 ## The vocabulary
 
-Deliberately small, and fixed. The whole reserved surface is 42 names — 32
-keywords plus 10 builtins — and both counts are asserted by the test suite, so
-adding a word is a visible decision rather than a drift.
+Closed, and asserted. The whole reserved surface is 42 names — 32 keywords plus
+10 builtins — and both counts are pinned by the test suite, so adding a word is
+a visible decision rather than a drift. For scale: Python has 35 keywords. The
+small number here is not the vocabulary, it is [the host](#the-host) — seven
+methods, which is what makes the effect surface computable at all.
 
 **32 keywords** — only words the parser must see to know a statement's shape:
 
