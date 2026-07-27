@@ -10,12 +10,21 @@
 // missingModuleError); and reads are cached for the length of one loader
 // instance, so a program that stays open across many ticks issues exactly one
 // fetch per module — construct a fresh loader per Run/Play, not per frame.
+//
+// `cacheBust`, when given, is appended to the fetch URL and to nothing else.
+// A `.planes` module is a LEAF fetch — nothing resolves relative to it — so a
+// query string here is a complete fix for the stale-copy problem, unlike on the
+// `.mjs` graph, where a query on one module does not reach that module's own
+// relative imports. The cache KEY stays the un-busted location, so the
+// one-fetch-per-module-per-run rule and the module names shown beside the
+// canvas are both untouched.
 
 import { missingModuleError } from "./modules.mjs";
 
 export class BrowserModuleLoader {
-  constructor({ base }) {
+  constructor({ base, cacheBust = null }) {
     this.base = base;
+    this.cacheBust = cacheBust;
     this._cache = new Map(); // key -> source text
     this._pending = new Map(); // key -> in-flight fetch, so concurrent reads of
     // the same not-yet-cached module (two `use` sites this frame) share one
@@ -45,10 +54,19 @@ export class BrowserModuleLoader {
     }
   }
 
+  // The URL to ASK for, which is the location plus the page-load token when
+  // there is one. Never the cache key, never a name, never shown.
+  _fetchUrl(location) {
+    if (!this.cacheBust) return location;
+    const url = new URL(location, this.base);
+    url.searchParams.set("v", this.cacheBust);
+    return url.href;
+  }
+
   async _fetchAndCache(location, k) {
     let res;
     try {
-      res = await fetch(location);
+      res = await fetch(this._fetchUrl(location));
     } catch {
       throw missingModuleError(this._nameFromLocation(location));
     }

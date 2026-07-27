@@ -183,6 +183,85 @@ export function surfaceReport(surface) {
   return lines.join("\n");
 }
 
+
+// ---- a stale module cache says so, instead of lying ---------------------------
+//
+// THE FAILURE THIS EXISTS FOR. These pages load about twenty-five same-origin
+// ES modules with no versioning, because versioning them would need a build
+// step and this repo does not have one — you open the file. A browser is then
+// free to serve some of them from cache and fetch others, and Safari in
+// particular keeps an instantiated module graph across a plain reload. After a
+// change to the repo, a returning reader can get a MIXED SET: `sine` was added
+// to grammar/vocabulary.json and to interp.mjs in one commit, and a browser
+// that took the fresh JSON and the cached interpreter answered
+//
+//   ✗ unknown-builtin: no builtin is named 'sine'
+//     try: the ten builtins are fixed and the lexer recognises only those, so
+//     reaching this is a defect in the interpreter rather than in the program
+//
+// — which blames the interpreter, tells the reader to report a bug, and says
+// "ten" while the vocabulary beside it says eleven. Every word of that is
+// wrong and none of it points at the cache.
+//
+// WHAT CAN AND CANNOT BE FIXED. The `.planes` sources and modules this page
+// fetches ITSELF are bustable, and are busted (js/module_loader_browser.mjs,
+// paint.html) — a query string on a leaf fetch works. The `.mjs` graph is not:
+// a query on an entry import does not propagate to that module's own relative
+// imports, so busting the whole graph needs either rewritten import URLs (a
+// build step) or `Cache-Control` (a server we control), and this page refuses
+// both by design.
+//
+// So the graph is not prevented from going stale. It is made to SAY SO. This
+// runs the interpreter that actually loaded against the vocabulary that
+// actually loaded, and reports the disagreement in the one sentence that
+// resolves it.
+
+// A literal each builtin accepts far enough to reach its own dispatch. The
+// argument is evaluated before the name is looked up, so any value that parses
+// is enough; these are chosen to be the least surprising thing to read.
+const PROBE_ARGUMENT = {
+  count: "[1]", lower: '"A"', upper: '"a"', text: "1", whole: "1.5",
+  ask: '"https://example.invalid"', read: '"x"', normalize: '"a"',
+  join: '["a"]', rest: "[1, 2]", sine: "0",
+};
+
+// Every builtin the loaded vocabulary declares that the loaded interpreter
+// does not implement. Effectful builtins refuse for their own reasons
+// (`read` wants `use file`, `ask` wants a response) and those refusals are not
+// this — only the tag that means "this interpreter has never heard of it".
+export function unimplementedBuiltins() {
+  const missing = [];
+  for (const b of vocab.builtins) {
+    const arg = PROBE_ARGUMENT[b.name] ?? "1";
+    try {
+      new Interpreter(new BrowserHost({})).run(`probe = ${b.name} of ${arg}\n`);
+    } catch (e) {
+      const tag = e instanceof PlanesError ? e.tag : null;
+      if (tag === "unknown-builtin" || tag === "unknown-function") missing.push(b.name);
+    }
+  }
+  return missing;
+}
+
+// null when the modules agree; otherwise the sentence to put in front of the
+// reader. Deliberately names the remedy first and the diagnosis second — a
+// reader who hits this wants to know what to press.
+export function staleModuleWarning() {
+  const missing = unimplementedBuiltins();
+  if (!missing.length) return null;
+  return (
+    "This page is running a mix of old and new code — empty your browser's " +
+    "cache and reload.\n\n" +
+    `The vocabulary this page loaded declares ${vocab.builtins.length} builtins, ` +
+    `and the interpreter it loaded does not implement ${missing.length} of them ` +
+    `(${missing.join(", ")}). That cannot happen in one version of this repo, ` +
+    "so the two came from different ones: your browser served some modules from " +
+    "cache and fetched others.\n\n" +
+    "In Safari: Develop → Empty Caches, then reload — a plain reload keeps ES " +
+    "modules. In Chrome or Firefox: hold Shift and click reload."
+  );
+}
+
 // ---- DOM wiring (only in a browser, and only on a page that has these
 // exact four elements — paint.html imports runProgram/analyseProgram/
 // surfaceReport from this module too, under its own element ids, and must
@@ -225,11 +304,14 @@ if (
     );
   }
 
+  const stale = staleModuleWarning();
+  if (stale) show(stale, true);
+
   runBtn.addEventListener("click", run);
   surfaceBtn.addEventListener("click", surface);
   source.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "Enter") surface();
   });
-  run(); // run the sample on load
+  if (!stale) run(); // run the sample on load, unless there is worse news
 }

@@ -175,10 +175,18 @@
       <code>js/*.mjs</code> modules, the real <code>grammar/*.json</code> as
       JSON modules, and the <code>paint/*.planes</code> programs and
       libraries as plain text, all from this same directory.
+      <br /><br />
+      <strong>After an update.</strong> The <code>.planes</code> files carry a
+      per-visit token and are never served stale. The <code>.mjs</code> modules
+      cannot: giving them one would mean rewriting every import URL, which
+      needs a build step this page does not have. If a browser ever serves a
+      mix of old and new modules, the page says so in the output pane and names
+      the one thing that fixes it — in Safari, Develop → Empty Caches, because
+      a plain reload keeps ES modules.
     </footer>
 
     <script type="module">
-      import { analyseProgramGraph, surfaceReport } from "./js/browser_main.mjs";
+      import { analyseProgramGraph, surfaceReport, staleModuleWarning } from "./js/browser_main.mjs";
       import { paint } from "./js/paint/painter.mjs";
       import { toSvg } from "./js/paint/svg.mjs";
       import { downloadSvg, downloadPng, recordCanvas, VIDEO_SECONDS } from "./js/paint/export.mjs";
@@ -213,6 +221,18 @@
       const ctx = canvas.getContext("2d");
 
       const DIMENSIONS = { width: canvas.width, height: canvas.height, background: "#ffffff" };
+
+      // One token per page load. It is appended to the `.planes` fetches — the
+      // programs below and, through the loader, their modules — so an edited
+      // source is never served from a previous visit's cache. It cannot do the
+      // same for the `.mjs` graph: a query on one module does not reach that
+      // module's own relative imports, and rewriting those needs a build step
+      // this page does not have. What guards the graph instead is
+      // `staleModuleWarning()`, which runs the interpreter that actually loaded
+      // against the vocabulary that actually loaded and says so when they
+      // disagree.
+      const LOAD_TOKEN = String(Date.now());
+      const bust = (path) => `${path}?v=${LOAD_TOKEN}`;
 
       const sources = {};
       let current = PROGRAMS[0];
@@ -249,7 +269,7 @@
       function newLoader() {
         runGeneration += 1;
         const base = new URL(current.file, window.location.href).href;
-        currentLoader = new BrowserModuleLoader({ base });
+        currentLoader = new BrowserModuleLoader({ base, cacheBust: LOAD_TOKEN });
         renderModuleInfo();
         return currentLoader;
       }
@@ -432,8 +452,11 @@
 
       // Load the three example programs as plain text, same directory, no
       // network dependency — then draw the default (turtle) on load.
+      const stale = staleModuleWarning();
+      if (stale) showOutput(stale.split("\n"), true);
+
       Promise.all(
-        PROGRAMS.map((p) => fetch(p.file).then((r) => r.text()).then((src) => (sources[p.id] = src))),
+        PROGRAMS.map((p) => fetch(bust(p.file)).then((r) => r.text()).then((src) => (sources[p.id] = src))),
       ).then(() => {
         sourceEl.value = sources[current.id];
         newLoader();
