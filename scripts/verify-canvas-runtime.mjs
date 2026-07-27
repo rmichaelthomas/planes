@@ -8,7 +8,7 @@
 // closed invariants.
 //
 // Usage: node scripts/verify-canvas-runtime.mjs
-// Writes: canvas-runtime-verification.md (same table as stdout)
+// Writes: reports/canvas-runtime-verification.md (same table as stdout)
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -270,7 +270,7 @@ const report = lines.join("\n") + "\n";
 console.log(report);
 
 const fs = await import("node:fs");
-fs.writeFileSync(rel("canvas-runtime-verification.md"), report);
+fs.writeFileSync(rel("reports", "canvas-runtime-verification.md"), report);
 
 if (blockingFail) {
   process.exit(1);
