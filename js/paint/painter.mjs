@@ -23,14 +23,24 @@ export { oklchToRgb };
 
 const toRad = (deg) => (deg * Math.PI) / 180;
 
-function canvasSink(ctx, { width, height, background }) {
+function canvasSink(ctx, { width, height, background, scale }) {
   let backgroundColor = background;
   const transformStack = [];
+
+  // "Identity" means one protocol pixel, not one device pixel. At scale 1
+  // that is the context's own identity; above it — a supersampled export
+  // (js/paint/export.mjs) — the backing store is larger than the drawing
+  // area, and this is the one place that difference lives. A program's
+  // coordinates never change.
+  const toIdentity =
+    scale === 1
+      ? () => ctx.resetTransform()
+      : () => ctx.setTransform(scale, 0, 0, scale, 0, 0);
 
   function fillWholeArea(colorString) {
     const savedTransform = ctx.getTransform();
     const savedFillStyle = ctx.fillStyle;
-    ctx.resetTransform();
+    toIdentity();
     ctx.fillStyle = colorString;
     ctx.fillRect(0, 0, width, height);
     ctx.fillStyle = savedFillStyle;
@@ -46,7 +56,7 @@ function canvasSink(ctx, { width, height, background }) {
       ctx.lineJoin = defaults.corner;
       ctx.font = `${defaults.size}px ${FONT_FAMILY}`;
       ctx.textAlign = defaults.align;
-      ctx.resetTransform();
+      toIdentity();
       backgroundColor = background;
     },
 
@@ -170,12 +180,16 @@ function canvasSink(ctx, { width, height, background }) {
     // transform happened to be", since a dangling unmatched push must not
     // leak its rotation out of this call either.
     finish() {
-      ctx.resetTransform();
+      toIdentity();
     },
   };
 }
 
-export function paint(ctx, lines, { width, height, background = "#fff" } = {}) {
-  const { drawn, text, errors } = walk(lines, canvasSink(ctx, { width, height, background }));
+// `scale` above 1 means the context's backing store is that many device
+// pixels per protocol pixel — what a supersampled PNG export sets up before
+// re-running the same stream (js/paint/export.mjs §6.2). It changes nothing
+// about what a program says, only how finely it is resolved.
+export function paint(ctx, lines, { width, height, background = "#fff", scale = 1 } = {}) {
+  const { drawn, text, errors } = walk(lines, canvasSink(ctx, { width, height, background, scale }));
   return { drawn, text, errors };
 }

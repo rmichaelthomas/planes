@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Planes draws — a canvas runtime</title>
+    <title>Planes draws — two renderers, one program</title>
     <meta
       name="description"
-      content="A Planes program runs, its show output paints a canvas, and its computed effect surface is shown beside it — nothing added to the language. No build step, no server, no network."
+      content="A Planes program runs, its show output paints a canvas or writes an SVG, and its computed effect surface is shown beside it — nothing added to the language. No build step, no server, no network."
     />
     <style>
       :root { color-scheme: light dark; }
@@ -80,6 +80,12 @@
       analyser <code>index.html</code> uses, now following <code>use</code>
       across the module graph too — and it is never hidden.
     </p>
+    <p class="sub">
+      There are two renderers now, and the program cannot tell which is
+      listening. The canvas below and the SVG the Save button writes walk the
+      same stream through the same module; only what they do with a circle
+      differs. That is what the protocol is for.
+    </p>
 
     <div>
       <label for="paint-picker" class="hint">program:</label>
@@ -92,6 +98,15 @@
       <button id="paint-play" class="secondary">Play ▸</button>
       <button id="paint-reset" class="tertiary">Reset ⟲</button>
       <div class="hint">arrow keys steer snake while it is playing · click the canvas to give it keyboard focus</div>
+    </div>
+
+    <div>
+      <button id="paint-save-svg" class="secondary">Save SVG ⤓</button>
+      <button id="paint-save-png" class="secondary">Save PNG ⤓</button>
+      <button id="paint-record" class="tertiary">Record WebM ⏺</button>
+      <div class="hint" id="paint-export-hint">
+        SVG and PNG save the frame on screen now. Video records ten seconds.
+      </div>
     </div>
 
     <div class="columns">
@@ -138,7 +153,21 @@
       A line not beginning with <code>draw</code> goes to the output pane as
       text, unconditionally; a line that does begin with <code>draw</code> is
       always a command, and a malformed one is reported as an error rather
-      than drawn. Opens directly in Safari or Firefox. Chrome blocks
+      than drawn.
+      <br /><br />
+      <strong>Two renderers.</strong> The canvas and the SVG exporter are
+      sinks for one stream walk (<code>js/paint/stream.mjs</code>): the version
+      declaration, the path lifecycle, transform balance, the arc convention
+      and every error tag are written once and shared, so the two cannot drift
+      apart. <strong>Saving.</strong> SVG and PNG capture the frame that is on
+      screen — for a program that redraws continuously that is a snapshot, not
+      an animation. PNG is written at twice the device pixel ratio. Video
+      records ten seconds of the canvas as WebM. A saved SVG's labels are laid
+      out by whatever font resolves where the file is opened, so text may
+      shift on another machine; both renderers name the same family, and
+      nothing can make that hold everywhere.
+      <br /><br />
+      Opens directly in Safari or Firefox. Chrome blocks
       ES-module loading over <code>file://</code> as a security policy — for
       Chrome, serve the folder with <code>python3 -m http.server</code> and
       open <code>http://localhost:8000/paint.html</code>. No bundler, no
@@ -151,6 +180,8 @@
     <script type="module">
       import { analyseProgramGraph, surfaceReport } from "./js/browser_main.mjs";
       import { paint } from "./js/paint/painter.mjs";
+      import { toSvg } from "./js/paint/svg.mjs";
+      import { downloadSvg, downloadPng, recordCanvas, VIDEO_SECONDS } from "./js/paint/export.mjs";
       import { stepGraph, createLoop } from "./js/paint/loop.mjs";
       import { BrowserModuleLoader } from "./js/module_loader_browser.mjs";
 
@@ -170,6 +201,9 @@
       const playBtn = document.getElementById("paint-play");
       const resetBtn = document.getElementById("paint-reset");
       const reloadModulesBtn = document.getElementById("paint-reload-modules");
+      const saveSvgBtn = document.getElementById("paint-save-svg");
+      const savePngBtn = document.getElementById("paint-save-png");
+      const recordBtn = document.getElementById("paint-record");
       const canvas = document.getElementById("paint-canvas");
       const sourceEl = document.getElementById("paint-source");
       const outputEl = document.getElementById("paint-output");
@@ -188,6 +222,11 @@
       // from a superseded run can tell it has been superseded and discard its
       // result instead of painting a stale picture over a newer one.
       let runGeneration = 0;
+      // The lines that produced what is on screen right now. Every export
+      // works on THIS — never on a fresh run of the program, which for a
+      // ticking one would be a different picture than the one being looked at.
+      let lastLines = [];
+      let recording = null;
       const heldKeys = new Set();
       const pointer = { x: 0, y: 0, down: false };
 
@@ -238,6 +277,7 @@
           showOutput([...result.lines, `✗ ${result.error.tag}: ${result.error.message}`], true);
           return;
         }
+        lastLines = result.lines;
         const { text, errors } = paint(ctx, result.lines, DIMENSIONS);
         if (errors.length) {
           showOutput([...text, ...errors.map((e) => `✗ ${e.tag}: ${e.message}`)], true);
@@ -249,6 +289,14 @@
       function stopLoop() {
         if (loop) loop.stop();
         playBtn.textContent = "Play ▸";
+      }
+
+      function startLoop() {
+        clearCanvas();
+        newLoader();
+        loop = buildLoop();
+        loop.start();
+        playBtn.textContent = "Pause ⏸";
       }
 
       function buildLoop() {
@@ -274,6 +322,7 @@
         newLoader();
         loop = buildLoop();
         playBtn.disabled = !current.ticking;
+        recordBtn.disabled = !current.ticking;
         clearCanvas();
         showSurface(sourceEl.value);
         runOnce();
@@ -299,15 +348,53 @@
 
       playBtn.addEventListener("click", () => {
         if (!loop) return;
-        if (loop.isRunning()) {
-          stopLoop();
-        } else {
-          clearCanvas();
-          newLoader();
-          loop = buildLoop();
-          loop.start();
-          playBtn.textContent = "Pause ⏸";
+        if (loop.isRunning()) stopLoop();
+        else startLoop();
+      });
+
+      // The three exports. Each works on `lastLines` — the stream that
+      // produced what is on screen — and none of them re-runs the program.
+      saveSvgBtn.addEventListener("click", () => {
+        if (!lastLines.length) {
+          showOutput(["nothing has been drawn yet — press Run first"], true);
+          return;
         }
+        const { svg, errors } = toSvg(lastLines, DIMENSIONS);
+        if (errors.length) {
+          showOutput(errors.map((e) => `✗ ${e.tag}: ${e.message}`), true);
+          return;
+        }
+        downloadSvg(svg, current.id);
+      });
+
+      savePngBtn.addEventListener("click", () => {
+        if (!lastLines.length) {
+          showOutput(["nothing has been drawn yet — press Run first"], true);
+          return;
+        }
+        downloadPng(canvas, lastLines, DIMENSIONS, current.id);
+      });
+
+      recordBtn.addEventListener("click", () => {
+        if (recording) {
+          recording.stop();
+          return;
+        }
+        // A recording of a still picture is ten seconds of nothing happening,
+        // so this starts the animation if it is not already running.
+        if (loop && !loop.isRunning()) startLoop();
+        try {
+          recording = recordCanvas(canvas, current.id, {
+            onFinish: () => {
+              recording = null;
+              recordBtn.textContent = "Record WebM ⏺";
+            },
+          });
+        } catch (e) {
+          showOutput([`✗ ${e.message}`], true);
+          return;
+        }
+        recordBtn.textContent = `Recording ${VIDEO_SECONDS}s ⏹`;
       });
 
       resetBtn.addEventListener("click", () => {
@@ -352,6 +439,7 @@
         newLoader();
         loop = buildLoop();
         playBtn.disabled = !current.ticking;
+        recordBtn.disabled = !current.ticking;
         clearCanvas();
         runOnce();
       });
