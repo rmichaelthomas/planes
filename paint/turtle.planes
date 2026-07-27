@@ -1,0 +1,39 @@
+# A recursive tree, drawn as lines only. Real turtle graphics turn by an
+# angle, but this language has no sine or cosine among its ten builtins, so
+# each branch drifts sideways by `lean` — a fixed ratio of its own length —
+# rather than a true rotation. The ratio widens slightly at every split, so
+# the two children fan apart instead of retracing one straight line, and each
+# generation is noticeably shorter than its parent, which is what makes eight
+# levels of splitting read as a tree rather than a zigzag.
+#
+# Depth 8 keeps the deepest call stack at 8 — far inside the 639-deep ceiling
+# this interpreter was measured at (canvas-runtime-benchmarks-pre.md, case 5).
+# The whole program is one static picture: it never reads `tick`, `keys`,
+# `pointer` or `state`, and it touches nothing but the console.
+
+to tree of fork-x, fork-y, branch-length, lean, remaining-depth:
+  if remaining-depth <= 0:
+    give nothing
+  else:
+    let tip-x = fork-x + lean * branch-length because "lean stands in for an angle the language cannot compute; multiplying it by the branch's own length keeps the sideways drift proportional as branches shrink"
+    let tip-y = fork-y - branch-length
+
+    show "move " + text of fork-x + " " + text of fork-y
+    show "line " + text of tip-x + " " + text of tip-y
+
+    let child-length = branch-length * 0.72 because "each generation noticeably shorter than its parent is what makes the recursion read as a tree"
+
+    tree of tip-x, tip-y, child-length, (lean - 0.4), (remaining-depth - 1)
+    tree of tip-x, tip-y, child-length, (lean + 0.4), (remaining-depth - 1)
+
+show "clear"
+show "pen 0.36 0.24 0.14"
+show "width 2"
+
+let trunk-x = 240 because "centered on the 480-pixel-wide canvas paint.html gives this page"
+let trunk-y = 350 because "near the bottom of the 360-tall canvas, so the tree grows upward into the frame"
+let trunk-length = 78
+let no-lean = 0 because "the trunk itself grows straight up before the first split introduces any drift"
+let starting-depth = 8
+
+tree of trunk-x, trunk-y, trunk-length, no-lean, starting-depth

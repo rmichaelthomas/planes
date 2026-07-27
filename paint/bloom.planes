@@ -1,0 +1,53 @@
+# A generative bloom of pulsating rings, driven by the tick counter alone —
+# no input, no state threaded across ticks (A.6). Motion needs no event: the
+# whole picture is a pure function of `tick`, recomputed fresh on every call.
+#
+# The language has no modulo operator and no trigonometry among its ten
+# builtins, so two small recursive helpers stand in. `mod` is a doubling
+# reduction — O(log(a/b)) deep rather than O(a/b) deep, so it stays shallow
+# even as `tick` climbs across a long session. `triangle` folds `mod`'s
+# sudden snap-back-to-zero into a smooth ramp-up-ramp-down wave, which is
+# what makes the pulse and the drift read as motion rather than a jump cut.
+
+to mod of a, b:
+  if a < b:
+    give a
+  else:
+    let doubled = mod of a, (b * 2) because "doubling the divisor each step keeps this O(log(a/b)) deep instead of O(a/b) deep"
+    if doubled < b:
+      give doubled
+    else:
+      give doubled - b
+
+to triangle of t, half-period:
+  let folded = mod of t, (half-period * 2)
+  if folded < half-period:
+    give folded
+  else:
+    give (half-period * 2) - folded
+
+to rings of ring-index, ring-count, tick, center-x, center-y:
+  if ring-index >= ring-count:
+    give nothing
+  else:
+    let period = 48
+    let offset = ring-index * 12
+    let phase = triangle of (tick + offset), period because "each ring is offset from the last by twelve ticks, so the pulse travels outward through the rings instead of all of them beating in lockstep"
+    let radius = 16 + phase * 1.6
+    let hue = phase / period
+
+    show "pen " + text of hue + " " + text of (1 - hue) + " 0.65"
+    show "circle " + text of center-x + " " + text of center-y + " " + text of radius
+
+    rings of (ring-index + 1), ring-count, tick, center-x, center-y
+
+show "clear"
+show "width 2"
+
+let drift-x = triangle of tick, 110 because "a smooth ramp from 0 to 110 and back, so the bloom's centre drifts sideways instead of sitting still"
+let drift-y = triangle of (tick + 30), 70 because "offsetting the vertical drift's phase from the horizontal one is what keeps the centre off a single straight line"
+let center-x = 90 + drift-x
+let center-y = 100 + drift-y
+
+let ring-count = 10
+rings of 0, ring-count, tick, center-x, center-y

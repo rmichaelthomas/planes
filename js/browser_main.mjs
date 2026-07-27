@@ -76,8 +76,17 @@ export function surfaceReport(surface) {
   return lines.join("\n");
 }
 
-// ---- DOM wiring (only in a browser)
-if (typeof document !== "undefined") {
+// ---- DOM wiring (only in a browser, and only on a page that has these
+// exact four elements — paint.html imports runProgram/analyseProgram/
+// surfaceReport from this module too, under its own element ids, and must
+// not trip this page's wiring).
+if (
+  typeof document !== "undefined" &&
+  document.getElementById("run") &&
+  document.getElementById("surface") &&
+  document.getElementById("source") &&
+  document.getElementById("output")
+) {
   const $ = (id) => document.getElementById(id);
   const runBtn = $("run");
   const surfaceBtn = $("surface");

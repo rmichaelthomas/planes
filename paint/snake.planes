@@ -1,0 +1,125 @@
+# A playable snake: arrow keys steer, the tail follows, an apple grows it, a
+# wall or its own tail ends it. State crosses the tick boundary through the
+# VFS, one direction (A.3): `write state to "state.json"` out, and the
+# harness reads it back as the next tick's `state` literal — no `read`, no
+# JSON parsing inside this program.
+#
+# The board is a 24-by-18 grid of 20-pixel cells. `body` holds every segment
+# behind the head, oldest first, NOT including the head itself: moving
+# without growing drops the oldest segment (`rest of body`) and appends the
+# just-vacated head position (`plus`); eating the apple appends without
+# dropping, which is the whole of how the snake grows.
+#
+# `random` is one of the seven effect kinds, but reaching it needs a
+# `foreign … doing random` declaration — and this build makes none (A.1,
+# A.3): a claimed effect surface wider than console-and-file is exactly what
+# this example exists to NOT show. So the apple's next cell is a
+# deterministic function of the score instead of true randomness, using the
+# same doubling-reduction `mod` bloom.planes needs (this language has no
+# modulo operator either, and files here cannot share code with each other).
+
+use file
+
+to mod of a, b:
+  if a < b:
+    give a
+  else:
+    doubled = mod of a, (b * 2) because "doubling the divisor each step keeps this O(log(a/b)) deep instead of O(a/b) deep"
+    if doubled < b:
+      give doubled
+    else:
+      give doubled - b
+
+let grid-columns = 24
+let grid-rows = 18
+let cell-size = 20
+
+to advance of old, keys:
+  if not old.alive:
+    next = old
+  else:
+    dir-x = old.dir-x
+    dir-y = old.dir-y
+    if ("ArrowLeft" in keys) and not (old.dir-x == 1):
+      dir-x = -1
+      dir-y = 0
+    if ("ArrowRight" in keys) and not (old.dir-x == -1):
+      dir-x = 1
+      dir-y = 0
+    if ("ArrowUp" in keys) and not (old.dir-y == 1):
+      dir-x = 0
+      dir-y = -1
+    if ("ArrowDown" in keys) and not (old.dir-y == -1):
+      dir-x = 0
+      dir-y = 1
+
+    new-head-x = old.head-x + dir-x
+    new-head-y = old.head-y + dir-y
+
+    hit-wall = new-head-x < 0 or new-head-x >= grid-columns or new-head-y < 0 or new-head-y >= grid-rows
+    self-hits = for each seg in old.body where seg.x == new-head-x and seg.y == new-head-y: seg
+    hit-self = count of self-hits > 0
+
+    if hit-wall or hit-self:
+      next = old with alive: false because "freeze the board on the losing tick, so the position that ended the game stays on screen instead of vanishing"
+    else:
+      old-head = { x: old.head-x, y: old.head-y }
+      score = old.score
+      body = (rest of old.body) plus old-head
+      apple-x = old.apple-x
+      apple-y = old.apple-y
+
+      ate-apple = new-head-x == old.apple-x and new-head-y == old.apple-y
+      if ate-apple:
+        score = old.score + 1
+        body = old.body plus old-head
+        apple-x = mod of (7 + score * 13), grid-columns
+        apple-y = mod of (3 + score * 17), grid-rows
+
+      next = {
+        head-x: new-head-x, head-y: new-head-y,
+        dir-x: dir-x, dir-y: dir-y,
+        body: body,
+        apple-x: apple-x, apple-y: apple-y,
+        score: score,
+        alive: true
+      }
+  give next
+
+if state is nothing:
+  next = {
+    head-x: 12, head-y: 9,
+    dir-x: 1, dir-y: 0,
+    body: [{ x: 10, y: 9 }, { x: 11, y: 9 }],
+    apple-x: 18, apple-y: 4,
+    score: 0,
+    alive: true
+  }
+else:
+  next = advance of state, keys
+
+write next to "state.json"
+
+show "clear"
+
+show "pen 0.85 0.15 0.15"
+apple-cx = next.apple-x * cell-size + (cell-size / 2)
+apple-cy = next.apple-y * cell-size + (cell-size / 2)
+show "dot " + text of apple-cx + " " + text of apple-cy + " " + text of (cell-size * 0.4)
+
+show "pen 0.2 0.55 0.2"
+for each seg in next.body:
+  seg-px = seg.x * cell-size + 1
+  seg-py = seg.y * cell-size + 1
+  show "box " + text of seg-px + " " + text of seg-py + " " + text of (cell-size - 2) + " " + text of (cell-size - 2)
+
+show "pen 0.45 0.85 0.25"
+head-px = next.head-x * cell-size + 1
+head-py = next.head-y * cell-size + 1
+show "box " + text of head-px + " " + text of head-py + " " + text of (cell-size - 2) + " " + text of (cell-size - 2)
+
+show "pen 0.1 0.1 0.1"
+show "text 8 16 score: " + text of next.score
+
+if not next.alive:
+  show "text 140 180 GAME OVER  -  press Reset to play again"
