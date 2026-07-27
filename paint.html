@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Planes draws — a canvas runtime</title>
+    <meta
+      name="description"
+      content="A Planes program runs, its show output paints a canvas, and its computed effect surface is shown beside it — nothing added to the language. No build step, no server, no network."
+    />
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        max-width: 980px; margin: 2rem auto; padding: 0 1rem;
+      }
+      h1 { font-size: 1.4rem; margin-bottom: 0.2rem; }
+      p.sub { color: #666; margin-top: 0; }
+      textarea, pre {
+        font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        width: 100%; box-sizing: border-box;
+      }
+      textarea {
+        min-height: 12rem; padding: 0.75rem; border: 1px solid #ccc;
+        border-radius: 6px; resize: vertical;
+      }
+      select {
+        font-size: 14px; padding: 0.4rem 0.6rem; border-radius: 6px;
+        border: 1px solid #ccc; background: #fff; margin: 0.75rem 0.4rem 0.75rem 0;
+      }
+      button {
+        margin: 0.75rem 0.4rem 0.75rem 0; padding: 0.5rem 1.1rem; font-size: 14px;
+        border: 0; border-radius: 6px; background: #2d6cdf; color: #fff; cursor: pointer;
+      }
+      button:hover { background: #245ac0; }
+      button.secondary { background: #4a8a5c; }
+      button.secondary:hover { background: #3c7049; }
+      button.tertiary { background: #6b6b6b; }
+      button.tertiary:hover { background: #565656; }
+      button:disabled { background: #9aa7b8; cursor: not-allowed; }
+      .hint { color: #888; font-size: 12px; }
+      .columns { display: flex; gap: 1.25rem; flex-wrap: wrap; align-items: flex-start; }
+      .col-canvas { flex: 0 0 auto; }
+      .col-surface { flex: 1 1 260px; min-width: 260px; }
+      canvas {
+        display: block; background: #fff; border: 1px solid #ccc; border-radius: 6px;
+        max-width: 100%;
+      }
+      pre#paint-surface {
+        background: #f6f7f9; padding: 0.75rem; border-radius: 6px;
+        min-height: 3rem; overflow-x: auto; white-space: pre-wrap;
+        max-height: 26rem; overflow-y: auto;
+      }
+      pre#paint-output {
+        background: #f6f7f9; padding: 0.75rem; border-radius: 6px;
+        min-height: 2.5rem; overflow-x: auto; white-space: pre-wrap;
+      }
+      pre#paint-output.error { color: #b00020; }
+      @media (prefers-color-scheme: dark) {
+        textarea, select { background: #1b1d22; border-color: #333; color: #e6e6e6; }
+        pre#paint-surface, pre#paint-output { background: #16181d; color: #e6e6e6; }
+        canvas { background: #16181d; border-color: #333; }
+        p.sub, .hint { color: #999; }
+      }
+      footer { margin-top: 2rem; color: #888; font-size: 12px; }
+      code { background: rgba(128,128,128,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>Planes draws</h1>
+    <p class="sub">
+      A canvas runtime that adds nothing to the language: a program draws by
+      emitting <code>show</code> lines in a fixed verb whitelist (pen, move,
+      line, circle, dot, rect, box, text, clear — see the footer), and the page
+      paints them. Input crosses in as a value, not an effect; state crosses
+      the tick boundary through <code>write state to "state.json"</code>, one
+      direction. The effect surface beside the canvas is computed, not
+      declared — the same analyser <code>index.html</code> uses — and it is
+      never hidden.
+    </p>
+
+    <div>
+      <label for="paint-picker" class="hint">program:</label>
+      <select id="paint-picker">
+        <option value="turtle">turtle — a recursive shape, static</option>
+        <option value="bloom">bloom — generative, driven by the tick alone</option>
+        <option value="snake">snake — playable, arrow keys, a score</option>
+      </select>
+      <button id="paint-run">Run ▸</button>
+      <button id="paint-play" class="secondary">Play ▸</button>
+      <button id="paint-reset" class="tertiary">Reset ⟲</button>
+      <div class="hint">arrow keys steer snake while it is playing · click the canvas to give it keyboard focus</div>
+    </div>
+
+    <div class="columns">
+      <div class="col-canvas">
+        <canvas
+          id="paint-canvas"
+          width="480"
+          height="360"
+          tabindex="0"
+          role="img"
+          aria-label="the painted output of the running program"
+        ></canvas>
+      </div>
+      <div class="col-surface">
+        <div class="hint">effect surface — computed, not run:</div>
+        <pre id="paint-surface">(loading…)</pre>
+      </div>
+    </div>
+
+    <p class="hint" style="margin-top:1rem;">source (editable — Run/Play use whatever is here):</p>
+    <textarea id="paint-source" spellcheck="false"></textarea>
+
+    <p class="hint">output — lines the program showed that were not draw commands, or an error:</p>
+    <pre id="paint-output">(no output yet)</pre>
+
+    <footer>
+      Verbs: <code>pen r g b</code>, <code>width n</code>, <code>move x y</code>,
+      <code>line x y</code>, <code>circle x y r</code>, <code>dot x y r</code>,
+      <code>rect x y w h</code>, <code>box x y w h</code>,
+      <code>text x y string…</code>, <code>clear</code>. A line matching none of
+      these goes to the output pane, never an error. Opens directly in Safari
+      or Firefox. Chrome blocks ES-module loading over <code>file://</code> as
+      a security policy — for Chrome, serve the folder with
+      <code>python3 -m http.server</code> and open
+      <code>http://localhost:8000/paint.html</code>. No bundler, no
+      transpiler, no network dependency: the page loads the real
+      <code>js/*.mjs</code> modules, the real <code>grammar/*.json</code> as
+      JSON modules, and the three <code>paint/*.planes</code> programs as
+      plain text, all from this same directory.
+    </footer>
+
+    <script type="module">
+      import { runProgram, analyseProgram, surfaceReport } from "./js/browser_main.mjs";
+      import { paint } from "./js/paint/painter.mjs";
+      import { step, createLoop } from "./js/paint/loop.mjs";
+
+      const PROGRAMS = [
+        { id: "turtle", file: "paint/turtle.planes", ticking: false, stepEveryNFrames: 1 },
+        { id: "bloom", file: "paint/bloom.planes", ticking: true, stepEveryNFrames: 1 },
+        // Grid-stepped and arrow-key-steered: one tick per animation frame
+        // (≈60/s) crosses the whole board faster than a human can react, so
+        // snake's ticks land on every 8th frame instead (≈7.5/s). The loop is
+        // still requestAnimationFrame (A.2) — this only skips callbacks
+        // between ticks, never adds a second runProgram call to one frame.
+        { id: "snake", file: "paint/snake.planes", ticking: true, stepEveryNFrames: 8 },
+      ];
+
+      const picker = document.getElementById("paint-picker");
+      const runBtn = document.getElementById("paint-run");
+      const playBtn = document.getElementById("paint-play");
+      const resetBtn = document.getElementById("paint-reset");
+      const canvas = document.getElementById("paint-canvas");
+      const sourceEl = document.getElementById("paint-source");
+      const outputEl = document.getElementById("paint-output");
+      const surfaceEl = document.getElementById("paint-surface");
+      const ctx = canvas.getContext("2d");
+
+      const DIMENSIONS = { width: canvas.width, height: canvas.height, background: "#ffffff" };
+
+      const sources = {};
+      let current = PROGRAMS[0];
+      let loop = null;
+      const heldKeys = new Set();
+      const pointer = { x: 0, y: 0, down: false };
+
+      function clearCanvas() {
+        ctx.fillStyle = DIMENSIONS.background;
+        ctx.fillRect(0, 0, DIMENSIONS.width, DIMENSIONS.height);
+      }
+
+      function showOutput(lines, isError) {
+        outputEl.textContent = lines.length ? lines.join("\n") : "(no output)";
+        outputEl.classList.toggle("error", Boolean(isError));
+      }
+
+      function showSurface(src) {
+        const { surface, error } = analyseProgram(src);
+        if (error) {
+          surfaceEl.textContent = `✗ ${error.tag}: ${error.message}`;
+          return;
+        }
+        surfaceEl.textContent = surfaceReport(surface);
+      }
+
+      function renderResult(result) {
+        if (result.error) {
+          showOutput([...result.lines, `✗ ${result.error.tag}: ${result.error.message}`], true);
+          return;
+        }
+        const { text } = paint(ctx, result.lines, DIMENSIONS);
+        showOutput(text, false);
+      }
+
+      function stopLoop() {
+        if (loop) loop.stop();
+        playBtn.textContent = "Play ▸";
+      }
+
+      function buildLoop() {
+        return createLoop({
+          getSource: () => sourceEl.value,
+          getKeys: () => [...heldKeys],
+          getPointer: () => ({ ...pointer }),
+          initialState: null,
+          stepEveryNFrames: current.stepEveryNFrames,
+          onFrame: (result) => {
+            renderResult(result);
+            if (result.error) playBtn.textContent = "Play ▸";
+          },
+        });
+      }
+
+      function selectProgram(id) {
+        stopLoop();
+        current = PROGRAMS.find((p) => p.id === id);
+        sourceEl.value = sources[id];
+        loop = buildLoop();
+        playBtn.disabled = !current.ticking;
+        clearCanvas();
+        showSurface(sourceEl.value);
+        runOnce();
+      }
+
+      function runOnce() {
+        const context = { tick: 0, keys: [], pointer: { x: 0, y: 0, down: false }, state: null };
+        clearCanvas();
+        const result = step(sourceEl.value, context);
+        renderResult(result);
+        showSurface(sourceEl.value);
+      }
+
+      runBtn.addEventListener("click", () => {
+        stopLoop();
+        runOnce();
+      });
+
+      playBtn.addEventListener("click", () => {
+        if (!loop) return;
+        if (loop.isRunning()) {
+          stopLoop();
+        } else {
+          clearCanvas();
+          loop = buildLoop();
+          loop.start();
+          playBtn.textContent = "Pause ⏸";
+        }
+      });
+
+      resetBtn.addEventListener("click", () => {
+        stopLoop();
+        loop = buildLoop();
+        clearCanvas();
+        showOutput([], false);
+        showSurface(sourceEl.value);
+      });
+
+      picker.addEventListener("change", () => selectProgram(picker.value));
+
+      window.addEventListener("keydown", (e) => {
+        if (e.key.startsWith("Arrow")) e.preventDefault();
+        heldKeys.add(e.key);
+      });
+      window.addEventListener("keyup", (e) => heldKeys.delete(e.key));
+
+      canvas.addEventListener("mousemove", (e) => {
+        const r = canvas.getBoundingClientRect();
+        pointer.x = Math.round(((e.clientX - r.left) / r.width) * canvas.width);
+        pointer.y = Math.round(((e.clientY - r.top) / r.height) * canvas.height);
+      });
+      canvas.addEventListener("mousedown", () => (pointer.down = true));
+      window.addEventListener("mouseup", () => (pointer.down = false));
+
+      // Load the three example programs as plain text, same directory, no
+      // network dependency — then draw the default (turtle) on load.
+      Promise.all(
+        PROGRAMS.map((p) => fetch(p.file).then((r) => r.text()).then((src) => (sources[p.id] = src))),
+      ).then(() => {
+        sourceEl.value = sources[current.id];
+        loop = buildLoop();
+        playBtn.disabled = !current.ticking;
+        clearCanvas();
+        runOnce();
+      });
+    </script>
+  </body>
+</html>
