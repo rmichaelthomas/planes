@@ -2,52 +2,57 @@
 # no input, no state threaded across ticks (A.6). Motion needs no event: the
 # whole picture is a pure function of `tick`, recomputed fresh on every call.
 #
-# The language has no modulo operator and no trigonometry among its ten
-# builtins, so two small recursive helpers stand in. `mod` is a doubling
-# reduction — O(log(a/b)) deep rather than O(a/b) deep, so it stays shallow
-# even as `tick` climbs across a long session. `triangle` folds `mod`'s
-# sudden snap-back-to-zero into a smooth ramp-up-ramp-down wave, which is
-# what makes the pulse and the drift read as motion rather than a jump cut.
+# `mod` comes from math.planes now (checkpoint v21.0 §250 — harvested from
+# this file and snake.planes, two witnesses of three, floored rather than
+# either witness's original truncated definition). The local ramp-up-ramp-
+# down wave `mod`'s sudden snap-back-to-zero gets folded into stayed local —
+# one witness only, and the harvest rule does not admit on one — but it is
+# named `pulse` here rather than its old name `triangle`: that name now
+# belongs to draw.planes's shape verb, and a module graph cannot hold two
+# functions of the same name (checkpoint v21.0 §250's own worked example is a
+# `mod` collision; this is the same rule catching a different one).
+#
+# Colour is OKLCH throughout (planes-drawing-protocol-v1.md §4): the whole
+# palette's hue rotates with `tick`, and each ring is offset from the last by
+# a fixed 18 degrees — an analogous harmony spreading outward through the
+# rings, computed by addition on hue rather than hand-mixed per-channel
+# arithmetic, and wrapped with the same floored `mod` hue arithmetic needs.
 
-to mod of a, b:
-  if a < b:
-    give a
-  else:
-    let doubled = mod of a, (b * 2) because "doubling the divisor each step keeps this O(log(a/b)) deep instead of O(a/b) deep"
-    if doubled < b:
-      give doubled
-    else:
-      give doubled - b
+use draw
+use math
 
-to triangle of t, half-period:
+to pulse of t, half-period:
   let folded = mod of t, (half-period * 2)
   if folded < half-period:
     give folded
   else:
     give (half-period * 2) - folded
 
-to rings of ring-index, ring-count, tick, center-x, center-y:
+to rings of ring-index, ring-count, tick, center-x, center-y, base-hue:
   if ring-index >= ring-count:
     give nothing
   else:
     let period = 48
     let offset = ring-index * 12
-    let phase = triangle of (tick + offset), period because "each ring is offset from the last by twelve ticks, so the pulse travels outward through the rings instead of all of them beating in lockstep"
+    let phase = pulse of (tick + offset), period because "each ring is offset from the last by twelve ticks, so the pulse travels outward through the rings instead of all of them beating in lockstep"
     let radius = 16 + phase * 1.6
-    let hue = phase / period
+    let lightness = 0.45 + (phase / period) * 0.35 because "the pulse modulates lightness now, in place of the old hand-mixed red/green channels"
+    let hue = mod of (base-hue + ring-index * 18), 360 because "an analogous harmony: each ring eighteen degrees further round the wheel than the last, wrapped by the shared floored mod"
 
-    show "pen " + text of hue + " " + text of (1 - hue) + " 0.65"
-    show "circle " + text of center-x + " " + text of center-y + " " + text of radius
+    stroke of lightness, 0.15, hue, 1
+    circle of center-x, center-y, radius
 
-    rings of (ring-index + 1), ring-count, tick, center-x, center-y
+    rings of (ring-index + 1), ring-count, tick, center-x, center-y, base-hue
 
-show "clear"
-show "width 2"
+clear
+width of 2
 
-let drift-x = triangle of tick, 110 because "a smooth ramp from 0 to 110 and back, so the bloom's centre drifts sideways instead of sitting still"
-let drift-y = triangle of (tick + 30), 70 because "offsetting the vertical drift's phase from the horizontal one is what keeps the centre off a single straight line"
+let drift-x = pulse of tick, 110 because "a smooth ramp from 0 to 110 and back, so the bloom's centre drifts sideways instead of sitting still"
+let drift-y = pulse of (tick + 30), 70 because "offsetting the vertical drift's phase from the horizontal one is what keeps the centre off a single straight line"
 let center-x = 90 + drift-x
 let center-y = 100 + drift-y
 
+let base-hue = mod of (tick * 2), 360 because "the whole palette rotates through hue over time, wrapping at 360 the same way the per-ring offset does"
+
 let ring-count = 10
-rings of 0, ring-count, tick, center-x, center-y
+rings of 0, ring-count, tick, center-x, center-y, base-hue

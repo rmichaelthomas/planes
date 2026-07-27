@@ -1,39 +1,51 @@
-# A recursive tree, drawn as lines only. Real turtle graphics turn by an
-# angle, but this language has no sine or cosine among its ten builtins, so
-# each branch drifts sideways by `lean` — a fixed ratio of its own length —
-# rather than a true rotation. The ratio widens slightly at every split, so
-# the two children fan apart instead of retracing one straight line, and each
-# generation is noticeably shorter than its parent, which is what makes eight
-# levels of splitting read as a tree rather than a zigzag.
+# A recursive tree, drawn as lines, using real rotation via push/rotate/pop —
+# available now that a transform stack exists as renderer state (planes-
+# drawing-protocol-v1.md §6.4): the program emits an angle in degrees at
+# every split and the renderer computes the trigonometry, so a language with
+# no sine or cosine among its builtins still gets a turtle that turns.
 #
 # Depth 8 keeps the deepest call stack at 8 — far inside the 639-deep ceiling
 # this interpreter was measured at (canvas-runtime-benchmarks-pre.md, case 5).
 # The whole program is one static picture: it never reads `tick`, `keys`,
-# `pointer` or `state`, and it touches nothing but the console.
+# `pointer` or `state`. Its surface is console only — draw.planes's helpers
+# are all `show`, nothing else.
+#
+# `tree` pushes before it translates and rotates for each child, and pops
+# after recursing into it, so the transform it leaves behind on return is
+# exactly the transform it was called with — the function never leaks a
+# rotation or an offset into its caller.
 
-to tree of fork-x, fork-y, branch-length, lean, remaining-depth:
+use draw
+
+to tree of branch-length, angle, remaining-depth:
   if remaining-depth <= 0:
     give nothing
   else:
-    let tip-x = fork-x + lean * branch-length because "lean stands in for an angle the language cannot compute; multiplying it by the branch's own length keeps the sideways drift proportional as branches shrink"
-    let tip-y = fork-y - branch-length
-
-    show "move " + text of fork-x + " " + text of fork-y
-    show "line " + text of tip-x + " " + text of tip-y
+    line of 0, 0, 0, -branch-length
 
     let child-length = branch-length * 0.72 because "each generation noticeably shorter than its parent is what makes the recursion read as a tree"
 
-    tree of tip-x, tip-y, child-length, (lean - 0.4), (remaining-depth - 1)
-    tree of tip-x, tip-y, child-length, (lean + 0.4), (remaining-depth - 1)
+    push
+    translate of 0, -branch-length
+    rotate of -angle
+    tree of child-length, angle, (remaining-depth - 1)
+    pop
 
-show "clear"
-show "pen 0.36 0.24 0.14"
-show "width 2"
+    push
+    translate of 0, -branch-length
+    rotate of angle
+    tree of child-length, angle, (remaining-depth - 1)
+    pop
+
+clear
+stroke of 0.45, 0.09, 60, 1
+width of 2
 
 let trunk-x = 240 because "centered on the 480-pixel-wide canvas paint.html gives this page"
 let trunk-y = 350 because "near the bottom of the 360-tall canvas, so the tree grows upward into the frame"
 let trunk-length = 78
-let no-lean = 0 because "the trunk itself grows straight up before the first split introduces any drift"
+let branch-angle = 24 because "a fixed angle at every split, now that rotate exists to turn by one rather than approximate it with a shear"
 let starting-depth = 8
 
-tree of trunk-x, trunk-y, trunk-length, no-lean, starting-depth
+translate of trunk-x, trunk-y
+tree of trunk-length, branch-angle, starting-depth

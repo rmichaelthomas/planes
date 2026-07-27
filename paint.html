@@ -70,13 +70,15 @@
     <h1>Planes draws</h1>
     <p class="sub">
       A canvas runtime that adds nothing to the language: a program draws by
-      emitting <code>show</code> lines in a fixed verb whitelist (pen, move,
-      line, circle, dot, rect, box, text, clear — see the footer), and the page
-      paints them. Input crosses in as a value, not an effect; state crosses
-      the tick boundary through <code>write state to "state.json"</code>, one
-      direction. The effect surface beside the canvas is computed, not
-      declared — the same analyser <code>index.html</code> uses — and it is
-      never hidden.
+      emitting <code>show</code> lines carrying the versioned drawing
+      protocol — every line prefixed <code>draw</code>, twenty-six verbs,
+      OKLCH colour (see the footer) — usually through <code>use draw</code>'s
+      helpers rather than assembled by hand, and the page paints them. Input
+      crosses in as a value, not an effect; state crosses the tick boundary
+      through <code>write state to "state.json"</code>, one direction. The
+      effect surface beside the canvas is computed, not declared — the same
+      analyser <code>index.html</code> uses, now following <code>use</code>
+      across the module graph too — and it is never hidden.
     </p>
 
     <div>
