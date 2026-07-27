@@ -11,6 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { paint, oklchToRgb } from "../paint/painter.mjs";
+import { FONT_FAMILY } from "../paint/stream.mjs";
 
 function fakeCtx() {
   const calls = [];
@@ -243,7 +244,7 @@ test("label draws text at x, y with the current fill", () => {
 test("size sets the font size in pixels", () => {
   const ctx = fakeCtx();
   paint(ctx, ["draw size 24"], DIMENSIONS);
-  assert.equal(ctx.font, "24px sans-serif");
+  assert.equal(ctx.font, `24px ${FONT_FAMILY}`);
 });
 
 test("align sets textAlign verbatim", () => {

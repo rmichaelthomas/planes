@@ -172,7 +172,7 @@ fill of 0.15, 0, 0, 1
 label of 8, 18, ("score: " + text of next.score)
 
 if not next.alive:
-  size of 20
+  size of 18
   align of "center"
   fill of 0.42, 0.2, 25, 1
   label of (board-width / 2), (board-height / 2), "GAME OVER  -  press Reset to play again"
