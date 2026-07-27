@@ -1,6 +1,6 @@
 # Canvas Runtime Verification (§9.2)
 
-Run at commit `fc4954d137369446864d228ae80b501e39a18dd6`.
+Run at commit `(uncommitted)`.
 
 | Category | Check | Result | Detail |
 |---|---|---|---|
