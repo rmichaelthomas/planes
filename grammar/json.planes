@@ -533,7 +533,7 @@ to json-render-value of v, pad:
     give json-render-list of v.items, pad
   if k == "record":
     give json-render-fields of v.fields, pad
-  fail "cannot write a value of kind '" + v.kind + "' as JSON" as cannot-write-json
+  fail "cannot write a value of kind '" + v.kind + "' as JSON\n  JSON holds numbers, text, yes/no, nothing, lists and records; convert the value to one of those first" as cannot-write-json
 
 to json-text-of of v:
   give json-render-value of v, ""

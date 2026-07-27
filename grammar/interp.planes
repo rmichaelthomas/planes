@@ -122,7 +122,7 @@ to canonical-of-value of v:
     give "[" + (canonical-of-items of v.items) + "]"
   if v.kind == "record":
     give "{" + (canonical-of-fields of v.fields) + "}"
-  fail "cannot render a value of kind '" + v.kind + "'" as cannot-render
+  fail { message: "cannot render a value of kind '" + v.kind + "'", fix: "the six value kinds are number, text, list, record, yes/no and nothing; reaching this means a value was built with a kind outside that set, which is a defect in the interpreter rather than in the program" } as cannot-render
 
 # One pass over the items, comma-joined (the join-comma shape, inlined with
 # the per-item render so there is no intermediate list and no per-item
@@ -255,11 +255,45 @@ to fail-of of error, env:
 # read as they did; `error-fix-of` is the site that names one. Until this build
 # there was no such site anywhere in the self-hosted interpreter: the slot for
 # a fix did not exist, so no message could have filled it.
+# interp.py's `param_list` and `call_shape`, for the arity clauses. A count
+# leaves an author counting commas; the declared parameter names say which
+# values are wanted and in what order, which is the information the detail
+# line does not carry.
+to comma-list-of of names:
+  if (count of names) == 0:
+    give ""
+  give comma-walk-of of (rest of names), (first-item of names)
+
+to comma-walk-of of remaining, acc:
+  if (count of remaining) == 0:
+    give acc
+  give comma-walk-of of (rest of remaining), (acc + ", " + (first-item of remaining))
+
+to param-list-of of params:
+  if (count of params) == 0:
+    give ""
+  give " of " + (comma-list-of of params)
+
+to call-shape-of of name, params:
+  if (count of params) == 0:
+    give name
+  give name + " of " + (comma-list-of of params)
+
 to error-of of tag, detail:
   give { tag: tag, detail: detail, fix: nothing }
 
 to error-fix-of of tag, detail, fix:
   give { tag: tag, detail: detail, fix: fix }
+
+# D: the counterpart of interp.py's `no_fix`. A site that deliberately names no
+# fix says why, in words, at the raise site — as a literal, exactly as the
+# message is. `reason` is never rendered and never reaches the record a program
+# reads, so the error record stays the four fields C5 fixed it at; it exists so
+# errors_coverage.py can tell a deliberate silence from a gap on this side too.
+# The one shape that qualifies here is the one that qualifies on the Python
+# side: a message the language did not write.
+to error-no-fix-of of tag, detail, reason:
+  give { tag: tag, detail: detail, fix: nothing }
 
 # ================================================================ the effect boundary (A.1, build 3)
 #
@@ -399,7 +433,7 @@ to eval-node of node, env, globals:
     give eval-orfail-node of node, env, globals
   if k == "WriteTo":
     give eval-writeto-node of node, env, globals
-  give fail-of of (error-of of "cannot-evaluate", ("cannot evaluate a node of kind '" + k + "'")), env
+  give fail-of of (error-fix-of of "cannot-evaluate", ("cannot evaluate a node of kind '" + k + "'"), "reaching this from a program the parser accepted is a defect in the interpreter, not in the program, and worth reporting with the source that produced it"), env
 
 # A variable reference. A function value auto-calls only when no local variable
 # of the same name shadows it (interp.py: `name in funcs and not env.has`) --
@@ -408,7 +442,7 @@ to eval-node of node, env, globals:
 to eval-var of node, env, globals:
   binding = env-find of env, node.name
   if not binding.found:
-    give fail-of of (error-of of "unknown-name", ("no name '" + node.name + "' here")), env
+    give fail-of of (error-fix-of of "unknown-name", ("no name '" + node.name + "' here"), ("define it first: let " + node.name + " = ...")), env
   if binding.value.kind == "function":
     give apply-function-node of binding.value, [], env, globals, node.name
   give normal-of of binding.value, env
@@ -423,14 +457,27 @@ to eval of node, env:
     give reraise of r.error
   give r.value
 
+# A caught error, as the record `fail` takes. §158's record form is how a fix
+# crosses back out through `fail`, and the fix slot only accepts text -- an
+# error naming none has to arrive as the one-field shape instead.
+to failure-of of detail, fix:
+  if fix is nothing:
+    give { message: detail }
+  give { message: detail, fix: fix }
+
 # Turn a fail status back into the host exception whose tag it carries, so the
 # value-returning adapter refuses exactly as build 1 did. The tags are the
 # finite set the evaluator raises; a self-hosted program's own custom `fail`
 # tags never reach here -- whole programs run through the status layer, not the
 # adapter -- so enumerating the built-in tags is complete. Flat, not nested.
+#
+# D: the fix rides across with the detail. Before this the adapter dropped it,
+# so an error that named a fix stopped naming one the moment it crossed the
+# value-returning boundary -- interp.py keeps `fix` on the exception, and this
+# is where the three implementations have to agree.
 to reraise of err:
   t = err.tag
-  d = err.detail
+  d = failure-of of err.detail, err.fix
   if t == "unknown-name":
     fail d as unknown-name
   if t == "divided-by-zero":
@@ -600,7 +647,7 @@ to eval-first-node of node, env, globals:
   # wrote. It runs before the label is built, because building the label is what
   # used to fail.
   if not (n.value.kind == "number"):
-    give fail-of of (error-of of "not-a-number", ("the count in `first n of` must be a number, found " + (detail-of-value of n.value))), src.env
+    give fail-of of (error-fix-of of "not-a-number", ("the count in `first n of` must be a number, found " + (detail-of-value of n.value)), "write the count as a number — `first 3 of items`"), src.env
   label = "first " + (text of (truncate-of of n.value.value)) + " of"
   if src.value.kind == "list":
     r = (first (n.value.value) of src.value.items) or fail as e:
@@ -610,7 +657,7 @@ to eval-first-node of node, env, globals:
     r2 = (first (n.value.value) of src.value.value) or fail as e2:
       give fail-of of e2, src.env
     give normal-of of (derived of (make-text of r2), "op", label, [src.value.deriv]), src.env
-  give fail-of of (error-of of "not-a-collection", ("cannot take the first " + (text of (truncate-of of n.value.value)) + " of " + (detail-of-value of src.value))), src.env
+  give fail-of of (error-fix-of of "not-a-collection", ("cannot take the first " + (text of (truncate-of of n.value.value)) + " of " + (detail-of-value of src.value)), "`first n of` takes a list or text; a record has no order to take a prefix of"), src.env
 
 # interp.py labels a `first` step with `int(n.value)` -- truncation toward
 # zero, not rounding. Planes rounds half away from zero (`whole of`) and has no
@@ -649,7 +696,7 @@ to apply-op of op, a, b:
     give make-boolean of (not (values-equal of a, b))
   if op == "in":
     give make-boolean of (member-of of a, b)
-  fail "unknown operator '" + op + "'" as unknown-operator
+  fail { message: "unknown operator '" + op + "'", fix: "the parser builds only the operators the language defines, so reaching this is a defect in the interpreter rather than in the program — worth reporting with the source" } as unknown-operator
 
 # `+` is the one operator that reads the operand kinds, because its result
 # kind depends on them (text, list, or number). Everything else is one arm.
@@ -660,7 +707,7 @@ to apply-plus of a, b:
     give make-text of (a.value + b.value)
   if a.kind == "list" and b.kind == "list":
     give make-list of (a.items + b.items)
-  fail "cannot combine " + (detail-of-value of a) + " with " + (detail-of-value of b) + " using +" as cannot-combine
+  fail { message: "cannot combine " + (detail-of-value of a) + " with " + (detail-of-value of b) + " using +", fix: "convert first — e.g. \"total: \" + text of n" } as cannot-combine
 
 # The raw number under a number value, or interp.py's not-a-number refusal.
 # `-`, `*`, `/` then use the host's own exact arithmetic on the raw numbers,
@@ -669,7 +716,7 @@ to apply-plus of a, b:
 to num-of of v, op:
   if v.kind == "number":
     give v.value
-  fail "cannot use '" + op + "' on " + (detail-of-value of v) as not-a-number
+  fail { message: "cannot use '" + op + "' on " + (detail-of-value of v), fix: "check the value is a number before doing arithmetic" } as not-a-number
 
 # What `<` can order: text with text, or a number with a number. Anything else
 # is "other" and cannot be ordered at all -- interp.py's `_order_kind`.
@@ -696,7 +743,7 @@ to compare-values of op, a, b:
   ka = order-kind-of of a
   kb = order-kind-of of b
   if (not (ka == kb)) or ka == "other":
-    fail "cannot compare " + (detail-of-value of a) + " with " + (detail-of-value of b) as cannot-compare
+    fail { message: "cannot compare " + (detail-of-value of a) + " with " + (detail-of-value of b), fix: "compare numbers with numbers, or text with text" } as cannot-compare
   x = a.value
   y = b.value
   if op == "<":
@@ -711,7 +758,7 @@ to compare-values of op, a, b:
 to as-condition of v:
   if v.kind == "boolean":
     give v.value
-  fail "a condition needs a yes/no value, found " + (detail-of-value of v) as not-a-yes-no
+  fail { message: "a condition needs a yes/no value, found " + (detail-of-value of v), fix: "compare it: `if count of items > 0:`" } as not-a-yes-no
 
 # ================================================================ equality and membership
 #
@@ -723,28 +770,28 @@ to as-condition of v:
 
 to values-equal of a, b:
   if a.kind == "nothing":
-    fail "nothing cannot be compared with ==" as cannot-compare
+    fail { message: "nothing cannot be compared with ==", fix: "test for absence with `is nothing`" } as cannot-compare
   if b.kind == "nothing":
-    fail "nothing cannot be compared with ==" as cannot-compare
+    fail { message: "nothing cannot be compared with ==", fix: "test for absence with `is nothing`" } as cannot-compare
   if a.kind == "number" and b.kind == "number":
     give a.value == b.value
   a-bool = a.kind == "boolean"
   b-bool = b.kind == "boolean"
   if a-bool and not b-bool:
-    fail "cannot compare " + (detail-of-value of a) + " with " + (detail-of-value of b) as cannot-compare
+    fail { message: "cannot compare " + (detail-of-value of a) + " with " + (detail-of-value of b), fix: "compare a yes/no value with a yes/no value" } as cannot-compare
   if b-bool and not a-bool:
-    fail "cannot compare " + (detail-of-value of a) + " with " + (detail-of-value of b) as cannot-compare
+    fail { message: "cannot compare " + (detail-of-value of a) + " with " + (detail-of-value of b), fix: "compare a yes/no value with a yes/no value" } as cannot-compare
   if a-bool and b-bool:
     give a.value == b.value
   if not (a.kind == b.kind):
-    fail "cannot compare " + (detail-of-value of a) + " with " + (detail-of-value of b) as cannot-compare
+    fail { message: "cannot compare " + (detail-of-value of a) + " with " + (detail-of-value of b), fix: "compare numbers with numbers, or text with text" } as cannot-compare
   if a.kind == "text":
     give a.value == b.value
   if a.kind == "list":
     give lists-equal of a.items, b.items
   if a.kind == "record":
     give records-equal of a.fields, b.fields
-  fail "cannot compare values of kind '" + a.kind + "'" as cannot-compare
+  fail { message: "cannot compare values of kind '" + a.kind + "'", fix: "the six value kinds are number, text, list, record, yes/no and nothing; reaching this means a value was built with a kind outside that set, which is a defect in the interpreter rather than in the program" } as cannot-compare
 
 # Different lengths are unequal; same length compares element by element,
 # and a cross-type element mismatch raises through values-equal exactly as
@@ -767,7 +814,7 @@ to lists-equal-walk of xs, ys:
 # set(b) raises); same field set compares field by field.
 to records-equal of af, bf:
   if not ((count of af) == (count of bf)):
-    fail "records have different fields" as cannot-compare
+    fail { message: "records have different fields", fix: "compare records with the same fields" } as cannot-compare
   give records-equal-walk of af, bf
 
 to records-equal-walk of af, bf:
@@ -776,7 +823,7 @@ to records-equal-walk of af, bf:
   f = first-item of af
   match = field-in of bf, f.key
   if not match.found:
-    fail "records have different fields" as cannot-compare
+    fail { message: "records have different fields", fix: "compare records with the same fields" } as cannot-compare
   if not (values-equal of f.value, match.value):
     give false
   give records-equal-walk of (rest of af), bf
@@ -814,7 +861,7 @@ to member-of of a, b:
   if b.kind == "text":
     if a.kind == "text":
       give (a.value) in (b.value)
-    fail "cannot look for " + (detail-of-value of a) + " in text " + (detail-of-value of b) as not-text
+    fail { message: "cannot look for " + (detail-of-value of a) + " in text " + (detail-of-value of b), fix: "`in` over text looks for text — wrap the left side with text of" } as not-text
   # A record's field names are text, so a candidate that is not text is simply
   # ABSENT -- an answer, not a refusal. This arm was missing entirely, so
   # `"a" in { a: 1 }` was refused here while interp.py answered `true`.
@@ -829,7 +876,7 @@ to member-of of a, b:
   # `unknown-operator` named the wrong thing: `in` IS an operator the language
   # defines, and what was wrong was the value on the right. The same defect
   # js/interp.mjs had, fixed there in C2 and here now.
-  fail "cannot look inside " + (detail-of-value of b) as not-a-collection
+  fail { message: "cannot look inside " + (detail-of-value of b), fix: "`in` looks inside a list, a record's field names, or text" } as not-a-collection
 
 # ================================================================ lists, records, field access (Phase 4)
 
@@ -895,7 +942,7 @@ to eval-record-update-node of node, env, globals:
   if not (base.status == "normal"):
     give base
   if not (base.value.kind == "record"):
-    give fail-of of (error-of of "not-a-record", ("cannot update " + (detail-of-value of base.value) + " with with")), base.env
+    give fail-of of (error-fix-of of "not-a-record", ("cannot update " + (detail-of-value of base.value) + " with with"), "with updates a record; check the base is one"), base.env
   fields = base.value.fields
   derivs = [base.value.deriv]
   state = base
@@ -916,7 +963,7 @@ to eval-list-plus-node of node, env, globals:
   if not (base.status == "normal"):
     give base
   if not (base.value.kind == "list"):
-    give fail-of of (error-of of "not-a-list", ("cannot append to " + (detail-of-value of base.value) + " with plus")), base.env
+    give fail-of of (error-fix-of of "not-a-list", ("cannot append to " + (detail-of-value of base.value) + " with plus"), "plus appends to a list; check the base is one"), base.env
   item = eval-node of node.item, base.env, globals
   if not (item.status == "normal"):
     give item
@@ -929,7 +976,7 @@ to eval-field-node of node, env, globals:
   if not (obj.status == "normal"):
     give obj
   if not (obj.value.kind == "record"):
-    give fail-of of (error-of of "not-a-record", ("cannot read ." + node.name + " from " + (detail-of-value of obj.value))), obj.env
+    give fail-of of (error-fix-of of "not-a-record", ("cannot read ." + node.name + " from " + (detail-of-value of obj.value)), "check the value is a record before using dot access"), obj.env
   label = "." + node.name
   match = field-in of obj.value.fields, node.name
   if match.found:
@@ -947,7 +994,7 @@ to eval-round-node of node, env, globals:
   if not (p.status == "normal"):
     give p
   if not (v.value.kind == "number"):
-    give fail-of of (error-of of "not-a-number", ("cannot round " + (detail-of-value of v.value))), p.env
+    give fail-of of (error-fix-of of "not-a-number", ("cannot round " + (detail-of-value of v.value)), "round only works on numbers"), p.env
   r = (round (v.value.value) to (p.value.value) places) or fail as e:
     give fail-of of e, p.env
   give normal-of of (derived of (make-number of r), "op", ("round to " + (fmt-of of p.value) + " places"), [v.value.deriv]), p.env
@@ -985,7 +1032,7 @@ to eval-call-node of node, env, globals:
     give apply-foreign-node of fr.value, args, env, globals, name
   if is-builtin-name of name:
     if not ((count of args) == 1):
-      give fail-of of (error-of of "wrong-arity", ("'" + name + "' takes 1 value, given " + (text of (count of args)))), env
+      give fail-of of (error-fix-of of "wrong-arity", ("'" + name + "' takes 1 value, given " + (text of (count of args))), ("write it as `" + name + " of x`")), env
     a = eval-node of (first-item of args), env, globals
     if not (a.status == "normal"):
       give a
@@ -999,7 +1046,7 @@ to eval-call-node of node, env, globals:
     v = (eval-builtin of name, a.value) or fail as e:
       give fail-of of e, a.env
     give normal-of of (derived of v, "op", (name + " of"), [a.value.deriv]), a.env
-  give fail-of of (error-of of "unknown-function", ("no function named '" + name + "'")), env
+  give fail-of of (error-fix-of of "unknown-function", ("no function named '" + name + "'"), ("define it: to " + name + ": ...")), env
 
 to eval-builtin of name, arg:
   if name == "count":
@@ -1019,10 +1066,10 @@ to eval-builtin of name, arg:
   if name == "rest":
     give builtin-rest of arg
   if name == "ask":
-    fail "ask is an effect -- effects are interp.planes build 3, not build 1" as build-3-effect
+    fail { message: "ask is an effect -- effects are interp.planes build 3, not build 1", fix: "run it through the build-3 entry point, which threads the effect log; build 1 evaluates expressions only" } as build-3-effect
   if name == "read":
-    fail "read is an effect -- effects are interp.planes build 3, not build 1" as build-3-effect
-  fail "unknown builtin '" + name + "'" as unknown-builtin
+    fail { message: "read is an effect -- effects are interp.planes build 3, not build 1", fix: "run it through the build-3 entry point, which threads the effect log; build 1 evaluates expressions only" } as build-3-effect
+  fail { message: "unknown builtin '" + name + "'", fix: "the ten builtins are fixed and the lexer recognises only those, so reaching this is a defect in the interpreter rather than in the program — worth reporting with the source" } as unknown-builtin
 
 # count of a list is its item count, of text its code-point count, of a
 # record its field count -- interp.py's len(arg.value) over each shape.
@@ -1033,7 +1080,7 @@ to builtin-count of arg:
     give make-number of (count of arg.value)
   if arg.kind == "record":
     give make-number of (count of arg.fields)
-  fail "cannot count " + (detail-of-value of arg) as not-a-collection
+  fail { message: "cannot count " + (detail-of-value of arg), fix: "count takes a list, a record, or text — check which of those this value should be" } as not-a-collection
 
 # `text of` is interp.py's fmt: a value's plain display form, distinct from
 # the canonical form (a list is "[n items]", a record is "{record}", a string
@@ -1054,7 +1101,7 @@ to builtin-text of arg:
     give make-text of ("[" + (text of (count of arg.items)) + " items]")
   if arg.kind == "record":
     give make-text of "{record}"
-  fail "cannot render a value of kind '" + arg.kind + "'" as cannot-render
+  fail { message: "cannot render a value of kind '" + arg.kind + "'", fix: "the six value kinds are number, text, list, record, yes/no and nothing; reaching this means a value was built with a kind outside that set, which is a defect in the interpreter rather than in the program" } as cannot-render
 
 # The guard `lower`, `upper`, and `normalize` share -- interp.py's
 # `require_text`, js/interp.mjs's `requireText`.
@@ -1069,32 +1116,32 @@ to builtin-text of arg:
 to require-text-of of v, name, verb:
   if v.kind == "text":
     give v.value
-  fail "cannot " + verb + " " + (detail-of-value of v) as not-text
+  fail { message: ("cannot " + verb + " " + (detail-of-value of v)), fix: (name + " takes text; convert first — e.g. " + name + " of (text of n)") } as not-text
 
 # The guard on an effect's target -- interp.py's `require_target`. `ask`, `read`,
 # and `write ... to` took `arg.value` raw, so a non-text target was concatenated
 # into the effect's own label and failed there as `cannot-combine`, naming the
 # wrong thing. Refused at the boundary instead, in interp.py's words.
-to require-target-of of v, what:
+to require-target-of of v, what, spelled:
   if v.kind == "text":
     give v.value
-  fail what + " must be text, found " + (detail-of-value of v) as not-text
+  fail { message: (what + " must be text, found " + (detail-of-value of v)), fix: ("wrap it with text of — `" + spelled + "`") } as not-text
 
 to builtin-whole of arg:
   if arg.kind == "number":
     give make-number of (whole of arg.value)
-  fail "cannot take the whole part of " + (detail-of-value of arg) as not-a-number
+  fail { message: "cannot take the whole part of " + (detail-of-value of arg), fix: "whole of rounds a number toward zero; Planes has no text-to-number builtin, so a number has to arrive as one — from a literal, from arithmetic, or from a field of something read as JSON" } as not-a-number
 
 # Fold a list of text into one string. A non-list, or any non-text element,
 # is refused naming the fix -- the same refusal interp.py's join makes, not a
 # silent stringify. An empty list joins to the empty string.
 to builtin-join of arg:
   if not (arg.kind == "list"):
-    fail "cannot join " + (detail-of-value of arg) as cannot-join
+    fail { message: "cannot join " + (detail-of-value of arg), fix: "join takes a list of text; check the value is a list" } as cannot-join
   strings = []
   for each item in arg.items:
     if not (item.kind == "text"):
-      fail "join needs a list of text, found " + (detail-of-value of item) as cannot-join
+      fail { message: "join needs a list of text, found " + (detail-of-value of item), fix: "convert each item first — e.g. text of n" } as cannot-join
     strings = strings plus item.value
   give make-text of (join of strings)
 
@@ -1102,11 +1149,11 @@ to builtin-join of arg:
 # rest of an empty list is an error, not a silent empty list.
 to builtin-rest of arg:
   if arg.kind == "text":
-    fail "cannot take the rest of text " + (detail-of-value of arg) as not-a-list
+    fail { message: "cannot take the rest of text " + (detail-of-value of arg), fix: "rest is for lists; for a text prefix use `first n of`" } as not-a-list
   if not (arg.kind == "list"):
-    fail "cannot take the rest of " + (detail-of-value of arg) as not-a-list
+    fail { message: "cannot take the rest of " + (detail-of-value of arg), fix: "rest takes a list; check the value is a list" } as not-a-list
   if (count of arg.items) == 0:
-    fail "cannot take the rest of an empty list" as empty-list
+    fail { message: "cannot take the rest of an empty list", fix: "check it is not empty first, e.g. `if count of xs > 0:`" } as empty-list
   give make-list of (rest of arg.items)
 
 # ================================================================ lexical scoping (A.1)
@@ -1153,7 +1200,7 @@ to make-function of funcdef:
 
 to apply-function-node of fn, arg-nodes, call-env, globals, name:
   if not ((count of fn.params) == (count of arg-nodes)):
-    give fail-of of (error-of of "wrong-arity", ("'" + name + "' takes " + (text of (count of fn.params)) + " values, given " + (text of (count of arg-nodes)))), call-env
+    give fail-of of (error-fix-of of "wrong-arity", ("'" + name + "' takes " + (text of (count of fn.params)) + " values, given " + (text of (count of arg-nodes))), ("it is declared `to " + name + (param-list-of of fn.params) + "`, so call it as `" + (call-shape-of of name, fn.params) + "`")), call-env
   bound = eval-args of fn.params, arg-nodes, call-env, globals, []
   if not (bound.status == "normal"):
     give bound
@@ -1260,7 +1307,7 @@ to eval-when-node of node, env, globals:
   if not (subj.status == "normal"):
     give subj
   if not (subj.value.kind == "record"):
-    give fail-of of (error-of of "not-a-record", ("cannot match " + (detail-of-value of subj.value) + " against a shape")), subj.env
+    give fail-of of (error-fix-of of "not-a-record", ("cannot match " + (detail-of-value of subj.value) + " against a shape"), "when matches record shapes only"), subj.env
   m = match-pattern of node.pattern, subj.value, subj.env, globals, []
   if not (m.status == "normal"):
     give m
@@ -1338,7 +1385,7 @@ to eval-foreach-node of node, env, globals:
     for each c in src.value.value:
       chars = chars plus (make-text of c)
     give run-foreach of node, chars, src.value.deriv, src.env, globals
-  give fail-of of (error-of of "not-a-collection", ("cannot loop over " + (detail-of-value of src.value))), src.env
+  give fail-of of (error-fix-of of "not-a-collection", ("cannot loop over " + (detail-of-value of src.value)), "for each needs a list, or a string to walk its code points"), src.env
 
 to run-foreach of node, items, source-deriv, start-env, globals:
   outer = start-env
@@ -1657,8 +1704,8 @@ to eval-writeto-node of node, env, globals:
     give d
   io = io-of of d.env
   if not (list-includes of io.modules, "file"):
-    give fail-of of (error-of of "module-not-used", "writing a file needs the file module"), d.env
-  dest = (require-target-of of d.value, "a destination to write to") or fail as e:
+    give fail-of of (error-fix-of of "module-not-used", "writing a file needs the file module", "add `use file` at the top"), d.env
+  dest = (require-target-of of d.value, "a destination to write to", "write value to (text of p)") or fail as e:
     give fail-of of e, d.env
   give do-write of v.value, dest, d.env
 
@@ -1738,8 +1785,8 @@ to unwrap-value of v:
 to do-ask of arg, env:
   io = io-of of env
   if not (list-includes of io.modules, "http"):
-    give fail-of of (error-of of "module-not-used", "asking a url needs the http module"), env
-  url = (require-target-of of arg, "a url to ask") or fail as e:
+    give fail-of of (error-fix-of of "module-not-used", "asking a url needs the http module", "add `use http` at the top"), env
+  url = (require-target-of of arg, "a url to ask", "ask (text of u)") or fail as e:
     give fail-of of e, env
   logged = io with log: (io.log plus { kind: "ask", target: url })
   env2 = with-io of env, logged
@@ -1748,7 +1795,7 @@ to do-ask of arg, env:
   if io.mode == "inert":
     r = lookup-response of io.responses, url
     if not r.found:
-      give fail-of of (error-of of "ask-failed", ("no stubbed response for " + url)), env2
+      give fail-of of (error-fix-of of "ask-failed", ("no stubbed response for " + url), "check the url is reachable and spelled right; a run without the network needs a stubbed response"), env2
     give normal-of of (derived-at of (parsed-response-of of r.value), "effect", label, [arg.deriv], origin), env2
   give normal-of of (derived-at of (make-text of (text of (ask of url))), "effect", label, [arg.deriv], origin), env2
 
@@ -1765,8 +1812,8 @@ to parsed-response-of of body:
 to do-read of arg, env:
   io = io-of of env
   if not (list-includes of io.modules, "file"):
-    give fail-of of (error-of of "module-not-used", "reading a file needs the file module"), env
-  path = (require-target-of of arg, "a path to read") or fail as e:
+    give fail-of of (error-fix-of of "module-not-used", "reading a file needs the file module", "add `use file` at the top"), env
+  path = (require-target-of of arg, "a path to read", "read (text of p)") or fail as e:
     give fail-of of e, env
   logged = io with log: (io.log plus { kind: "read", target: path })
   env2 = with-io of env, logged
@@ -1775,7 +1822,7 @@ to do-read of arg, env:
   if io.mode == "inert":
     f = lookup-file of io.files, path
     if not f.found:
-      give fail-of of (error-of of "no-such-file", path), env2
+      give fail-of of (error-fix-of of "no-such-file", path, "check the path, or write it first"), env2
     give normal-of of (derived-at of (make-text of f.value), "effect", label, [arg.deriv], origin), env2
   give normal-of of (derived-at of (make-text of (read of path)), "effect", label, [arg.deriv], origin), env2
 
@@ -1847,7 +1894,7 @@ to make-foreign of decl:
 
 to apply-foreign-node of decl, arg-nodes, call-env, globals, name:
   if not ((count of decl.params) == (count of arg-nodes)):
-    give fail-of of (error-of of "wrong-arity", ("'" + name + "' takes " + (text of (count of decl.params)) + " values, given " + (text of (count of arg-nodes)))), call-env
+    give fail-of of (error-fix-of of "wrong-arity", ("'" + name + "' takes " + (text of (count of decl.params)) + " values, given " + (text of (count of arg-nodes))), ("it is declared `foreign " + name + (param-list-of of decl.params) + " from \"" + decl.target + "\"`, so call it as `" + (call-shape-of of name, decl.params) + "`")), call-env
   bound = eval-args of decl.params, arg-nodes, call-env, globals, []
   if not (bound.status == "normal"):
     give bound
@@ -1911,7 +1958,7 @@ to foreign-result-inert of decl, param-bindings, env:
     give normal-of of (make-number of io.clock), env
   if has-effect-kind of decl.effects, "random":
     if (count of io.randoms) == 0:
-      give fail-of of (error-of of "no-random-supplied", "inert mode ran out of supplied random values"), env
+      give fail-of of (error-fix-of of "no-random-supplied", "inert mode ran out of supplied random values", "inert mode replays a fixed list, so supply one value for every random draw the run makes — or run it in real mode"), env
     drawn = first-item of io.randoms
     give normal-of of (make-number of drawn), (with-io of env, (io with randoms: (rest of io.randoms)))
   if has-effect-kind of decl.effects, "env":
@@ -1933,7 +1980,7 @@ to foreign-supplied-or-fail of decl, io, env:
   r = lookup-by-name of io.foreigns, decl.name
   if r.found:
     give normal-of of r.value, env
-  give fail-of of (error-of of "no-foreign-result", (missing-foreign-result-message of decl)), env
+  give fail-of of (error-fix-of of "no-foreign-result", (missing-foreign-result-message of decl), "inert mode answers a foreign call from supplied data, so add a result for this declaration — or run it in real mode, where a host resolves it"), env
 
 # The message names which foreign lacked a result and how to supply one -- and
 # for a foreign declaring `env`, that its own table is the more specific place.
@@ -1955,7 +2002,7 @@ to foreign-result-real of decl, param-bindings, env:
     give normal-of of (make-number of (host-random)), env
   if has-effect-kind of decl.effects, "env":
     give normal-of of (make-text of (host-getcwd)), env
-  give fail-of of (error-of of "foreign-needs-host", ("resolving foreign '" + decl.name + "' (" + decl.target + ") needs a host that can load it -- the second host, Route B's next step")), env
+  give fail-of of (error-fix-of of "foreign-needs-host", ("resolving foreign '" + decl.name + "' (" + decl.target + ") needs a host that can load it -- the second host, Route B's next step"), "run it in inert mode with a supplied result for this declaration, which needs no host at all"), env
 
 # `fail "message" as tag` (Phase 6, Rule 3). The tag is static (from the parser);
 # the message is evaluated and must be text (interp.py's fail-message-not-text),
@@ -1975,7 +2022,7 @@ to exec-fail of stmt, state, globals:
     give exec-fail-record of stmt, m
   if not (m.value.kind == "text"):
     give fail-of of (error-fix-of of "fail-message-not-text", ("fail's message must be text, found " + (detail-of-value of m.value)), "use text of it, or a record: fail { message: \"...\", fix: \"...\" } as tag"), m.env
-  give fail-of of (error-of of stmt.tag, m.value.value), m.env
+  give fail-of of (error-no-fix-of of stmt.tag, m.value.value, "the message is the program's own -- `fail` names it, and the language must not attach its advice to a sentence it did not write"), m.env
 
 # The record form. A missing `message` field reads as `nothing`, which is not
 # text, so it is refused by the same message the bare form is.
@@ -1987,7 +2034,7 @@ to exec-fail-record of stmt, m:
   if not (message-value.kind == "text"):
     give fail-of of (error-fix-of of "fail-message-not-text", ("fail's message must be text, found " + (detail-of-value of message-value)), "use text of it, or a record: fail { message: \"...\", fix: \"...\" } as tag"), m.env
   if fix-value.kind == "nothing":
-    give fail-of of (error-of of stmt.tag, message-value.value), m.env
+    give fail-of of (error-no-fix-of of stmt.tag, message-value.value, "the message is the program's own -- `fail` names it, and the language must not attach its advice to a sentence it did not write"), m.env
   if not (fix-value.kind == "text"):
     give fail-of of (error-fix-of of "fail-message-not-text", ("fail's fix must be text, found " + (detail-of-value of fix-value)), "use text for the fix, or leave the field out"), m.env
   give fail-of of (error-fix-of of stmt.tag, message-value.value, fix-value.value), m.env
