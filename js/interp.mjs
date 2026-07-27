@@ -64,22 +64,26 @@ export function fmt(v) {
 
 // A caught error, as an ordinary record — discriminated by shape, never by type.
 //
-// `fix` (§158) is always present and `nothing` when the error names none —
-// the opposite convention to `path`, and deliberately: a missing field is no
-// match under `when`, so `when e is { fix: f }:` would silently skip every
-// error without one if `fix` were absent. A field a program is expected to
-// read has to be there to be read.
+// One convention for an absent field (C5, Ruling 3): `fix` (§158) and `path`
+// (A.4) are both always present and both `nothing` when they do not apply. A
+// missing field is no match under `when`, so an absent `path` made
+// `when e is { path }:` fall to the else branch for every error without one —
+// and the author could not tell that from failing to match an error record at
+// all. Planes already says absent explicitly, with `nothing` and `is nothing`.
+//
+// An empty path stays an empty list: a top-level mismatch has a path, and it
+// has no steps.
 function errorRecord(e) {
   const rec = new Map();
   rec.set("tag", e.tag);
   rec.set("detail", e.detail);
   rec.set("fix", e.fix || null);
-  if (e.path !== null && e.path !== undefined) {
-    rec.set(
-      "path",
-      e.path.map((p) => (typeof p === "number" ? PlanesNumber.of(p) : p)),
-    );
-  }
+  rec.set(
+    "path",
+    e.path === null || e.path === undefined
+      ? null
+      : e.path.map((p) => (typeof p === "number" ? PlanesNumber.of(p) : p)),
+  );
   return rec;
 }
 

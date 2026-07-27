@@ -195,15 +195,19 @@ def section_b() -> None:
         check("B", label, agree,
               f"py={py['output']} js={js['output']} planes={pl['output']}")
 
-    # The convention the field does NOT follow, asserted so the divergence is a
-    # recorded fact rather than a surprise.
+    # C4 recorded a divergence here and C5's Ruling 3 closed it, so this row is
+    # INVERTED rather than removed: `path` now follows `fix`'s convention in all
+    # three implementations. Left in this script — a check that silently stopped
+    # being run because its answer changed is the failure C5 spent a phase on.
     src = ('to risky:\n  fail "plain" as inner\n'
            'x = risky() or fail as e:\n'
-           '  when e is { path }:\n    show "matched"\n'
+           '  when e is { path }:\n    show "bound: " + (text of path)\n'
            '  else:\n    show "no path field"\n')
-    py = run_py(src)
-    check("B", "path keeps the opposite convention (reported, not fixed)",
-          py["output"] == ["no path field"], f"{py['output']}")
+    py, js, pl = run_py(src), run_js(src), run_planes_file(src)
+    want = ["bound: nothing"]
+    check("B", "path follows fix's convention (C5 inverted C4's divergence)",
+          py["output"] == js["output"] == pl["output"] == want,
+          f"py={py['output']} js={js['output']} planes={pl['output']}")
 
 
 # ================================================================ C: the seam

@@ -134,12 +134,24 @@ def test_comparison_error_caught_by_handler_carries_path():
     assert run(src) == ["cannot-compare", "2"]
 
 
-def test_error_without_path_has_no_path_field():
+def test_error_without_a_path_carries_nothing_not_an_absent_field():
+    """C5, Ruling 3: `path` follows `fix`'s convention — always present,
+    `nothing` when it does not apply. The `is nothing` read is unchanged (dot
+    access on a missing key already gave nothing); the second assertion is the
+    one that tells present-and-nothing apart from absent, which `is nothing`
+    cannot."""
+    from interp import error_record
     src = ('use http\n'
            'x = ask "https://example.com/a.json"\n'
            '  or fail as err:\n'
            '    show (err.path is nothing)\n')
     assert run(src, http=lambda u: (_ for _ in ()).throw(RuntimeError("x"))) == ["true"]
+    try:
+        run('x = 1 / 0')
+        assert False, "should raise"
+    except PlanesError as e:
+        rec = error_record(e)
+        assert "path" in rec and rec["path"] is None, rec
 
 
 def test_error_record_is_traceable_by_why():

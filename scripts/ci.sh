@@ -82,6 +82,14 @@ else
   timed "test suite" python3 scripts/run_suites.py
 fi
 
+echo "== js test enumeration (what exists vs what the glob below runs) =="
+# C5 / Ruling 1, the JavaScript half. The glob on the `node --test` line covers
+# one directory, non-recursively, and until now nothing counted how many JS test
+# files EXIST against how many were run. This step does, and it fails the gate
+# — it is pure Python, so it runs whether or not node is on PATH, and it reads
+# the glob out of this file rather than restating it.
+timed check_js_tests python3 scripts/check_js_tests.py
+
 echo "== js/test (node --test) =="
 # C4: these 47 tests existed and NOTHING ran them — not this script, not any
 # test_js_*.py, not any other script. Found while removing a dead host method
