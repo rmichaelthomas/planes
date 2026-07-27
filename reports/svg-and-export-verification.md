@@ -1,6 +1,16 @@
 # SVG Renderer and Export Verification (§9.2)
 
-Run at commit `(uncommitted)`.
+Run at commit `c8eae2b`, on the branch, before merge.
+
+**RETIRED.** `scripts/verify-svg-and-export.mjs` was deleted in the same PR
+under `scripts/ci.sh`'s retirement rule — a build's verification script
+graduates into a suite or goes, and this one graduated. Its checks now live in
+suites `ci.sh` runs on every commit: coverage (A) and programs (C) in
+`js/test/paint_examples.test.mjs`, conformance (B) in
+`js/test/paint_conformance.test.mjs`, invariants (D) and the page's export
+copy (E) in `js/test/drawing_invariants.test.mjs`, and the export mechanics
+(E) in `js/test/paint_export.test.mjs`. This table is the record of the gate
+having run, not something to re-run.
 
 | Category | Check | Result | Detail |
 |---|---|---|---|

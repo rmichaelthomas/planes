@@ -412,6 +412,35 @@ for (const [name, keys] of [["bloom", []], ["snake", ["ArrowLeft"]]]) {
   });
 }
 
+test("the SVG each program produces is well-formed and fully escaped", async () => {
+  const restore = installFsFetch();
+  try {
+    const turtle = await runProgramGraph(readExample("turtle"), { base: baseFor("turtle") });
+    const streams = [["turtle", turtle.output]];
+    for (const name of ["bloom", "snake"]) {
+      const loader = new BrowserModuleLoader({ base: baseFor(name) });
+      const r = await stepGraph(
+        readExample(name),
+        { tick: 13, keys: ["ArrowLeft"], pointer: { x: 0, y: 0, down: false }, state: null },
+        { loader },
+      );
+      streams.push([name, r.lines]);
+    }
+    for (const [name, lines] of streams) {
+      const { svg } = toSvg(lines, DIMENSIONS);
+      assert.ok(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"'), `${name}: root is not <svg>`);
+      assert.ok(svg.trimEnd().endsWith("</svg>"), `${name}: document is not closed`);
+      // Nothing outside a tag carries a raw angle bracket or a bare ampersand
+      // — the two ways text content makes a document unparseable.
+      const textContent = svg.replace(/<[^>]*>/g, "");
+      assert.doesNotMatch(textContent, /[<>]/, `${name}: unescaped angle bracket in text`);
+      assert.doesNotMatch(textContent, /&(?!amp;|lt;|gt;|quot;|apos;|#)/, `${name}: bare ampersand`);
+    }
+  } finally {
+    restore();
+  }
+});
+
 test("every group the corpus opens is closed, in every frame of every program", async () => {
   const restore = installFsFetch();
   try {
