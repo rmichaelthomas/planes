@@ -41,6 +41,18 @@ def test_a_foreign_function_actually_runs():
     assert val(src, "r").value == [1, 2, 3]
 
 
+def test_json_loads_as_a_foreign_target_a_q9():
+    """The A-Q9 cold-start shape: a JSON-reading program declares
+    `foreign parse-json of source from "json.loads" doing nothing`. Works
+    under host.py's generic resolve() with no table entry needed there;
+    js/host.mjs needed json.loads added to sharedTargets (Gap 4,
+    test_json_loads_is_a_shared_target_resolving_identically in
+    test_js_host.py covers the JS side and cross-implementation agreement)."""
+    src = ('foreign parse-json of source from "json.loads" doing nothing\n'
+           'r = parse-json of "{\\"a\\": [1, 2], \\"b\\": null}"')
+    assert val(src, "r").value == {"a": [1, 2], "b": None}
+
+
 def test_foreign_with_no_arguments():
     src = ('foreign now from "time.time" doing clock\n'
            't = now')

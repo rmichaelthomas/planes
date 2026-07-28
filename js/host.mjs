@@ -116,9 +116,16 @@ function pyMin(arr) {
   return arr.reduce((m, x) => (pyCompare(x, m) < 0 ? x : m));
 }
 
-// The host-independent foreign targets the corpus resolves. The ambient
+// The host-independent foreign targets available to any program. The ambient
 // os.getcwd is env-specific (process.cwd under Node, a VFS root in a browser),
 // so each host supplies it; everything else is shared.
+//
+// json.loads: host.py's resolve() is a generic `importlib.import_module` +
+// `getattr`, so `json.loads` already worked there with no table entry. This
+// table is a fixed whitelist instead (no arbitrary dynamic import in a
+// browser), so it needed its own line -- without it, `foreign parse-json of s
+// from "json.loads" doing nothing` ran under Python and raised "cannot find
+// 'json.loads'" here (the A-Q9 cold-start finding).
 export function sharedTargets(getcwd) {
   return {
     "builtins.sorted": (arr) => pySorted(arr),
@@ -128,6 +135,7 @@ export function sharedTargets(getcwd) {
     "time.time": () => Date.now() / 1000,
     "random.random": () => Math.random(),
     "os.getcwd": getcwd,
+    "json.loads": (text) => JSON.parse(text),
   };
 }
 

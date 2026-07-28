@@ -138,6 +138,20 @@ def test_resolve_sorts_strings_by_code_point_like_python():
     assert got == py.resolve("builtins.sorted")(["b", "a", "c"]) == ["a", "b", "c"]
 
 
+def test_json_loads_is_a_shared_target_resolving_identically():
+    """Gap 4 / A-Q9: host.py's resolve() is a generic importlib import + getattr,
+    so `json.loads` already worked there. js/host.mjs's sharedTargets is a
+    fixed whitelist, and before this it had no entry -- a program declaring
+    `foreign parse-json of s from "json.loads" doing nothing` ran under Python
+    and raised `cannot find 'json.loads'` in the browser. Same parsed value on
+    both hosts closes that gap."""
+    py = PythonHost()
+    text = '{"a": [1, 2, {"b": true}], "c": null}'
+    got = json.loads(_node("resolve", "json.loads", json.dumps([text])))
+    want = py.resolve("json.loads")(text)
+    assert got == want == {"a": [1, 2, {"b": True}], "c": None}
+
+
 def test_the_ambient_targets_resolve():
     """clock / random / env are foreign-only, reached through the ambient
     targets time.time / random.random / os.getcwd. The JS host resolves each."""
