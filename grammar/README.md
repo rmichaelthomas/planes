@@ -25,6 +25,15 @@ effect log, and no test result — they are pure projections of the real
 source. Deleting `vocabulary.json` fails loudly (`grammar-data-missing`),
 never silently, from every entry point that loads it.
 
+## The drawing protocol is not here
+
+`protocol/` holds the same kind of thing (a verb table and an error
+catalogue, both generated) for the Planes drawing protocol — but as a
+sibling directory, not a subdirectory of this one. The drawing protocol is
+what one renderer family agreed to accept, not part of the language itself,
+so putting it here would conflate *what Planes is* with *what one renderer
+family agreed to*. See `protocol/README.md`.
+
 ## Regenerating
 
 ```bash

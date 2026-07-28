@@ -171,6 +171,13 @@ timed audit_locked_vs_built python3 audit_locked_vs_built.py
 echo "== grammar_gen.py --check =="
 timed grammar_gen python3 grammar_gen.py --check
 
+echo "== protocol_gen.mjs --check (protocol/*.json against js/paint/protocol.mjs and stream.mjs) =="
+if command -v node >/dev/null 2>&1; then
+  timed protocol_gen node scripts/protocol_gen.mjs --check
+else
+  echo "   (node not on PATH — skipped)"
+fi
+
 echo "== core_check.py (interp.planes stays inside the declared core) =="
 timed core_check python3 core_check.py
 # C1: interp.planes now `use`s grammar/json.planes, so that file is part of the
