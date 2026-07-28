@@ -18,6 +18,10 @@
 // template, and (for protocol.mjs) fix clause — not a general JS parser, and
 // it says so at every point it refuses rather than guesses.
 //
+// Verb groups are read directly out of planes-drawing-protocol-v1.md's own
+// §6.1-§6.5 section structure (extractSpecGroups, below) — the one field in
+// protocol.json with no source in protocol.mjs itself.
+//
 //   node scripts/protocol_gen.mjs            regenerate both files
 //   node scripts/protocol_gen.mjs --check    regenerate into memory, diff
 //                                             against the committed files,
@@ -35,6 +39,7 @@ const REPO = path.resolve(__dirname, "..");
 
 const PROTOCOL_SRC_PATH = path.join(REPO, "js", "paint", "protocol.mjs");
 const STREAM_SRC_PATH = path.join(REPO, "js", "paint", "stream.mjs");
+const SPEC_PATH = path.join(REPO, "planes-drawing-protocol-v1.md");
 const PROTOCOL_JSON_PATH = path.join(REPO, "protocol", "protocol.json");
 const ERRORS_JSON_PATH = path.join(REPO, "protocol", "errors.json");
 
@@ -233,29 +238,60 @@ const DECLARATION = Object.freeze({
   example: "draw protocol 1",
 });
 
-const GROUPS = ["colour-and-line", "shapes", "paths", "transforms", "text-and-canvas"];
+// Groups come from planes-drawing-protocol-v1.md's own section 6 structure
+// (§6.1 "Colour and line" through §6.5 "Text and canvas") — read here, not
+// restated: each `### 6.N Title` heading names a group (slugified: lower-
+// cased, spaces to hyphens) and its markdown table's rows name the verbs in
+// it. If the spec gains a verb, moves one to a new section, or renames a
+// section, this changes on the next run with no edit here.
+//
+// This document was not present anywhere in this repository when
+// protocol_gen.mjs was first written — verified by a repo-wide search and
+// `git log --all` at the time — so the first version of this generator
+// derived groups from ARITY's own declared key order in js/paint/protocol.mjs
+// instead. That derivation agreed with this file's real section order
+// exactly, verb for verb, once the document became available.
+function extractSpecGroups(specSrc) {
+  const headingRe = /^### 6\.\d+ (.+)$/gm;
+  const headings = [...specSrc.matchAll(headingRe)];
+  if (headings.length === 0) {
+    throw new Error(`protocol_gen.mjs: found no "### 6.N <title>" section headings in ${path.relative(REPO, SPEC_PATH)} — its shape changed; update the extractor`);
+  }
+  // The last §6.N section has no next §6.N heading to bound it, and the
+  // document continues past it (§7 onward, including §10's p5-comparison
+  // table, which also has single-word backtick-quoted cells) — without an
+  // explicit outer bound the last section's body ran to end of file and
+  // picked up stray matches from later sections that happened to start a
+  // table row the same way. Bounded at the next level-2 (`## N.`) heading.
+  const level2Re = /^## \d/gm;
+  level2Re.lastIndex = headings[headings.length - 1].index;
+  const nextLevel2 = level2Re.exec(specSrc);
+  const afterSection6 = nextLevel2 ? nextLevel2.index : specSrc.length;
 
-// planes-drawing-protocol-v1.md (this file's own header comment names it as
-// normative) is not present anywhere in this repository — verified by a
-// repo-wide search and by `git log --all` before writing this generator, so
-// groups cannot be read off the specification's section order as §3.2
-// originally asked. ARITY's own declared key order in js/paint/protocol.mjs
-// already clusters the 26 verbs into exactly these 5 groups with no leftover
-// (colour/line state, then the six shape primitives, then the path
-// lifecycle, then the transform stack, then text-and-canvas) — that
-// clustering is asserted, not merely assumed, by the coverage check below
-// and by js/test/protocol_gen.test.mjs.
-const VERB_GROUPS = Object.freeze({
-  stroke: "colour-and-line", fill: "colour-and-line", width: "colour-and-line",
-  cap: "colour-and-line", corner: "colour-and-line",
-  line: "shapes", rect: "shapes", circle: "shapes", ellipse: "shapes",
-  arc: "shapes", triangle: "shapes",
-  shape: "paths", vertex: "paths", curve: "paths", close: "paths", end: "paths",
-  push: "transforms", pop: "transforms", translate: "transforms",
-  rotate: "transforms", scale: "transforms",
-  label: "text-and-canvas", size: "text-and-canvas", align: "text-and-canvas",
-  background: "text-and-canvas", clear: "text-and-canvas",
-});
+  const groups = [];
+  const verbGroups = {};
+  for (let i = 0; i < headings.length; i++) {
+    const h = headings[i];
+    const sectionStart = h.index + h[0].length;
+    const sectionEnd = i + 1 < headings.length ? headings[i + 1].index : afterSection6;
+    const body = specSrc.slice(sectionStart, sectionEnd);
+    const group = h[1].trim().toLowerCase().replace(/\s+/g, "-");
+    groups.push(group);
+    const verbNames = [...body.matchAll(/^\|\s*`(\w+)`/gm)].map((vm) => vm[1]);
+    if (verbNames.length === 0) {
+      throw new Error(`protocol_gen.mjs: section "${h[1]}" in ${path.relative(REPO, SPEC_PATH)} names no verbs in backtick-quoted table cells — its shape changed; update the extractor`);
+    }
+    for (const v of verbNames) {
+      if (v in verbGroups) {
+        throw new Error(`protocol_gen.mjs: "${v}" appears in more than one §6 section (${verbGroups[v]} and ${group}) — its shape changed; update the extractor`);
+      }
+      verbGroups[v] = group;
+    }
+  }
+  return { groups, verbGroups };
+}
+
+const { groups: GROUPS, verbGroups: VERB_GROUPS } = extractSpecGroups(readFileSync(SPEC_PATH, "utf-8"));
 
 function extractNumberGrammar(src) {
   const m = src.match(/if \(!(\/(?:\\.|[^/])*\/)\.test\(stripped\)\) return null;/);
@@ -571,6 +607,7 @@ export {
   readStringExpr,
   extractProtocolErrors,
   extractStreamErrors,
+  extractSpecGroups,
   buildProtocolJson,
   protocolJsonFromModule,
   buildErrorsJson,
