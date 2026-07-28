@@ -8,7 +8,7 @@
 // agreement on the corpus (test_js_interp.py). interp.py is the specification.
 
 import { MemoryHost, TestHost, HostError, pyJsonDumps } from "./host.mjs";
-import { PlanesNumber, Inexact, sineDegrees } from "./planes_num.mjs";
+import { PlanesNumber, Inexact, NotANumber, numberFromText, sineDegrees } from "./planes_num.mjs";
 import {
   escapeStringLiteral,
   codePoints,
@@ -847,13 +847,47 @@ export class Interpreter {
         throw new PlanesError(
           "not-a-number",
           `cannot take the whole part of ${detailValue(arg.value)}`,
-          "whole of rounds a number toward zero; Planes has no text-to-number builtin, so a " +
-            "number has to arrive as one — from a literal, from arithmetic, or from a field of " +
-            "something read as JSON",
+          "whole of rounds a number toward zero; if this is text, convert it first with " +
+            "number of — a boolean, a list, a record, or nothing has no path to becoming a number",
         );
       }
       const n = PlanesNumber.of(arg.value).roundTo(0);
       return new Traced(n, new Deriv("op", "whole of", n, [arg.node]));
+    }
+    if (name === "number") {
+      // The twelfth builtin (A-Q19): text to an exact number, closing the
+      // round trip `write` opened and nothing closed — `write` emits a
+      // number as JSON text so an exact value survives a tool that isn't
+      // Planes, and `read` and `ask` hand text back, but nothing turned
+      // that text back into a number until now.
+      if (typeof arg.value !== "string") {
+        throw new PlanesError(
+          "not-text",
+          `cannot make a number from ${detailValue(arg.value)}`,
+          "number of takes text; a number does not need converting, and nothing else has a path to one",
+        );
+      }
+      let n;
+      try {
+        n = numberFromText(arg.value);
+      } catch (e) {
+        if (!(e instanceof NotANumber)) throw e;
+        if (e.approximation) {
+          throw new PlanesError(
+            "not-a-number",
+            `${detailValue(arg.value)} is an approximation of a number, not a number`,
+            "the ~ marks text that was rounded for display, so the original value cannot be " +
+              "recovered from it — carry the number itself instead of its text",
+          );
+        }
+        throw new PlanesError(
+          "not-a-number",
+          `cannot make a number from ${detailValue(arg.value)}`,
+          "number of takes an optional leading -, digits, and at most one . — no exponent " +
+            'notation, e.g. number of "12.5"',
+        );
+      }
+      return new Traced(n, new Deriv("op", "number of", n, [arg.node]));
     }
     if (name === "sine") {
       // The eleventh builtin, and the only operation in the language that
@@ -908,7 +942,7 @@ export class Interpreter {
     throw new PlanesError(
       "unknown-builtin",
       `no builtin is named '${name}'`,
-      "the eleven builtins are fixed and the lexer recognises only those, so reaching this is a " +
+      "the twelve builtins are fixed and the lexer recognises only those, so reaching this is a " +
         "defect in the interpreter rather than in the program — worth reporting with the source",
     );
   }
@@ -1084,7 +1118,11 @@ function applyOp(op, a, b) {
     if (typeof a === "string" && typeof b === "string") return a + b;
     if (Array.isArray(a) && Array.isArray(b)) return [...a, ...b];
     if (isNum(a) && isNum(b)) return arith("+", a, b);
-    throw new PlanesError("cannot-combine", `cannot combine ${detailValue(a)} with ${detailValue(b)} using +`, 'convert first — e.g. "total: " + text of n');
+    throw new PlanesError(
+      "cannot-combine",
+      `cannot combine ${detailValue(a)} with ${detailValue(b)} using +`,
+      "convert first — text of n to build text, or number of t to do arithmetic",
+    );
   }
   if (op === "-") return arith("-", a, b);
   if (op === "*") return arith("*", a, b);
