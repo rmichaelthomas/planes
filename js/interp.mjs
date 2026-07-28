@@ -14,7 +14,7 @@ import {
   codePoints,
   codePointLength,
 } from "./planes_text.mjs";
-import { parse } from "./parser.mjs";
+import { parse, findDiscardedWrites } from "./parser.mjs";
 import { builtinNames, effectKinds } from "./lexer.mjs";
 
 // ================================================================ values
@@ -339,12 +339,38 @@ export class Interpreter {
   // ---- driving
   run(src) {
     const prog = parse(src);
+    this.checkDiscardedWrites(prog);
     this.hoist(prog, this.env);
     for (const stmt of prog) {
       if (stmt.__node === "Note") continue;
       this.exec_stmt(stmt, this.env);
     }
     return this.output;
+  }
+
+  // A parse-time-computed, pre-execution refusal: findDiscardedWrites
+  // (parser.mjs) is pure and has no way to throw PlanesError itself without
+  // interp.mjs importing back into parser.mjs's own dependency, so the one
+  // call site that turns its answer into a program error lives here, on the
+  // class that already owns PlanesError. Public (not just called from
+  // run() above) so modules.mjs's hoistAndRun — which parses each file in a
+  // module graph itself, outside this class — can call it once per file
+  // through the Interpreter instance it already threads through, the same
+  // way it already calls this.hoist / this.exec_stmt rather than importing
+  // interp.mjs's exports directly.
+  checkDiscardedWrites(prog) {
+    const violations = findDiscardedWrites(prog);
+    if (violations.length > 0) {
+      const name = violations[0];
+      throw new PlanesError(
+        "discarded-write",
+        `'${name}' is bound with \`let\` inside a loop and reads the ` +
+          `outer '${name}', so every iteration's value is discarded ` +
+          `when that iteration ends`,
+        "drop `let` — a bare assignment rebinds the outer name, " +
+          "which is what accumulating across a loop needs",
+      );
+    }
   }
 
   hoist(stmts, env, renames = null) {

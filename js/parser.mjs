@@ -50,6 +50,8 @@ import {
   Because,
   Note,
   tup,
+  isNode,
+  isTup,
 } from "./nodes.mjs";
 
 // Two or more readings of the same source, and nothing says which. A program
@@ -1371,4 +1373,146 @@ export function parse(src, known = null) {
 
 export function scan_names(src) {
   return prescan_funcs(tokenize(src));
+}
+
+// ================================================================ discarded-write
+
+// Every `Var` name referenced anywhere inside `expr`, however deeply nested
+// — a plain recursive walk over a plain-object AST (nodes.mjs's __node
+// tagging), the JS counterpart of parser.py's `_names_read`.
+function namesRead(expr) {
+  const found = new Set();
+  function walk(n) {
+    if (isNode(n)) {
+      if (n.__node === "Var") {
+        found.add(n.name);
+        return;
+      }
+      for (const k of Object.keys(n)) {
+        if (k !== "__node") walk(n[k]);
+      }
+      return;
+    }
+    if (isTup(n)) {
+      for (const x of n.items) walk(x);
+      return;
+    }
+    if (Array.isArray(n)) {
+      for (const x of n) walk(x);
+    }
+  }
+  walk(expr);
+  return found;
+}
+
+// A chain of bound-name sets, opened only where interp.mjs's runtime scoping
+// actually opens one — at a `for each` (matching evalForeach's fresh env
+// per iteration) and at a function body (matching invoke's fresh env). `if`,
+// `when`, and an `or fail ... as tag:` handler run in the SAME env their
+// surroundings do, so this walk does not open a frame for them either —
+// doing so would be unsound, drawing a line interp.mjs itself does not draw.
+class WriteScope {
+  constructor(parent = null) {
+    this.names = new Set();
+    this.parent = parent;
+  }
+  bound(name) {
+    let scope = this;
+    while (scope !== null) {
+      if (scope.names.has(name)) return true;
+      scope = scope.parent;
+    }
+    return false;
+  }
+  boundInAnAncestor(name) {
+    return this.parent !== null && this.parent.bound(name);
+  }
+  bind(name) {
+    this.names.add(name);
+  }
+  child() {
+    return new WriteScope(this);
+  }
+}
+
+// The A-Q9 shape, found statically: `let NAME = expr` inside a loop body,
+// where `expr` reads `NAME` and `NAME` is already bound in an enclosing
+// scope — so the loop's own per-iteration binding shadows the outer one and
+// every iteration's write is discarded when it ends.
+//
+// Pure: returns the list of violating names, in the order found, and never
+// throws. `PlanesError` lives in interp.mjs; findDiscardedWrites stays a
+// plain function of parser.mjs so modules.mjs's hoistAndRun can reach it
+// through the Interpreter instance it already has (Interpreter.
+// checkDiscardedWrites), the same way it already calls interp.hoist /
+// interp.exec_stmt rather than importing interp.mjs's exports directly.
+export function findDiscardedWrites(prog) {
+  const violations = [];
+
+  function walkStmts(stmts, scope, inLoop) {
+    for (const s of stmts) walkStmt(s, scope, inLoop);
+  }
+
+  function walkStmt(s, scope, inLoop) {
+    const k = s.__node;
+    if (k === "Assign") {
+      if (
+        s.is_let &&
+        inLoop &&
+        namesRead(s.expr).has(s.name) &&
+        scope.boundInAnAncestor(s.name)
+      ) {
+        violations.push(s.name);
+      }
+      scope.bind(s.name);
+      return;
+    }
+    if (k === "ForEach") {
+      const inner = scope.child();
+      inner.bind(s.var);
+      walkStmts(s.body, inner, true);
+      return;
+    }
+    if (k === "If") {
+      // A child scope per branch, discarded after: `then` and `els` are
+      // mutually exclusive at runtime, so a name one branch binds must not
+      // read as bound to the other, or to whatever follows — which branch
+      // ran is a runtime fact (the same reasoning shapes.py's own
+      // `consts.child()` per branch already states).
+      walkStmts(s.then, scope.child(), inLoop);
+      walkStmts(s.els, scope.child(), inLoop);
+      return;
+    }
+    if (k === "When") {
+      // Each pattern entry is Tup(field, Tup(matcherKind, matcherValue)) —
+      // parser.mjs's own construction (parse_when_pattern_entry).
+      const bodyScope = scope.child();
+      for (const entry of s.pattern) {
+        const matcher = entry.items[1];
+        if (matcher.items[0] === "bind") bodyScope.bind(matcher.items[1]);
+      }
+      walkStmts(s.body, bodyScope, inLoop);
+      walkStmts(s.els, scope.child(), inLoop);
+      return;
+    }
+    if (k === "OrFail") {
+      // Same reasoning as If: the handler runs only on failure, so its
+      // bindings must not leak to the success path or to what follows.
+      if (s.handler !== null) {
+        const handlerScope = scope.child();
+        handlerScope.bind(s.tag);
+        walkStmts(s.handler, handlerScope, inLoop);
+      }
+      return;
+    }
+    if (k === "FuncDef") {
+      const fnScope = new WriteScope();
+      for (const p of s.params) fnScope.bind(p);
+      walkStmts(s.body, fnScope, false);
+      return;
+    }
+  }
+
+  walkStmts(prog, new WriteScope(), false);
+  return violations;
 }

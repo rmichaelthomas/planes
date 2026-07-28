@@ -2288,6 +2288,207 @@ to origins-walk of d, acc:
     out = origins-walk of i, out
   give out
 
+# ================================================================ discarded-write (A-Q9), checked before a program runs
+#
+# The A-Q9 shape, found statically before a single statement of the parsed
+# program executes: `let NAME = expr` inside a loop body, where `expr` reads
+# NAME and NAME is already bound in an enclosing scope. Mirrors this file's
+# own run-foreach exactly -- a fresh per-iteration scope, discarded at the
+# end of every iteration -- not an approximation of it: `if`/`when`/an
+# `or fail ... as tag:` handler run in the same environment their
+# surroundings do at runtime (no separate frame -- run-stmt's own If/OrFail
+# cases below, matching interp.py's stated reasoning), so a real Env never
+# opens one for them either. This walk still opens a CHILD frame per branch
+# for its own bookkeeping, discarded once that branch is walked and never
+# merged back, because the branches are mutually exclusive: a name only one
+# branch binds must not read as bound to its sibling or to what follows --
+# which branch ran is a runtime fact, the same reasoning this repo's own
+# static analyser (shapes.py) states for its `consts.child()` per branch.
+#
+# A scope chain here is a plain list of frames, innermost first; a frame is
+# a plain list of names. Ported functionally -- Planes has no mutable
+# closure -- threading the chain by returning a new one rather than
+# mutating, the same style run-top-level already threads `state` in.
+
+to dw-bound-in-frames of frames, name:
+  for each frame in frames:
+    if name in frame:
+      give true
+  give false
+
+to dw-bind of chain, name:
+  head = (first-item of chain) plus name
+  give [head] + (rest of chain)
+
+to dw-child of chain:
+  give [[]] + chain
+
+to dw-bound-in-an-ancestor of chain, name:
+  if (count of chain) < 2:
+    give false
+  give dw-bound-in-frames of (rest of chain), name
+
+# Every Var name referenced anywhere inside an expression node, however
+# deeply nested. Explicit per-kind dispatch -- Planes has no reflection --
+# covering the expression node kinds parser.planes actually produces; a kind
+# with no expression-bearing field (Num, Str, Bool, Nothing) or one this
+# build's scope does not extend into (a comprehension body, a When used as
+# an expression) simply falls through and contributes nothing, the
+# conservative direction to be wrong in -- a missed read costs a false
+# negative, never a false positive.
+
+to dw-names-read of expr:
+  give dw-names-into of expr, []
+
+to dw-names-into of node, acc:
+  if node.kind == "Var":
+    give acc plus node.name
+  if node.kind == "ListLit":
+    give dw-names-list of node.items, acc
+  if node.kind == "RecordLit":
+    give dw-names-fields of node.fields, acc
+  if node.kind == "RecordUpdate":
+    give dw-names-fields of node.fields, (dw-names-into of node.base, acc)
+  if node.kind == "ListPlus":
+    give dw-names-into of node.item, (dw-names-into of node.base, acc)
+  if node.kind == "BinOp":
+    give dw-names-into of node.right, (dw-names-into of node.left, acc)
+  if node.kind == "Not":
+    give dw-names-into of node.expr, acc
+  if node.kind == "IsNothing":
+    give dw-names-into of node.expr, acc
+  if node.kind == "Field":
+    give dw-names-into of node.obj, acc
+  if node.kind == "Call":
+    give dw-names-list of node.args, acc
+  if node.kind == "Builtin":
+    give dw-names-into of node.arg, acc
+  if node.kind == "Round":
+    give dw-names-into of node.places-value, (dw-names-into of node.value, acc)
+  if node.kind == "OrFail":
+    give dw-names-into of node.expr, acc
+  give acc
+
+to dw-names-list of items, acc:
+  result = acc
+  for each item in items:
+    result = dw-names-into of item, result
+  give result
+
+to dw-names-fields of fields, acc:
+  result = acc
+  for each entry in fields:
+    result = dw-names-into of entry.value, result
+  give result
+
+# The walk over statements. `state` is { violations:, chain: }; `in-loop` is
+# a plain downward parameter, true only inside a `for each` body, and reset
+# to false inside a function body -- a nested `to ...:` closes over the
+# environment hoist-time built, before any loop iterated, so it can never
+# see a loop's own per-iteration names; walking it with a fresh chain is not
+# an approximation of that, it is the fact.
+
+to dw-walk-stmts of stmts, state, in-loop:
+  result = state
+  for each s in stmts:
+    result = dw-walk-stmt of s, result, in-loop
+  give result
+
+to dw-walk-stmt of s, state, in-loop:
+  if s.kind == "Assign":
+    give dw-walk-assign of s, state, in-loop
+  if s.kind == "ForEach":
+    give dw-walk-foreach of s, state, in-loop
+  if s.kind == "If":
+    give dw-walk-if of s, state, in-loop
+  if s.kind == "When":
+    give dw-walk-when of s, state, in-loop
+  if s.kind == "OrFail":
+    give dw-walk-orfail of s, state, in-loop
+  if s.kind == "FuncDef":
+    give dw-walk-funcdef of s, state
+  give state
+
+to dw-walk-assign of s, state, in-loop:
+  new-chain = dw-bind of state.chain, s.name
+  unchanged = { violations: state.violations, chain: new-chain }
+  if not s.is-let:
+    give unchanged
+  if not in-loop:
+    give unchanged
+  if not (s.name in (dw-names-read of s.expr)):
+    give unchanged
+  if not (dw-bound-in-an-ancestor of state.chain, s.name):
+    give unchanged
+  give { violations: (state.violations plus s.name), chain: new-chain }
+
+to dw-walk-foreach of s, state, in-loop:
+  inner-chain = dw-bind of (dw-child of state.chain), s.var
+  inner-state = { violations: state.violations, chain: inner-chain }
+  body-result = dw-walk-stmts of s.body, inner-state, true
+  give { violations: body-result.violations, chain: state.chain }
+
+to dw-walk-if of s, state, in-loop:
+  then-state = { violations: state.violations, chain: (dw-child of state.chain) }
+  then-result = dw-walk-stmts of s.then, then-state, in-loop
+  els-state = { violations: then-result.violations, chain: (dw-child of state.chain) }
+  els-result = dw-walk-stmts of s.els, els-state, in-loop
+  give { violations: els-result.violations, chain: state.chain }
+
+to dw-when-bind-pattern of pattern, chain:
+  result = chain
+  for each entry in pattern:
+    if entry.matcher-tag == "bind":
+      result = dw-bind of result, entry.value
+  give result
+
+to dw-walk-when of s, state, in-loop:
+  body-chain = dw-when-bind-pattern of s.pattern, (dw-child of state.chain)
+  body-state = { violations: state.violations, chain: body-chain }
+  body-result = dw-walk-stmts of s.body, body-state, in-loop
+  els-state = { violations: body-result.violations, chain: (dw-child of state.chain) }
+  els-result = dw-walk-stmts of s.els, els-state, in-loop
+  give { violations: els-result.violations, chain: state.chain }
+
+to dw-walk-orfail of s, state, in-loop:
+  if s.handler is nothing:
+    give state
+  else:
+    handler-chain = dw-bind of (dw-child of state.chain), s.tag
+    handler-state = { violations: state.violations, chain: handler-chain }
+    handler-result = dw-walk-stmts of s.handler, handler-state, in-loop
+    give { violations: handler-result.violations, chain: state.chain }
+
+to dw-bind-params of params, chain:
+  result = chain
+  for each p in params:
+    result = dw-bind of result, p
+  give result
+
+to dw-walk-funcdef of s, state:
+  fn-chain = dw-bind-params of s.params, [[]]
+  fn-state = { violations: state.violations, chain: fn-chain }
+  fn-result = dw-walk-stmts of s.body, fn-state, false
+  give { violations: fn-result.violations, chain: state.chain }
+
+# The list of violating names, in the order found -- pure, never fails.
+# execute-program / execute-program-with decide what to do with a
+# non-empty result: the one call site on this side of the port that already
+# owns `fail ... as <tag>`, the same reason parser.py's find_discarded_writes
+# stays pure too and interp.py's Interpreter.run does the raising.
+
+to find-discarded-writes of nodes:
+  start = { violations: [], chain: [[]] }
+  result = dw-walk-stmts of nodes, start, false
+  give result.violations
+
+to check-discarded-writes of nodes:
+  violations = find-discarded-writes of nodes
+  if (count of violations) > 0:
+    name = first-item of violations
+    fail { message: "'" + name + "' is bound with `let` inside a loop and reads the outer '" + name + "', so every iteration's value is discarded when that iteration ends", fix: "drop `let` — a bare assignment rebinds the outer name, which is what accumulating across a loop needs" } as discarded-write
+  give nothing
+
 # ================================================================ whole-program execution (Phase 2 driver; Phase 8 finishes)
 #
 # Parse a program, hoist its function values into the globals, and run the
@@ -2298,6 +2499,7 @@ to origins-walk of d, acc:
 
 to execute-program of src:
   nodes = program-nodes-of of src
+  check-discarded-writes of nodes
   base = functions-env-of of src
   start-env = [{ name: "__io__", value: (real-io) }] + base
   start = { status: "normal", value: nothing, env: start-env, error: nothing }
@@ -2309,6 +2511,7 @@ to execute-program of src:
 # against interp.py's self.effects, and neither side performs an effect.
 to execute-program-with of src, io-config:
   nodes = program-nodes-of of src
+  check-discarded-writes of nodes
   base = functions-env-of of src
   start-env = [{ name: "__io__", value: io-config }] + base
   start = { status: "normal", value: nothing, env: start-env, error: nothing }
