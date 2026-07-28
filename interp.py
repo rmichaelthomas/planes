@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from host import HostError, PythonHost, TestHost
 from lexer import *
-from parser import BUILTIN_NAMES, parse
+from parser import BUILTIN_NAMES, find_discarded_writes, parse
 from planes_num import Inexact, Number, sine_degrees
 from planes_text import escape_string_literal
 
@@ -481,12 +481,31 @@ class Interpreter:
 
     def run(self, src, path=None):
         prog = parse(src)
+        self.check_discarded_writes(prog)
         self.hoist(prog, self.env)
         for stmt in prog:
             if isinstance(stmt, Note):
                 continue     # never dispatched -- see exec_stmt's Note case
             self.exec_stmt(stmt, self.env)
         return self.output
+
+    def check_discarded_writes(self, prog):
+        """A parse-time-computed, pre-execution refusal: `find_discarded_writes`
+        (parser.py) is pure and cannot raise `PlanesError` itself without an
+        import cycle, so the one call site that turns its answer into a
+        program error lives here, on the class that already owns
+        `PlanesError` — called before any statement runs, so the A-Q9 shape
+        is refused before it can write its wrong answer, not caught after."""
+        violations = find_discarded_writes(prog)
+        if violations:
+            name = violations[0]
+            raise PlanesError(
+                "discarded-write",
+                f"'{name}' is bound with `let` inside a loop and reads the "
+                f"outer '{name}', so every iteration's value is discarded "
+                f"when that iteration ends",
+                "drop `let` — a bare assignment rebinds the outer name, "
+                "which is what accumulating across a loop needs")
 
     def run_file(self, path):
         """Run a file plus everything it uses.
@@ -503,6 +522,7 @@ class Interpreter:
         entry = []
         for p, src in graph:
             prog = parse(src, known)
+            self.check_discarded_writes(prog)
             self.hoist(prog, self.env, renames.get(p, {}))
             if os.path.abspath(p) == os.path.abspath(path):
                 entry = prog

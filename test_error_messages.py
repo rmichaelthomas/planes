@@ -541,7 +541,7 @@ def test_the_self_hosted_work_list_is_empty():
     total = sum(len(v) for v in sites.values())
     assert len(sites[ec.SHORTFALL]) == 0, [
         (s[0], s[1], s[2]) for s in sites[ec.SHORTFALL]]
-    assert total == 112, total
+    assert total == 113, total
     assert len(sites[ec.NAMES_FIX]) + len(sites[ec.DELIBERATE]) == total
 
 
@@ -551,7 +551,7 @@ def test_the_reference_work_list_is_still_empty_too():
     ec = _coverage()
     cov = ec.coverage()
     assert cov["counts"][ec.SHORTFALL] == 0
-    assert cov["errors"] == 110, cov["errors"]
+    assert cov["errors"] == 111, cov["errors"]
 
 
 def test_every_deliberate_self_hosted_silence_states_a_reason():

@@ -1,6 +1,8 @@
 """Planes parser — turns tokens into AST."""
 import json
 import os
+from dataclasses import fields as dc_fields
+from dataclasses import is_dataclass
 
 from lexer import *
 from lexer import _VOCAB, GrammarDataError
@@ -1427,3 +1429,125 @@ def parse(src, known=None):
 def scan_names(src):
     """Function names defined in a source file, without a full parse."""
     return prescan_funcs(tokenize(src))
+
+
+# ================================================================ discarded-write
+
+def _names_read(expr):
+    """Every `Var` name referenced anywhere inside `expr`, however deeply
+    nested — a plain recursive walk over whatever AST node shape is there,
+    the same technique shapes.py's own tree walks use."""
+    found = set()
+
+    def walk(n):
+        if isinstance(n, Var):
+            found.add(n.name)
+        elif is_dataclass(n):
+            for f in dc_fields(n):
+                walk(getattr(n, f.name))
+        elif isinstance(n, (list, tuple)):
+            for x in n:
+                walk(x)
+
+    walk(expr)
+    return found
+
+
+class _WriteScope:
+    """A chain of bound-name sets, opened only where interp.py's runtime
+    scoping actually opens one — at a `for each` (matching eval_foreach's
+    fresh `Env(env)` per iteration) and at a function body (matching
+    invoke's fresh Env). `if`, `when`, and an `or fail ... as tag:` handler
+    run in the SAME env their surroundings do (interp.py's own comment on
+    the `If` case: "the no-child-scope choice if/else already makes"), so
+    this walk does not open a frame for them either — doing so would be
+    unsound, drawing a line interp.py itself does not draw.
+    """
+
+    def __init__(self, parent=None):
+        self.names = set()
+        self.parent = parent
+
+    def bound(self, name):
+        scope = self
+        while scope is not None:
+            if name in scope.names:
+                return True
+            scope = scope.parent
+        return False
+
+    def bound_in_an_ancestor(self, name):
+        return self.parent is not None and self.parent.bound(name)
+
+    def bind(self, name):
+        self.names.add(name)
+
+    def child(self):
+        return _WriteScope(self)
+
+
+def find_discarded_writes(prog):
+    """The A-Q9 shape, found statically: `let NAME = expr` inside a loop
+    body, where `expr` reads `NAME` and `NAME` is already bound in an
+    enclosing scope — so the loop's own per-iteration binding shadows the
+    outer one and every iteration's write is discarded when it ends.
+
+    Pure: returns the list of violating names, in the order found, and
+    never raises. `PlanesError` lives in interp.py, which imports this
+    module — the reverse import would cycle (the same reason
+    GrammarDataError exists in lexer.py rather than reusing PlanesError,
+    lexer.py's own docstring on that class) — so interp.py decides what to
+    do with a non-empty result.
+    """
+    violations = []
+
+    def walk_stmts(stmts, scope, in_loop):
+        for s in stmts:
+            walk_stmt(s, scope, in_loop)
+
+    def walk_stmt(s, scope, in_loop):
+        if isinstance(s, Assign):
+            if (s.is_let and in_loop and s.name in _names_read(s.expr)
+                    and scope.bound_in_an_ancestor(s.name)):
+                violations.append(s.name)
+            scope.bind(s.name)
+            return
+        if isinstance(s, ForEach):
+            inner = scope.child()
+            inner.bind(s.var)
+            walk_stmts(s.body, inner, True)
+            return
+        if isinstance(s, If):
+            # A child scope per branch, discarded after: `then` and `els`
+            # are mutually exclusive at runtime, so a name one branch binds
+            # must not read as bound to the other, or to whatever follows —
+            # which branch ran is a runtime fact (the same reasoning
+            # shapes.py's own `consts.child()` per branch already states).
+            walk_stmts(s.then, scope.child(), in_loop)
+            walk_stmts(s.els, scope.child(), in_loop)
+            return
+        if isinstance(s, When):
+            body_scope = scope.child()
+            for _field, matcher in s.pattern:
+                if matcher[0] == "bind":
+                    body_scope.bind(matcher[1])
+            walk_stmts(s.body, body_scope, in_loop)
+            walk_stmts(s.els, scope.child(), in_loop)
+            return
+        if isinstance(s, OrFail):
+            # Same reasoning as If: the handler runs only on failure, so its
+            # bindings must not leak to the success path or to what follows.
+            if s.handler is not None:
+                handler_scope = scope.child()
+                handler_scope.bind(s.tag)
+                walk_stmts(s.handler, handler_scope, in_loop)
+            return
+        if isinstance(s, FuncDef):
+            fn_scope = _WriteScope()
+            for p in s.params:
+                fn_scope.bind(p)
+            walk_stmts(s.body, fn_scope, False)
+            return
+
+    walk_stmts(prog, _WriteScope(), False)
+    return violations

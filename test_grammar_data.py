@@ -123,6 +123,11 @@ def test_binding_semantics_section_matches_the_language():
     assert let_entry["binds"] == "local"
     assert "hazard" in let_entry
     assert "discards it at the end of the iteration" in let_entry["hazard"]
+    # The discarded-write build: this exact shape is no longer silent, and
+    # the JSON must say so -- test_values.py's
+    # test_let_accumulator_hazard_is_now_refused_a_q9 is the behaviour.
+    assert "discarded-write" in let_entry["hazard"]
+    assert "refused" in let_entry["hazard"]
 
 
 def test_no_loader_reads_binding_semantics():
