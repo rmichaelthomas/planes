@@ -44,7 +44,10 @@ export function setVocabulary(doc) {
     throw new GrammarDataError(
       "grammar-data-missing",
       `vocabulary format ${JSON.stringify(doc.format)} is not ${GRAMMAR_FORMAT_VERSION}`,
-      "regenerate with a matching version of planes",
+      "regenerate the grammar data with a version of planes matching " +
+        "this interpreter — if the data is newer than what this " +
+        "interpreter reads, upgrade planes instead of regenerating the " +
+        "data",
     );
   }
   const missing = REQUIRED_VOCAB_KEYS.filter((k) => !(k in doc));

@@ -96,7 +96,10 @@ def _load_vocabulary():
         raise GrammarDataError(
             "grammar-data-missing",
             f"{path} format {version!r} is not {GRAMMAR_FORMAT_VERSION}",
-            "regenerate with a matching version of planes")
+            "regenerate the grammar data with a version of planes matching "
+            "this interpreter — if the data is newer than what this "
+            "interpreter reads, upgrade planes instead of regenerating "
+            "the data")
     missing = [k for k in _REQUIRED_VOCAB_KEYS if k not in doc]
     if missing:
         raise GrammarDataError(

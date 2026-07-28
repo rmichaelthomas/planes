@@ -141,12 +141,40 @@ ASSESSED_THIS_BUILD = frozenset({
     # build added, and the same question applies. Left unchanged because
     # it names no specific conversion to get wrong.
     "interp.not-a-number.arith",
+
+    # host-error-reachability-and-fix-clauses: reports/REPORT_ERROR_MESSAGES.md
+    # read the first 60 catalogued sites against this exact question and
+    # found nine whose fix misdirected for at least one situation the site
+    # can fire from. Each was corrected; `interp.cannot-combine.apply_op` and
+    # `interp.not-text.membership` above already carry this build's fix
+    # (independently found by both audits) and are not repeated here.
+    "interp.cannot-compare.equal-1",      # nothing: the nested-path case
+    "interp.cannot-compare.equal-3",      # equal(): list/record, not just num/text
+    "interp.not-a-yes-no.condition",      # and/or/not/where, not just `if`
+    "interp.unrecognized-record-format.records_from_json",  # which side is stale
+    "interp.write-failed.eval",           # OSError has more causes than ENOENT/EACCES
+    "interp.recursion-too-deep.call",     # plain numeric recursion has no collection
+    "interp.not-a-number.builtin-4",      # sine: not itself wrong, made complete
+    "lexer.grammar-data-missing._load_vocabulary-3",  # same stale-side question as above
+    # Read alongside them and confirmed correct as written, not changed:
+    # compare()'s guard (`<` `>` `<=` `>=`) shares equal-3's old text, but
+    # only numbers and text are ever orderable, same-typed or not — so the
+    # audit's fix belongs to equal() only, and this site is assessed and
+    # left alone, same as C2's own precedent above.
+    "interp.cannot-compare.compare",
 })
 
 SELF_HOSTED_ASSESSED_THIS_BUILD = frozenset({
     ("interp.planes", "apply-plus"),
     ("interp.planes", "builtin-whole"),
     ("interp.planes", "builtin-number-of"),
+
+    # host-error-reachability-and-fix-clauses (see the reference set above).
+    ("interp.planes", "values-equal"),
+    ("interp.planes", "as-condition"),
+    ("interp.planes", "member-of"),
+    ("interp.planes", "builtin-sine"),
+    ("interp.planes", "compare-values"),
 })
 
 
