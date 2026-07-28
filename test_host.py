@@ -11,7 +11,9 @@ These tests hold that line. If a host assumption leaks back into the
 language, something here fails.
 """
 import json
+import os
 import sys
+import tempfile
 
 from host import Host, PythonHost, TestHost
 from interp import Interpreter, PlanesError
@@ -183,6 +185,33 @@ def test_missing_file_on_a_host_is_a_program_error():
         assert False, "should raise"
     except PlanesError as e:
         assert e.tag == "no-such-file"
+
+
+def test_missing_file_on_the_real_host_is_a_program_error():
+    """`TestHost` raises HostError itself; PythonHost does not — it calls
+    `open()` directly and a real missing file used to raise a bare
+    FileNotFoundError here, uncaught, instead of this PlanesError."""
+    d = tempfile.mkdtemp()
+    path = os.path.join(d, "definitely-gone.json")
+    try:
+        Interpreter(host=PythonHost()).run(f'use file\nr = read "{path}"')
+        assert False, "should raise"
+    except PlanesError as e:
+        assert e.tag == "no-such-file"
+
+
+def test_an_unreachable_url_on_the_real_host_is_a_program_error():
+    """Same shape as the read case above: PythonHost.ask calls urlopen
+    directly, and urllib.error.URLError (an OSError subclass) used to
+    escape here uncaught instead of becoming ask-failed. Port 1 on
+    localhost refuses the connection immediately — no real network
+    needed, and no dependency on it being reachable or not."""
+    try:
+        Interpreter(host=PythonHost()).run(
+            'use http\nr = ask "http://127.0.0.1:1/"')
+        assert False, "should raise"
+    except PlanesError as e:
+        assert e.tag == "ask-failed"
 
 
 # ================================================================ foreign

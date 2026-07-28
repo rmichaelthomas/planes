@@ -96,7 +96,10 @@ function equal(a, b, path = null) {
     throw new PlanesError(
       "cannot-compare",
       "nothing cannot be compared with ==",
-      "test for absence with `is nothing`",
+      "test for absence with `is nothing` — if the nothing is inside a " +
+        "compared list or record rather than the whole value (the path " +
+        "names which), test that inner value with `is nothing` directly " +
+        "rather than rewriting the whole comparison",
       path,
     );
   }
@@ -120,7 +123,9 @@ function equal(a, b, path = null) {
     throw new PlanesError(
       "cannot-compare",
       `cannot compare ${detailValue(a)} with ${detailValue(b)}`,
-      "compare numbers with numbers, or text with text",
+      "compare same-kind values — numbers with numbers, text with text, " +
+        "lists with lists (compared element by element), or records with " +
+        "records (compared field by field)",
       path,
     );
   }
@@ -159,7 +164,10 @@ function condition(v) {
   throw new PlanesError(
     "not-a-yes-no",
     `a condition needs a yes/no value, found ${detailValue(v)}`,
-    "compare it: `if count of items > 0:`",
+    "compare it against something explicit rather than a bare value — " +
+      "e.g. `if count of items > 0:` for an if, `x > 0 and y` for an " +
+      "and/or operand, or `for each x in xs where x > 0:` for a where " +
+      "clause",
   );
 }
 
@@ -661,7 +669,10 @@ export class Interpreter {
         throw new PlanesError(
           "write-failed",
           `writing '${dest.value}' failed: ${e.message ?? e}`,
-          "check the directory exists and is writable",
+          "check the directory exists and is writable — the message " +
+            "above names the actual OS error when it's something else, " +
+            "such as no space left on the device or the destination " +
+            "already existing as a directory",
         );
       }
       this.effects.push(["write", dest.value, payload.length]);
@@ -899,7 +910,8 @@ export class Interpreter {
         throw new PlanesError(
           "not-a-number",
           `cannot take the sine of ${detailValue(arg.value)}`,
-          "sine takes an angle in degrees as a number — e.g. sine of 30",
+          "sine takes an angle in degrees as a number — e.g. sine of 30; " +
+            "if this is text, convert it first with number of",
         );
       }
       const n = sineDegrees(arg.value);
@@ -1047,9 +1059,12 @@ export class Interpreter {
         throw new PlanesError(
           "recursion-too-deep",
           `'${iname}' recursed past the depth this interpreter can follow`,
-          "replace per-item recursion with one `for each` pass over the whole " +
-            "collection, threading a state record forward; for nested structure, " +
-            "track depth with a cons-list stack sized to nesting depth, not item count",
+          "if recursing over a collection, replace it with one `for each` " +
+            "pass threading a state record forward — or a cons-list stack " +
+            "for nested structure; if recursing on a plain number with no " +
+            "collection involved, `for each` has nothing to iterate over, " +
+            "so restructure the computation to avoid unbounded recursion " +
+            "depth instead",
         );
       }
       throw e;
@@ -1121,7 +1136,11 @@ function applyOp(op, a, b) {
     throw new PlanesError(
       "cannot-combine",
       `cannot combine ${detailValue(a)} with ${detailValue(b)} using +`,
-      "convert first — text of n to build text, or number of t to do arithmetic",
+      "convert first — `text of n` to build text, or `number of t` to do " +
+        "arithmetic — but only for a text/number pairing; if either side " +
+        "is a list or record, neither conversion is meaningful: use " +
+        "`plus` to append to a list, `with` to update a record, or " +
+        "rewrite the expression",
     );
   }
   if (op === "-") return arith("-", a, b);
@@ -1217,7 +1236,11 @@ function inOp(a, b) {
       throw new PlanesError(
         "not-text",
         `cannot look for ${detailValue(a)} in text ${detailValue(b)}`,
-        "`in` over text looks for text — wrap the left side with text of",
+        "`in` over text looks for text — wrap the left side with " +
+          "`text of`, but only when it is a number, yes/no value, or " +
+          "nothing; if it is a list or record, `text of` gives an opaque " +
+          "placeholder, not its contents, so the search will not find " +
+          "what was probably intended",
       );
     }
     return b.includes(a);

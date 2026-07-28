@@ -81,7 +81,10 @@ def equal(a, b, path=None):
         raise PlanesError(
             "cannot-compare",
             "nothing cannot be compared with ==",
-            "test for absence with `is nothing`",
+            "test for absence with `is nothing` — if the nothing is inside "
+            "a compared list or record rather than the whole value (the "
+            "path names which), test that inner value with `is nothing` "
+            "directly rather than rewriting the whole comparison",
             path=path)
 
     if is_num(a) and is_num(b):
@@ -100,7 +103,9 @@ def equal(a, b, path=None):
         raise PlanesError(
             "cannot-compare",
             f"cannot compare {detail_value(a)} with {detail_value(b)}",
-            "compare numbers with numbers, or text with text",
+            "compare same-kind values — numbers with numbers, text with "
+            "text, lists with lists (compared element by element), or "
+            "records with records (compared field by field)",
             path=path)
 
     if isinstance(a, str):
@@ -134,7 +139,10 @@ def condition(v):
     raise PlanesError(
         "not-a-yes-no",
         f"a condition needs a yes/no value, found {detail_value(v)}",
-        "compare it: `if count of items > 0:`")
+        "compare it against something explicit rather than a bare value — "
+        "e.g. `if count of items > 0:` for an if, `x > 0 and y` for an "
+        "and/or operand, or `for each x in xs where x > 0:` for a where "
+        "clause")
 
 
 def require_text(name, verb, v):
@@ -322,7 +330,10 @@ def records_from_json(doc):
         raise PlanesError(
             "unrecognized-record-format",
             f"record format {version!r} is not {RECORD_FORMAT_VERSION}",
-            "regenerate the record with a matching version of planes")
+            "regenerate the record with a version of planes matching this "
+            "interpreter's record format — if the record is newer than "
+            "what this interpreter reads, upgrade planes instead of "
+            "regenerating the record")
     return doc["records"]
 
 
@@ -841,7 +852,10 @@ class Interpreter:
                 # is the third boundary, converted in the same voice.
                 raise PlanesError(
                     "write-failed", f"writing '{dest.value}' failed: {e}",
-                    "check the directory exists and is writable")
+                    "check the directory exists and is writable — the "
+                    "message above names the actual OS error when it's "
+                    "something else, such as no space left on the device "
+                    "or the destination already existing as a directory")
             self.effects.append(("write", dest.value, len(payload)))
             self.maybe_record("write", dest.value, self.host_anchor(),
                               derivation=dest.node)
@@ -977,11 +991,17 @@ class Interpreter:
             require_target("a url to ask", "ask (text of u)", url)
             try:
                 body = self.host.ask(url)
-            except HostError as e:
+            except (HostError, OSError) as e:
                 # C2 (A.1): the message is a literal here, so the catalogue can
                 # read it. The host's own words ride along as the cause — they
                 # say which url and why — but the sentence and the fix are the
                 # language's.
+                #
+                # OSError, not just HostError: PythonHost.ask calls urlopen
+                # directly and wraps nothing, and urllib.error.URLError (and
+                # HTTPError) are OSError subclasses — the same widening
+                # WriteTo's except already needed for a real filesystem.
+                # TestHost is the only host that raises HostError itself.
                 raise PlanesError(
                     "ask-failed", f"asking '{url}' failed: {e}",
                     "check the url is reachable and spelled right; a run "
@@ -1004,7 +1024,12 @@ class Interpreter:
             require_target("a path to read", "read (text of p)", path)
             try:
                 body = self.host.read(path)
-            except HostError:
+            except (HostError, OSError):
+                # OSError, not just HostError: PythonHost.read calls open()
+                # directly and wraps nothing, so a real missing file raised
+                # FileNotFoundError here, uncaught — the same widening
+                # WriteTo's except already needed for a real filesystem.
+                # TestHost is the only host that raises HostError itself.
                 raise PlanesError("no-such-file", path,
                                   "check the path, or write it first")
             self.effects.append(("read", path, len(body)))
@@ -1085,7 +1110,9 @@ class Interpreter:
                 raise PlanesError(
                     "not-a-number",
                     f"cannot take the sine of {detail_value(arg.value)}",
-                    "sine takes an angle in degrees as a number — e.g. sine of 30")
+                    "sine takes an angle in degrees as a number — e.g. "
+                    "sine of 30; if this is text, convert it first with "
+                    "number of")
             n = sine_degrees(arg.value)
             return Traced(n, Deriv("op", "sine of", n, [arg.node]))
 
@@ -1250,10 +1277,12 @@ class Interpreter:
             raise PlanesError(
                 "recursion-too-deep",
                 f"'{iname}' recursed past the depth this interpreter can follow",
-                "replace per-item recursion with one `for each` pass over "
-                "the whole collection, threading a state record forward; "
-                "for nested structure, track depth with a cons-list stack "
-                "sized to nesting depth, not item count")
+                "if recursing over a collection, replace it with one "
+                "`for each` pass threading a state record forward — or a "
+                "cons-list stack for nested structure; if recursing on a "
+                "plain number with no collection involved, `for each` has "
+                "nothing to iterate over, so restructure the computation "
+                "to avoid unbounded recursion depth instead")
 
     def call_foreign(self, decl, args, env):
         """Call a host function.
@@ -1339,8 +1368,11 @@ def apply_op(op, a, b):
         raise PlanesError(
             "cannot-combine",
             f"cannot combine {detail_value(a)} with {detail_value(b)} using +",
-            "convert first — text of n to build text, or number of t to "
-            "do arithmetic")
+            "convert first — `text of n` to build text, or `number of t` "
+            "to do arithmetic — but only for a text/number pairing; if "
+            "either side is a list or record, neither conversion is "
+            "meaningful: use `plus` to append to a list, `with` to update "
+            "a record, or rewrite the expression")
     if op == "-": return arith("-", a, b)
     if op == "*": return arith("*", a, b)
     if op == "/":
@@ -1410,7 +1442,10 @@ def membership(a, b):
             raise PlanesError(
                 "not-text", f"cannot look for {detail_value(a)} in text {detail_value(b)}",
                 "`in` over text looks for text — wrap the left side with "
-                "text of")
+                "`text of`, but only when it is a number, yes/no value, "
+                "or nothing; if it is a list or record, `text of` gives "
+                "an opaque placeholder, not its contents, so the search "
+                "will not find what was probably intended")
         return a in b
     if isinstance(b, dict):
         # A record's field names are text, so a candidate that is not text is

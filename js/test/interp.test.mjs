@@ -8,9 +8,12 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import os from "node:os";
+import path from "node:path";
 import { loadGrammar } from "../loader_node.mjs";
 import { Interpreter, fmt } from "../interp.mjs";
 import { TestHost } from "../host.mjs";
+import { NodeHost } from "../host_node.mjs";
 
 loadGrammar();
 
@@ -65,4 +68,30 @@ test("fmt renders each type distinctly", () => {
   assert.equal(fmt(null), "nothing");
   assert.equal(fmt("s"), "s");
   assert.equal(fmt([1, 2]), "[2 items]");
+});
+
+// Python's equivalent gap (interp.py's read/ask used to catch HostError
+// only, and PythonHost doesn't wrap its own OSError into one) has no JS
+// counterpart: host_node.mjs's ask/read already wrap the real failure into
+// HostError before interp.mjs ever sees it. These pin that down through the
+// real NodeHost rather than TestHost, so a regression at either layer fails
+// here instead of only surfacing as an uncaught exception in the field.
+
+test("a missing file on the real (Node) host is a program error, not a crash", () => {
+  const p = path.join(os.tmpdir(), `definitely-gone-${process.pid}.json`);
+  const itp = new Interpreter({ host: new NodeHost() });
+  assert.throws(
+    () => itp.run(`use file\nr = read "${p}"`),
+    (e) => e.tag === "no-such-file",
+  );
+});
+
+test("an unreachable URL on the real (Node) host is a program error, not a crash", () => {
+  // Port 1 on localhost refuses the connection immediately — no real
+  // network needed, and no dependency on it being reachable or not.
+  const itp = new Interpreter({ host: new NodeHost() });
+  assert.throws(
+    () => itp.run('use http\nr = ask "http://127.0.0.1:1/"'),
+    (e) => e.tag === "ask-failed",
+  );
 });
