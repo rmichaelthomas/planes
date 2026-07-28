@@ -75,6 +75,36 @@ def test_positional_words_are_not_in_keywords():
         assert entry["reserved"] is False
 
 
+def test_value_properties_section_records_exactness_descriptively():
+    """value_properties follows positional_words's precedent exactly:
+    hand-edited, descriptive-only, no loader consults it -- it exists
+    because no other table in the repository records that every value
+    carries an exact/approximate property (test_exactness.py exercises
+    the property itself; this only holds the data-file record of its
+    rules legible)."""
+    doc = load_vocab_doc()
+    assert "value_properties_note" in doc
+    assert len(doc["value_properties"]) == 1
+    exactness = doc["value_properties"][0]
+    assert exactness["property"] == "exactness"
+    assert exactness["values"] == ["exact", "approximate"]
+    assert exactness["default"] == "exact"
+    assert "sine" in exactness["introduced_by"]
+    rule_names = {r["rule"] for r in exactness["rules"]}
+    assert rule_names == {
+        "entry", "named-precision-reduction-stays-exact", "propagation",
+        "comparison", "static-derivability",
+    }
+
+
+def test_no_loader_reads_value_properties():
+    """Descriptive only, like positional_words -- lexer.py and parser.py
+    load grammar/vocabulary.json but must never branch on this section."""
+    for module_path in ("lexer.py", "parser.py"):
+        with open(module_path, encoding="utf-8") as f:
+            assert "value_properties" not in f.read()
+
+
 # ================================================================ refuse, don't guess
 
 def _run_with_vocab_missing(code):

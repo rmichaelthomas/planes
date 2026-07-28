@@ -143,5 +143,37 @@
       "reserved": false,
       "note": "matched via `self.at(\"NAME\", \"derives-from\")`; positional like the others."
     }
+  ],
+
+  "value_properties_note": "Descriptive only -- no loader consults this section; it exists because no other table in the repository records these rules as data at all. Every value carries whether it is exact or approximate. The rules below are enforced in all three implementations and agreed by the three-way suite.",
+  "value_properties": [
+    {
+      "property": "exactness",
+      "values": ["exact", "approximate"],
+      "default": "exact",
+      "introduced_by": ["sine"],
+      "rules": [
+        {
+          "rule": "entry",
+          "statement": "A value is approximate when the true result of the operation that produced it cannot be represented as a rational. It is exact otherwise."
+        },
+        {
+          "rule": "named-precision-reduction-stays-exact",
+          "statement": "An operation that deliberately reduces precision does not make a value approximate. `round ... to N places` returns an exact value: not the original quantity, but the exact result of the operation asked for."
+        },
+        {
+          "rule": "propagation",
+          "statement": "exact combined with exact is exact. Any operation touching an approximate value yields approximate."
+        },
+        {
+          "rule": "comparison",
+          "statement": "Equality between two approximate values compares the underlying rationals and returns a plain answer. No epsilon and no tolerance: a tolerance nobody chose is the silent behaviour exact rationals exist to prevent."
+        },
+        {
+          "rule": "static-derivability",
+          "statement": "Whether a program produces approximate values is derivable without running it, by the same call-graph walk that computes the effect surface."
+        }
+      ]
+    }
   ]
 }
