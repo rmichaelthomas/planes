@@ -75,6 +75,32 @@ def test_let_inside_a_loop_shadows_and_does_not_escape():
     assert run(src) == ["0"]
 
 
+def test_let_accumulator_hazard_writes_zero_a_q9():
+    """The exact A-Q9 cold-start failure (grammar/vocabulary.json's
+    binding_semantics hazard text): an agent given only the grammar files
+    wrote `let total = total + order.amount` inside a `for each` and it ran
+    clean, writing 0 -- eval_foreach builds a fresh Env per iteration, `let`
+    binds locally into that Env, and the write is discarded when the
+    iteration ends."""
+    i = interp('use file\n'
+               'let total = 0\n'
+               'for each order in [{ amount: 3 }, { amount: 4 }]:\n'
+               '  let total = total + order.amount\n'
+               'write total to "total.json"', fs={})
+    assert json.loads(i.fs["total.json"]) == 0
+
+
+def test_bare_assignment_accumulator_writes_the_sum():
+    """The A-Q9 fix: dropping `let` from the accumulating line lets `=`
+    walk the enclosing scopes and rebind the outer total instead."""
+    i = interp('use file\n'
+               'total = 0\n'
+               'for each order in [{ amount: 3 }, { amount: 4 }]:\n'
+               '  total = total + order.amount\n'
+               'write total to "total.json"', fs={})
+    assert json.loads(i.fs["total.json"]) == 7
+
+
 def test_assignment_inside_if_still_escapes():
     src = ('x = 1\n'
            'if true:\n'

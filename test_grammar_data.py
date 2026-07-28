@@ -105,6 +105,34 @@ def test_no_loader_reads_value_properties():
             assert "value_properties" not in f.read()
 
 
+def test_binding_semantics_section_matches_the_language():
+    """binding_semantics follows value_properties's and positional_words's
+    precedent exactly: hand-edited, descriptive-only, no loader consults it --
+    it exists because nothing else in the repository records, as data, what
+    `let` does differently from bare assignment (V-Q5, reports/REPORT_VALUES.md).
+    test_values.py's test_summing_a_list_in_a_loop_produces_the_sum and
+    test_let_inside_a_loop_shadows_and_does_not_escape are the behaviour this
+    section describes; this only holds the data-file record legible."""
+    doc = load_vocab_doc()
+    assert "binding_semantics_note" in doc
+    assert len(doc["binding_semantics"]) == 2
+    forms = {e["form"]: e for e in doc["binding_semantics"]}
+    assert set(forms) == {"NAME = expression", "let NAME = expression"}
+    assert forms["NAME = expression"]["binds"] == "rebinding"
+    let_entry = forms["let NAME = expression"]
+    assert let_entry["binds"] == "local"
+    assert "hazard" in let_entry
+    assert "discards it at the end of the iteration" in let_entry["hazard"]
+
+
+def test_no_loader_reads_binding_semantics():
+    """Descriptive only -- lexer.py and parser.py load
+    grammar/vocabulary.json but must never branch on this section."""
+    for module_path in ("lexer.py", "parser.py"):
+        with open(module_path, encoding="utf-8") as f:
+            assert "binding_semantics" not in f.read()
+
+
 # ================================================================ refuse, don't guess
 
 def _run_with_vocab_missing(code):

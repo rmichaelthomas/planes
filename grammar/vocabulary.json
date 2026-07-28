@@ -175,5 +175,22 @@
         }
       ]
     }
+  ],
+
+  "binding_semantics_note": "Descriptive only -- no loader consults this section. The parser needs `let` to read a statement's shape and nothing more, so the difference between `let` and bare assignment is recorded nowhere else in loadable form. It is the difference between accumulating across a loop and silently discarding every write (reports/REPORT_VALUES.md, V-Q5; test_values.py's test_summing_a_list_in_a_loop_produces_the_sum and test_let_inside_a_loop_shadows_and_does_not_escape run both sides of it).",
+  "binding_semantics": [
+    {
+      "form": "NAME = expression",
+      "binds": "rebinding",
+      "statement": "Walks the enclosing scopes and rebinds wherever the name is already bound. Binds locally only when the name is genuinely new.",
+      "use_for": "Accumulating a total across the iterations of a loop, and any assignment meant to outlive the block it is written in."
+    },
+    {
+      "form": "let NAME = expression",
+      "binds": "local",
+      "statement": "Always binds in the current scope, shadowing any outer binding of the same name. A loop body is a fresh scope per iteration, so a `let` inside one is discarded when that iteration ends.",
+      "use_for": "A value scoped to the block it is written in. Function parameters and loop variables always bind this way, so a parameter sharing a name with something in the closure shadows it instead of overwriting it.",
+      "hazard": "`let total = total + x` inside a loop reads the outer total, binds a new local, and discards it at the end of the iteration. The outer value never moves. Write `total = total + x` instead."
+    }
   ]
 }

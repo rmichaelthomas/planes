@@ -58,6 +58,17 @@ test("TestHost provides resolve and the JSON boundary (from MemoryHost)", () => 
   assert.deepEqual(h.parseJson('{"n": 1}'), { n: 1 });
 });
 
+test("json.loads resolves as a shared foreign target (Gap 4 / A-Q9)", () => {
+  // host.py's resolve() is generic (importlib import + getattr), so
+  // json.loads already worked there with no table entry. sharedTargets is a
+  // fixed whitelist instead, and before this it had none for json.loads --
+  // a program using it as a foreign target ran under Python and raised
+  // "cannot find 'json.loads'" here.
+  const h = new TestHost();
+  assert.deepEqual(h.resolve("json.loads")('{"a": [1, 2], "b": null}'),
+    { a: [1, 2], b: null });
+});
+
 // A.4: both backends satisfy the same seven-method interface and the same
 // tests. The interface assertions run against each; the filesystem is a temp
 // dir for Node and the in-memory VFS for the browser, but both round-trip.
