@@ -9,6 +9,7 @@ The language's grammar, as loadable data (addendum v4.2 sections 69.1 and
 | `rules.json` | A **form inventory**, not a formal grammar — one entry per `parse_*` method: what token it opens with, what AST node it produces, what sub-forms it calls, and the surface form from that method's own docstring. Deriving a true BNF from recursive-descent code is not mechanical; this is what can honestly be generated instead. | **Generated** by `grammar_gen.py`. Never hand-edit. |
 | `errors.json` | Every `PlanesError` / `PlanesSyntaxError` / `PlanesAmbiguity` / `RuleConflict` / `RuleNotSupported` construction in the repo, found by walking the AST of every `.py` file — not by regex. Includes a `tags` index: every distinct error tag and every site that raises it. | **Generated** by `grammar_gen.py`. Never hand-edit. |
 | `messages/amber.json` | The message templates amber's four refusal sites render from (addendum v4.2 section 69.5, ruling D5). Authored as data from the start — no amber message text lives inline in `parser.py`. | **Hand-edited.** |
+| `core.json` | The subset a self-hosting implementation may use (root `README.md`) — the port surface a second host must implement to run `grammar/interp.planes`. Declared here as a single source of truth, the same role `vocabulary.json` plays for the full surface, and enforced by `core_check.py`, which fails when `interp.planes` uses any keyword or builtin outside it. | **Hand-edited.** `grammar_gen.py` never reads or writes it; `core_check.py` reads it directly. |
 
 ## Why the split (ruling D2)
 
