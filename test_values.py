@@ -75,19 +75,32 @@ def test_let_inside_a_loop_shadows_and_does_not_escape():
     assert run(src) == ["0"]
 
 
-def test_let_accumulator_hazard_writes_zero_a_q9():
+def test_let_accumulator_hazard_is_now_refused_a_q9():
     """The exact A-Q9 cold-start failure (grammar/vocabulary.json's
     binding_semantics hazard text): an agent given only the grammar files
-    wrote `let total = total + order.amount` inside a `for each` and it ran
-    clean, writing 0 -- eval_foreach builds a fresh Env per iteration, `let`
-    binds locally into that Env, and the write is discarded when the
-    iteration ends."""
-    i = interp('use file\n'
-               'let total = 0\n'
-               'for each order in [{ amount: 3 }, { amount: 4 }]:\n'
-               '  let total = total + order.amount\n'
-               'write total to "total.json"', fs={})
-    assert json.loads(i.fs["total.json"]) == 0
+    wrote `let total = total + order.amount` inside a `for each`.
+    eval_foreach still builds a fresh Env per iteration and `let` still
+    binds locally into it, exactly as before (V-Q5, untouched by this
+    build) -- the write would still be discarded when the iteration ends.
+    What changed is that the program no longer reaches that write at all:
+    `Interpreter.run` now calls `find_discarded_writes` (parser.py) on the
+    freshly parsed AST before executing a single statement, and this exact
+    shape is refused with the `discarded-write` tag instead of silently
+    writing 0 (the discarded-write build, reports/REPORT_VALUES.md's V-Q1
+    reasoning extended: a `0` here is true about the computation and
+    useless about the mistake)."""
+    src = ('use file\n'
+           'let total = 0\n'
+           'for each order in [{ amount: 3 }, { amount: 4 }]:\n'
+           '  let total = total + order.amount\n'
+           'write total to "total.json"')
+    try:
+        interp(src, fs={})
+        assert False, "should have raised discarded-write"
+    except PlanesError as e:
+        assert e.tag == "discarded-write"
+        assert "'total'" in e.detail
+        assert "let" in e.fix
 
 
 def test_bare_assignment_accumulator_writes_the_sum():

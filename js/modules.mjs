@@ -284,6 +284,7 @@ export function hoistAndRun(interp, graph, targetKey, loader) {
   let entry = [];
   for (const [location, src] of graph) {
     const prog = parseCached(src, known, loader);
+    interp.checkDiscardedWrites(prog);
     interp.hoist(prog, interp.env, renames.get(location) ?? {});
     if (loader.key(location) === targetKey) {
       entry = prog;
