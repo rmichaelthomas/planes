@@ -977,11 +977,17 @@ class Interpreter:
             require_target("a url to ask", "ask (text of u)", url)
             try:
                 body = self.host.ask(url)
-            except HostError as e:
+            except (HostError, OSError) as e:
                 # C2 (A.1): the message is a literal here, so the catalogue can
                 # read it. The host's own words ride along as the cause — they
                 # say which url and why — but the sentence and the fix are the
                 # language's.
+                #
+                # OSError, not just HostError: PythonHost.ask calls urlopen
+                # directly and wraps nothing, and urllib.error.URLError (and
+                # HTTPError) are OSError subclasses — the same widening
+                # WriteTo's except already needed for a real filesystem.
+                # TestHost is the only host that raises HostError itself.
                 raise PlanesError(
                     "ask-failed", f"asking '{url}' failed: {e}",
                     "check the url is reachable and spelled right; a run "
@@ -1004,7 +1010,12 @@ class Interpreter:
             require_target("a path to read", "read (text of p)", path)
             try:
                 body = self.host.read(path)
-            except HostError:
+            except (HostError, OSError):
+                # OSError, not just HostError: PythonHost.read calls open()
+                # directly and wraps nothing, so a real missing file raised
+                # FileNotFoundError here, uncaught — the same widening
+                # WriteTo's except already needed for a real filesystem.
+                # TestHost is the only host that raises HostError itself.
                 raise PlanesError("no-such-file", path,
                                   "check the path, or write it first")
             self.effects.append(("read", path, len(body)))

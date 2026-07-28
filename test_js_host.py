@@ -195,8 +195,13 @@ def test_reading_a_missing_file_is_a_host_error_on_both():
         got = _node("read", p)
         assert got.startswith("HOSTERROR:"), got
         assert "no such file" in got
-        # PythonHost's read raises too (its HostError surfaces as no-such-file
-        # at the interp layer — Phase 5).
+        # PythonHost's read raises too — but as a bare OSError, not a
+        # HostError like NodeHost's. interp.py used to catch only HostError
+        # here, so a real missing file escaped as an uncaught
+        # FileNotFoundError instead of becoming no-such-file at the interp
+        # layer; it now catches (HostError, OSError), matching WriteTo's
+        # existing except and js/interp.mjs's host_node.mjs-level wrapping
+        # (see test_host.py's real-host tests for the interp-layer check).
         try:
             PythonHost().read(p)
             assert False, "python read should raise"
