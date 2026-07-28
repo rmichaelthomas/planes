@@ -648,7 +648,7 @@ def test_every_corpus_program_runs_self_hosted_and_agrees_with_the_reference():
     print(f"    [self-hosted corpus: {len(files) - len(bad)}/{len(files)} "
           f"runnable, inert, agreeing with interp.py under a TestHost]")
     assert not bad, "not runnable self-hosted:\n" + "\n".join(bad)
-    assert len(files) == 50, len(files)
+    assert len(files) == 51, len(files)
 
 
 def test_foreign_unloadable_target_refused_like_interp_py():

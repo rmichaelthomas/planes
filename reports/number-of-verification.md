@@ -2,6 +2,16 @@
 
 Automated verification for A-Q19 — `number of` and the corrected `cannot-combine` fix clause.
 
+The table below is a one-time snapshot from `scripts/verify-number-of.py`,
+run during this build (§8.2). The script itself is not committed: the
+retirement rule (`test_gate.py::test_no_verification_script_exists_for_the_gate_not_to_run`)
+requires a verification script to graduate its durable assertions into a
+suite the gate runs, or be deleted, before the build merges. Sections A, B,
+and C live on in `test_numbers.py`; the three-way agreement sweep (D) lives
+on as `test_number_of_agrees_across_three_implementations_on_every_case` in
+`test_builtin_guards.py`; the invariants (E) and corpus check (G) were
+already covered by existing suites this build's changes also satisfy.
+
 | section | check | result | detail |
 |---|---|---|---|
 | A | write 145 -> read -> number of -> +1 == 146 | PASS |  |

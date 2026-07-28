@@ -726,6 +726,33 @@ def test_three_implementations_agree_this_is_the_350th_shape():
     assert py[1] == "not-a-number", py
 
 
+# Every acceptance and refusal case `number of`'s own build prompt asked to be
+# verified (§8.2, sections B and C), swept across all three implementations
+# in one place. This graduated out of the build's own throwaway
+# scripts/verify-number-of.py per the retirement rule (test_gate.py) — a
+# verification script is not product code, and its durable assertions belong
+# in a suite the gate runs, not in a script the gate does not.
+_NUMBER_OF_CASES = (
+    '"5"', '"145.48"', '"-3"', '"-0.5"', '"0"', '"  5  "', '"\\t12.5\\n"',
+    '""', '"abc"', '"1e5"', '"1/3"', '"~0.333333333333"',
+    "5", "true", "nothing", "[1, 2]", "{ a: 1 }",
+)
+
+
+def test_number_of_agrees_across_three_implementations_on_every_case():
+    if NODE is None:
+        return
+    bad = []
+    for lit in _NUMBER_OF_CASES:
+        expr = f"number of {lit}"
+        py = _outcome_py(expr, {})
+        js = _outcome_js(expr, {})
+        pl = _outcome_planes(expr, {})
+        if not (py == js == pl):
+            bad.append(f"  {expr}\n    py={py}\n    js={js}\n    pl={pl}")
+    assert not bad, f"{len(bad)} divergence(s):\n" + "\n".join(bad)
+
+
 def test_ordering_works_on_numbers_and_text_and_nothing_else():
     """What `compare`'s docstring said before it was true. A same-kind pair used
     to reach the host's own `<`, so `[1] < [2]` answered `true` out of Python's
