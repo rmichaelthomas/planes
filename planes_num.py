@@ -58,6 +58,7 @@ Two rules that look like exceptions and are not:
     exactly the silent behaviour this design refuses; `why` shows both sides'
     entry points instead, which is what makes the plain answer defensible.
 """
+import re
 from fractions import Fraction
 
 # Roughly 4,000 bits. Chosen empirically: summing 1/1 .. 1/2000 stays under
@@ -265,6 +266,51 @@ class Number:
 
     def __repr__(self):
         return self.text()
+
+
+# ---- number of (A-Q19) -------------------------------------------------------
+#
+# `write` emits a number as JSON text so an exact value survives a round trip
+# through a tool that isn't Planes; `read` and `ask` hand text back. Nothing
+# turned that text back into a number until this builtin, so a program could
+# write its own output and never read it back as a value it could compute
+# with. This is deliberately narrower than Number.parse / Fraction(text):
+# no exponent notation and no `a/b` form -- a source NUMBER token is only
+# ever `\d+(\.\d+)?`, and accepting on input what the language cannot itself
+# write would be an asymmetry nobody asked for. Whitespace is trimmed first,
+# the same convention Fraction(text) already uses.
+
+_NUMBER_TEXT_RE = re.compile(r"-?\d+(\.\d+)?")
+
+
+class NotANumber(ValueError):
+    """Text `number of` refuses. `approximation` distinguishes the `~`-prefixed
+    case (its own reason: the text names an approximation, not a value) from
+    plain non-numeric text, so the caller can raise the right message."""
+
+    __slots__ = ("text", "approximation")
+
+    def __init__(self, text, approximation=False):
+        self.text = text
+        self.approximation = approximation
+        super().__init__(f"not a number: {text!r}")
+
+
+def number_from_text(text):
+    """`number of text` -- text to an exact Number, or a refusal.
+
+    A `~`-prefixed text is refused before the general check, with its own
+    reason: it is the language's own marker for a rounded display, not a
+    value, so parsing it would silently manufacture a different, terminating
+    rational than the one that was printed -- exactly the silent rounding
+    exact rationals exist to prevent.
+    """
+    s = text.strip()
+    if s.startswith("~"):
+        raise NotANumber(text, approximation=True)
+    if not _NUMBER_TEXT_RE.fullmatch(s):
+        raise NotANumber(text)
+    return Number.parse(s)
 
 
 # ---- sine (planes_checkpoint_v21_0 §§251-253) --------------------------------
