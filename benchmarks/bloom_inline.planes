@@ -1,0 +1,175 @@
+# benchmarks/bloom_inline.planes — a twin of paint/bloom.planes (derived from
+# blob a541fdc1b80706ce54249ad75368ab5f17f864b8, the SHA on `main` at the base
+# of feat/call-cost-measurement) with every `draw.planes` helper call replaced
+# by the inline `show` string it expands to, and `use draw` removed. Nothing
+# else changes: same structure, same arithmetic, same `use math`, same
+# `because` clauses. This file exists to be diffed against, not read for its
+# own sake — scripts/measure_library_differential.mjs asserts its stream is
+# byte-identical to paint/bloom.planes's before either is timed, so a stale
+# twin fails loudly instead of drifting.
+#
+# A generative bloom of pulsating rings, driven by the tick counter alone —
+# no input, no state threaded across ticks (A.6). Motion needs no event: the
+# whole picture is a pure function of `tick`, recomputed fresh on every call.
+#
+# `mod` and `cosine` come from math.planes. The wave that drives everything is
+# a real one now: `wave` below is built on `cosine`, which is `sine of (d+90)`,
+# which is the eleventh builtin (checkpoint v21.0 §§251-253). The hand-rolled
+# triangle it replaces is kept in the file, unused, immediately below it —
+# what the builtin bought is easier to see with both in front of you than in
+# any sentence about it.
+#
+# Colour is OKLCH throughout (planes-drawing-protocol-v1.md §4): the whole
+# palette's hue rotates with `tick`, and each ring is offset from the last by
+# a fixed 18 degrees — an analogous harmony spreading outward through the
+# rings, computed by addition on hue rather than hand-mixed per-channel
+# arithmetic, and wrapped with the same floored `mod` hue arithmetic needs.
+#
+# What alpha changes here is what the program *is*. Opaque strokes occlude:
+# ten of them is ten outlines stacked front-to-back, and the eye reads the
+# stacking order. A low-alpha fill under a higher-alpha edge mixes instead,
+# and ten of those read as one glazed thing made of light. Independent fill
+# and stroke, and any alpha between 0 and 1, are what make that expressible;
+# neither existed in this corpus before.
+#
+# The petal is the only path in the corpus. Everything else the protocol can
+# draw is a shape it already names — a circle, a rectangle, an ellipse. A
+# petal is not, and never will be: `shape`/`vertex`/`curve`/`close`/`end` is
+# how the vocabulary stops being a fixed menu. It is drawn once at a fixed
+# size, in its own frame with its base at the origin, and `push`/`rotate`/
+# `scale`/`pop` puts it where it belongs — so `petal` takes no arguments at
+# all and the transform stack carries every difference between one petal and
+# the next.
+
+use math
+
+let ring-count = 10
+let ring-period = 48 because "the pulse's half-period in ticks: at sixty frames a second a ring swells and falls back roughly every 1.6 seconds, slow enough to read as breathing rather than flicker"
+let ring-stagger = 12 because "each ring's pulse is offset twelve ticks from the last, so the swell travels outward through the rings instead of all ten beating in lockstep"
+let ring-harmony = 18 because "an analogous harmony: each ring eighteen degrees further round the hue circle than the last (planes-drawing-protocol-v1.md §4.1 — 25 degrees is the classic analogous step, and a little under it keeps ten rings inside one family)"
+let petal-turn = 36 because "ten petals thirty-six degrees apart close the circle exactly once, so no petal doubles another"
+
+# The wave this program always wanted. `cosine` comes from math.planes, which
+# is `sine of (d + 90)`, which is the eleventh builtin — so the whole of what
+# makes this curve smooth is one Taylor series computed to a stated depth.
+#
+#   0 at t = 0, half-period at t = half-period, back to 0 at 2*half-period,
+#   and FLAT AT BOTH TURNS, which `pulse` below is not.
+#
+# It is also why this program's computed surface now says its numbers are
+# approximate: `sine` is the only operation in the language that introduces
+# approximation, and the analyser can see the route to it — wave, cosine,
+# sine — without running a single tick.
+#
+# The result is ROUNDED, for the same reason turtle rounds its coordinates: a
+# `sine` result carries a denominator of 10^30, and everything computed from
+# it downstream carries one too, which is a lot of arithmetic and a lot of
+# emitted digits to buy precision a sixth of a micron past what a pixel can
+# show. Rounding does NOT make the value exact again — that is the point of
+# §4.1's rule, and the surface below still says these numbers are
+# approximate.
+to wave of t, half-period:
+  let turn = 180 * t / half-period because "one full swing of the wave is one half-turn of the circle, so the position in the cycle IS an angle in degrees — no period constant has to be reconciled with a radian one"
+  let shaped = cosine of turn because "cosine, not sine, because cosine starts at its peak: 1 - cos runs 0 to 2 with zero slope at both ends, and a ramp with zero slope at its ends is exactly what a kinked triangle wave is not"
+  give round (half-period * (1 - shaped) / 2) to 6 places
+
+# KEPT, UNUSED, AND WORTH KEEPING. This is the hand-rolled ramp-up-ramp-down
+# triangle that stood in for a sine because none existed — it was named
+# `triangle` until the drawing protocol claimed that word. The two side by
+# side are the clearest available statement of what the builtin bought: the
+# same range and the same period, computed from `mod` and a comparison, and
+# kinked at every turn because a triangle wave's slope flips sign the instant
+# it reaches its peak. Run the program with `wave` swapped for `pulse` and the
+# difference is visible on the canvas in one glance.
+#
+# It is also the only function here whose values stay EXACT, which is the
+# trade stated plainly: `pulse` is exact and wrong-looking, `wave` is
+# approximate and right-looking, and the surface beside the canvas says which
+# one this program chose.
+to pulse of t, half-period:
+  let folded = mod of t, (half-period * 2)
+  if folded < half-period:
+    give folded
+  else:
+    give (half-period * 2) - folded
+
+# The petal: base at the origin, tip straight up the negative y axis, drawn
+# once at one fixed size. Two cubics out and back, closed at the base.
+to petal:
+  show "draw shape"
+  show "draw vertex " + text of 0 + " " + text of 0
+  show "draw curve " + text of -19 + " " + text of -14 + " " + text of -13 + " " + text of -39 + " " + text of 0 + " " + text of -46
+  show "draw curve " + text of 13 + " " + text of -39 + " " + text of 19 + " " + text of -14 + " " + text of 0 + " " + text of 0
+  show "draw close"
+  show "draw end"
+
+to rings of ring-index, tick, base-hue:
+  if ring-index >= ring-count:
+    give nothing
+  else:
+    let offset = ring-index * ring-stagger
+    let phase = wave of (tick + offset), ring-period
+    let glow = phase / ring-period because "0 at the pulse's trough and 1 at its crest — one fraction, and radius, lightness and both alphas are all read off it"
+    let radius = 20 + phase * 2.6 because "twenty pixels at the trough and a hundred and forty-five at the crest: the widest ring nearly fills the 360-tall canvas, so the bloom is the picture rather than a motif floating in a lot of empty ground"
+    let lightness = 0.45 + glow * 0.35 because "the pulse modulates lightness, in place of the old hand-mixed red and green channels"
+    let hue = mod of (base-hue + ring-index * ring-harmony), 360 because "each ring further round the wheel than the last, wrapped by the shared floored mod so a hue is always a point on the circle"
+
+    let body-alpha = 0.06 + glow * 0.09 because "an ABSOLUTE swing of nine hundredths, not a proportion of the 0.06 base: a ring at 0.06 alpha animated by a *fraction* of 0.06 moves by thousandths, which is invisible, and the canvas looks frozen. Translucency has to be animated in alpha units"
+    let edge-alpha = 0.35 + glow * 0.3 because "the edge carries four to six times the body's alpha, so a ring reads as a bounded thing full of light rather than as a soft blur with no shape"
+
+    show "draw fill " + text of lightness + " " + text of 0.13 + " " + text of hue + " " + text of body-alpha
+    show "draw stroke " + text of (lightness + 0.15) + " " + text of 0.19 + " " + text of hue + " " + text of edge-alpha
+    show "draw circle " + text of 0 + " " + text of 0 + " " + text of radius
+
+    let petal-scale = radius / 64 because "the petal is drawn once at one size and scaled into place, so it breathes with its ring — and because scale carries the pen with it, the outline thins as the petal shrinks instead of staying a fixed weight"
+    let petal-angle = mod of (ring-index * petal-turn + tick * 2), 360 because "the whole flower turns two degrees a tick, wrapped so the emitted angle stays a number a reader can hold rather than climbing forever"
+
+    show "draw push"
+    show "draw rotate " + text of petal-angle
+    show "draw scale " + text of petal-scale + " " + text of petal-scale
+    petal
+    show "draw pop"
+
+    rings of (ring-index + 1), tick, base-hue
+
+show "draw clear"
+
+let ground-lightness = 0.17 because "luminous colour needs a dark substrate: translucent fills over white wash out toward white however they are mixed, and the whole point of the low alphas above is that they add up to light"
+let ground-chroma = 0.03
+let ground-hue = 265
+show "draw background " + text of ground-lightness + " " + text of ground-chroma + " " + text of ground-hue
+
+# The petal is one closed path with a real joint where its two curves meet at
+# the tip; a round join is what keeps that tip from growing a spike as the
+# outline thickens.
+show "draw corner " + "round"
+show "draw width " + text of 2
+
+let drift-x = wave of tick, 110 because "a smooth ramp from 0 to 110 and back, so the bloom's centre drifts sideways instead of sitting still"
+let drift-y = wave of (tick + 30), 70 because "offsetting the vertical drift's phase from the horizontal one is what keeps the centre off a single straight line"
+let center-x = 215 + drift-x * 0.5 because "halving the drift keeps the widest ring inside the 480-wide canvas at both ends of the ramp"
+let center-y = 155 + drift-y * 0.5
+
+let base-hue = mod of (tick * 2), 360 because "the whole palette rotates through hue over time, wrapping at 360 the same way the per-ring offset does"
+
+# The whole bloom is drawn at the origin and placed once, the way turtle's
+# tree is: every ring, every petal and the highlight arc below are written in
+# the flower's own coordinates, and where it sits on the page is one
+# translate. Nothing inside knows the canvas exists.
+show "draw push"
+show "draw translate " + text of center-x + " " + text of center-y
+
+rings of 0, tick, base-hue
+
+# One arc, outside the rings: a highlight sweeping round the bloom's widest
+# edge. An arc is a curve and not a wedge (planes-drawing-protocol-v1.md §7),
+# so this is a bright stroke of exactly 120 degrees and nothing is filled.
+let outer-phase = wave of (tick + (ring-count - 1) * ring-stagger), ring-period
+let outer-radius = 20 + outer-phase * 2.6
+let sweep-start = mod of (tick * 4), 360
+let sweep-end = mod of (sweep-start + 120), 360 because "wrapping the end means it lands at or below the start for a third of every revolution, which is the case §7 pins: add 360 to the end until it exceeds the start, so the sweep is 120 degrees clockwise either way"
+show "draw stroke " + text of 0.97 + " " + text of 0.11 + " " + text of base-hue + " " + text of 0.75
+show "draw width " + text of 3
+show "draw arc " + text of 0 + " " + text of 0 + " " + text of (outer-radius + 9) + " " + text of sweep-start + " " + text of sweep-end
+
+show "draw pop"
