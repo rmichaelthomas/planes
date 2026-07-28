@@ -12,8 +12,9 @@ truth and `rules.json`/`errors.json` are generated).
 | `errors.json` | Every distinct error tag the protocol can produce — five from `js/paint/protocol.mjs` (`wrong-arity`, `bad-protocol-version`, `bad-number`, `unknown-verb`, `bad-word`), eight from `js/paint/stream.mjs`'s stream-level rules (`protocol-repeated`, `protocol-late`, `unsupported-version`, `path-already-open`, `path-not-open`, `unmatched-pop`, `path-unclosed`, `unmatched-push`) — with every site that raises it and, where the source states one, its fix clause. | **Generated** by `scripts/protocol_gen.mjs`. Never hand-edit. |
 
 The source of truth for both files is **`js/paint/protocol.mjs`** (verb
-table, number grammar) **and `js/paint/stream.mjs`** (stream-level error
-tags). Neither JavaScript file is modified by the generator — it only reads.
+table, number grammar), **`js/paint/stream.mjs`** (stream-level error tags),
+and **`planes-drawing-protocol-v1.md`** (verb groups — see below). None of
+the three is modified by the generator — it only reads.
 
 ## Why this is not in `grammar/`
 
@@ -55,15 +56,25 @@ the same principle: read the source mechanically, never hand-copy it.
 `protocol.json`'s `group` field (one of `colour-and-line`, `shapes`,
 `paths`, `transforms`, `text-and-canvas` per verb) has no source in
 `js/paint/protocol.mjs` — nothing in that file records which of these five
-clusters a verb belongs to. The specification document
-`planes-drawing-protocol-v1.md`, which `protocol.mjs`'s and `stream.mjs`'s
-own header comments cite as normative, does not exist in this repository
-(verified by a repo-wide search and by `git log --all` before this file was
-generated). The groups are instead derived from `ARITY`'s own declared key
-order in `js/paint/protocol.mjs`, which already clusters the 26 verbs into
-exactly these five groups with no leftover — asserted, not merely assumed,
-by a coverage check in `scripts/protocol_gen.mjs` and by
-`js/test/protocol_gen.test.mjs`.
+clusters a verb belongs to. It is read out of
+**`planes-drawing-protocol-v1.md`** instead: each `### 6.N <title>` heading
+(§6.1 "Colour and line" through §6.5 "Text and canvas") names a group —
+slugified, lowercased, spaces to hyphens — and that section's markdown table
+names the verbs in it (`extractSpecGroups` in `scripts/protocol_gen.mjs`).
+If the specification gains a verb, moves one to a different section, or
+renames a section, `protocol.json` changes on the next run with no edit to
+the generator.
+
+This document was not present anywhere in this repository (verified by a
+repo-wide search and `git log --all`) when this generator was first
+written, so groups were originally derived from `ARITY`'s own declared key
+order in `js/paint/protocol.mjs` — a source with no formal claim to
+authority over grouping, only an empirical one. That derivation turned out
+to agree with the specification's real section order exactly, verb for
+verb, once the document became available and was copied in. The generator
+now reads the specification directly; the coverage check (every verb
+exactly one group, every group non-empty) and `js/test/protocol_gen.test.mjs`
+still assert the result rather than assume it.
 
 ## CI
 

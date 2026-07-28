@@ -14,8 +14,10 @@ import {
   buildProtocolJson,
   buildErrorsJson,
   protocolJsonFromModule,
+  extractSpecGroups,
   probeArity,
   probeArgumentShape,
+  VERB_GROUPS,
   GROUPS,
 } from "../../scripts/protocol_gen.mjs";
 import { VERBS, parseCommand } from "../paint/protocol.mjs";
@@ -79,6 +81,61 @@ test("groups: every verb has exactly one group, every group is non-empty", () =>
   for (const g of GROUPS) {
     assert.ok(byGroup.get(g) > 0, `group "${g}" has no verbs`);
   }
+});
+
+test("groups and their verbs match planes-drawing-protocol-v1.md's §6.1-§6.5 tables directly", () => {
+  const specSrc = readFileSync(path.join(REPO, "planes-drawing-protocol-v1.md"), "utf-8");
+  const { groups, verbGroups } = extractSpecGroups(specSrc);
+  assert.deepEqual(groups, GROUPS);
+  assert.deepEqual(verbGroups, VERB_GROUPS);
+  assert.equal(Object.keys(verbGroups).length, VERBS.length);
+});
+
+test("a §6 section's group assignment does not leak past the last one into later document sections", () => {
+  // Regression: the first version of extractSpecGroups bounded every §6.N
+  // section by the NEXT §6.N heading, so the LAST section (§6.5) ran to end
+  // of file and picked up single-word backtick-quoted table cells from later
+  // sections (§10's p5-comparison table has rows like "| `cap` / `corner` |
+  // ..." whose first cell collides with a real verb name), silently
+  // overwriting the correct earlier group for `cap`, `shape`, `push`, and
+  // `translate`.
+  const stubSpec = [
+    "### 6.1 Colour and line",
+    "",
+    "| Verb | Arguments | |",
+    "|---|---|---|",
+    "| `cap` | word | how a line's ends are drawn |",
+    "",
+    "### 6.5 Text and canvas",
+    "",
+    "| Verb | Arguments | |",
+    "|---|---|---|",
+    "| `label` | x y rest | draw text |",
+    "",
+    "## 10. Relationship to p5.js",
+    "",
+    "| This protocol | p5 |",
+    "|---|---|",
+    "| `cap` / `corner` | `strokeCap()` / `strokeJoin()` |",
+    "",
+  ].join("\n");
+  const { verbGroups } = extractSpecGroups(stubSpec);
+  assert.equal(verbGroups.cap, "colour-and-line", "the §10 table row must not overwrite §6.1's assignment");
+  assert.equal(verbGroups.label, "text-and-canvas");
+});
+
+test("a verb appearing in two §6 sections fails loudly rather than silently picking one", () => {
+  const stubSpec = [
+    "### 6.1 Colour and line",
+    "",
+    "| `cap` | word |",
+    "",
+    "### 6.2 Shapes",
+    "",
+    "| `cap` | word |",
+    "",
+  ].join("\n");
+  assert.throws(() => extractSpecGroups(stubSpec), /"cap" appears in more than one §6 section/);
 });
 
 // ---- generation (§7.2 B): no copy of the verb list ---------------------
