@@ -31,7 +31,7 @@ def test_the_totals_come_from_the_grammar_not_a_literal():
     hand-lists 31 keywords here or in the checker, this fails."""
     cov = cc.coverage([os.path.join(REPO, "*.planes")])
     assert cov["reserved_words"]["total"] == len(KEYWORDS) == 32
-    assert cov["builtins"]["total"] == len(BUILTIN_NAMES) == 11
+    assert cov["builtins"]["total"] == len(BUILTIN_NAMES) == 12
     assert cov["effect_kinds"]["total"] == len(EFFECT_KINDS) == 7
 
 

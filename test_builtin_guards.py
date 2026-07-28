@@ -710,6 +710,22 @@ def test_all_three_implementations_agree_on_tag_detail_and_fix():
                      f"implementations:\n" + "\n".join(bad))
 
 
+def test_three_implementations_agree_this_is_the_350th_shape():
+    """A-Q19's new error tag is one more shape in the same agreement space
+    this file's sweep measures (348), one after discarded-write claimed the
+    349th (test_discarded_write.py) -- `number of` refusing non-numeric text
+    gets its own dedicated case here rather than a forced fit into
+    _three_way_cases()'s one-value-per-kind generator, the same reason
+    discarded-write's shape did not go in there either."""
+    if NODE is None:
+        return
+    py = _outcome_py('number of "abc"', {})
+    js = _outcome_js('number of "abc"', {})
+    pl = _outcome_planes('number of "abc"', {})
+    assert py == js == pl, (py, js, pl)
+    assert py[1] == "not-a-number", py
+
+
 def test_ordering_works_on_numbers_and_text_and_nothing_else():
     """What `compare`'s docstring said before it was true. A same-kind pair used
     to reach the host's own `<`, so `[1] < [2]` answered `true` out of Python's

@@ -38,7 +38,7 @@ Not a single network call was made to produce that surface.
 |---|---|
 | [Run it](#run-it) | the three implementations, and a browser |
 | [Three implementations](#three-implementations) | what self-hosting buys, and what "they agree" means |
-| [The vocabulary](#the-vocabulary) | 32 words, 11 builtins, 7 effect kinds |
+| [The vocabulary](#the-vocabulary) | 32 words, 12 builtins, 7 effect kinds |
 | [The language](#the-language) | syntax, in one page |
 | [Numbers are exact](#numbers-are-exact) | rationals, not floats |
 | [Effect surface](#effect-surface) | what a program *can* do |
@@ -103,7 +103,7 @@ $ node js/cli.mjs meta run ordinary.planes
 
 That is Planes-in-Planes, running on JavaScript. No Python involved.
 
-**What "they agree" means is measured, not asserted.** A sweep runs 348 value
+**What "they agree" means is measured, not asserted.** A sweep runs 349 value
 shapes — every builtin and operator against every kind of value — through all
 three and compares the tag, the detail text, and the fix clause of whatever
 each refuses:
@@ -111,10 +111,10 @@ each refuses:
 ```
 $ python3 planes.py -e 'x = "5" + 1'
 error — cannot-combine: cannot combine "5" with 1 using +
-  try: convert first — e.g. "total: " + text of n
+  try: convert first — text of n to build text, or number of t to do arithmetic
 ```
 
-All three produce that message, byte for byte. **0 divergences across 348
+All three produce that message, byte for byte. **0 divergences across 349
 shapes.** Both the effect surface and the derivation graph are computed by the
 JavaScript stack too, so neither guarantee depends on Python.
 
@@ -122,8 +122,8 @@ JavaScript stack too, so neither guarantee depends on Python.
 
 ## The vocabulary
 
-Closed, and asserted. The whole reserved surface is 43 names — 32 keywords plus
-11 builtins — and both counts are pinned by the test suite, so adding a word is
+Closed, and asserted. The whole reserved surface is 44 names — 32 keywords plus
+12 builtins — and both counts are pinned by the test suite, so adding a word is
 a visible decision rather than a drift. For scale: Python has 35 keywords. The
 small number here is not the vocabulary, it is [the host](#the-host) — seven
 methods, which is what makes the effect surface computable at all.
@@ -137,14 +137,20 @@ nothing  of  or   places plus  round rule   show
 to   true  use   when   where  why   with   write
 ```
 
-**11 builtins** — ordinary functions, not keywords, called as `count of xs`:
+**12 builtins** — ordinary functions, not keywords, called as `count of xs`:
 
 ```
-ask  count  join  lower  normalize  read  rest  sine  text  upper  whole
+ask  count  join  lower  normalize  number  read  rest  sine  text  upper  whole
 ```
 
 `sine` takes **degrees** and is the only operation in the language that
 returns an approximate value — see [Exact, and approximate](#exact-and-approximate).
+
+`number` is the other direction of `text` — `number of "12.5"` is the exact
+number `12.5`. It refuses rather than guesses: non-numeric text, the empty
+string, exponent notation, and a `~`-prefixed approximation (the language's
+own marker that a value's exact form could not be printed) all name their own
+error rather than returning `nothing` or `0`.
 
 **7 effect kinds** — the closed vocabulary a host can be asked for:
 
@@ -439,14 +445,14 @@ every error names its fix, and that is counted rather than asserted:
 
 ```
 $ python3 errors_coverage.py
-  names a fix                  106 of 111  (95%)
-  deliberately names none        5 of 111  (5%)
-  should name one and does not   0 of 111  (0%)
+  names a fix                  109 of 114  (96%)
+  deliberately names none        5 of 114  (4%)
+  should name one and does not   0 of 114  (0%)
 
-  113 raise sites across interp.planes, parser.planes, lexer.planes, json.planes:
-  names a fix                   73 of 113  (65%)
-  deliberately names none       40 of 113  (35%)
-  should name one and does not   0 of 113  (0%)
+  114 raise sites across interp.planes, parser.planes, lexer.planes, json.planes:
+  names a fix                   74 of 114  (65%)
+  deliberately names none       40 of 114  (35%)
+  should name one and does not   0 of 114  (0%)
 ```
 
 **Both work lists are zero** — the commitment is kept in the reference

@@ -69,9 +69,9 @@ def test_every_builtin_name_works_inside_a_multiword_name():
     assert not failures, "\n  ".join(failures)
 
 
-def test_effective_reserved_surface_is_43():
-    """The effective reserved surface is 43: the 32 structural keywords plus
-    the 11 builtins, which spend from the same name budget (S3a A.4).
+def test_effective_reserved_surface_is_44():
+    """The effective reserved surface is 44: the 32 structural keywords plus
+    the 12 builtins, which spend from the same name budget (S3a A.4).
 
     A builtin name is not a keyword — `count`, `text`, `read` can each still
     NAME a function (`to count of x:` shadows the builtin, the names
@@ -88,10 +88,19 @@ def test_effective_reserved_surface_is_43():
     reserved surface since the ceiling was argued word by word. The argument
     for it is checkpoint v21.0 §251's, which retracts v20.0 §238's ruling that
     trigonometry is not a builtin: §238's stated reason was SILENT rounding,
-    and a value that carries whether it is exact removes the silence."""
+    and a value that carries whether it is exact removes the silence.
+
+    `number` takes it from 43 to 44 (A-Q19). The same shape as `sine`'s
+    argument: a prior ruling against a conversion builtin (grammar/parser.
+    planes's comment on parsing NUMBER-literal text by hand, "a magic
+    conversion builtin reintroduces exactly the opacity the closed
+    vocabulary exists to avoid") is retracted for the same reason `chr of n`
+    was declined and `whole` was not — this one closes a round trip the
+    language cannot otherwise close at all, not a convenience for one that
+    already has another way in."""
     assert len(KEYWORDS) == 32, f"keyword count is {len(KEYWORDS)}, expected 32"
-    assert len(BUILTIN_NAMES) == 11, f"builtin count is {len(BUILTIN_NAMES)}, expected 11"
-    assert len(KEYWORDS | BUILTIN_NAMES) == 43, "keywords and builtins must be disjoint at 43"
+    assert len(BUILTIN_NAMES) == 12, f"builtin count is {len(BUILTIN_NAMES)}, expected 12"
+    assert len(KEYWORDS | BUILTIN_NAMES) == 44, "keywords and builtins must be disjoint at 44"
     # the two sets are disjoint -- no word is both a keyword and a builtin
     assert not (KEYWORDS & BUILTIN_NAMES)
 

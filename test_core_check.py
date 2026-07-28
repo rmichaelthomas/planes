@@ -46,17 +46,19 @@ def test_all_seven_effect_kinds_confirmed_used():
 
 
 def test_reported_core_size_is_the_port_surface():
-    # 28 of 32 keywords, ten of the 11 builtins, all 7 effect kinds — larger than the
-    # "half the keywords / 3 builtins" CORE_SUBSET.md predicted.
+    # 28 of 32 keywords, eleven of the 12 builtins, all 7 effect kinds — larger
+    # than the "half the keywords / 3 builtins" CORE_SUBSET.md predicted.
     kw, blt, core = core_check.load_core()
     assert len(kw) == 28
-    assert len(blt) == 10
+    assert len(blt) == 11
     assert core["effect_kinds_all_core"] is True
     r = _run()
     assert "keywords    : 28 of 32" in r.stdout
-    # 10 of 11: interp.planes uses ten builtins and provably avoids `sine`,
-    # because it IMPLEMENTS the series rather than calling it (§5.5).
-    assert "builtins    : 10 of 11" in r.stdout
+    # 11 of 12: interp.planes uses eleven builtins (`number` among them, A-Q19
+    # -- it delegates to the host the same way `whole` and the rest already
+    # do) and provably avoids `sine`, because it IMPLEMENTS the series rather
+    # than calling it (§5.5).
+    assert "builtins    : 11 of 12" in r.stdout
 
 
 def test_core_json_excludes_exactly_let_rule_when_why():
