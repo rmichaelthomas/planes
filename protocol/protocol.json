@@ -4,11 +4,14 @@
   "version": 1,
   "prefix": "draw",
   "prefix_note": "Every command line begins with this word. A line that does not is prose and is never interpreted.",
+  "line_shape": "draw <verb> <arg1> <arg2> ... <argN>",
+  "line_shape_note": "One command per line. Tokens (the prefix, the verb, and each argument) are separated by one or more whitespace characters. Each verb's own `arity` and `arguments` entry says how many argument tokens follow it and what kind each one is; for a verb listed in `word_arguments`, the permitted values for its `\"word\"`-typed argument are that entry, keyed by verb name.",
   "declaration": {
     "verb": "protocol",
     "arity": 1,
     "argument": "positive integer version",
-    "note": "Recognised in version 1 so a version-1 consumer can refuse a version-2 stream. Not a drawing verb. Must precede the first drawing command."
+    "note": "Recognised in version 1 so a version-1 consumer can refuse a version-2 stream. Not a drawing verb. Must precede the first drawing command.",
+    "example": "draw protocol 1"
   },
   "verbs": [
     {
@@ -263,6 +266,7 @@
       "right"
     ]
   },
+  "trailing_text_note": "The one verb with `trailing_text: true` (label) is the one exception to whitespace-tokenized arguments: its declared numeric arguments are followed by one whitespace run, then everything remaining on the line -- verbatim, including any further whitespace -- is the trailing argument. It is not itself tokenized.",
   "number_grammar": {
     "pattern": "^-?\\d+(\\.\\d+)?$",
     "tilde_prefix": "accepted and discarded; a rational whose decimal expansion does not terminate renders with a leading ~ elsewhere in the language",

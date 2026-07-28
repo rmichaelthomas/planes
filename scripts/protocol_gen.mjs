@@ -230,6 +230,7 @@ const DECLARATION = Object.freeze({
   arity: 1,
   argument: "positive integer version",
   note: "Recognised in version 1 so a version-1 consumer can refuse a version-2 stream. Not a drawing verb. Must precede the first drawing command.",
+  example: "draw protocol 1",
 });
 
 const GROUPS = ["colour-and-line", "shapes", "paths", "transforms", "text-and-canvas"];
@@ -369,9 +370,12 @@ function protocolJsonFromModule(mod, src, { verbGroups = VERB_GROUPS, groups = G
     version: 1,
     prefix: "draw",
     prefix_note: "Every command line begins with this word. A line that does not is prose and is never interpreted.",
+    line_shape: "draw <verb> <arg1> <arg2> ... <argN>",
+    line_shape_note: "One command per line. Tokens (the prefix, the verb, and each argument) are separated by one or more whitespace characters. Each verb's own `arity` and `arguments` entry says how many argument tokens follow it and what kind each one is; for a verb listed in `word_arguments`, the permitted values for its `\"word\"`-typed argument are that entry, keyed by verb name.",
     declaration: DECLARATION,
     verbs,
     word_arguments,
+    trailing_text_note: "The one verb with `trailing_text: true` (label) is the one exception to whitespace-tokenized arguments: its declared numeric arguments are followed by one whitespace run, then everything remaining on the line -- verbatim, including any further whitespace -- is the trailing argument. It is not itself tokenized.",
     number_grammar: extractNumberGrammar(src),
     groups: GROUPS,
   };
