@@ -732,7 +732,7 @@ to apply-plus of a, b:
     give make-text of (a.value + b.value)
   if a.kind == "list" and b.kind == "list":
     give make-list of (a.items + b.items)
-  fail { message: "cannot combine " + (detail-of-value of a) + " with " + (detail-of-value of b) + " using +", fix: "convert first — e.g. \"total: \" + text of n" } as cannot-combine
+  fail { message: "cannot combine " + (detail-of-value of a) + " with " + (detail-of-value of b) + " using +", fix: "convert first — text of n to build text, or number of t to do arithmetic" } as cannot-combine
 
 # The raw number under a number value, or interp.py's not-a-number refusal.
 # `-`, `*`, `/` then use the host's own exact arithmetic on the raw numbers,
@@ -1090,6 +1090,8 @@ to eval-builtin of name, arg:
     give make-text of (normalize of (require-text-of of arg, "normalize", "normalize"))
   if name == "whole":
     give builtin-whole of arg
+  if name == "number":
+    give builtin-number-of of arg
   if name == "sine":
     give builtin-sine of arg
   if name == "join":
@@ -1100,7 +1102,7 @@ to eval-builtin of name, arg:
     fail { message: "ask is an effect -- effects are interp.planes build 3, not build 1", fix: "run it through the build-3 entry point, which threads the effect log; build 1 evaluates expressions only" } as build-3-effect
   if name == "read":
     fail { message: "read is an effect -- effects are interp.planes build 3, not build 1", fix: "run it through the build-3 entry point, which threads the effect log; build 1 evaluates expressions only" } as build-3-effect
-  fail { message: "unknown builtin '" + name + "'", fix: "the eleven builtins are fixed and the lexer recognises only those, so reaching this is a defect in the interpreter rather than in the program — worth reporting with the source" } as unknown-builtin
+  fail { message: "unknown builtin '" + name + "'", fix: "the twelve builtins are fixed and the lexer recognises only those, so reaching this is a defect in the interpreter rather than in the program — worth reporting with the source" } as unknown-builtin
 
 # ================================================================ sine
 #
@@ -1270,7 +1272,18 @@ to require-target-of of v, what, spelled:
 to builtin-whole of arg:
   if arg.kind == "number":
     give make-number-carrying of (whole of arg.value), arg.approx
-  fail { message: "cannot take the whole part of " + (detail-of-value of arg), fix: "whole of rounds a number toward zero; Planes has no text-to-number builtin, so a number has to arrive as one — from a literal, from arithmetic, or from a field of something read as JSON" } as not-a-number
+  fail { message: "cannot take the whole part of " + (detail-of-value of arg), fix: "whole of rounds a number toward zero; if this is text, convert it first with number of — a boolean, a list, a record, or nothing has no path to becoming a number" } as not-a-number
+
+# The twelfth builtin (A-Q19): text to an exact number, closing the round
+# trip `write` opened and nothing closed. Delegates to the host's own
+# `number of` -- the same shape `builtin-whole` above and `builtin-count`
+# below already use -- so the refusal messages (not-text for a non-text
+# argument, not-a-number for text that will not parse, including the
+# ~-prefixed case) are the host's own words, not a second copy of them.
+to builtin-number-of of arg:
+  if arg.kind == "text":
+    give make-number of (number of arg.value)
+  fail { message: "cannot make a number from " + (detail-of-value of arg), fix: "number of takes text; a number does not need converting, and nothing else has a path to one" } as not-text
 
 # Fold a list of text into one string. A non-list, or any non-text element,
 # is refused naming the fix -- the same refusal interp.py's join makes, not a

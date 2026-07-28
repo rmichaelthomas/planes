@@ -8,8 +8,8 @@
     "write"
   ],
   "builtins": [
-    "ask", "count", "join", "lower", "normalize", "read", "rest", "text",
-    "upper", "whole"
+    "ask", "count", "join", "lower", "normalize", "number", "read", "rest",
+    "text", "upper", "whole"
   ],
   "effect_kinds_all_core": true,
   "excluded_keywords": {
@@ -21,7 +21,7 @@
   "excluded_builtins": {},
   "size": {
     "keywords": "28 of 32",
-    "builtins": "10 of 10 -- interp.planes delegates every builtin to the host, so all ten are core, not the 3-4 CORE_SUBSET.md predicted",
+    "builtins": "11 of 12 -- interp.planes delegates every ordinary builtin to the host, `number` (A-Q19) among them; `sine` is the one exception, reimplemented from exact parts rather than called, because showing that derivation was the point of adding it",
     "effect_kinds": "7 of 7"
   }
 }

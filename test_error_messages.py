@@ -278,16 +278,17 @@ def test_the_foreign_arity_message_names_the_declaration():
                              "was accepted")
 
 
-def test_whole_of_says_a_number_has_to_arrive_as_one():
-    """The clause carries information the error does not: Planes has no
-    text-to-number builtin at all, so rounding is not the missing step."""
+def test_whole_of_names_number_of_as_the_fix_for_text():
+    """A-Q19: `number of` exists now, so `whole of "5"`'s fix names it rather
+    than asserting no conversion exists at all -- the clause carries
+    information the error does not, and that information changed under it."""
     from host import TestHost
     from interp import Interpreter, PlanesError
     try:
         Interpreter(host=TestHost()).run('show text of (whole of "5")\n')
     except PlanesError as e:
         assert e.tag == "not-a-number", e.tag
-        assert "no text-to-number builtin" in e.fix, e.fix
+        assert "number of" in e.fix, e.fix
     else:
         raise AssertionError('whole of "5" was accepted')
 
@@ -541,7 +542,7 @@ def test_the_self_hosted_work_list_is_empty():
     total = sum(len(v) for v in sites.values())
     assert len(sites[ec.SHORTFALL]) == 0, [
         (s[0], s[1], s[2]) for s in sites[ec.SHORTFALL]]
-    assert total == 113, total
+    assert total == 114, total
     assert len(sites[ec.NAMES_FIX]) + len(sites[ec.DELIBERATE]) == total
 
 
@@ -551,7 +552,7 @@ def test_the_reference_work_list_is_still_empty_too():
     ec = _coverage()
     cov = ec.coverage()
     assert cov["counts"][ec.SHORTFALL] == 0
-    assert cov["errors"] == 111, cov["errors"]
+    assert cov["errors"] == 114, cov["errors"]
 
 
 def test_every_deliberate_self_hosted_silence_states_a_reason():

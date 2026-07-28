@@ -343,6 +343,43 @@ export class PlanesNumber {
   }
 }
 
+// ---- number of (A-Q19) -------------------------------------------------------
+//
+// `write` emits a number as JSON text so an exact value survives a tool that
+// isn't Planes; `read` and `ask` hand text back. Nothing turned that text
+// back into a number until this builtin. Deliberately narrower than
+// PlanesNumber.parse / fractionFromString: no exponent notation and no
+// `a/b` form — a source NUMBER token is only ever `\d+(\.\d+)?`, and
+// accepting on input what the language cannot itself write would be an
+// asymmetry nobody asked for. Whitespace is trimmed first, the same
+// convention fractionFromString already uses.
+
+const NUMBER_TEXT_RE = /^-?\d+(\.\d+)?$/;
+
+// Text `number of` refuses. `approximation` distinguishes the `~`-prefixed
+// case (its own reason: the text names an approximation, not a value) from
+// plain non-numeric text, so the caller can raise the right message.
+export class NotANumber extends Error {
+  constructor(text, approximation = false) {
+    super(`not a number: ${text}`);
+    this.name = "NotANumber";
+    this.text = text;
+    this.approximation = approximation;
+  }
+}
+
+// `number of text` — text to an exact PlanesNumber, or a refusal. A
+// `~`-prefixed text is refused before the general check, with its own
+// reason: it is the language's own marker for a rounded display, not a
+// value, so parsing it would silently manufacture a different, terminating
+// rational than the one that was printed.
+export function numberFromText(text) {
+  const s = text.trim();
+  if (s.startsWith("~")) throw new NotANumber(text, true);
+  if (!NUMBER_TEXT_RE.test(s)) throw new NotANumber(text);
+  return new PlanesNumber(fractionFromString(s));
+}
+
 // ---- sine (planes_checkpoint_v21_0 §§251-253) --------------------------------
 //
 // THE ALGORITHM, once. The port of planes_num.py's sine_degrees, on exactly the

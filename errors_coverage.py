@@ -92,6 +92,80 @@ STATES = (NAMES_FIX, DELIBERATE, SHORTFALL)
 ERROR_KIND = "error"
 REPORT_KIND = "report"
 
+# ============================================ a fourth dimension: intent (A-Q19)
+#
+# The three states above answer "does this site's message carry a fix
+# clause at all". They do not answer a different question a fix clause can
+# still fail: "does the fix it names hold in EVERY situation this site can
+# fire from" — `cannot-combine`'s old clause named a real fix (`text of`)
+# that was the *wrong* one whenever the site fired from the arithmetic
+# side rather than the text-building side, and it counted as NAMES_FIX
+# the whole time. That defect is invisible to a naming check and visible
+# only to someone reading the site against every way it can be reached.
+#
+# This is deliberately not an audit of the other ~110 sites — the standing
+# anti-escalation rule gives a found instance a point fix, not a mandate to
+# re-read the catalogue. What a single instance CAN do cheaply is make the
+# next one visible: every site is either ASSESSED (a build looked at it
+# against this question and recorded the answer, changing it or not) or
+# UNASSESSED (no build has). The count is reported, never a work list —
+# unassessed is the honest default for a site nobody has looked at yet, not
+# a claim that it is wrong.
+#
+# Keyed by the reference catalogue's own `id` (grammar/errors.json) for the
+# reference side, and by (file, function) for the self-hosted side, where
+# `self_hosted_sites()` has no single stable id.
+ASSESSED_THIS_BUILD = frozenset({
+    # A-Q19's own site: the fix corrected to name both directions.
+    "interp.cannot-combine.apply_op",
+    # Read alongside it because it makes the same claim `number of` now
+    # falsifies -- "Planes has no text-to-number builtin" stopped being
+    # true the moment this build shipped one.
+    "interp.not-a-number.builtin-1",
+    # The three new sites `number of` itself raises from.
+    "interp.not-text.builtin",
+    "interp.not-a-number.builtin-2",
+    "interp.not-a-number.builtin-3",
+    # Every other site this build found by searching for `text of` as a
+    # named remedy (§3.2's literal instruction) and read against whether
+    # the fix holds in every situation the site fires from. Each of these
+    # is genuinely one-directional (the site only ever wants text), so
+    # none needed to change -- assessed and left alone is still assessed.
+    "interp.not-text.require_text",     # lower / upper / normalize
+    "interp.not-text.require_target",   # ask / read / write's target
+    "interp.not-text.membership",       # `in` over text
+    "interp.cannot-join.builtin-2",     # join's per-item guard
+    "interp.fail-message-not-text.exec_stmt-1",   # fail's message field
+    # Not a `text of` site, but read for the same reason `whole`'s was:
+    # it is the other generic arithmetic guard next to the builtin this
+    # build added, and the same question applies. Left unchanged because
+    # it names no specific conversion to get wrong.
+    "interp.not-a-number.arith",
+})
+
+SELF_HOSTED_ASSESSED_THIS_BUILD = frozenset({
+    ("interp.planes", "apply-plus"),
+    ("interp.planes", "builtin-whole"),
+    ("interp.planes", "builtin-number-of"),
+})
+
+
+def intent_assessment(entries, assessed_ids):
+    """How many of `entries` (each carrying an `id`) are in `assessed_ids`.
+
+    Returns {"assessed": N, "unassessed": N} — reported, never a work list;
+    see the module note above ASSESSED_THIS_BUILD."""
+    assessed = sum(1 for e in entries if e["id"] in assessed_ids)
+    return {"assessed": assessed, "unassessed": len(entries) - assessed}
+
+
+def self_hosted_intent_assessment(sites, assessed_keys):
+    """The same question, for the self-hosted sites keyed by (file, function)
+    instead of an id string."""
+    all_sites = [s for v in sites.values() for s in v]
+    assessed = sum(1 for s in all_sites if (s[0], s[4]) in assessed_keys)
+    return {"assessed": assessed, "unassessed": len(all_sites) - assessed}
+
 
 def load(path):
     with open(path, encoding="utf-8") as f:
@@ -162,6 +236,7 @@ def coverage():
                       for e in buckets[SHORTFALL]],
         "deliberate": [brief(e, "no_fix") for e in buckets[DELIBERATE]],
         "unreadable": [brief(e) for e in errors if is_unreadable(e)],
+        "intent": intent_assessment(errors, ASSESSED_THIS_BUILD),
     }
 
 
@@ -628,6 +703,12 @@ def render_self_hosted(sites):
     lines.append("  message-writing work with its own ruling, not a side "
                  "effect of opening the slot.")
     lines.append("")
+    intent = self_hosted_intent_assessment(sites, SELF_HOSTED_ASSESSED_THIS_BUILD)
+    lines.append(f"  The same fourth question as the reference report: "
+                 f"{intent['unassessed']} of {total} self-hosted")
+    lines.append(f"  sites are unassessed for whether their fix holds in "
+                 f"every situation ({intent['assessed']} assessed).")
+    lines.append("")
     by_file: dict[str, int] = {}
     for site in sites[SHORTFALL]:
         by_file[site[0]] = by_file.get(site[0], 0) + 1
@@ -671,6 +752,16 @@ def render_report(cov):
                  "its own fix.")
     lines.append(f"  Unreadable at the raise site: {len(cov['unreadable'])} "
                  f"— never counted as a pass.")
+    lines.append("")
+    intent = cov["intent"]
+    lines.append("  A fourth question, orthogonal to the three above: does "
+                 "the fix a site names")
+    lines.append(f"  hold in every situation that site can fire from? "
+                 f"{intent['unassessed']} of {total} sites have not")
+    lines.append(f"  been read against that question by any build yet "
+                 f"({intent['assessed']} have). Not a work")
+    lines.append("  list — a site nobody has looked at is not a site known "
+                 "to be wrong.")
     lines.append("")
 
     if not cov["amber_templates_all_name_a_fix"]:
@@ -730,6 +821,8 @@ def main(argv):
         twins, fns = reference_fix_tags(), reference_fix_functions()
         split = split_shortfall(sites[SHORTFALL], twins, fns)
         cov["self_hosted"] = {k: rows(v) for k, v in sites.items()}
+        cov["self_hosted_intent"] = self_hosted_intent_assessment(
+            sites, SELF_HOSTED_ASSESSED_THIS_BUILD)
         cov["self_hosted_split"] = {
             "has_a_reference_twin": rows(split[HAS_TWIN]),
             "has_a_probable_twin": rows(split[PROBABLE_TWIN]),

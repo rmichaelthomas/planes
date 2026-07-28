@@ -710,6 +710,49 @@ def test_all_three_implementations_agree_on_tag_detail_and_fix():
                      f"implementations:\n" + "\n".join(bad))
 
 
+def test_three_implementations_agree_this_is_the_350th_shape():
+    """A-Q19's new error tag is one more shape in the same agreement space
+    this file's sweep measures (348), one after discarded-write claimed the
+    349th (test_discarded_write.py) -- `number of` refusing non-numeric text
+    gets its own dedicated case here rather than a forced fit into
+    _three_way_cases()'s one-value-per-kind generator, the same reason
+    discarded-write's shape did not go in there either."""
+    if NODE is None:
+        return
+    py = _outcome_py('number of "abc"', {})
+    js = _outcome_js('number of "abc"', {})
+    pl = _outcome_planes('number of "abc"', {})
+    assert py == js == pl, (py, js, pl)
+    assert py[1] == "not-a-number", py
+
+
+# Every acceptance and refusal case `number of`'s own build prompt asked to be
+# verified (§8.2, sections B and C), swept across all three implementations
+# in one place. This graduated out of the build's own throwaway
+# scripts/verify-number-of.py per the retirement rule (test_gate.py) — a
+# verification script is not product code, and its durable assertions belong
+# in a suite the gate runs, not in a script the gate does not.
+_NUMBER_OF_CASES = (
+    '"5"', '"145.48"', '"-3"', '"-0.5"', '"0"', '"  5  "', '"\\t12.5\\n"',
+    '""', '"abc"', '"1e5"', '"1/3"', '"~0.333333333333"',
+    "5", "true", "nothing", "[1, 2]", "{ a: 1 }",
+)
+
+
+def test_number_of_agrees_across_three_implementations_on_every_case():
+    if NODE is None:
+        return
+    bad = []
+    for lit in _NUMBER_OF_CASES:
+        expr = f"number of {lit}"
+        py = _outcome_py(expr, {})
+        js = _outcome_js(expr, {})
+        pl = _outcome_planes(expr, {})
+        if not (py == js == pl):
+            bad.append(f"  {expr}\n    py={py}\n    js={js}\n    pl={pl}")
+    assert not bad, f"{len(bad)} divergence(s):\n" + "\n".join(bad)
+
+
 def test_ordering_works_on_numbers_and_text_and_nothing_else():
     """What `compare`'s docstring said before it was true. A same-kind pair used
     to reach the host's own `<`, so `[1] < [2]` answered `true` out of Python's

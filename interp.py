@@ -9,7 +9,7 @@ from typing import Any, Optional
 from host import HostError, PythonHost, TestHost
 from lexer import *
 from parser import BUILTIN_NAMES, find_discarded_writes, parse
-from planes_num import Inexact, Number, sine_degrees
+from planes_num import Inexact, NotANumber, Number, number_from_text, sine_degrees
 from planes_text import escape_string_literal
 
 
@@ -1038,12 +1038,42 @@ class Interpreter:
                 raise PlanesError(
                     "not-a-number",
                     f"cannot take the whole part of {detail_value(arg.value)}",
-                    "whole of rounds a number toward zero; Planes has no "
-                    "text-to-number builtin, so a number has to arrive as "
-                    "one — from a literal, from arithmetic, or from a field "
-                    "of something read as JSON")
+                    "whole of rounds a number toward zero; if this is text, "
+                    "convert it first with number of — a boolean, a list, "
+                    "a record, or nothing has no path to becoming a number")
             n = Number.of(arg.value).round_to(0)
             return Traced(n, Deriv("op", "whole of", n, [arg.node]))
+
+        if node.name == "number":
+            # The twelfth builtin (A-Q19): text to an exact number, closing the
+            # round trip `write` opened and nothing closed — `write` emits a
+            # number as JSON text so an exact value survives a tool that isn't
+            # Planes, and `read` and `ask` hand text back, but nothing turned
+            # that text back into a number until now.
+            if not isinstance(arg.value, str):
+                raise PlanesError(
+                    "not-text",
+                    f"cannot make a number from {detail_value(arg.value)}",
+                    "number of takes text; a number does not need "
+                    "converting, and nothing else has a path to one")
+            try:
+                n = number_from_text(arg.value)
+            except NotANumber as e:
+                if e.approximation:
+                    raise PlanesError(
+                        "not-a-number",
+                        f"{detail_value(arg.value)} is an approximation of "
+                        "a number, not a number",
+                        "the ~ marks text that was rounded for display, so "
+                        "the original value cannot be recovered from it — "
+                        "carry the number itself instead of its text")
+                raise PlanesError(
+                    "not-a-number",
+                    f"cannot make a number from {detail_value(arg.value)}",
+                    "number of takes an optional leading -, digits, and at "
+                    "most one . — no exponent notation, e.g. "
+                    "number of \"12.5\"")
+            return Traced(n, Deriv("op", "number of", n, [arg.node]))
 
         if node.name == "sine":
             # The eleventh builtin, and the only operation in the language that
@@ -1112,7 +1142,7 @@ class Interpreter:
 
         raise PlanesError(
             "unknown-builtin", f"no builtin is named '{node.name}'",
-            "the eleven builtins are fixed and the lexer recognises only those, "
+            "the twelve builtins are fixed and the lexer recognises only those, "
             "so reaching this is a defect in the interpreter rather than in "
             "the program — worth reporting with the source")
 
@@ -1309,7 +1339,8 @@ def apply_op(op, a, b):
         raise PlanesError(
             "cannot-combine",
             f"cannot combine {detail_value(a)} with {detail_value(b)} using +",
-            "convert first — e.g. \"total: \" + text of n")
+            "convert first — text of n to build text, or number of t to "
+            "do arithmetic")
     if op == "-": return arith("-", a, b)
     if op == "*": return arith("*", a, b)
     if op == "/":

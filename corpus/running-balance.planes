@@ -1,0 +1,21 @@
+# A balance carried from one run to the next: written as a number, read back
+# as text — files hold text, and `write` and `read` do not exempt this
+# program from that — and turned back into a number with `number of` before
+# today's transactions can be added to it.
+
+use file
+
+let opening = 500 because "yesterday's closing balance, written the same way any run before this one would have"
+write opening to "ledger/balance.txt"
+
+let stored = read "ledger/balance.txt"
+let balance = number of stored because "read hands back text regardless of what was written; number of is the only way back to a value arithmetic can use"
+
+let deposits = 120
+let withdrawals = 45
+let closing = balance + deposits - withdrawals
+
+show "opening " + text of balance
+show "closing " + text of closing
+
+write closing to "ledger/balance.txt"

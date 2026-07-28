@@ -145,6 +145,132 @@ def test_round_a_non_number_is_an_error():
         assert e.tag == "not-a-number"
 
 
+# ================================================================ number of (A-Q19)
+#
+# `write` emits a number as JSON text so an exact value survives a tool that
+# isn't Planes; `read` and `ask` hand text back; nothing turned that text
+# back into a number. `number of` closes the round trip from the reading
+# side -- `write`'s serialisation is untouched (test_whole_numbers_write_
+# as_numbers and test_exact_value_survives_a_file_round_trip above still
+# pass unmodified).
+
+def test_number_of_parses_integers_decimals_and_negatives():
+    assert run('show text of (number of "5")') == ["5"]
+    assert run('show text of (number of "145.48")') == ["145.48"]
+    assert run('show text of (number of "-3")') == ["-3"]
+    assert run('show text of (number of "-0.5")') == ["-0.5"]
+    assert run('show text of (number of "0")') == ["0"]
+
+
+def test_number_of_is_exact_not_a_float():
+    assert val('n = number of "0.1"', "n").value == Number.parse("0.1")
+
+
+def test_number_of_does_arithmetic_after_parsing():
+    assert run('show text of ((number of "145.48") + 1)') == ["146.48"]
+
+
+def test_number_of_trims_leading_and_trailing_whitespace():
+    """The same convention `Fraction(text)` already uses for a source literal."""
+    assert run('show text of (number of "  5  ")') == ["5"]
+    assert run('show text of (number of "\\n12.5\\t")') == ["12.5"]
+
+
+def test_number_of_refuses_non_numeric_text():
+    try:
+        run('n = number of "abc"')
+        assert False, "should raise"
+    except PlanesError as e:
+        assert e.tag == "not-a-number", e.tag
+        assert '"abc"' in e.detail, e.detail
+
+
+def test_number_of_refuses_the_empty_string():
+    try:
+        run('n = number of ""')
+        assert False, "should raise"
+    except PlanesError as e:
+        assert e.tag == "not-a-number", e.tag
+
+
+def test_number_of_refuses_exponent_notation():
+    """Accepting on input what the language cannot itself write (a source
+    NUMBER token has no exponent form) would be an asymmetry nobody asked
+    for -- `Fraction("1e5")` alone would silently accept it."""
+    try:
+        run('n = number of "1e5"')
+        assert False, "should raise"
+    except PlanesError as e:
+        assert e.tag == "not-a-number", e.tag
+
+
+def test_number_of_refuses_a_fraction_form():
+    try:
+        run('n = number of "1/3"')
+        assert False, "should raise"
+    except PlanesError as e:
+        assert e.tag == "not-a-number", e.tag
+
+
+def test_number_of_refuses_an_approximation_marker_with_its_own_reason():
+    """`~0.333333333333` is the language's OWN marker that a value's exact
+    form could not be printed -- parsing it would silently manufacture a
+    different, terminating rational than the one that was shown, which is
+    exactly the silent rounding exact rationals exist to prevent (V-Q1's
+    reasoning, reports/REPORT_VALUES.md)."""
+    try:
+        run('n = number of "~0.333333333333"')
+        assert False, "should raise"
+    except PlanesError as e:
+        assert e.tag == "not-a-number", e.tag
+        assert "approximation" in e.detail, e.detail
+        assert "~" in e.fix, e.fix
+
+
+def test_number_of_refuses_a_non_text_argument():
+    for lit in ("5", "true", "nothing", "[1, 2]", "{ a: 1 }"):
+        try:
+            run(f"n = number of {lit}")
+            assert False, f"number of {lit} should raise"
+        except PlanesError as e:
+            assert e.tag == "not-text", (lit, e.tag)
+
+
+def test_number_of_is_shadowable():
+    src = ('to number of t:\n'
+           '  give 999\n\n'
+           'r = number of "5"')
+    assert val(src, "r").value == 999
+
+
+def test_write_then_number_of_closes_the_round_trip():
+    """The exact sequence that failed at A-Q19: write a number, read it back,
+    and do arithmetic on it. A whole number, because `write`'s existing
+    serialisation (untouched here -- test_whole_numbers_write_as_numbers)
+    already emits a whole number as bare JSON digits with no quoting to
+    strip; a non-whole number goes out as a quoted JSON string precisely so
+    an exact value survives a non-Planes reader, and stripping that quoting
+    back off is `read`/JSON's job, not `number of`'s (§2.2 accepts no
+    character outside digits, one leading -, and one .)."""
+    i = interp('use file\n'
+              'n = 145\n'
+              'write n to "out.json"\n'
+              'm = read "out.json"\n'
+              'total = (number of m) + 1\n'
+              'show text of total', fs={})
+    assert i.output == ["146"]
+
+
+def test_number_of_reads_a_decimal_from_a_plain_text_file():
+    """The realistic shape (A-Q9): a file written by something other than
+    this program's own `write` -- a bare decimal, no JSON quoting at all."""
+    i = interp('use file\n'
+              'raw = read "price.txt"\n'
+              'total = (number of raw) + 1\n'
+              'show text of total', fs={"price.txt": "145.48"})
+    assert i.output == ["146.48"]
+
+
 # ================================================================ boundaries
 
 def test_foreign_floats_become_exact_on_entry():
