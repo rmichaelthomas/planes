@@ -1,0 +1,3577 @@
+draw clear
+draw background 0.95 0.014 95
+draw cap round
+draw translate 240 350
+draw stroke 0.32 0.05 40 1
+draw width 5.6
+draw line 0 0 0 -78
+draw push
+draw translate 0 -78
+draw rotate -24
+draw stroke 0.3725 0.05875 41.484375 0.9953125
+draw width 5
+draw line 0 0 0 -56.16
+draw push
+draw translate 0 -56.16
+draw rotate -24
+draw stroke 0.425 0.0675 45.9375 0.98125
+draw width 4.4
+draw line 0 0 0 -40.435
+draw push
+draw translate 0 -40.435
+draw rotate -24
+draw stroke 0.4775 0.07625 53.359375 0.9578125
+draw width 3.8
+draw line 0 0 0 -29.113
+draw push
+draw translate 0 -29.113
+draw rotate -24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -20.961
+draw push
+draw translate 0 -20.961
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -15.092
+draw push
+draw translate 0 -15.092
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -10.866
+draw push
+draw translate 0 -10.866
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -7.824
+draw push
+draw translate 0 -7.824
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -4.5064 2.53485 6.1963
+draw pop
+draw push
+draw translate 0 -7.824
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -4.912 2.763 6.754
+draw pop
+draw pop
+draw push
+draw translate 0 -10.866
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -8.528
+draw push
+draw translate 0 -8.528
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -4.912 2.763 6.754
+draw pop
+draw push
+draw translate 0 -8.528
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -15.092
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -11.844
+draw push
+draw translate 0 -11.844
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -8.528
+draw push
+draw translate 0 -8.528
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -4.912 2.763 6.754
+draw pop
+draw push
+draw translate 0 -8.528
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw pop
+draw push
+draw translate 0 -11.844
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.296
+draw push
+draw translate 0 -9.296
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw push
+draw translate 0 -9.296
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -20.961
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -16.45
+draw push
+draw translate 0 -16.45
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -11.844
+draw push
+draw translate 0 -11.844
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -8.528
+draw push
+draw translate 0 -8.528
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -4.912 2.763 6.754
+draw pop
+draw push
+draw translate 0 -8.528
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw pop
+draw push
+draw translate 0 -11.844
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.296
+draw push
+draw translate 0 -9.296
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw push
+draw translate 0 -9.296
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -16.45
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.91
+draw push
+draw translate 0 -12.91
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.295
+draw push
+draw translate 0 -9.295
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3536 3.0114 7.3612
+draw pop
+draw push
+draw translate 0 -9.295
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8352 3.2823 8.0234
+draw pop
+draw pop
+draw push
+draw translate 0 -12.91
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -29.113
+draw rotate 24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -22.847
+draw push
+draw translate 0 -22.847
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -16.45
+draw push
+draw translate 0 -16.45
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -11.844
+draw push
+draw translate 0 -11.844
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -8.528
+draw push
+draw translate 0 -8.528
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -4.912 2.763 6.754
+draw pop
+draw push
+draw translate 0 -8.528
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw pop
+draw push
+draw translate 0 -11.844
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.296
+draw push
+draw translate 0 -9.296
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw push
+draw translate 0 -9.296
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -16.45
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.91
+draw push
+draw translate 0 -12.91
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.295
+draw push
+draw translate 0 -9.295
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3536 3.0114 7.3612
+draw pop
+draw push
+draw translate 0 -9.295
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8352 3.2823 8.0234
+draw pop
+draw pop
+draw push
+draw translate 0 -12.91
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -22.847
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -17.931
+draw push
+draw translate 0 -17.931
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.91
+draw push
+draw translate 0 -12.91
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.295
+draw push
+draw translate 0 -9.295
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3536 3.0114 7.3612
+draw pop
+draw push
+draw translate 0 -9.295
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8352 3.2823 8.0234
+draw pop
+draw pop
+draw push
+draw translate 0 -12.91
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -17.931
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -40.435
+draw rotate 24
+draw stroke 0.4775 0.07625 53.359375 0.9578125
+draw width 3.8
+draw line 0 0 0 -31.733
+draw push
+draw translate 0 -31.733
+draw rotate -24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -22.848
+draw push
+draw translate 0 -22.848
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -16.451
+draw push
+draw translate 0 -16.451
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -11.845
+draw push
+draw translate 0 -11.845
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -8.528
+draw push
+draw translate 0 -8.528
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -4.912 2.763 6.754
+draw pop
+draw push
+draw translate 0 -8.528
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw pop
+draw push
+draw translate 0 -11.845
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.296
+draw push
+draw translate 0 -9.296
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw push
+draw translate 0 -9.296
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -16.451
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.911
+draw push
+draw translate 0 -12.911
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.296
+draw push
+draw translate 0 -9.296
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw push
+draw translate 0 -9.296
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw pop
+draw push
+draw translate 0 -12.911
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.133
+draw push
+draw translate 0 -10.133
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8368 3.2832 8.0256
+draw pop
+draw push
+draw translate 0 -10.133
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3624 3.57885 8.7483
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -22.848
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -17.932
+draw push
+draw translate 0 -17.932
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.911
+draw push
+draw translate 0 -12.911
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.296
+draw push
+draw translate 0 -9.296
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw push
+draw translate 0 -9.296
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw pop
+draw push
+draw translate 0 -12.911
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.133
+draw push
+draw translate 0 -10.133
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8368 3.2832 8.0256
+draw pop
+draw push
+draw translate 0 -10.133
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3624 3.57885 8.7483
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -17.932
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.073
+draw push
+draw translate 0 -14.073
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.133
+draw push
+draw translate 0 -10.133
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8368 3.2832 8.0256
+draw pop
+draw push
+draw translate 0 -10.133
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3624 3.57885 8.7483
+draw pop
+draw pop
+draw push
+draw translate 0 -14.073
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.045
+draw push
+draw translate 0 -11.045
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.045
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -31.733
+draw rotate 24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -24.904
+draw push
+draw translate 0 -24.904
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -17.931
+draw push
+draw translate 0 -17.931
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.91
+draw push
+draw translate 0 -12.91
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.295
+draw push
+draw translate 0 -9.295
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3536 3.0114 7.3612
+draw pop
+draw push
+draw translate 0 -9.295
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8352 3.2823 8.0234
+draw pop
+draw pop
+draw push
+draw translate 0 -12.91
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -17.931
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -24.904
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -19.545
+draw push
+draw translate 0 -19.545
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -19.545
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.338
+draw push
+draw translate 0 -15.338
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.043
+draw push
+draw translate 0 -11.043
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3608 3.57795 8.7461
+draw pop
+draw push
+draw translate 0 -11.043
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw pop
+draw push
+draw translate 0 -15.338
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.037
+draw push
+draw translate 0 -12.037
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.037
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -56.16
+draw rotate 24
+draw stroke 0.425 0.0675 45.9375 0.98125
+draw width 4.4
+draw line 0 0 0 -44.074
+draw push
+draw translate 0 -44.074
+draw rotate -24
+draw stroke 0.4775 0.07625 53.359375 0.9578125
+draw width 3.8
+draw line 0 0 0 -31.733
+draw push
+draw translate 0 -31.733
+draw rotate -24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -22.848
+draw push
+draw translate 0 -22.848
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -16.451
+draw push
+draw translate 0 -16.451
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -11.845
+draw push
+draw translate 0 -11.845
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -8.528
+draw push
+draw translate 0 -8.528
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -4.912 2.763 6.754
+draw pop
+draw push
+draw translate 0 -8.528
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw pop
+draw push
+draw translate 0 -11.845
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.296
+draw push
+draw translate 0 -9.296
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw push
+draw translate 0 -9.296
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -16.451
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.911
+draw push
+draw translate 0 -12.911
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.296
+draw push
+draw translate 0 -9.296
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw push
+draw translate 0 -9.296
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw pop
+draw push
+draw translate 0 -12.911
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.133
+draw push
+draw translate 0 -10.133
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8368 3.2832 8.0256
+draw pop
+draw push
+draw translate 0 -10.133
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3624 3.57885 8.7483
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -22.848
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -17.932
+draw push
+draw translate 0 -17.932
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.911
+draw push
+draw translate 0 -12.911
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.296
+draw push
+draw translate 0 -9.296
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw push
+draw translate 0 -9.296
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw pop
+draw push
+draw translate 0 -12.911
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.133
+draw push
+draw translate 0 -10.133
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8368 3.2832 8.0256
+draw pop
+draw push
+draw translate 0 -10.133
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3624 3.57885 8.7483
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -17.932
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.073
+draw push
+draw translate 0 -14.073
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.133
+draw push
+draw translate 0 -10.133
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8368 3.2832 8.0256
+draw pop
+draw push
+draw translate 0 -10.133
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3624 3.57885 8.7483
+draw pop
+draw pop
+draw push
+draw translate 0 -14.073
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.045
+draw push
+draw translate 0 -11.045
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.045
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -31.733
+draw rotate 24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -24.904
+draw push
+draw translate 0 -24.904
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -17.931
+draw push
+draw translate 0 -17.931
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.91
+draw push
+draw translate 0 -12.91
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.295
+draw push
+draw translate 0 -9.295
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3536 3.0114 7.3612
+draw pop
+draw push
+draw translate 0 -9.295
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8352 3.2823 8.0234
+draw pop
+draw pop
+draw push
+draw translate 0 -12.91
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -17.931
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -24.904
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -19.545
+draw push
+draw translate 0 -19.545
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -19.545
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.338
+draw push
+draw translate 0 -15.338
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.043
+draw push
+draw translate 0 -11.043
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3608 3.57795 8.7461
+draw pop
+draw push
+draw translate 0 -11.043
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw pop
+draw push
+draw translate 0 -15.338
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.037
+draw push
+draw translate 0 -12.037
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.037
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -44.074
+draw rotate 24
+draw stroke 0.4775 0.07625 53.359375 0.9578125
+draw width 3.8
+draw line 0 0 0 -34.589
+draw push
+draw translate 0 -34.589
+draw rotate -24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -24.904
+draw push
+draw translate 0 -24.904
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -17.931
+draw push
+draw translate 0 -17.931
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.91
+draw push
+draw translate 0 -12.91
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.295
+draw push
+draw translate 0 -9.295
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3536 3.0114 7.3612
+draw pop
+draw push
+draw translate 0 -9.295
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8352 3.2823 8.0234
+draw pop
+draw pop
+draw push
+draw translate 0 -12.91
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -17.931
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -24.904
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -19.545
+draw push
+draw translate 0 -19.545
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -19.545
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.338
+draw push
+draw translate 0 -15.338
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.043
+draw push
+draw translate 0 -11.043
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3608 3.57795 8.7461
+draw pop
+draw push
+draw translate 0 -11.043
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw pop
+draw push
+draw translate 0 -15.338
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.037
+draw push
+draw translate 0 -12.037
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.037
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -34.589
+draw rotate 24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -27.145
+draw push
+draw translate 0 -27.145
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -19.544
+draw push
+draw translate 0 -19.544
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -19.544
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.338
+draw push
+draw translate 0 -15.338
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.043
+draw push
+draw translate 0 -11.043
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3608 3.57795 8.7461
+draw pop
+draw push
+draw translate 0 -11.043
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw pop
+draw push
+draw translate 0 -15.338
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.037
+draw push
+draw translate 0 -12.037
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.037
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -27.145
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -21.303
+draw push
+draw translate 0 -21.303
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.338
+draw push
+draw translate 0 -15.338
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.043
+draw push
+draw translate 0 -11.043
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3608 3.57795 8.7461
+draw pop
+draw push
+draw translate 0 -11.043
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw pop
+draw push
+draw translate 0 -15.338
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.037
+draw push
+draw translate 0 -12.037
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.037
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -21.303
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -16.718
+draw push
+draw translate 0 -16.718
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.037
+draw push
+draw translate 0 -12.037
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.037
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw push
+draw translate 0 -16.718
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -13.12
+draw push
+draw translate 0 -13.12
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5568 4.2507 10.3906
+draw pop
+draw push
+draw translate 0 -13.12
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -8.2368 4.6332 11.3256
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -78
+draw rotate 24
+draw stroke 0.3725 0.05875 41.484375 0.9953125
+draw width 5
+draw line 0 0 0 -61.214
+draw push
+draw translate 0 -61.214
+draw rotate -24
+draw stroke 0.425 0.0675 45.9375 0.98125
+draw width 4.4
+draw line 0 0 0 -44.074
+draw push
+draw translate 0 -44.074
+draw rotate -24
+draw stroke 0.4775 0.07625 53.359375 0.9578125
+draw width 3.8
+draw line 0 0 0 -31.733
+draw push
+draw translate 0 -31.733
+draw rotate -24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -22.848
+draw push
+draw translate 0 -22.848
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -16.451
+draw push
+draw translate 0 -16.451
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -11.845
+draw push
+draw translate 0 -11.845
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -8.528
+draw push
+draw translate 0 -8.528
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -4.912 2.763 6.754
+draw pop
+draw push
+draw translate 0 -8.528
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw pop
+draw push
+draw translate 0 -11.845
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.296
+draw push
+draw translate 0 -9.296
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw push
+draw translate 0 -9.296
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -16.451
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.911
+draw push
+draw translate 0 -12.911
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.296
+draw push
+draw translate 0 -9.296
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw push
+draw translate 0 -9.296
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw pop
+draw push
+draw translate 0 -12.911
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.133
+draw push
+draw translate 0 -10.133
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8368 3.2832 8.0256
+draw pop
+draw push
+draw translate 0 -10.133
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3624 3.57885 8.7483
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -22.848
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -17.932
+draw push
+draw translate 0 -17.932
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.911
+draw push
+draw translate 0 -12.911
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.296
+draw push
+draw translate 0 -9.296
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw push
+draw translate 0 -9.296
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw pop
+draw push
+draw translate 0 -12.911
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.133
+draw push
+draw translate 0 -10.133
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8368 3.2832 8.0256
+draw pop
+draw push
+draw translate 0 -10.133
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3624 3.57885 8.7483
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -17.932
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.073
+draw push
+draw translate 0 -14.073
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.133
+draw push
+draw translate 0 -10.133
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8368 3.2832 8.0256
+draw pop
+draw push
+draw translate 0 -10.133
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3624 3.57885 8.7483
+draw pop
+draw pop
+draw push
+draw translate 0 -14.073
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.045
+draw push
+draw translate 0 -11.045
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.045
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -31.733
+draw rotate 24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -24.904
+draw push
+draw translate 0 -24.904
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -17.931
+draw push
+draw translate 0 -17.931
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.91
+draw push
+draw translate 0 -12.91
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.295
+draw push
+draw translate 0 -9.295
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3536 3.0114 7.3612
+draw pop
+draw push
+draw translate 0 -9.295
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8352 3.2823 8.0234
+draw pop
+draw pop
+draw push
+draw translate 0 -12.91
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -17.931
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -24.904
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -19.545
+draw push
+draw translate 0 -19.545
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -19.545
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.338
+draw push
+draw translate 0 -15.338
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.043
+draw push
+draw translate 0 -11.043
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3608 3.57795 8.7461
+draw pop
+draw push
+draw translate 0 -11.043
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw pop
+draw push
+draw translate 0 -15.338
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.037
+draw push
+draw translate 0 -12.037
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.037
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -44.074
+draw rotate 24
+draw stroke 0.4775 0.07625 53.359375 0.9578125
+draw width 3.8
+draw line 0 0 0 -34.589
+draw push
+draw translate 0 -34.589
+draw rotate -24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -24.904
+draw push
+draw translate 0 -24.904
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -17.931
+draw push
+draw translate 0 -17.931
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.91
+draw push
+draw translate 0 -12.91
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.295
+draw push
+draw translate 0 -9.295
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3536 3.0114 7.3612
+draw pop
+draw push
+draw translate 0 -9.295
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8352 3.2823 8.0234
+draw pop
+draw pop
+draw push
+draw translate 0 -12.91
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -17.931
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -24.904
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -19.545
+draw push
+draw translate 0 -19.545
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -19.545
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.338
+draw push
+draw translate 0 -15.338
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.043
+draw push
+draw translate 0 -11.043
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3608 3.57795 8.7461
+draw pop
+draw push
+draw translate 0 -11.043
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw pop
+draw push
+draw translate 0 -15.338
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.037
+draw push
+draw translate 0 -12.037
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.037
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -34.589
+draw rotate 24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -27.145
+draw push
+draw translate 0 -27.145
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -19.544
+draw push
+draw translate 0 -19.544
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -19.544
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.338
+draw push
+draw translate 0 -15.338
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.043
+draw push
+draw translate 0 -11.043
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3608 3.57795 8.7461
+draw pop
+draw push
+draw translate 0 -11.043
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw pop
+draw push
+draw translate 0 -15.338
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.037
+draw push
+draw translate 0 -12.037
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.037
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -27.145
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -21.303
+draw push
+draw translate 0 -21.303
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.338
+draw push
+draw translate 0 -15.338
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.043
+draw push
+draw translate 0 -11.043
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3608 3.57795 8.7461
+draw pop
+draw push
+draw translate 0 -11.043
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw pop
+draw push
+draw translate 0 -15.338
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.037
+draw push
+draw translate 0 -12.037
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.037
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -21.303
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -16.718
+draw push
+draw translate 0 -16.718
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.037
+draw push
+draw translate 0 -12.037
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.037
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw push
+draw translate 0 -16.718
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -13.12
+draw push
+draw translate 0 -13.12
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5568 4.2507 10.3906
+draw pop
+draw push
+draw translate 0 -13.12
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -8.2368 4.6332 11.3256
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -61.214
+draw rotate 24
+draw stroke 0.425 0.0675 45.9375 0.98125
+draw width 4.4
+draw line 0 0 0 -48.041
+draw push
+draw translate 0 -48.041
+draw rotate -24
+draw stroke 0.4775 0.07625 53.359375 0.9578125
+draw width 3.8
+draw line 0 0 0 -34.59
+draw push
+draw translate 0 -34.59
+draw rotate -24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -24.905
+draw push
+draw translate 0 -24.905
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -17.932
+draw push
+draw translate 0 -17.932
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -12.911
+draw push
+draw translate 0 -12.911
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -9.296
+draw push
+draw translate 0 -9.296
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.3544 3.01185 7.3623
+draw pop
+draw push
+draw translate 0 -9.296
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw pop
+draw push
+draw translate 0 -12.911
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.133
+draw push
+draw translate 0 -10.133
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8368 3.2832 8.0256
+draw pop
+draw push
+draw translate 0 -10.133
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3624 3.57885 8.7483
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -17.932
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.073
+draw push
+draw translate 0 -14.073
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.133
+draw push
+draw translate 0 -10.133
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8368 3.2832 8.0256
+draw pop
+draw push
+draw translate 0 -10.133
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3624 3.57885 8.7483
+draw pop
+draw pop
+draw push
+draw translate 0 -14.073
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.045
+draw push
+draw translate 0 -11.045
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.045
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -24.905
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -19.546
+draw push
+draw translate 0 -19.546
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.073
+draw push
+draw translate 0 -14.073
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.133
+draw push
+draw translate 0 -10.133
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.8368 3.2832 8.0256
+draw pop
+draw push
+draw translate 0 -10.133
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3624 3.57885 8.7483
+draw pop
+draw pop
+draw push
+draw translate 0 -14.073
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.045
+draw push
+draw translate 0 -11.045
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.045
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -19.546
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.34
+draw push
+draw translate 0 -15.34
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.045
+draw push
+draw translate 0 -11.045
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.045
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw push
+draw translate 0 -15.34
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.039
+draw push
+draw translate 0 -12.039
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw push
+draw translate 0 -12.039
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5584 4.2516 10.3928
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -34.59
+draw rotate 24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -27.146
+draw push
+draw translate 0 -27.146
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -19.545
+draw push
+draw translate 0 -19.545
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -19.545
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.338
+draw push
+draw translate 0 -15.338
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.043
+draw push
+draw translate 0 -11.043
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3608 3.57795 8.7461
+draw pop
+draw push
+draw translate 0 -11.043
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw pop
+draw push
+draw translate 0 -15.338
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.037
+draw push
+draw translate 0 -12.037
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.037
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -27.146
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -21.304
+draw push
+draw translate 0 -21.304
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.339
+draw push
+draw translate 0 -15.339
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw push
+draw translate 0 -15.339
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.038
+draw push
+draw translate 0 -12.038
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.038
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -21.304
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -16.72
+draw push
+draw translate 0 -16.72
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.038
+draw push
+draw translate 0 -12.038
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.038
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw push
+draw translate 0 -16.72
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -13.121
+draw push
+draw translate 0 -13.121
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw push
+draw translate 0 -13.121
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -8.2376 4.63365 11.3267
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -48.041
+draw rotate 24
+draw stroke 0.4775 0.07625 53.359375 0.9578125
+draw width 3.8
+draw line 0 0 0 -37.703
+draw push
+draw translate 0 -37.703
+draw rotate -24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -27.146
+draw push
+draw translate 0 -27.146
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -19.545
+draw push
+draw translate 0 -19.545
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -14.072
+draw push
+draw translate 0 -14.072
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -10.132
+draw push
+draw translate 0 -10.132
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -5.836 3.28275 8.0245
+draw pop
+draw push
+draw translate 0 -10.132
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw pop
+draw push
+draw translate 0 -14.072
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -19.545
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.338
+draw push
+draw translate 0 -15.338
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.043
+draw push
+draw translate 0 -11.043
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3608 3.57795 8.7461
+draw pop
+draw push
+draw translate 0 -11.043
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw pop
+draw push
+draw translate 0 -15.338
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.037
+draw push
+draw translate 0 -12.037
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.037
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -27.146
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -21.304
+draw push
+draw translate 0 -21.304
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.339
+draw push
+draw translate 0 -15.339
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw push
+draw translate 0 -15.339
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.038
+draw push
+draw translate 0 -12.038
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.038
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -21.304
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -16.72
+draw push
+draw translate 0 -16.72
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.038
+draw push
+draw translate 0 -12.038
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.038
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw push
+draw translate 0 -16.72
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -13.121
+draw push
+draw translate 0 -13.121
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw push
+draw translate 0 -13.121
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -8.2376 4.63365 11.3267
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -37.703
+draw rotate 24
+draw stroke 0.53 0.085 63.75 0.925
+draw width 3.2
+draw line 0 0 0 -29.589
+draw push
+draw translate 0 -29.589
+draw rotate -24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -21.304
+draw push
+draw translate 0 -21.304
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -15.339
+draw push
+draw translate 0 -15.339
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -11.044
+draw push
+draw translate 0 -11.044
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.3616 3.5784 8.7472
+draw pop
+draw push
+draw translate 0 -11.044
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9344 3.9006 9.5348
+draw pop
+draw pop
+draw push
+draw translate 0 -15.339
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.038
+draw push
+draw translate 0 -12.038
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.038
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -21.304
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -16.72
+draw push
+draw translate 0 -16.72
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.038
+draw push
+draw translate 0 -12.038
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.038
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw push
+draw translate 0 -16.72
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -13.121
+draw push
+draw translate 0 -13.121
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw push
+draw translate 0 -13.121
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -8.2376 4.63365 11.3267
+draw pop
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -29.589
+draw rotate 24
+draw stroke 0.5825 0.09375 77.109375 0.8828125
+draw width 2.6
+draw line 0 0 0 -23.221
+draw push
+draw translate 0 -23.221
+draw rotate -24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -16.719
+draw push
+draw translate 0 -16.719
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -12.038
+draw push
+draw translate 0 -12.038
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -6.9336 3.90015 9.5337
+draw pop
+draw push
+draw translate 0 -12.038
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw pop
+draw push
+draw translate 0 -16.719
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -13.121
+draw push
+draw translate 0 -13.121
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw push
+draw translate 0 -13.121
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -8.2376 4.63365 11.3267
+draw pop
+draw pop
+draw pop
+draw push
+draw translate 0 -23.221
+draw rotate 24
+draw stroke 0.635 0.1025 93.4375 0.83125
+draw width 2
+draw line 0 0 0 -18.224
+draw push
+draw translate 0 -18.224
+draw rotate -24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -13.121
+draw push
+draw translate 0 -13.121
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -7.5576 4.25115 10.3917
+draw pop
+draw push
+draw translate 0 -13.121
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -8.2376 4.63365 11.3267
+draw pop
+draw pop
+draw push
+draw translate 0 -18.224
+draw rotate 24
+draw stroke 0.6875 0.11125 112.734375 0.7703125
+draw width 1.4
+draw line 0 0 0 -14.302
+draw push
+draw translate 0 -14.302
+draw rotate -24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -8.2376 4.63365 11.3267
+draw pop
+draw push
+draw translate 0 -14.302
+draw rotate 24
+draw stroke 0 0 0 0
+draw fill 0.74 0.15 138 0.9
+draw ellipse 0 -8.9792 5.0508 12.3464
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop
+draw pop

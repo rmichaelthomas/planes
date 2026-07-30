@@ -71,7 +71,7 @@
     <p class="sub">
       A canvas runtime that adds nothing to the language: a program draws by
       emitting <code>show</code> lines carrying the versioned drawing
-      protocol — every line prefixed <code>draw</code>, twenty-six verbs,
+      protocol — every line prefixed <code>draw</code>, thirty-three verbs,
       OKLCH colour (see the footer) — usually through <code>use draw</code>'s
       helpers rather than assembled by hand, and the page paints them. Input
       crosses in as a value, not an effect; state crosses the tick boundary
@@ -138,22 +138,29 @@
     <pre id="paint-output">(no output yet)</pre>
 
     <footer>
-      Drawing Protocol v1 — twenty-six verbs, every line prefixed
+      Drawing Protocol v2 — thirty-three verbs, every line prefixed
       <code>draw</code>: colour and line (<code>stroke</code>,
       <code>fill</code>, <code>width</code>, <code>cap</code>,
-      <code>corner</code>), shapes (<code>line</code>, <code>rect</code>,
-      <code>circle</code>, <code>ellipse</code>, <code>arc</code>,
-      <code>triangle</code>), paths (<code>shape</code>, <code>vertex</code>,
-      <code>curve</code>, <code>close</code>, <code>end</code>), transforms
-      (<code>push</code>, <code>pop</code>, <code>translate</code>,
-      <code>rotate</code>, <code>scale</code>), text and canvas
-      (<code>label</code>, <code>size</code>, <code>align</code>,
-      <code>background</code>, <code>clear</code>). Colour is OKLCH
+      <code>corner</code>, <code>alpha</code>, <code>dash</code>), shapes
+      (<code>line</code>, <code>rect</code>, <code>circle</code>,
+      <code>ellipse</code>, <code>arc</code>, <code>triangle</code> —
+      <code>rect</code>/<code>ellipse</code> take an optional rotation),
+      paths (<code>shape</code>, <code>vertex</code>, <code>curve</code>,
+      <code>close</code>, <code>end</code>), transforms (<code>push</code>,
+      <code>pop</code>, <code>translate</code>, <code>rotate</code>,
+      <code>scale</code>), text and canvas (<code>label</code>,
+      <code>size</code>, <code>align</code>, <code>background</code>,
+      <code>clear</code>), and paint and compositing (<code>gradient</code>,
+      <code>shadow</code>, <code>blend</code>, <code>clip</code>,
+      <code>unclip</code>). Colour is OKLCH
       (<code>L C H</code>, plus <code>A</code> for <code>stroke</code>/<code>fill</code>).
       A line not beginning with <code>draw</code> goes to the output pane as
       text, unconditionally; a line that does begin with <code>draw</code> is
       always a command, and a malformed one is reported as an error rather
-      than drawn.
+      than drawn. A stream declares its version — <code>draw protocol 1</code>
+      or <code>draw protocol 2</code>, or nothing (version 1) — and a version-2
+      verb used without declaring version 2 is refused rather than silently
+      drawn.
       <br /><br />
       <strong>Two renderers.</strong> The canvas and the SVG exporter are
       sinks for one stream walk (<code>js/paint/stream.mjs</code>): the version

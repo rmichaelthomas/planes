@@ -1,7 +1,7 @@
 {
   "format": 1,
   "protocol": "planes-drawing",
-  "version": 1,
+  "version": 2,
   "prefix": "draw",
   "prefix_note": "Every command line begins with this word. A line that does not is prose and is never interpreted.",
   "line_shape": "draw <verb> <arg1> <arg2> ... <argN>",
@@ -78,8 +78,10 @@
         "number",
         "number",
         "number",
+        "number",
         "number"
       ],
+      "optional": 1,
       "group": "shapes"
     },
     {
@@ -99,8 +101,10 @@
         "number",
         "number",
         "number",
+        "number",
         "number"
       ],
+      "optional": 1,
       "group": "shapes"
     },
     {
@@ -247,6 +251,100 @@
       ],
       "trailing_text": true,
       "group": "text-and-canvas"
+    },
+    {
+      "name": "gradient",
+      "arity": 1,
+      "arguments": [
+        "word"
+      ],
+      "variable_arity": true,
+      "variants": {
+        "linear": {
+          "arguments": [
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number"
+          ],
+          "description": "x1 y1 x2 y2 L1 C1 H1 A1 L2 C2 H2 A2"
+        },
+        "radial": {
+          "arguments": [
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number"
+          ],
+          "description": "x y r L1 C1 H1 A1 L2 C2 H2 A2"
+        }
+      },
+      "group": "paint-and-compositing"
+    },
+    {
+      "name": "shadow",
+      "arity": 6,
+      "arguments": [
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+        "number"
+      ],
+      "group": "paint-and-compositing"
+    },
+    {
+      "name": "blend",
+      "arity": 1,
+      "arguments": [
+        "word"
+      ],
+      "group": "paint-and-compositing"
+    },
+    {
+      "name": "clip",
+      "arity": 0,
+      "arguments": [],
+      "group": "paint-and-compositing"
+    },
+    {
+      "name": "unclip",
+      "arity": 0,
+      "arguments": [],
+      "group": "paint-and-compositing"
+    },
+    {
+      "name": "alpha",
+      "arity": 1,
+      "arguments": [
+        "number"
+      ],
+      "group": "colour-and-line"
+    },
+    {
+      "name": "dash",
+      "arity": 2,
+      "arguments": [
+        "number",
+        "number"
+      ],
+      "group": "colour-and-line"
     }
   ],
   "word_arguments": {
@@ -264,6 +362,14 @@
       "left",
       "center",
       "right"
+    ],
+    "gradient": [
+      "linear",
+      "radial"
+    ],
+    "blend": [
+      "normal",
+      "add"
     ]
   },
   "trailing_text_note": "The one verb with `trailing_text: true` (label) is the one exception to whitespace-tokenized arguments: its declared numeric arguments are followed by one whitespace run, then everything remaining on the line -- verbatim, including any further whitespace -- is the trailing argument. It is not itself tokenized.",
@@ -277,6 +383,7 @@
     "shapes",
     "paths",
     "transforms",
-    "text-and-canvas"
+    "text-and-canvas",
+    "paint-and-compositing"
   ]
 }

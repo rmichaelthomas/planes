@@ -1,10 +1,10 @@
-# paint/draw.planes — one helper per verb in planes-drawing-protocol-v1.md,
+# paint/draw.planes — one helper per verb in planes-drawing-protocol-v2.md,
 # and nothing else (specification §11, checkpoint v21.0 §250). The
 # specification's verb table and this file are the same thing written twice;
 # a test reads the table straight out of js/paint/protocol.mjs and asserts
 # the correspondence verb for verb, no extras, no omissions. `protocol`
 # itself is excluded — it is a stream directive, not a drawing verb, and a
-# program states its version once, directly, as `show "draw protocol 1"`.
+# program states its version once, directly, as `show "draw protocol 2"`.
 #
 # `label`, not `text`, and `corner`, not `join`: those two words are Planes
 # builtins, and a function definition here would shadow them across any
@@ -12,6 +12,13 @@
 # would keep working, but `text of x` would silently call this file's
 # `label`-adjacent wrapper instead of the builtin, in every file that uses
 # this library.
+#
+# `ellipse`/`rect` carry a `turn` argument ALWAYS now (v2 §9.3), even though
+# the protocol's own optional-tail mechanism would let a caller omit it —
+# because a second helper (one with rotation, one without) would break "one
+# helper per verb, and nothing else." Every caller updated to pass `0` costs
+# a one-line edit per call site; a second `ellipse`/`rect` helper would cost
+# this file its one correspondence a mechanical test can check.
 
 to stroke of l, c, h, a:
   show "draw stroke " + text of l + " " + text of c + " " + text of h + " " + text of a
@@ -31,14 +38,14 @@ to corner of style:
 to line of x1, y1, x2, y2:
   show "draw line " + text of x1 + " " + text of y1 + " " + text of x2 + " " + text of y2
 
-to rect of x, y, w, h:
-  show "draw rect " + text of x + " " + text of y + " " + text of w + " " + text of h
+to rect of x, y, w, h, turn:
+  show "draw rect " + text of x + " " + text of y + " " + text of w + " " + text of h + " " + text of turn
 
 to circle of x, y, r:
   show "draw circle " + text of x + " " + text of y + " " + text of r
 
-to ellipse of x, y, rx, ry:
-  show "draw ellipse " + text of x + " " + text of y + " " + text of rx + " " + text of ry
+to ellipse of x, y, rx, ry, turn:
+  show "draw ellipse " + text of x + " " + text of y + " " + text of rx + " " + text of ry + " " + text of turn
 
 to arc of x, y, r, start, finish:
   show "draw arc " + text of x + " " + text of y + " " + text of r + " " + text of start + " " + text of finish
@@ -90,3 +97,33 @@ to background of l, c, h:
 
 to clear:
   show "draw clear"
+
+# v2 additions (planes-drawing-protocol-v2.md §6.6).
+#
+# `gradient` covers both `linear` and `radial` in one definition, the way
+# the protocol's own parser does (§5.2) — Planes functions have fixed arity,
+# so `radial`'s callers pass all four geometry positions too, with the
+# fourth (`x2`) unused; a radial gradient only ever needed three.
+to gradient of kind, x1, y1, x2, y2, l1, c1, h1, a1, l2, c2, h2, a2:
+  if kind == "radial":
+    show "draw gradient radial " + text of x1 + " " + text of y1 + " " + text of x2 + " " + text of l1 + " " + text of c1 + " " + text of h1 + " " + text of a1 + " " + text of l2 + " " + text of c2 + " " + text of h2 + " " + text of a2
+  else:
+    show "draw gradient linear " + text of x1 + " " + text of y1 + " " + text of x2 + " " + text of y2 + " " + text of l1 + " " + text of c1 + " " + text of h1 + " " + text of a1 + " " + text of l2 + " " + text of c2 + " " + text of h2 + " " + text of a2
+
+to shadow of dx, dy, blur, l, c, h:
+  show "draw shadow " + text of dx + " " + text of dy + " " + text of blur + " " + text of l + " " + text of c + " " + text of h
+
+to blend of mode:
+  show "draw blend " + mode
+
+to clip:
+  show "draw clip"
+
+to unclip:
+  show "draw unclip"
+
+to alpha of a:
+  show "draw alpha " + text of a
+
+to dash of dash-on, dash-off:
+  show "draw dash " + text of dash-on + " " + text of dash-off

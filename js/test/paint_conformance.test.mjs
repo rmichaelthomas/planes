@@ -40,9 +40,24 @@ function fakeCtx() {
     stroke: record("stroke"), fill: record("fill"), fillRect: record("fillRect"),
     fillText: record("fillText"), translate: record("translate"),
     rotate: record("rotate"), scale: record("scale"),
+    save: record("save"), restore: record("restore"), clip: record("clip"),
+    drawImage: record("drawImage"), clearRect: record("clearRect"),
+    createLinearGradient(...args) {
+      calls.push(["createLinearGradient", ...args]);
+      return { addColorStop: (...a) => calls.push(["addColorStop", ...a]) };
+    },
+    createRadialGradient(...args) {
+      calls.push(["createRadialGradient", ...args]);
+      return { addColorStop: (...a) => calls.push(["addColorStop", ...a]) };
+    },
     getTransform() { return transform; },
     setTransform(t) { transform = t; },
     resetTransform() { transform = "identity"; },
+    // Bookkeeping, like getTransform/setTransform above — not itself a
+    // verb's own call, so not recorded into `calls` (dash's own tests read
+    // this back directly instead).
+    setLineDash(d) { this._lineDash = d; },
+    getLineDash() { return this._lineDash || []; },
   };
 }
 
@@ -83,21 +98,41 @@ const SAMPLE = {
   end: "draw end",
   pop: "draw pop",
   label: "draw label 8 18 score: 42",
+  // v2 additions.
+  gradient: "draw gradient linear 0 0 200 0 0.9 0.05 90 1 0.4 0.1 260 1",
+  shadow: "draw shadow 3 3 6 0.2 0.05 260",
+  blend: "draw blend add",
+  alpha: "draw alpha 0.6",
+  dash: "draw dash 6 3",
+  clip: "draw clip",
+  unclip: "draw unclip",
 };
 
 // A valid stream order: the path block is opened before it is drawn into and
-// closed before its enclosing push is popped. Asserted to be a permutation of
-// VERBS, so it stays complete as the table changes.
+// closed before its enclosing push is popped, and `clip` is immediately
+// followed by the shape that defines it (`rect`) and then `unclip`. `shadow`
+// is last, right before `label` — every shape before it draws with no
+// shadow active, so this fixture never needs the offscreen single-cast path
+// (js/test/shadow_parity.test.mjs covers that on its own); `label` still
+// picks the shadow up (canvas's fillText respects ctx.shadowBlur natively,
+// and svg.mjs's label() checks the same shadowState svg.mjs's shapes do), so
+// the filter def this fixture asserts on is still genuinely referenced.
+// Asserted to be a permutation of VERBS, so it stays complete as the table
+// changes.
 const ORDER = [
   "stroke", "fill", "width", "cap", "corner",
   "background", "clear", "size", "align",
-  "line", "rect", "circle", "ellipse", "arc", "triangle",
+  "alpha", "dash", "blend", "gradient",
+  "line",
+  "clip", "rect", "unclip",
+  "circle", "ellipse", "arc", "triangle",
   "push", "translate", "rotate", "scale",
   "shape", "vertex", "curve", "close", "end",
-  "pop", "label",
+  "pop", "shadow", "label",
 ];
 
-const ALL_VERBS_STREAM = ["draw protocol 1", ...ORDER.map((v) => SAMPLE[v])];
+// v2, since six of these verbs do not exist in version 1.
+const ALL_VERBS_STREAM = ["draw protocol 2", ...ORDER.map((v) => SAMPLE[v])];
 
 test("the all-verbs fixture covers exactly the verb table, no more and no less", () => {
   assert.deepEqual(Object.keys(SAMPLE).slice().sort(), VERBS.slice().sort());
@@ -134,6 +169,13 @@ test("every verb in the fixture leaves a mark in the SVG document", () => {
   assert.match(svg, /transform="translate\(20 15\)"/);
   assert.match(svg, /transform="rotate\(25\)"/);
   assert.match(svg, /transform="scale\(1\.5 1\.5\)"/);
+  // v2 marks.
+  assert.match(svg, /<defs>/, "gradient/shadow/clip defs");
+  assert.match(svg, /<linearGradient/);
+  assert.match(svg, /<feDropShadow/);
+  assert.match(svg, /<clipPath/);
+  assert.match(svg, /stroke-dasharray="6 3"/);
+  assert.match(svg, /style="mix-blend-mode:plus-lighter"/);
 });
 
 // ---- the error battery -------------------------------------------------------
@@ -161,6 +203,9 @@ const ERROR_CASES = [
   ["path-unclosed", ["draw shape", "draw vertex 0 0"]],
   ["unmatched-pop", ["draw pop"]],
   ["unmatched-push", ["draw push", "draw rotate 10"]],
+  ["verb-not-in-version", ["draw shadow 1 1 1 0 0 0"]],
+  ["unmatched-unclip", ["draw protocol 2", "draw unclip"]],
+  ["clip-unclosed", ["draw protocol 2", "draw clip"]],
   ["several at once, in stream order", [
     "draw pop",
     "draw wobble",
@@ -194,10 +239,10 @@ test("the error battery reaches every tag either renderer can raise", () => {
   assert.deepEqual(
     [...seen].sort(),
     [
-      "bad-number", "bad-protocol-version", "bad-word", "path-already-open",
-      "path-not-open", "path-unclosed", "protocol-late", "protocol-repeated",
-      "unknown-verb", "unmatched-pop", "unmatched-push", "unsupported-version",
-      "wrong-arity",
+      "bad-number", "bad-protocol-version", "bad-word", "clip-unclosed",
+      "path-already-open", "path-not-open", "path-unclosed", "protocol-late",
+      "protocol-repeated", "unknown-verb", "unmatched-pop", "unmatched-push",
+      "unmatched-unclip", "unsupported-version", "verb-not-in-version", "wrong-arity",
     ],
   );
 });
@@ -205,7 +250,7 @@ test("the error battery reaches every tag either renderer can raise", () => {
 // ---- version refusal ---------------------------------------------------------
 
 test("both renderers refuse an unsupported version identically and emit nothing", () => {
-  for (const version of [2, 7, 99]) {
+  for (const version of [3, 7, 99]) {
     const lines = [`draw protocol ${version}`, "draw circle 10 10 5", "some prose", "draw rect 0 0 5 5"];
     const ctx = fakeCtx();
     const canvas = paint(ctx, lines, DIMENSIONS);

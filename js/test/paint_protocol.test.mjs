@@ -1,19 +1,22 @@
 // js/test/paint_protocol.test.mjs — the drawing protocol (planes-drawing-
-// protocol-v1.md §§1-7), headless.
+// protocol-v1.md §§1-7, planes-drawing-protocol-v2.md), headless.
 //
 // A line beginning with `draw` is always a command — never reinterpreted as
 // prose, even when it is malformed. Any other line is prose, unconditionally,
 // including a line that happens to spell a zero-arity verb's own name. These
 // tests cover every verb at correct and wrong arity, every error tag, `~`
-// stripping, and label's free-text tail.
+// stripping, and label's/gradient's free-shape parsing. `ellipse`/`rect`
+// (v2's optional rotation argument) are excluded from the generic
+// NUMERIC_CASES arity loops below, the same way `label` and `gradient` are —
+// their arity is a range, not a single number, and get their own tests.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseCommand, VERBS } from "../paint/protocol.mjs";
 
-test("VERBS is the frozen twenty-six-verb table, protocol excluded", () => {
-  assert.equal(VERBS.length, 26);
-  assert.equal(new Set(VERBS).size, 26, "no duplicates");
+test("VERBS is the frozen thirty-three-verb table, protocol excluded", () => {
+  assert.equal(VERBS.length, 33);
+  assert.equal(new Set(VERBS).size, 33, "no duplicates");
   assert.ok(!VERBS.includes("protocol"), "protocol is a stream directive, not a drawing verb");
   assert.ok(Object.isFrozen(VERBS));
   for (const retired of ["pen", "move", "dot", "box", "text", "join"]) {
@@ -21,6 +24,9 @@ test("VERBS is the frozen twenty-six-verb table, protocol excluded", () => {
   }
   assert.ok(VERBS.includes("label"), "text -> label");
   assert.ok(VERBS.includes("corner"), "join -> corner");
+  for (const added of ["gradient", "shadow", "blend", "clip", "unclip", "alpha", "dash"]) {
+    assert.ok(VERBS.includes(added), `v2 adds ${added}`);
+  }
 });
 
 // ---- every verb at correct arity -------------------------------------------
@@ -30,9 +36,7 @@ const NUMERIC_CASES = [
   ["fill", "draw fill 0.6 0.15 210 1", [0.6, 0.15, 210, 1]],
   ["width", "draw width 3", [3]],
   ["line", "draw line 0 0 100 50", [0, 0, 100, 50]],
-  ["rect", "draw rect 0 0 100 50", [0, 0, 100, 50]],
   ["circle", "draw circle 200 100 40", [200, 100, 40]],
-  ["ellipse", "draw ellipse 200 100 40 20", [200, 100, 40, 20]],
   ["arc", "draw arc 200 100 40 0 90", [200, 100, 40, 0, 90]],
   ["triangle", "draw triangle 0 0 10 0 5 10", [0, 0, 10, 0, 5, 10]],
   ["vertex", "draw vertex 100 100", [100, 100]],
@@ -42,6 +46,9 @@ const NUMERIC_CASES = [
   ["scale", "draw scale 2 -1", [2, -1]],
   ["size", "draw size 16", [16]],
   ["background", "draw background 0.9 0.05 90", [0.9, 0.05, 90]],
+  ["shadow", "draw shadow 2 3 6 0.5 0.1 40", [2, 3, 6, 0.5, 0.1, 40]],
+  ["alpha", "draw alpha 0.4", [0.4]],
+  ["dash", "draw dash 8 4", [8, 4]],
 ];
 
 for (const [verb, line, args] of NUMERIC_CASES) {
@@ -50,12 +57,103 @@ for (const [verb, line, args] of NUMERIC_CASES) {
   });
 }
 
-const ZERO_ARITY = ["shape", "close", "end", "push", "pop", "clear"];
+const ZERO_ARITY = ["shape", "close", "end", "push", "pop", "clear", "clip", "unclip"];
 for (const verb of ZERO_ARITY) {
   test(`${verb} takes no arguments`, () => {
     assert.deepEqual(parseCommand(`draw ${verb}`), { kind: "command", verb, args: [] });
   });
 }
+
+// ---- ellipse/rect: base arity plus one optional rotation argument ---------
+
+test("ellipse with no rotation defaults the fifth argument to 0", () => {
+  assert.deepEqual(parseCommand("draw ellipse 200 100 40 20"), {
+    kind: "command",
+    verb: "ellipse",
+    args: [200, 100, 40, 20, 0],
+  });
+});
+
+test("ellipse with an explicit rotation keeps it", () => {
+  assert.deepEqual(parseCommand("draw ellipse 200 100 40 20 45"), {
+    kind: "command",
+    verb: "ellipse",
+    args: [200, 100, 40, 20, 45],
+  });
+});
+
+test("rect with no rotation defaults the fifth argument to 0", () => {
+  assert.deepEqual(parseCommand("draw rect 0 0 100 50"), {
+    kind: "command",
+    verb: "rect",
+    args: [0, 0, 100, 50, 0],
+  });
+});
+
+test("rect with an explicit rotation keeps it", () => {
+  assert.deepEqual(parseCommand("draw rect 0 0 100 50 30"), {
+    kind: "command",
+    verb: "rect",
+    args: [0, 0, 100, 50, 30],
+  });
+});
+
+for (const verb of ["ellipse", "rect"]) {
+  test(`${verb} with two arguments too few is wrong-arity, naming the range`, () => {
+    const r = parseCommand(`draw ${verb} 1 2`);
+    assert.equal(r.kind, "error");
+    assert.equal(r.tag, "wrong-arity");
+    assert.match(r.message, /takes 4 to 5 arguments/);
+  });
+  test(`${verb} with two arguments too many is wrong-arity`, () => {
+    const r = parseCommand(`draw ${verb} 1 2 3 4 5 6`);
+    assert.equal(r.kind, "error");
+    assert.equal(r.tag, "wrong-arity");
+  });
+}
+
+// ---- gradient: word, then a variable run of numbers depending on it -------
+
+test("gradient linear takes 4 geometry numbers then 8 stop numbers", () => {
+  assert.deepEqual(parseCommand("draw gradient linear 0 0 100 0 0.9 0.05 90 1 0.4 0.1 260 1"), {
+    kind: "command",
+    verb: "gradient",
+    args: ["linear", 0, 0, 100, 0, 0.9, 0.05, 90, 1, 0.4, 0.1, 260, 1],
+  });
+});
+
+test("gradient radial takes 3 geometry numbers then 8 stop numbers", () => {
+  assert.deepEqual(parseCommand("draw gradient radial 50 50 40 0.9 0.05 90 1 0.4 0.1 260 1"), {
+    kind: "command",
+    verb: "gradient",
+    args: ["radial", 50, 50, 40, 0.9, 0.05, 90, 1, 0.4, 0.1, 260, 1],
+  });
+});
+
+test("gradient rejects a kind word outside linear/radial", () => {
+  const r = parseCommand("draw gradient conic 0 0 100 0 0 0 0 1 0 0 0 1");
+  assert.equal(r.kind, "error");
+  assert.equal(r.tag, "bad-word");
+  assert.match(r.message, /linear/);
+});
+
+test("gradient with no kind word at all is bad-word", () => {
+  const r = parseCommand("draw gradient");
+  assert.equal(r.kind, "error");
+  assert.equal(r.tag, "bad-word");
+});
+
+test("gradient linear with the wrong count of numbers is wrong-arity", () => {
+  const r = parseCommand("draw gradient linear 0 0 100 0");
+  assert.equal(r.kind, "error");
+  assert.equal(r.tag, "wrong-arity");
+});
+
+test("gradient with a non-numeric argument is bad-number", () => {
+  const r = parseCommand("draw gradient linear x 0 100 0 0.9 0.05 90 1 0.4 0.1 260 1");
+  assert.equal(r.kind, "error");
+  assert.equal(r.tag, "bad-number");
+});
 
 test("protocol takes one positive integer", () => {
   assert.deepEqual(parseCommand("draw protocol 1"), { kind: "command", verb: "protocol", args: [1] });
@@ -85,6 +183,7 @@ const WORD_CASES = [
   ["cap", ["butt", "round", "square"], "triangle"],
   ["corner", ["miter", "round", "bevel"], "square"],
   ["align", ["left", "center", "right"], "middle"],
+  ["blend", ["normal", "add"], "screen"],
 ];
 
 for (const [verb, valid, invalid] of WORD_CASES) {

@@ -147,7 +147,7 @@ for each seg in next.body:
   fill of (0.36 + nearness * 0.26), 0.14, 145, 1
   seg-px = seg.x * cell-size + 1
   seg-py = seg.y * cell-size + 1
-  rect of seg-px, seg-py, (cell-size - 2), (cell-size - 2)
+  rect of seg-px, seg-py, (cell-size - 2), (cell-size - 2), 0
   ramp-index = ramp-index + 1
 
 # The head is a triangle rather than a square, pointed the way the snake is

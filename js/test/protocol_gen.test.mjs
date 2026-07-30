@@ -41,8 +41,15 @@ test("every verb's arity in protocol.json agrees with what parseCommand itself e
   const doc = readJson("protocol/protocol.json");
   for (const v of doc.verbs) {
     // label's declared arity is "2 plus trailing free text" (§3.2's one
-    // named exception) — it never rejects on an OVER count, only under.
-    const cases = v.trailing_text ? [v.arity - 1] : v.arity === 0 ? [v.arity + 1] : [v.arity - 1, v.arity + 1];
+    // named exception), and gradient's is "1 word, then a run of numbers
+    // depending on the word" (a second exception, v2 §5.2) — neither fits
+    // "exactly arity, or an error" at all; both get their own dedicated
+    // tests below. A verb with an OPTIONAL tail (v2's `ellipse`/`rect`)
+    // rejects one UNDER its base arity and one OVER its max, not one over
+    // its base.
+    if (v.trailing_text || v.variable_arity) continue;
+    const over = v.arity + (v.optional || 0) + 1;
+    const cases = v.arity === 0 ? [over] : [v.arity - 1, over];
     for (const argc of cases) {
       const args = Array.from({ length: argc }, () => "1").join(" ");
       const result = parseCommand(`draw ${v.name} ${args}`.trim());
@@ -54,6 +61,10 @@ test("every verb's arity in protocol.json agrees with what parseCommand itself e
 test("every word_arguments set in protocol.json agrees with parseCommand's own bad-word rejection", () => {
   const doc = readJson("protocol/protocol.json");
   for (const [verb, words] of Object.entries(doc.word_arguments)) {
+    // gradient's word decides how many numbers follow it, so `draw gradient
+    // <word>` alone is not a complete command — its own dedicated test below
+    // covers this instead of the generic "word alone is a command" case.
+    if (verb === "gradient") continue;
     for (const word of words) {
       const result = parseCommand(`draw ${verb} ${word}`);
       assert.equal(result.kind, "command", `${verb} ${word} should be accepted`);
@@ -61,6 +72,13 @@ test("every word_arguments set in protocol.json agrees with parseCommand's own b
     const result = parseCommand(`draw ${verb} not-a-real-word`);
     assert.equal(result.tag, "bad-word");
   }
+});
+
+test("gradient's word_arguments entry (linear, radial) matches parseCommand's own kind check", () => {
+  const doc = readJson("protocol/protocol.json");
+  assert.deepEqual(doc.word_arguments.gradient, ["linear", "radial"]);
+  const result = parseCommand("draw gradient conic 1 2 3 4 5 6 7 8 9 10 11 12");
+  assert.equal(result.tag, "bad-word");
 });
 
 test("draw.planes has exactly one helper per verb, protocol excluded, no extras", () => {
@@ -83,12 +101,20 @@ test("groups: every verb has exactly one group, every group is non-empty", () =>
   }
 });
 
-test("groups and their verbs match planes-drawing-protocol-v1.md's §6.1-§6.5 tables directly", () => {
-  const specSrc = readFileSync(path.join(REPO, "planes-drawing-protocol-v1.md"), "utf-8");
+test("groups and their verbs match planes-drawing-protocol-v2.md's §6.1-§6.6 tables directly", () => {
+  const specSrc = readFileSync(path.join(REPO, "planes-drawing-protocol-v2.md"), "utf-8");
   const { groups, verbGroups } = extractSpecGroups(specSrc);
   assert.deepEqual(groups, GROUPS);
   assert.deepEqual(verbGroups, VERB_GROUPS);
   assert.equal(Object.keys(verbGroups).length, VERBS.length);
+});
+
+test("planes-drawing-protocol-v1.md is unmodified and still describes its own 26-verb, 5-group world", () => {
+  const specSrc = readFileSync(path.join(REPO, "planes-drawing-protocol-v1.md"), "utf-8");
+  const { groups, verbGroups } = extractSpecGroups(specSrc);
+  assert.deepEqual(groups, ["colour-and-line", "shapes", "paths", "transforms", "text-and-canvas"]);
+  assert.equal(Object.keys(verbGroups).length, 26);
+  assert.ok(!("gradient" in verbGroups), "v1 has no v2 verbs");
 });
 
 test("a §6 section's group assignment does not leak past the last one into later document sections", () => {
@@ -194,12 +220,31 @@ function makeStubProtocolModule(extraVerb) {
 
 const STUB_SRC = 'if (!/^-?\\d+(\\.\\d+)?$/.test(stripped)) return null;';
 
+// Self-contained, independent of the real GROUPS/VERB_GROUPS (which now span
+// six groups and thirty-three verbs) — the stub module only ever has the
+// twenty-six verbs makeStubProtocolModule declares, so it gets its own
+// five-group world rather than depending on the real one's exact shape.
+const STUB_GROUPS = ["colour-and-line", "shapes", "paths", "transforms", "text-and-canvas"];
+const STUB_VERB_GROUPS = {
+  stroke: "colour-and-line", fill: "colour-and-line", width: "colour-and-line", cap: "colour-and-line", corner: "colour-and-line",
+  line: "shapes", rect: "shapes", circle: "shapes", ellipse: "shapes", arc: "shapes", triangle: "shapes",
+  shape: "paths", vertex: "paths", curve: "paths", close: "paths", end: "paths",
+  push: "transforms", pop: "transforms", translate: "transforms", rotate: "transforms", scale: "transforms",
+  size: "text-and-canvas", align: "text-and-canvas", background: "text-and-canvas", clear: "text-and-canvas", label: "text-and-canvas",
+};
+
 test("a verb added to a stub module appears in the generated JSON with no edit to the generator", () => {
-  const withoutExtra = protocolJsonFromModule(makeStubProtocolModule(null), STUB_SRC);
+  const withoutExtra = protocolJsonFromModule(makeStubProtocolModule(null), STUB_SRC, {
+    verbGroups: STUB_VERB_GROUPS,
+    groups: STUB_GROUPS,
+  });
   assert.ok(!withoutExtra.verbs.some((v) => v.name === "wiggle"));
 
-  const stubGroups = { ...Object.fromEntries(withoutExtra.verbs.map((v) => [v.name, v.group])), wiggle: "shapes" };
-  const withExtra = protocolJsonFromModule(makeStubProtocolModule("wiggle"), STUB_SRC, { verbGroups: stubGroups });
+  const stubGroups = { ...STUB_VERB_GROUPS, wiggle: "shapes" };
+  const withExtra = protocolJsonFromModule(makeStubProtocolModule("wiggle"), STUB_SRC, {
+    verbGroups: stubGroups,
+    groups: STUB_GROUPS,
+  });
   const wiggle = withExtra.verbs.find((v) => v.name === "wiggle");
   assert.ok(wiggle, "the added verb must appear in the generated JSON");
   assert.equal(wiggle.arity, 2);
@@ -208,7 +253,10 @@ test("a verb added to a stub module appears in the generated JSON with no edit t
 
 test("a verb with no group assignment fails loudly rather than being silently dropped", () => {
   assert.throws(
-    () => protocolJsonFromModule(makeStubProtocolModule("wiggle"), STUB_SRC),
+    () => protocolJsonFromModule(makeStubProtocolModule("wiggle"), STUB_SRC, {
+      verbGroups: STUB_VERB_GROUPS,
+      groups: STUB_GROUPS,
+    }),
     /verb "wiggle" has no group assignment/,
   );
 });
@@ -216,7 +264,11 @@ test("a verb with no group assignment fails loudly rather than being silently dr
 test("probeArity/probeArgumentShape agree with the real module for every real verb", async () => {
   const mod = await import(`file://${path.join(REPO, "js", "paint", "protocol.mjs")}`);
   for (const name of VERBS) {
-    if (name === "label") continue; // §3.2's one named exception
+    // §3.2's one named exception (label) and v2's second one (gradient) —
+    // neither has an arity a 64-numeric-argument probe can read: label is
+    // never reached through the generic path at all, and gradient rejects
+    // 64 numbers on its first (word) argument before arity is ever checked.
+    if (name === "label" || name === "gradient") continue;
     const arity = probeArity(mod.parseCommand, name);
     const shape = probeArgumentShape(mod.parseCommand, name, arity);
     assert.ok(Number.isInteger(arity) && arity >= 0);
@@ -262,13 +314,13 @@ test("errors.json's entry count matches an independent count of err()/tag: sites
   assert.equal(streamEntries.length, literalTagCount);
 });
 
-test("errors.json reports the full tag list — 5 from protocol.mjs, 8 from stream.mjs, 13 total", () => {
+test("errors.json reports the full tag list — 5 from protocol.mjs, 11 from stream.mjs, 16 total", () => {
   const doc = readJson("protocol/errors.json");
   const protocolTags = new Set(doc.entries.filter((e) => e.source.startsWith("js/paint/protocol.mjs")).map((e) => e.tag));
   const streamTags = new Set(doc.entries.filter((e) => e.source.startsWith("js/paint/stream.mjs")).map((e) => e.tag));
   assert.equal(protocolTags.size, 5, [...protocolTags].join(", "));
-  assert.equal(streamTags.size, 8, [...streamTags].join(", "));
-  assert.equal(Object.keys(doc.tags).length, 13);
+  assert.equal(streamTags.size, 11, [...streamTags].join(", "));
+  assert.equal(Object.keys(doc.tags).length, 16);
   assert.equal(doc.count, doc.entries.length);
 });
 

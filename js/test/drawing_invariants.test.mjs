@@ -60,20 +60,29 @@ test("paint/draw.planes defines exactly one helper per verb, and nothing else", 
   );
 });
 
-test("VERBS is the twenty-six of protocol version 1, exactly", () => {
+test("VERBS is the thirty-three of protocol versions 1-2, exactly", () => {
   assert.deepEqual(VERBS.slice().sort(), [
-    "align", "arc", "background", "cap", "circle", "clear", "close", "corner",
-    "curve", "ellipse", "end", "fill", "label", "line", "pop", "push", "rect",
-    "rotate", "scale", "shape", "size", "stroke", "translate", "triangle",
+    "align", "alpha", "arc", "background", "blend", "cap", "circle", "clear",
+    "clip", "close", "corner", "curve", "dash", "ellipse", "end", "fill",
+    "gradient", "label", "line", "pop", "push", "rect", "rotate", "scale",
+    "shadow", "shape", "size", "stroke", "translate", "triangle", "unclip",
     "vertex", "width",
   ]);
 });
 
-test("no Planes source emits a raw draw string except paint/draw.planes", () => {
+test("no Planes source emits a raw draw string except paint/draw.planes and the protocol declaration", () => {
+  // draw.planes deliberately carries no `protocol` helper (v2 §6.6's own
+  // draw.planes header, and planes-drawing-protocol-v2.md §1.1): a program
+  // states its version once, directly, as `show "draw protocol N"`. That
+  // one exact shape is the only raw "draw " string any other program may
+  // emit — anything else is a hand-assembled protocol line.
   const offenders = fs
     .readdirSync(path.join(REPO, "paint"))
     .filter((f) => f.endsWith(".planes") && f !== "draw.planes")
-    .filter((f) => /show\s+"draw\b/.test(read(path.join("paint", f))));
+    .filter((f) => {
+      const withoutDeclaration = read(path.join("paint", f)).replace(/show\s+"draw protocol \d+"/g, "");
+      return /show\s+"draw\b/.test(withoutDeclaration);
+    });
   assert.deepEqual(offenders, [], "a program assembled a protocol line by hand");
 });
 
@@ -84,6 +93,8 @@ const WALK_OWNED_TAGS = [
   "protocol-repeated", "protocol-late", "unsupported-version",
   "path-already-open", "path-not-open", "path-unclosed",
   "unmatched-pop", "unmatched-push",
+  // v2 additions.
+  "verb-not-in-version", "unmatched-unclip", "clip-unclosed",
 ];
 
 test("every stream-level error tag is raised by stream.mjs", () => {
@@ -160,7 +171,7 @@ test("the language's counts: 32 keywords, 12 builtins, 7 effect kinds", () => {
 
 const offOrigin = (u) => /^(https?:)?\/\//.test(u);
 
-for (const page of ["paint.html", "index.html"]) {
+for (const page of ["paint.html", "index.html", "garden.html"]) {
   test(`${page} loads nothing off-origin: no CDN, no npm package, no bundler`, () => {
     const html = read(page);
     // What counts is what the page FETCHES. A `src` always does. A `<link>`
@@ -190,4 +201,36 @@ test("paint.html says what each export means, under the buttons", () => {
   // Specification §8.1: a still-image renderer captures ONE STREAM, and a
   // learner expecting an animated SVG must be told rather than surprised.
   assert.match(html, /SVG and PNG save the frame on screen now\. Video records ten seconds\./);
+});
+
+test("paint.html carries no garden entry, no day scrubber — garden.html is its own page", () => {
+  const html = read("paint.html");
+  assert.doesNotMatch(html, /garden/i);
+  assert.doesNotMatch(html, /day scrubber|paint-day/i);
+});
+
+test("garden.html exists as a sibling of paint.html, fetches garden.planes rather than inlining it, and says how to serve itself", () => {
+  const html = read("garden.html");
+  // The program is loaded via createProgramSession's own fetch (asserted
+  // against program_session.mjs directly below), never pasted into the
+  // page — garden.html's <textarea> is populated at runtime from that
+  // fetch, not from a literal copy of the source in this file.
+  assert.doesNotMatch(html, /let canvas-width = 480/, "the program is fetched, not pasted into the page");
+  assert.match(html, /createProgramSession\(\{\s*file:\s*"paint\/garden\.planes"/s, "loads its program through the shared session module, by file path");
+  assert.match(html, /python3 -m http\.server/, "states how to serve itself, so the requirement is not rediscovered");
+  for (const id of ["garden-day", "garden-day-back", "garden-day-forward", "garden-seed", "garden-save-svg", "garden-save-png", "garden-surface", "garden-source"]) {
+    assert.ok(html.includes(`id="${id}"`), `no ${id}`);
+  }
+});
+
+test("js/paint/program_session.mjs loads its program by fetch, not by inlining it", () => {
+  const src = read("js/paint/program_session.mjs");
+  assert.match(src, /fetch\(`\$\{file\}/);
+});
+
+test("garden.html imports the shared program-load/scrubber/surface modules rather than reimplementing them inline", () => {
+  const html = read("garden.html");
+  assert.match(html, /from ["']\.\/js\/paint\/program_session\.mjs["']/);
+  assert.match(html, /from ["']\.\/js\/paint\/tick_scrubber\.mjs["']/);
+  assert.match(html, /from ["']\.\/js\/paint\/surface_pane\.mjs["']/);
 });
