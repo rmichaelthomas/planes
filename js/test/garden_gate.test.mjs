@@ -138,29 +138,98 @@ test("B: and the seed is the only other input — the same seed twice is the sam
 
 // ---- C: the rest of the corpus is untouched ---------------------------------
 //
-// Byte-identity against the committed pre-build baselines, which is stronger
-// than "against main": those frames have been fixed since protocol v2 shipped
-// and js/test/protocol_v2.test.mjs already compares against them on every
-// gate. This asserts that the file this build did change is the ONLY one.
+// NOT `git diff main`. Three checks in this file were first written that way,
+// and the merge caught them the same hour: a check phrased against a diff with
+// `main` asserts NOTHING the moment the build becomes `main` — two of them
+// passed vacuously and one failed outright on the merge commit. That is the
+// retirement rule's own lesson met one layer in, and the answer is the same
+// one: a build-time assertion either becomes a durable one or it goes.
+//
+// The durable form of "turtle, bloom and snake are untouched" is that they
+// still emit the streams the committed pre-v2 baselines captured — frames
+// fixed since protocol v2 shipped, which stay true a year from now and are
+// what the claim actually means.
 
-test("C: turtle, bloom and snake are untouched by this build", () => {
-  const changed = execFileSync("git", ["diff", "--name-only", "main", "--", "paint/"], {
-    cwd: REPO,
-    encoding: "utf-8",
-  })
-    .split("\n")
-    .filter(Boolean);
-  const allowed = new Set(["paint/garden.planes", "paint/math.planes", "paint/sound.planes"]);
-  const unexpected = changed.filter((f) => !allowed.has(f));
-  assert.deepEqual(unexpected, [], `paint/ files this build had no business touching: ${unexpected.join(", ")}`);
+const BENCH = path.join(REPO, "benchmarks", "protocol-v2-pre");
+
+// WHERE C ACTUALLY LIVES, AND WHY IT IS NOT DUPLICATED HERE.
+// `js/test/protocol_v2.test.mjs` compares turtle, bloom and snake against the
+// committed pre-v2 baselines on every gate, and it compares the RENDERED
+// PICTURE — the SVG document — not the raw stream. Writing a second copy of
+// that comparison here against the `.lines.txt` files looked equivalent and is
+// not: PR #51 gave `rect` its explicit rotation argument, so snake now emits
+// `draw rect 201 181 18 18 0` where the captured stream has four numbers. The
+// picture is identical, which is exactly why the SVG check has stayed green
+// and a stream check goes red.
+//
+// So this asserts the part that is NOT already asserted over there — that the
+// three programs still run clean at every tick the baselines cover, and that
+// the frame count has not quietly shrunk — and names the suite that owns the
+// byte-identity rather than keeping a second copy of it to drift.
+
+test("C: the baselines still cover the three programs, and every one of them runs clean", async () => {
+  const restore = installFsFetch();
+  try {
+    const labels = fs
+      .readdirSync(BENCH)
+      .filter((f) => f.endsWith(".lines.txt"))
+      .map((f) => f.replace(/\.lines\.txt$/, ""))
+      .sort();
+    assert.ok(labels.length >= 10, `only ${labels.length} baseline frames`);
+    assert.ok(labels.includes("turtle"));
+    assert.ok(labels.some((l) => l.startsWith("bloom")));
+    assert.ok(labels.some((l) => l.startsWith("snake")));
+    for (const label of labels) {
+      const lines = await baselineStream(label);
+      const sink = markSink();
+      const { errors } = walk(lines, sink);
+      assert.deepEqual(errors, [], `${label} emitted a protocol error`);
+      assert.ok(lines.length > 5, `${label} drew almost nothing`);
+    }
+  } finally {
+    restore();
+  }
 });
 
-test("C: paint.html is unchanged", () => {
-  const changed = execFileSync("git", ["diff", "--name-only", "main", "--", "paint.html"], {
-    cwd: REPO,
-    encoding: "utf-8",
-  }).trim();
-  assert.equal(changed, "");
+// The three programs, replayed exactly as the baselines were captured.
+async function baselineStream(label) {
+  if (label === "turtle") {
+    const r = await runProgramGraph(fs.readFileSync(path.join(PAINT, "turtle.planes"), "utf-8"), {
+      base: pathToFileURL(path.join(PAINT, "turtle.planes")).href,
+    });
+    assert.equal(r.error, null);
+    return r.output;
+  }
+  const program = label.startsWith("bloom") ? "bloom" : "snake";
+  const tick = Number(/-tick-(\d+)/.exec(label)[1]);
+  const loader = new BrowserModuleLoader({
+    base: pathToFileURL(path.join(PAINT, `${program}.planes`)).href,
+  });
+  const src = fs.readFileSync(path.join(PAINT, `${program}.planes`), "utf-8");
+  if (program === "bloom") {
+    const r = await stepGraph(src, { tick, keys: [], pointer: { x: 0, y: 0, down: false }, state: null }, { loader });
+    assert.equal(r.error, null);
+    return r.lines;
+  }
+  let state = null;
+  let lines = null;
+  for (let t = 0; t <= tick; t++) {
+    const r = await stepGraph(
+      src,
+      { tick: t, keys: ["ArrowLeft"], pointer: { x: 0, y: 0, down: false }, state },
+      { loader },
+    );
+    assert.equal(r.error, null);
+    state = r.state;
+    lines = r.lines;
+  }
+  return lines;
+}
+
+test("C: paint.html is still its own page, with no garden entry and no day scrubber", () => {
+  const html = fs.readFileSync(path.join(REPO, "paint.html"), "utf-8");
+  assert.doesNotMatch(html, /garden/i);
+  assert.doesNotMatch(html, /day scrubber|paint-day/i);
 });
 
 // ---- D: the trace lines up with the output ----------------------------------
@@ -245,45 +314,28 @@ test("G: and the source never calls them either", () => {
 
 // ---- H: nothing in grammar/ changed -----------------------------------------
 
-test("H: grammar/ changes only where it records a line number in a file this build edited", () => {
-  const files = execFileSync("git", ["diff", "--name-only", "main", "--", "grammar/"], {
-    cwd: REPO,
-    encoding: "utf-8",
-  })
-    .split("\n")
-    .filter(Boolean);
-  // THE INVARIANT IS "THE LANGUAGE DID NOT CHANGE", and the check that used
-  // to stand for it was "grammar/ is byte-identical". Those are not the same
-  // check: `grammar/errors.json` is a PROJECTION of the Python source, and
-  // every entry in it carries the `file.py:line` where its error is raised.
-  // Adding a field and a paragraph of comment to interp.py moves a hundred of
-  // those line numbers without touching a single tag, template or fix — so a
-  // byte-identity check fails on a build that changed nothing about the
-  // language, which is the opposite of what it is for.
+test("H: the language did not change — grammar/ regenerates identically from its own sources", () => {
+  // THE INVARIANT IS "THE LANGUAGE DID NOT CHANGE", and the check that stood
+  // for it during the build was `git diff --stat main -- grammar/` being
+  // empty. That is not the same check twice over.
   //
-  // What is asserted instead is the thing that actually matters, and it is
-  // stronger where it counts: no other file under grammar/ moved at all, and
-  // inside errors.json every line that moved is a source LOCATION and nothing
-  // else. A new tag, a changed message, a lost fix clause all still fail.
-  assert.deepEqual(files, ["grammar/errors.json"], `grammar/ files changed: ${files.join(", ")}`);
-
-  const diff = execFileSync("git", ["diff", "main", "--", "grammar/errors.json"], {
+  // It is too STRICT for a build that edits Python: `grammar/errors.json` is a
+  // projection of the source and records `file.py:line` for every error it
+  // catalogues, so adding a field and a paragraph of comment to interp.py
+  // moves a hundred line numbers without touching a single tag, template or
+  // fix. And it is too WEAK once the build merges: a diff against `main`, on
+  // `main`, is empty, and the check passes without asserting anything at all.
+  //
+  // What is durable is that grammar/ is a faithful projection of the sources
+  // it is generated from and that the counts the language is measured by are
+  // where they were. `grammar_gen.py --check` is the same check `ci.sh` runs
+  // as its own step; running it here too is deliberate, so the letter of the
+  // gate lives with the rest of the gate rather than only in a shell script.
+  const r = execFileSync("python3", ["grammar_gen.py", "--check"], {
     cwd: REPO,
     encoding: "utf-8",
   });
-  const substantive = diff
-    .split("\n")
-    .filter((l) => /^[+-]/.test(l) && !/^[+-]{3}/.test(l))
-    .filter((l) => !/^[+-]\s*("source":\s*)?"[a-z_]+\.py:\d+",?$/.test(l));
-  assert.deepEqual(substantive, [], `grammar/errors.json changed beyond source locations:\n${substantive.join("\n")}`);
-
-  // And the counts the language is measured by are where they were.
-  const errors = JSON.parse(fs.readFileSync(path.join(REPO, "grammar", "errors.json"), "utf-8"));
-  const onMain = JSON.parse(
-    execFileSync("git", ["show", "main:grammar/errors.json"], { cwd: REPO, encoding: "utf-8" }),
-  );
-  assert.equal(errors.count, onMain.count);
-  assert.deepEqual(Object.keys(errors.tags).sort(), Object.keys(onMain.tags).sort());
+  assert.match(r, /up to date/);
 });
 
 test("H: the counts are where they were — 32 keywords, 12 builtins, 7 effect kinds", () => {

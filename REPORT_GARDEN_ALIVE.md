@@ -278,5 +278,32 @@ f5c4ff052da71f7c2fa55da83737cf183c0681df8c13c50b8e1814988b9f4bb6  b60.png
 
 ---
 
+## The gate suite caught itself, one hour after merging
+
+Three of §12's checks were written against `git diff main` — the natural way to
+phrase "this build changed only what it meant to". A diff against `main`, **on**
+`main`, is empty: two of the three passed vacuously and the third failed
+outright on the merge commit. That is the retirement rule's own lesson met one
+layer in — a build-time assertion living inside a durable suite is a stale
+assertion waiting to mislead, and the answer is the same one: it becomes
+durable or it goes.
+
+- **C** now asserts what is not already asserted elsewhere — that the baselines
+  still cover all three programs and that every captured frame runs clean — and
+  names `js/test/protocol_v2.test.mjs` as the owner of the byte-identity rather
+  than keeping a second copy. Writing that copy showed why: it compared the raw
+  `.lines.txt` streams and went red, because PR #51 gave `rect` its explicit
+  rotation argument and snake now emits `draw rect 201 181 18 18 0` where the
+  captured stream has four numbers. The picture is identical, which is exactly
+  why the SVG comparison has stayed green the whole time.
+- **H** now runs `grammar_gen.py --check`: grammar/ is a faithful projection of
+  the sources it is generated from, and the counts are where they were. True on
+  a branch, true on `main`, true next year.
+
+Green on merged `main`: 60 suites / 1,219 oks, 651 JS tests, ruff and mypy
+clean.
+
+---
+
 *`feat/tutor-ask-why` was never created — its Phases 1–3 are §7 here and its
 Phase 4 landed in `garden.html`. There is no branch to delete.*
