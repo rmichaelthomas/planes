@@ -1,197 +1,578 @@
-# paint/garden.planes — a garden through a day, proving the seven v2
-# additions (planes-drawing-protocol-v2.md §6.6, §9) inside one picture:
+# paint/garden.planes — a garden through a day, rewritten against
+# garden-scene-spec.md from scratch. This is a picture, not a protocol-v2
+# showcase: dash and clip never appear, shadow appears only on glows and the
+# wet sheen, and every leaf and petal tilts through ellipse's own rotation
+# argument, never push/rotate/pop.
 #
-#   - the sky and the pond's reflection are both `gradient` fills (one
-#     linear, the moon's glow radial) — two distinct kinds, both stops
-#     interpolated in OKLCH by stream.mjs, never by this program;
-#   - the sun, the moon and every bee and firefly cast a `shadow`;
-#   - fireflies composite with `blend add`, so their light brightens where
-#     two of them overlap;
-#   - the pond's ripples are `clip`ped to the pond's own oval, opened by the
-#     pond itself and released with `unclip`;
-#   - the drifting clouds are drawn under `alpha`, translucent as a group of
-#     independently-dimmed marks;
-#   - the fence rail and the pond's ripples are `dash`ed;
-#   - every leaf and both fence posts carry the optional rotation argument
-#     on `ellipse`/`rect` — a single-argument tilt, no push/rotate/pop —
-#     standing right next to the recursive tree, which still uses
-#     push/rotate/pop for ITS rotation, because both techniques coexist in
-#     this version and neither replaces the other.
+# SOURCE OF TRUTH. the-living-garden.html (the JS mockup) is the reference
+# implementation; garden-scene-spec.md's own preamble says the mockup wins
+# wherever the two disagree. Every position, count and timing formula below
+# is transcribed from the mockup's actual arithmetic; every OKLCH colour is
+# taken from the spec document, which already did the RGB/HSL-to-OKLCH
+# translation this program has no way to redo faithfully by hand.
 #
-# PURITY (v2 §11). The whole picture is a function of `tick` and `seed` —
-# never of `state`, which this program does not read, does not write, and
-# does not declare a surface for (no `use file`). Both `tick` and `seed` are
-# INPUTS, the same way `tick` always was: crossed in from whatever page runs
-# this program (js/paint/loop.mjs's composePrelude, which now injects both,
-# `seed` defaulting to 0), never bound locally here. The garden at (N, seed)
-# is the same picture whether N is the first tick ever computed or the
-# thousandth: that is what makes garden.html's day scrubber meaningful. Drag
-# it backward and the frame it draws is RECOMPUTED from N and the current
-# seed alone, not eased toward from wherever the picture happened to be — a
-# bee whose position came from N would break this; a bee whose position
-# eased toward a target frame by frame would too. Every moving thing here —
-# the sun and moon's arc, the clouds' drift, the bees' and fireflies' loops
-# — is `tick` fed through `mod`/`sine`/`cosine` and nothing else; `seed`
-# only ever offsets WHICH bee/firefly/cloud phase each index lands on, never
-# whether the picture keeps moving.
+# CANVAS. garden.html's <canvas> is 480x360 (untouched — the gate found it
+# correct and said so explicitly). The mockup was authored against a
+# 1720x900 canvas, so every absolute-pixel constant below is rescaled: a
+# horizontal one by width-ratio (480/1720), a vertical one or a uniform mark
+# size (a radius, a blur, a stroke width — anything that would distort a
+# round shape if the two axes scaled unequally) by mark-scale (360/900).
+# Formulas the mockup already wrote in terms of its own W/H/GY need no
+# rescaling at all: substituting this program's canvas-width/canvas-height/
+# ground-y for them is the whole adaptation.
 #
-# `seed` varies bee/firefly/cloud placement without true randomness, the
-# same reason snake.planes's apple placement is a deterministic function of
-# score rather than `random` (one of the seven effect kinds, reachable only
-# through a `foreign ... doing random` declaration this program does not
-# make).
+# TRIG. This language's `sine`/`cosine` (math.planes) take degrees; the
+# mockup's Math.sin/Math.cos take radians. Every radian expression copied
+# from the mockup is multiplied once by rad-to-deg (180/pi) rather than
+# hand-converted coefficient by coefficient, which is where transcription
+# errors would hide.
+#
+# NOISE. The mockup's hash(i,s) is a 32-bit integer bit-mix — this language
+# has no bitwise operators, so it cannot be reproduced. `hash` below is the
+# classic shader substitute, fract(sine(i*a+s*b)*c), which needs only
+# multiplication, sine and mod. It will not agree with the mockup value for
+# value; the STRUCTURE around it (noise, fbm, every call site and salt) is
+# transcribed exactly, and that structure — not bit-identical pseudorandom
+# numbers — is what "match it" can mean for a hash the language cannot run.
+#
+# PURITY. The whole picture is a function of `tick` and `seed` alone — no
+# `state.json`, no value carried across ticks. The one place the mockup
+# itself is NOT pure is the bees: `b.x += (gx - b.x) * 0.014` accumulates a
+# position across frames. This program cannot do that (garden-scene-spec.md
+# section 12 says so directly), so bees fly in fixed-length cycles between
+# two plant targets, both computed from the cycle's own integer index —
+# never from a running position — and blended by a fraction derived from
+# `tick` alone.
+#
+# SHADOW. The protocol has no "shadow off" verb — once set it paints every
+# later mark until something sets it again. `no-shadow` (blur 0, offset 0,0)
+# is the only way to stop a glow's shadow from bleeding into the crisp layer
+# that follows it, the same idiom `dash of 0, 0` already is for turning
+# dashing back off. It appears wherever a shadow-bearing layer is followed
+# by one that must not inherit it: after clouds (before hills), after the
+# ground (before the tree), after the plants (before rain), and after
+# fireflies (before grass).
 
 use draw
 use math
 
-# `canvas-width`/`canvas-height`, not `width`/`height`: `width` is also the
-# line-thickness verb draw.planes imports, and a bare reference to the local
-# constant would collide with that function's own name.
+# ---- canvas, scale, and the constants every formula below is rescaled by --
+
 let canvas-width = 480
 let canvas-height = 360
-let horizon = 260 because "the ground begins here; sky above, grass below"
-let day-length = 240 because "ticks per full day-night cycle -- slow enough to read as a cycle, fast enough to drag through with the scrubber in a couple of seconds"
+let ground-y = canvas-height * 0.815 because "the mockup's own GY = H * 0.815 (garden-scene-spec.md section 1)"
+let width-ratio = canvas-width / 1720 because "the mockup's horizontal absolute-pixel constants were tuned for its 1720-wide reference canvas"
+let mark-scale = canvas-height / 900 because "the mockup's vertical absolute-pixel constants, and every uniform mark size (a radius, a blur, a stroke width), were tuned for its 900-tall reference canvas -- using height for uniform sizes too keeps a circle a circle even though this canvas's aspect ratio is not the mockup's"
+let pi = 3.14159265358979
+let rad-to-deg = 180 / pi because "sine and cosine here take degrees; the mockup's Math.sin/Math.cos take radians, so a radian expression copied from the mockup is multiplied by this once rather than hand-converted term by term"
 
-let phase = mod of tick, day-length
-let day-fraction = phase / day-length because "0 at the cycle's start, just under 1 at its end"
-let sun-angle = day-fraction * 360 because "one full lap of the sky per day-length ticks; angle 0 is sunrise, 90 is noon, 180 is sunset, 270 is midnight -- sine of each of those is 0, 1, 0, -1, which is exactly the height a day cycle wants"
-let sun-height = sine of sun-angle
-let moon-angle = mod of (sun-angle + 180), 360
-let moon-height = sine of moon-angle because "always the negative of sun-height by construction, computed the same way rather than as 0 - sun-height, so both stay honest about where they come from"
-let sky-mix = (sun-height + 1) / 2 because "0 at midnight's low point, 1 at noon's peak"
+let day-length = 240 because "ticks per full day-night cycle -- garden.html hardcodes this same number as the day scrubber's range, so it cannot change here without changing there too"
 
-let zenith-l = 0.1 + sky-mix * 0.5
-let zenith-c = 0.03 + sky-mix * 0.12
-let zenith-h = 250
-let horizon-l = 0.25 + sky-mix * 0.55
-let horizon-c = 0.04 + sky-mix * 0.14
-let horizon-h = 235 - sky-mix * 15 because "a touch warmer near the horizon at full day than at the zenith"
+# ---- small general helpers -------------------------------------------------
 
-# ---- plants: a single tilt each, via ellipse's optional rotation argument --
+to smaller of a, b:
+  if a < b:
+    give a
+  else:
+    give b
 
-to leaf of x, y, leaf-size, tilt:
-  fill of 0.62, 0.16, 130, 0.95
-  stroke of 0, 0, 0, 0
-  let leaf-ry = leaf-size * 0.42
-  ellipse of x, y, leaf-size, leaf-ry, tilt
+to larger of a, b:
+  if a > b:
+    give a
+  else:
+    give b
 
-to plant of base-x, base-y, lean:
-  stroke of 0.25, 0.1, 120, 1
-  width of 2
-  let tip-x = base-x + lean
-  let tip-y = base-y - 34
-  line of base-x, base-y, tip-x, tip-y
-  let leaf-a-x = base-x + lean * 0.3
-  let leaf-a-y = base-y - 14
-  let leaf-b-x = base-x + lean * 0.6
-  let leaf-b-y = base-y - 24
-  leaf of leaf-a-x, leaf-a-y, 13, (18 + lean)
-  leaf of leaf-b-x, leaf-b-y, 11, (-22 + lean)
-  leaf of tip-x, tip-y, 9, (6 + lean)
+to clamp01 of x:
+  give larger of 0, (smaller of 1, x)
 
-# ---- a recursive tree: push/rotate/pop still does what it always did ------
+to lerp of a, b, u:
+  give a + (b - a) * u
 
-to tree of branch-length, angle, remaining-depth:
-  if remaining-depth <= 0:
-    fill of 0.68, 0.17, 135, 0.9
-    stroke of 0, 0, 0, 0
-    let leaf-length = branch-length * 0.8
-    let leaf-width = branch-length * 0.35
-    ellipse of 0, (0 - leaf-length), leaf-width, leaf-length, angle
+# shortest-arc hue interpolation, the same sense the drawing protocol's own
+# gradient stops use (planes-drawing-protocol-v2.md section 5.1) -- applied
+# here across TIME, between two sky-palette keyframes, not across space.
+to hue-lerp of h1, h2, u:
+  let raw = mod of (h2 - h1 + 180), 360
+  let delta = raw - 180
+  give mod of (h1 + delta * u), 360
+
+# ---- deterministic noise ----------------------------------------------------
+#
+# hash: fract(sine(i*12.9898 + s*78.233) * 43758.5453), the standard
+# shader pseudo-random substitute for a bitwise hash this language cannot
+# express. Rounded to 6 places -- an EXACT value again (value_properties'
+# named-precision-reduction rule) -- so the huge exact-rational denominator
+# sine leaves behind does not compound through noise and fbm on top of it.
+to hash of i, s:
+  let raw = (sine of ((i * 12.9898 + s * 78.233) * rad-to-deg)) * 43758.5453
+  give round (mod of raw, 1) to 6 places
+
+# blends hash(floor x) and hash(floor x + 1) with a cosine smoothstep,
+# exactly the mockup's vn(x,s) (garden-scene-spec.md section 1). `whole of`
+# is floor here because every x this program ever calls noise with is
+# non-negative.
+to noise of x, s:
+  let i = whole of x
+  let f = x - i
+  let a = hash of i, s
+  let b = hash of (i + 1), s
+  let weight = (1 - (cosine of (f * 180))) / 2
+  give round (a + (b - a) * weight) to 6 places
+
+to fbm of x, s:
+  let n1 = noise of x, s
+  let n2 = noise of (x * 2.3), (s + 11)
+  let n3 = noise of (x * 5.1), (s + 23)
+  give round (n1 * 0.6 + n2 * 0.27 + n3 * 0.13) to 6 places
+
+# ---- frame state: a pure function of tick and seed alone -------------------
+
+let day = tick / day-length
+let t = day * 100 because "mirrors the mockup's own t-to-day ratio (t/100 = day), so a formula copied from the mockup that reads S.t can be transcribed as `t` unchanged"
+let phase = mod of day, 1
+
+let sun-el = sine of ((phase - 0.25) * 360)
+let light-raw = (sun-el + 0.18) / 0.72
+let light = clamp01 of light-raw
+let night = 1 - light
+
+let wet-raw = (fbm of (day * 1.6 + 3.5), (seed + 91)) * 1.55 - 0.62
+let wet = larger of 0, wet-raw
+let wet-k = smaller of 1, (wet * 2.4)
+
+let wind = 0.35 + (fbm of (t * 0.04), (seed + 55)) * 1.1
+
+let grow-raw = 0.34 + day * 0.16
+let grow = smaller of 1, grow-raw
+
+# ---- sky palette: eight OKLCH keyframes, interpolated by phase ------------
+# (garden-scene-spec.md section 3 -- OKLCH values are the document's own
+# translation of the mockup's RGB, trusted rather than re-derived here.)
+
+to sky-mix of p, p0, p1, l0, c0, h0, l1, c1, h1:
+  let u = (p - p0) / (p1 - p0)
+  give { l: (lerp of l0, l1, u), c: (lerp of c0, c1, u), h: (hue-lerp of h0, h1, u) }
+
+to sky-top of p:
+  if p < 0.17:
+    give sky-mix of p, 0.00, 0.17, 0.18, 0.06, 265, 0.28, 0.09, 285
+  else:
+    if p < 0.24:
+      give sky-mix of p, 0.17, 0.24, 0.28, 0.09, 285, 0.52, 0.09, 250
+    else:
+      if p < 0.34:
+        give sky-mix of p, 0.24, 0.34, 0.52, 0.09, 250, 0.62, 0.09, 245
+      else:
+        if p < 0.50:
+          give sky-mix of p, 0.34, 0.50, 0.62, 0.09, 245, 0.60, 0.10, 245
+        else:
+          if p < 0.68:
+            give sky-mix of p, 0.50, 0.68, 0.60, 0.10, 245, 0.62, 0.08, 250
+          else:
+            if p < 0.77:
+              give sky-mix of p, 0.68, 0.77, 0.62, 0.08, 250, 0.36, 0.08, 285
+            else:
+              if p < 0.86:
+                give sky-mix of p, 0.77, 0.86, 0.36, 0.08, 285, 0.22, 0.06, 268
+              else:
+                give sky-mix of p, 0.86, 1.00, 0.22, 0.06, 268, 0.18, 0.06, 265
+
+to sky-middle of p:
+  if p < 0.17:
+    give sky-mix of p, 0.00, 0.17, 0.24, 0.06, 265, 0.44, 0.10, 330
+  else:
+    if p < 0.24:
+      give sky-mix of p, 0.17, 0.24, 0.44, 0.10, 330, 0.68, 0.13, 40
+    else:
+      if p < 0.34:
+        give sky-mix of p, 0.24, 0.34, 0.68, 0.13, 40, 0.78, 0.06, 240
+      else:
+        if p < 0.50:
+          give sky-mix of p, 0.34, 0.50, 0.78, 0.06, 240, 0.75, 0.07, 238
+        else:
+          if p < 0.68:
+            give sky-mix of p, 0.50, 0.68, 0.75, 0.07, 238, 0.70, 0.10, 45
+          else:
+            if p < 0.77:
+              give sky-mix of p, 0.68, 0.77, 0.70, 0.10, 45, 0.58, 0.14, 30
+            else:
+              if p < 0.86:
+                give sky-mix of p, 0.77, 0.86, 0.58, 0.14, 30, 0.28, 0.06, 266
+              else:
+                give sky-mix of p, 0.86, 1.00, 0.28, 0.06, 266, 0.24, 0.06, 265
+
+to sky-low of p:
+  if p < 0.17:
+    give sky-mix of p, 0.00, 0.17, 0.28, 0.05, 262, 0.62, 0.11, 25
+  else:
+    if p < 0.24:
+      give sky-mix of p, 0.17, 0.24, 0.62, 0.11, 25, 0.84, 0.08, 68
+    else:
+      if p < 0.34:
+        give sky-mix of p, 0.24, 0.34, 0.84, 0.08, 68, 0.90, 0.02, 235
+      else:
+        if p < 0.50:
+          give sky-mix of p, 0.34, 0.50, 0.90, 0.02, 235, 0.88, 0.03, 232
+        else:
+          if p < 0.68:
+            give sky-mix of p, 0.50, 0.68, 0.88, 0.03, 232, 0.82, 0.09, 62
+          else:
+            if p < 0.77:
+              give sky-mix of p, 0.68, 0.77, 0.82, 0.09, 62, 0.74, 0.12, 52
+            else:
+              if p < 0.86:
+                give sky-mix of p, 0.77, 0.86, 0.74, 0.12, 52, 0.32, 0.05, 264
+              else:
+                give sky-mix of p, 0.86, 1.00, 0.32, 0.05, 264, 0.28, 0.05, 262
+
+# ---- shadow lifecycle -------------------------------------------------------
+#
+# The protocol has no verb to turn a shadow back off; this is the only way
+# (planes-drawing-protocol-v2.md section 6 -- "a mark casts exactly one
+# shadow", but nothing un-sets a shadow already set). Blur 0 at offset 0,0
+# is invisible behind an opaque mark and the idiom `dash of 0, 0` already is
+# for dashing.
+to no-shadow:
+  shadow of 0, 0, 0, 0, 0, 0
+
+# ---- stars: fixed by hash of (i, 7) -- they never drift with seed ---------
+
+to draw-star of i:
+  if i >= 150:
     give nothing
   else:
-    let bark-lightness = 0.3 + remaining-depth * 0.05
-    stroke of bark-lightness, 0.05, 40, 1
-    width of (remaining-depth * 0.7)
-    line of 0, 0, 0, (0 - branch-length)
-    let child-length = branch-length * 0.7
-    let other-length = branch-length * 0.72
-    push
-    translate of 0, (0 - branch-length)
-    rotate of (0 - angle)
-    tree of child-length, angle, (remaining-depth - 1)
-    pop
-    push
-    translate of 0, (0 - branch-length)
-    rotate of angle
-    tree of other-length, angle, (remaining-depth - 1)
-    pop
+    let sx = (hash of i, 7) * canvas-width
+    let sy = (hash of (i + 900), 7) * ground-y * 0.78
+    let sr = (0.7 + (hash of (i + 50), 7) * 1.5) * mark-scale
+    let star-phase = (hash of (i + 300), 7) * 9
+    let twinkle = 0.55 + 0.45 * (sine of ((t * 1.7 + star-phase) * rad-to-deg))
+    let star-alpha = night * twinkle * 0.85
+    fill of 0.98, 0.02, 95, star-alpha
+    stroke of 0, 0, 0, 0
+    circle of sx, sy, sr
+    draw-star of (i + 1)
 
-# ---- weather: drifting clouds under `alpha` --------------------------------
-
-to cloud of index, cy, drift-speed, tilt:
-  let raw-drift = mod of (tick * drift-speed + index * seed), (canvas-width + 160)
-  let cx = raw-drift - 80
-  alpha of 0.55
-  fill of 0.9, 0.02, 250, 1
-  stroke of 0, 0, 0, 0
-  ellipse of cx, cy, 46, 18, tilt
-  let cx2 = cx + 30
-  let cy2 = cy - 6
-  ellipse of cx2, cy2, 34, 15, (0 - tilt)
-  alpha of 1
-
-# ---- sun and moon: a shadow each, the moon backed by a radial gradient ----
+# ---- sun and moon: one glowing disc each -----------------------------------
 
 to draw-sun:
-  let sun-x = canvas-width / 2 + (cosine of sun-angle) * (canvas-width * 0.42)
-  let sun-y = horizon - sun-height * (horizon - 40)
-  shadow of 0, 0, 18, 0.95, 0.15, 90
-  fill of 0.96, 0.18, 90, 1
+  let body-x = ((phase - 0.25) * 2) * canvas-width * 1.06 - canvas-width * 0.03
+  let body-y = ground-y - (sine of (((phase - 0.25) * 2) * 180)) * ground-y * 0.78
+  blend of "add"
+  shadow of 0, 0, (52 * mark-scale), 0.92, 0.10, 75
+  fill of 0.92, 0.10, 75, (0.30 + light * 0.35)
   stroke of 0, 0, 0, 0
-  circle of sun-x, sun-y, 22
+  circle of body-x, body-y, (110 * mark-scale)
+  blend of "normal"
+  no-shadow
+  fill of 0.97, 0.05, 85, 0.98
+  stroke of 0, 0, 0, 0
+  circle of body-x, body-y, (36 * mark-scale)
 
 to draw-moon:
-  let moon-x = canvas-width / 2 + (cosine of moon-angle) * (canvas-width * 0.42)
-  let moon-y = horizon - moon-height * (horizon - 40)
-  gradient of "radial", moon-x, moon-y, 40, 0, 0.9, 0.04, 250, 0.35, 0.9, 0.04, 250, 0
+  let raw-progress = mod of (phase + 0.25), 1
+  let body-x = (raw-progress * 2) * canvas-width * 1.06 - canvas-width * 0.03
+  let body-y = ground-y - (sine of ((raw-progress * 2) * 180)) * ground-y * 0.78
+  blend of "add"
+  shadow of 0, 0, (30 * mark-scale), 0.88, 0.04, 250
+  fill of 0.88, 0.04, 250, 0.30
   stroke of 0, 0, 0, 0
-  circle of moon-x, moon-y, 40
-  fill of 0.93, 0.02, 250, 1
-  shadow of 0, 0, 10, 0.9, 0.05, 250
-  circle of moon-x, moon-y, 16
+  circle of body-x, body-y, (66 * mark-scale)
+  blend of "normal"
+  no-shadow
+  fill of 0.94, 0.02, 260, 0.95
+  stroke of 0, 0, 0, 0
+  circle of body-x, body-y, (25 * mark-scale)
 
-# ---- bees by day: a small shadow each, no blending ------------------------
+# ---- clouds: five overlapping ellipses each, so the silhouette is lumpy ---
 
-to bee of index, bee-count:
-  if index >= bee-count:
+to cloud-puff of b, cx, cy, sc, cl, cc, ch, ca:
+  if b >= 5:
     give nothing
   else:
-    let orbit-angle = mod of (tick * 5 + index * seed), 360
-    let orbit-radius = 60 + index * 18
-    let bx = 240 + (cosine of orbit-angle) * orbit-radius
-    let bob-angle = orbit-angle * 2
-    let by = 150 + (sine of bob-angle) * 14 + index * 10
-    shadow of 1, 2, 3, 0.15, 0.05, 90
-    fill of 0.85, 0.16, 90, 1
-    stroke of 0.1, 0.05, 90, 1
-    width of 0.6
-    circle of bx, by, 4
-    bee of (index + 1), bee-count
-
-# ---- fireflies by night: `blend add` brightens every overlap --------------
-
-to firefly of index, firefly-count:
-  if index >= firefly-count:
-    give nothing
-  else:
-    let drift-angle = mod of (tick * 3 + index * seed * 7), 360
-    let drift-radius = 30 + index * 14
-    let fx = 340 + (cosine of drift-angle) * drift-radius
-    let bob-radius = 18 + index * 9
-    let fy = 220 + (sine of drift-angle) * bob-radius
-    let pulse-angle = mod of (tick * 9 + index * 40), 360
-    let glow = 0.5 + (sine of pulse-angle) * 0.5 because "each firefly pulses on its own phase, so a whole swarm does not blink in lockstep"
-    let glow-blur = 6 + glow * 4
-    let glow-alpha = 0.5 + glow * 0.5
-    blend of "add"
-    # dx 0, dy 0 is a glow, not a cast shadow (v2 section 6.6).
-    shadow of 0, 0, glow-blur, 0.9, 0.1, 60
-    fill of 0.95, 0.12, 60, glow-alpha
+    let spread = b - 2
+    let ox = spread * 46 * width-ratio * sc
+    let oy = (sine of ((b * 1.9 + cx) * rad-to-deg)) * 13 * mark-scale * sc
+    let ax = spread
+    let axabs = larger of ax, (0 - ax)
+    let prx = (58 * width-ratio - axabs * 11 * width-ratio) * sc
+    let pry = (30 * mark-scale - axabs * 5 * mark-scale) * sc
+    fill of cl, cc, ch, ca
     stroke of 0, 0, 0, 0
-    circle of fx, fy, 2
+    ellipse of (cx + ox), (cy + oy), prx, pry, 0
+    cloud-puff of (b + 1), cx, cy, sc, cl, cc, ch, ca
+
+to draw-cloud of i:
+  if i >= 7:
+    give nothing
+  else:
+    let cw = noise of (i * 2.1 + t * 0.012), (seed + 201)
+    let drift = mod of (cw * 1.4 + t * 0.0055 * (0.5 + i * 0.12)), 1.35
+    let cx = (drift - 0.18) * canvas-width
+    let cy = ground-y * 0.13 + (noise of (i * 7.7), (seed + 202)) * ground-y * 0.36
+    let sc = 0.55 + (noise of (i * 3.3), (seed + 203)) * 0.9
+    let dark = smaller of 1, (wet * 1.7)
+    let cloud-l = lerp of (0.35 + light * 0.65), 0.45, dark
+    let cloud-alpha = 0.30 + dark * 0.34
+    shadow of 0, 0, (16 * mark-scale), cloud-l, 0.02, 250
+    cloud-puff of 0, cx, cy, sc, cloud-l, 0.02, 250, cloud-alpha
+    draw-cloud of (i + 1)
+
+# ---- far hills: three parallax layers, each one shape ---------------------
+
+to hill-vertices of x, layer, off:
+  if x > canvas-width:
+    vertex of canvas-width, canvas-height
+    close
+  else:
+    let n = fbm of (x * 0.0016 + layer * 9 + off * 0.0004), (seed + 300 + layer)
+    let amplitude = 110 * mark-scale - layer * 22 * mark-scale
+    let hy = ground-y - 70 * mark-scale - layer * 34 * mark-scale - n * amplitude
+    vertex of x, hy
+    hill-vertices of (x + 26 * width-ratio), layer, off
+
+to draw-hill of layer:
+  if layer >= 3:
+    give nothing
+  else:
+    let depth = layer / 2
+    let off = t * (1.5 + layer * 2.4)
+    let sh = (0.10 + light * 0.20) * (1 - depth * 0.28)
+    fill of sh, 0.04, 145, (0.55 + layer * 0.18)
+    stroke of 0, 0, 0, 0
+    shape
+    vertex of 0, canvas-height
+    hill-vertices of 0, layer, off
+    end
+    draw-hill of (layer + 1)
+
+# ---- ground: a gradient, and a sheen when the ground is wet ---------------
+
+to draw-ground:
+  let top-l = (0.22 - wet-k * 0.06) * (0.5 + light * 0.7)
+  gradient of "linear", 0, ground-y, 0, canvas-height, top-l, 0.05, 120, 1, 0.08, 0.03, 130, 1
+  stroke of 0, 0, 0, 0
+  rect of 0, ground-y, canvas-width, (canvas-height - ground-y), 0
+  if wet-k > 0.1:
+    blend of "add"
+    shadow of 0, 0, (20 * mark-scale), 0.75, 0.05, 230
+    fill of 0.75, 0.05, 230, (wet-k * 0.12)
+    stroke of 0, 0, 0, 0
+    rect of 0, ground-y, canvas-width, (70 * mark-scale), 0
     blend of "normal"
-    firefly of (index + 1), firefly-count
+  no-shadow
+
+# ---- the tree: one function, seven levels deep -----------------------------
+
+let tree-branch-angle = 0.30 * rad-to-deg
+let tree-branch-spread = 0.34 * rad-to-deg
+let min-branch-length = 7 * mark-scale
+let tree-bark-lightness = 0.10 + light * 0.28
+let tree-leaf-hue = 96 - (smaller of 1, (day * 0.13)) * 64
+let tree-leaf-lightness = 0.16 + light * 0.30
+let tree-leaf-chroma = 0.10 + light * 0.06
+
+to tree-branch of x, y, angle, len, w, depth, idx:
+  if depth > 7:
+    give nothing
+  else:
+    if len < min-branch-length:
+      give nothing
+    else:
+      let ex = round (x + (cosine of angle) * len) to 3 places
+      let ey = round (y + (sine of angle) * len) to 3 places
+      let sway = (sine of ((t * 0.5 + depth * 0.55) * rad-to-deg)) * (depth * depth * 0.32 * mark-scale) * wind
+      let start-x = round (x + sway * 0.35) to 3 places
+      let tip-x = round (ex + sway) to 3 places
+      stroke of tree-bark-lightness, 0.03, 60, 1
+      width of w
+      line of start-x, y, tip-x, ey
+      if depth >= 5:
+        fill of tree-leaf-lightness, tree-leaf-chroma, tree-leaf-hue, 0.92
+        stroke of 0, 0, 0, 0
+        ellipse of tip-x, ey, (13 * mark-scale), (9 * mark-scale), (idx * rad-to-deg)
+      let hs = hash of (idx * 3 + depth), (seed + 400)
+      let hs2 = hash of (idx * 7 + depth), (seed + 401)
+      let angle-a = round (angle - tree-branch-angle - hs * tree-branch-spread) to 4 places
+      let len-a = round (len * (0.70 + hs * 0.12)) to 4 places
+      let angle-b = round (angle + tree-branch-angle + hs2 * tree-branch-spread) to 4 places
+      let len-b = round (len * (0.70 + hs2 * 0.12)) to 4 places
+      tree-branch of ex, ey, angle-a, len-a, (w * 0.68), (depth + 1), (idx * 2)
+      tree-branch of ex, ey, angle-b, len-b, (w * 0.68), (depth + 1), (idx * 2 + 1)
+
+# ---- plants: a shared "what this plant is" function, drawing on top -------
+
+to plant-g of i:
+  give noise of (i * 0.73 + day * 0.5), seed
+
+to plant-x of i:
+  give (150 * width-ratio) + i * ((1460 * width-ratio) / 11)
+
+to plant-height of g:
+  give ((70 * mark-scale) + g * (250 * mark-scale)) * grow
+
+to plant-lean of i, height:
+  let amp = (6 * width-ratio) + wind * (13 * width-ratio)
+  give (sine of ((t * 0.55 + i * 1.7) * rad-to-deg)) * amp * (height / (260 * mark-scale))
+
+to plant-record of i:
+  let g = plant-g of i
+  let x = plant-x of i
+  let height = plant-height of g
+  let lean = plant-lean of i, height
+  give { g: g, x: x, height: height, lean: lean, tip-x: (x + lean), tip-y: (ground-y - height) }
+
+to plant-leaf of l, lv, x, lean, height, g, lit:
+  if l >= lv:
+    give nothing
+  else:
+    let q = 0.3 + (l / lv) * 0.6
+    let lx = x + lean * q
+    let ly = ground-y - height * q
+    let is-right = mod of l, 2
+    let side = is-right * 2 - 1 because "l even -> side -1, l odd -> side 1, matching the mockup's l%2?1:-1"
+    let leaf-len = (16 * mark-scale) + g * (24 * mark-scale)
+    let leaf-hue = 136 - g * 30
+    let leaf-lightness = 0.14 + lit * 0.28 because "the mockup's HSL lightness percent (14+lit*28) read as a 0..1 fraction -- lightness is comparable across HSL and OKLCH, unlike saturation and chroma below"
+    let leaf-chroma = 0.10 + g * 0.06 because "the mockup's HSL saturation (40+g*18)% has no direct OKLCH equivalent, so this reuses the same order of magnitude as the tree's own leaf chroma (section 9) rather than a false conversion"
+    let turn = side * (-24 - g * 13)
+    fill of leaf-lightness, leaf-chroma, leaf-hue, 0.94
+    stroke of 0, 0, 0, 0
+    ellipse of (lx + side * leaf-len * 0.55), ly, leaf-len, (leaf-len * 0.33), turn
+    plant-leaf of (l + 1), lv, x, lean, height, g, lit
+
+to plant-petal of k, petals, fx, fy, g:
+  if k >= petals:
+    give nothing
+  else:
+    let angle = (k / petals) * 360 + t * 0.06 * rad-to-deg
+    let rr = (5 * mark-scale + g * (13 * mark-scale)) * (0.30 + light * 0.85)
+    let hue = mod of (28 + g * 300), 360
+    let petal-l = 0.52 + light * 0.26
+    let petal-c = 0.16 + light * 0.05
+    let px = fx + (cosine of angle) * rr * 0.95
+    let py = fy + (sine of angle) * rr * 0.95
+    fill of petal-l, petal-c, hue, (0.55 + light * 0.42)
+    stroke of 0, 0, 0, 0
+    ellipse of px, py, (rr * 0.72), (rr * 0.44), angle
+    plant-petal of (k + 1), petals, fx, fy, g
+
+to draw-plant of i:
+  if i >= 12:
+    give nothing
+  else:
+    let p = plant-record of i
+    let lit = 0.20 + light * 0.62
+    stroke of (0.13 + lit * 0.30), (0.09 + p.g * 0.05), (132 - p.g * 26), 1
+    width of (5 * mark-scale + p.g * (5 * mark-scale))
+    shape
+    vertex of p.x, ground-y
+    let ctrl-x = p.x + p.lean * 0.6
+    let ctrl-y = ground-y - p.height * 0.55
+    curve of ctrl-x, ctrl-y, ctrl-x, ctrl-y, p.tip-x, p.tip-y
+    end
+    let lv = 2 + (whole of (p.g * 4))
+    plant-leaf of 0, lv, p.x, p.lean, p.height, p.g, lit
+    let petals = 5 + (whole of (p.g * 3))
+    plant-petal of 0, petals, p.tip-x, p.tip-y, p.g
+    fill of (0.52 + light * 0.26), 0.12, 48, 1
+    stroke of 0, 0, 0, 0
+    circle of p.tip-x, p.tip-y, (4 * mark-scale + p.g * (5 * mark-scale))
+    if light > 0.55:
+      let flower-hue = mod of (28 + p.g * 300), 360
+      blend of "add"
+      shadow of 0, 0, (10 * mark-scale), 0.70, 0.16, flower-hue
+      fill of 0.70, 0.16, flower-hue, ((light - 0.55) * 0.34)
+      stroke of 0, 0, 0, 0
+      circle of p.tip-x, p.tip-y, (20 * mark-scale + p.g * (16 * mark-scale))
+      blend of "normal"
+    draw-plant of (i + 1)
+
+# ---- rain: only when wet, short strokes offset and scattered by hash -----
+
+to draw-rain of i, drop-count:
+  if i >= drop-count:
+    give nothing
+  else:
+    let x = mod of ((hash of i, (seed + 7)) * canvas-width + t * 90 * width-ratio * (0.6 + (hash of i, (seed + 9)) * 0.5) + (hash of i, (seed + 11)) * canvas-width), canvas-width
+    let y = mod of ((hash of i, (seed + 13)) * canvas-height + t * 760 * mark-scale * (0.7 + (hash of i, (seed + 17)) * 0.6)), canvas-height
+    stroke of 0.85, 0.03, 240, (0.10 + wet * 0.34)
+    width of (1.4 * mark-scale)
+    line of x, y, (x - 5 * width-ratio), (y + 19 * mark-scale)
+    draw-rain of (i + 1), drop-count
+
+# ---- bees by day: fixed-length cycles between two plant targets, pure -----
+
+let bee-cycle-length = 40 because "ticks per flight between flowers -- a bee is never eased toward a moving target (garden-scene-spec.md section 12 forbids accumulating state), so it flies a fixed cycle between two targets computed from the cycle's own index instead"
+
+to bee-target-index of bee-i, cycle-idx:
+  let cycle-t = cycle-idx * bee-cycle-length
+  let n = noise of (bee-i * 4.4 + cycle-t * 0.05), (seed + 77)
+  give whole of (n * 12)
+
+to draw-bee of i:
+  if i >= 4:
+    give nothing
+  else:
+    let cycle-progress = t / bee-cycle-length
+    let cycle-idx = whole of cycle-progress
+    let cycle-fraction = cycle-progress - cycle-idx
+    let eased = (1 - (cosine of (cycle-fraction * 180))) / 2
+    let target-a = bee-target-index of i, cycle-idx
+    let target-b = bee-target-index of i, (cycle-idx + 1)
+    let plant-a = plant-record of target-a
+    let plant-b = plant-record of target-b
+    let bee-x = plant-a.tip-x + (plant-b.tip-x - plant-a.tip-x) * eased
+    let bee-y = plant-a.tip-y + (plant-b.tip-y - plant-a.tip-y) * eased
+    let wob = (sine of ((t * 7 + i * 2) * rad-to-deg)) * (4 * mark-scale)
+    fill of 0.85, 0.16, 85, 0.95
+    stroke of 0, 0, 0, 0
+    ellipse of bee-x, (bee-y + wob), (6.5 * mark-scale), (4.6 * mark-scale), 0
+    fill of 0.18, 0.05, 70, 0.9
+    stroke of 0, 0, 0, 0
+    ellipse of (bee-x + 2 * width-ratio), (bee-y + wob), (2.4 * mark-scale), (4.4 * mark-scale), 0
+    stroke of 1, 0, 0, 0.55
+    width of (1.2 * mark-scale)
+    let wing-turn = (sine of ((t * 22 + i) * rad-to-deg)) * 0.5 * rad-to-deg
+    arc of (bee-x - 1 * width-ratio), (bee-y + wob - 5 * mark-scale), (5 * mark-scale), (200 + wing-turn), (340 + wing-turn)
+    draw-bee of (i + 1)
+
+# ---- fireflies by night: blend add brightens every overlap ----------------
+
+to draw-firefly of i:
+  if i >= 14:
+    give nothing
+  else:
+    let fx = (noise of (i * 2.7 + t * 0.13), (seed + 301)) * canvas-width
+    let fy = ground-y - 60 * mark-scale - (noise of (i * 5.3 + t * 0.11), (seed + 302)) * (300 * mark-scale)
+    let blink-base = larger of 0, (sine of ((t * 1.6 + i * 2.3) * rad-to-deg))
+    let blink = blink-base * blink-base * blink-base
+    blend of "add"
+    shadow of 0, 0, (7 * mark-scale), 0.90, 0.16, 130
+    fill of 0.90, 0.16, 130, (blink * 0.5)
+    stroke of 0, 0, 0, 0
+    circle of fx, fy, (11 * mark-scale)
+    fill of 0.96, 0.10, 130, (0.35 + blink * 0.6)
+    stroke of 0, 0, 0, 0
+    circle of fx, fy, (2.3 * mark-scale)
+    blend of "normal"
+    draw-firefly of (i + 1)
+
+# ---- foreground grass -------------------------------------------------------
+
+to draw-grass of i:
+  if i >= 130:
+    give nothing
+  else:
+    let x = (hash of i, (seed + 500)) * canvas-width
+    let hh = (18 * mark-scale) + (hash of (i + 90), (seed + 501)) * (40 * mark-scale)
+    let sway = (sine of ((t * 0.9 + i) * rad-to-deg)) * (5 * width-ratio) * wind
+    stroke of (0.06 + light * 0.14), 0.05, 140, 0.85
+    width of (2.2 * mark-scale)
+    shape
+    vertex of x, canvas-height
+    curve of (x + sway * 0.5), (canvas-height - hh * 0.6), (x + sway * 0.5), (canvas-height - hh * 0.6), (x + sway), (canvas-height - hh)
+    end
+    draw-grass of (i + 1)
 
 # =============================================================================
 # the picture
@@ -199,77 +580,62 @@ to firefly of index, firefly-count:
 show "draw protocol 2"
 clear
 
-gradient of "linear", 0, 0, 0, horizon, zenith-l, zenith-c, zenith-h, 1, horizon-l, horizon-c, horizon-h, 1
+let sky-top-c = sky-top of phase
+let sky-mid-c = sky-middle of phase
+let sky-low-c = sky-low of phase
+let sky-split = whole of (ground-y * 0.55) because "landed on a whole pixel row: at a fractional y the two stacked gradients each cover part of the same canvas pixel row and get anti-aliased independently, which shows as a one-pixel seam even though both gradients agree on the colour exactly at the boundary"
+
+gradient of "linear", 0, 0, 0, sky-split, sky-top-c.l, sky-top-c.c, sky-top-c.h, 1, sky-mid-c.l, sky-mid-c.c, sky-mid-c.h, 1
 stroke of 0, 0, 0, 0
-rect of 0, 0, canvas-width, horizon, 0
+rect of 0, 0, canvas-width, sky-split, 0
 
-let ground-l = 0.22 + sky-mix * 0.12
-let ground-c = 0.05 + sky-mix * 0.03
-fill of ground-l, ground-c, 110, 1
+gradient of "linear", 0, sky-split, 0, ground-y, sky-mid-c.l, sky-mid-c.c, sky-mid-c.h, 1, sky-low-c.l, sky-low-c.c, sky-low-c.h, 1
 stroke of 0, 0, 0, 0
-let ground-h = canvas-height - horizon
-rect of 0, horizon, canvas-width, ground-h, 0
+rect of 0, sky-split, canvas-width, (ground-y - sky-split), 0
 
-cloud of 0, 70, 0.6, 8
-cloud of 1, 100, 0.35, -6
-cloud of 2, 55, 0.85, 4
+if night >= 0.05:
+  draw-star of 0
 
-let pond-x = 120
-let pond-y = 300
-let pond-rx = 70
-let pond-ry = 24
-
-clip
-gradient of "linear", (pond-x - pond-rx), (pond-y - pond-ry), (pond-x - pond-rx), (pond-y + pond-ry), horizon-l, horizon-c, horizon-h, 1, zenith-l, zenith-c, zenith-h, 1
-stroke of 0.1, 0.05, 230, 0.6
-width of 1.5
-ellipse of pond-x, pond-y, pond-rx, pond-ry, 0
-
-let ripple-phase = mod of tick, 40
-let ripple-lift = (ripple-phase / 40) * 4
-stroke of 1, 0, 0, 0.35
-width of 1
-dash of 4, 3
-let ripple-1-y = pond-y - 6 + ripple-lift
-let ripple-1-x1 = pond-x - pond-rx + 6
-let ripple-1-x2 = pond-x + pond-rx - 6
-line of ripple-1-x1, ripple-1-y, ripple-1-x2, ripple-1-y
-let ripple-2-y = pond-y + 4 + ripple-lift * 0.7
-let ripple-2-x1 = pond-x - pond-rx + 12
-let ripple-2-x2 = pond-x + pond-rx - 12
-line of ripple-2-x1, ripple-2-y, ripple-2-x2, ripple-2-y
-dash of 0, 0
-unclip
-
-if sun-height > 0:
+if phase >= 0.25 and phase < 0.75:
   draw-sun
-
-if moon-height > 0:
+else:
   draw-moon
 
-stroke of 0.3, 0.05, 60, 1
-width of 3
-dash of 10, 6
-line of 380, 300, 460, 300
-dash of 0, 0
+draw-cloud of 0
+no-shadow
 
-fill of 0.4, 0.08, 60, 1
+draw-hill of 0
+
+draw-ground
+
+let tree-x = canvas-width * 0.135
+tree-branch of tree-x, ground-y, -90, (118 * mark-scale), (17 * mark-scale), 0, 1
+
+draw-plant of 0
+no-shadow
+
+let rain-count = whole of (wet * 640)
+if wet > 0.06:
+  draw-rain of 0, rain-count
+
+if light > 0.30:
+  draw-bee of 0
+else:
+  draw-firefly of 0
+no-shadow
+
+draw-grass of 0
+
+# The mockup's own createRadialGradient takes a non-zero inner radius
+# (height x 0.28, fully transparent, so the centre stays clear before the
+# darkening begins). This protocol's `gradient radial` has no inner-radius
+# argument at all (js/paint/painter.mjs pins it to 0), so the transparent-
+# to-black transition here runs the full radius instead of starting at 0.28
+# -- a softer vignette than the mockup's, and the closest this verb reaches.
+let vignette-alpha = 0.30 + night * 0.22
+let vignette-x = canvas-width / 2
+let vignette-y = ground-y * 0.6
+let vignette-r = canvas-height * 0.92
+gradient of "radial", vignette-x, vignette-y, vignette-r, 0, 0, 0, 0, 0, 0, 0, 0, vignette-alpha
 stroke of 0, 0, 0, 0
-rect of 390, 280, 6, 40, -4
-rect of 430, 280, 6, 40, 3
-
-plant of 260, 340, 6
-plant of 300, 345, -8
-plant of 340, 338, 10
-plant of 200, 348, -4
-
-push
-translate of 400, 340
-tree of 42, 26, 5
-pop
-
-if sun-height > 0.15:
-  bee of 0, 5
-
-if sun-height <= 0.15:
-  firefly of 0, 6
+circle of vignette-x, vignette-y, vignette-r
