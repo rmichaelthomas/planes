@@ -357,6 +357,8 @@ def test_no_implementation_reaches_for_a_host_trigonometric_function():
         "svg.mjs",                      # arc endpoints from the swept angle
         "paint_conformance.test.mjs",   # the same endpoints, asserted
         "paint_svg.test.mjs",
+        "protocol_v2.test.mjs",         # v2 §9.2: rotated ellipse/rect corners,
+                                         # hand-computed the same way to check against
     }
     offenders = []
     roots = (glob.glob(os.path.join(REPO, "*.py"))

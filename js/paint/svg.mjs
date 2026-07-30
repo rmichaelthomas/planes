@@ -1,13 +1,15 @@
 // js/paint/svg.mjs — the SVG renderer: a second SINK for js/paint/stream.mjs
-// (planes-drawing-protocol-v1.md §§4-8, normative).
+// (planes-drawing-protocol-v1.md §§4-8, planes-drawing-protocol-v2.md,
+// normative).
 //
 // `toSvg(lines, dimensions)` returns the same three-part result `paint()`
 // does — `{ svg, drawn, text, errors }` in place of the canvas's `{ drawn,
 // text, errors }` — because it walks the same stream with the same module.
 // Everything that is protocol rather than medium (the version declaration and
 // its ordering, the path lifecycle, transform balance, the reset table, the
-// arc wrap, every error tag) lives in stream.mjs and is shared verbatim with
-// painter.mjs. What is here is what it means to draw a circle *as SVG*.
+// arc wrap, every error tag, a gradient's sixteen stops) lives in stream.mjs
+// and is shared verbatim with painter.mjs. What is here is what it means to
+// draw a circle *as SVG*.
 //
 // STATED LIMIT: TEXT.
 //
@@ -26,6 +28,15 @@
 // is drawn on across ticks and `clear` wipes pixels; here `clear` discards
 // the elements emitted so far and starts again from a background rect. The
 // visible result is the same and the mechanism is not.
+//
+// STATED LIMIT (v2): NO GRADIENT STROKE. §5.2 — a gradient sets the current
+// FILL only; there is no gradient stroke in this version.
+//
+// STATED LIMIT (v2): BLEND'S MODE SET STAYS CLOSED AT TWO. `normal` and
+// `add` (`mix-blend-mode: plus-lighter`, the exact match for canvas's
+// `lighter`) are the only two — every other CSS blend mode differs between
+// canvas and SVG in ways that would make the two renderers disagree about
+// what a picture means (§7).
 
 import { walk, FONT_FAMILY } from "./stream.mjs";
 import { rgbHex } from "./color.mjs";
@@ -50,35 +61,119 @@ function svgSink({ width, height, background }) {
   let elements = [];
   // Every currently-unclosed <g>, innermost last. `clear` rebuilds the
   // element list from these, so discarding a picture never unbalances the
-  // nesting a later `pop` is going to close.
+  // nesting a later `pop`/`unclip` is going to close. Each entry's `kind` is
+  // "push" (a transform-save marker), "xform" (translate/rotate/scale) or
+  // "clip" (v2) — pop closes everything down to and including its own
+  // "push" marker, whichever kinds sit above it; unclip closes down to and
+  // including its own "clip" marker.
   let open = [];
 
   let strokeC = [0, 0, 0, 1];
-  let fillC = [0, 0, 0, 0];
+  let fillPaint = { kind: "solid", lcha: [0, 0, 0, 0] }; // | { kind: "gradient", id }
   let lineWidth = 1;
   let capWord = "butt";
   let cornerWord = "miter";
   let sizePx = 16;
   let alignWord = "left";
   let backgroundColor = background;
-
   // A path under construction, as SVG path-data commands.
   let pathD = [];
+
+  // v2 state.
+  let dashOn = 0;
+  let dashOff = 0;
+  let alphaVal = 1;
+  let blendWord = "normal";
+  let shadowState = null; // | { dx, dy, blur, L, C, H }
+  let pendingClip = false;
+
+  // ---- <defs> (v2 §4) ------------------------------------------------------
+  //
+  // A resource collection, content-keyed: two identical gradients (or
+  // shadows, or clip regions) emit one <defs> entry and every reference
+  // just points at it. `defs` survives `wipe()` — a def is a resource, not a
+  // mark, and discarding the picture on `background`/`clear` must not
+  // discard the resources a still-open group might reference again.
+  let defs = [];
+  let defIndexByKey = new Map();
+  let defCounters = Object.create(null);
+
+  function defRef(kind, key, buildBody) {
+    const cacheKey = `${kind}:${key}`;
+    const existing = defIndexByKey.get(cacheKey);
+    if (existing) return existing;
+    defCounters[kind] = (defCounters[kind] || 0) + 1;
+    const id = `p-${kind}-${defCounters[kind]}`;
+    defs.push({ id, body: buildBody(id) });
+    defIndexByKey.set(cacheKey, id);
+    return id;
+  }
+
+  function gradientDefBody(id, kindWord, geomArgs, stops) {
+    const stopsMarkup = stops
+      .map((s) => `<stop offset="${fmt(s.offset)}" stop-color="${rgbHex(s.L, s.C, s.H)}" stop-opacity="${fmt(s.A)}"/>`)
+      .join("");
+    if (kindWord === "linear") {
+      const [x1, y1, x2, y2] = geomArgs;
+      return (
+        `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${fmt(x1)}" y1="${fmt(y1)}"` +
+        ` x2="${fmt(x2)}" y2="${fmt(y2)}">${stopsMarkup}</linearGradient>`
+      );
+    }
+    const [x, y, r] = geomArgs;
+    return (
+      `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${fmt(x)}" cy="${fmt(y)}"` +
+      ` r="${fmt(r)}">${stopsMarkup}</radialGradient>`
+    );
+  }
+
+  // The shadow's own reference — recomputed (and deduplicated by defRef's
+  // own cache) each time it is needed, since the filter's flood-opacity
+  // carries the CURRENT `alpha` state (§6: "alpha comes from the current
+  // alpha state, not a seventh argument") and must track a later `alpha`
+  // change the same way canvas's persistent ctx.shadowColor does.
+  //
+  // stdDeviation is set to the SAME numeric value as `blur` rather than a
+  // Gaussian-equivalent conversion (a common approximation is blur/2) —
+  // v2 §6.3's acceptance criterion is that the two renderers' shadow
+  // parameters match at scale 1, which this makes true by construction
+  // rather than by coincidence between two different blur models.
+  function shadowDefId() {
+    const { dx, dy, blur, L, C, H } = shadowState;
+    const key = `${dx},${dy},${blur},${L},${C},${H},${alphaVal}`;
+    return defRef(
+      "shadow",
+      key,
+      (id) =>
+        `<filter id="${id}" x="-50%" y="-50%" width="200%" height="200%">` +
+        `<feDropShadow dx="${fmt(dx)}" dy="${fmt(dy)}" stdDeviation="${fmt(blur)}"` +
+        ` flood-color="${rgbHex(L, C, H)}" flood-opacity="${fmt(alphaVal)}"/></filter>`,
+    );
+  }
 
   const emit = (el) => elements.push(el);
   const bgRect = () =>
     `<rect x="0" y="0" width="${fmt(width)}" height="${fmt(height)}" fill="${backgroundColor}"/>`;
 
   // Presentation attributes, restated per element rather than inherited from
-  // a group: a `<g>` here carries a transform and nothing else, so an
-  // element's paint never depends on how deeply it happens to be nested.
+  // a group: a `<g>` here carries a transform (or a clip-path) and nothing
+  // else, so an element's paint never depends on how deeply it happens to be
+  // nested (v2's `alpha`, `dash`, `shadow` and `blend` all follow the same
+  // rule — per-element, never per-group).
   function shapeAttrs() {
     const [sl, sc, sh, sa] = strokeC;
-    const [fl, fc, fh, fa] = fillC;
+    const fillValue = fillPaint.kind === "gradient" ? `url(#${fillPaint.id})` : rgbHex(...fillPaint.lcha.slice(0, 3));
+    const fillOpacity = (fillPaint.kind === "gradient" ? 1 : fillPaint.lcha[3]) * alphaVal;
+    const strokeOpacity = sa * alphaVal;
+    let extra = "";
+    if (dashOn !== 0 || dashOff !== 0) extra += ` stroke-dasharray="${fmt(dashOn)} ${fmt(dashOff)}"`;
+    if (shadowState) extra += ` filter="url(#${shadowDefId()})"`;
+    if (blendWord === "add") extra += ` style="mix-blend-mode:plus-lighter"`;
     return (
-      ` fill="${rgbHex(fl, fc, fh)}" fill-opacity="${fmt(fa)}"` +
-      ` stroke="${rgbHex(sl, sc, sh)}" stroke-opacity="${fmt(sa)}"` +
-      ` stroke-width="${fmt(lineWidth)}" stroke-linecap="${capWord}" stroke-linejoin="${cornerWord}"`
+      ` fill="${fillValue}" fill-opacity="${fmt(fillOpacity)}"` +
+      ` stroke="${rgbHex(sl, sc, sh)}" stroke-opacity="${fmt(strokeOpacity)}"` +
+      ` stroke-width="${fmt(lineWidth)}" stroke-linecap="${capWord}" stroke-linejoin="${cornerWord}"` +
+      extra
     );
   }
 
@@ -87,11 +182,26 @@ function svgSink({ width, height, background }) {
     open.push({ tag, kind });
   }
 
+  // §8.3: `clip` opens a masking region; the NEXT completed shape or path
+  // defines it, by becoming a <clipPath> child (geometry only — a
+  // <clipPath>'s children are never themselves rendered) AND, unchanged, the
+  // visible element this call still emits — nested inside the new
+  // <g clip-path> group it opens, so the defining shape ends up clipped to
+  // itself (a no-op, matching canvas's ctx.clip() called on the same shape's
+  // own path right before it is filled/stroked).
+  function applyPendingClip(tagName, geomAttrs) {
+    if (!pendingClip) return;
+    pendingClip = false;
+    const id = defRef("clip", `${tagName} ${geomAttrs}`, (defId) => `<clipPath id="${defId}"><${tagName} ${geomAttrs}/></clipPath>`);
+    openGroup(`<g clip-path="url(#${id})">`, "clip");
+  }
+
   // `background` is a full-area fill of an opaque colour, so on canvas it
   // obliterates everything under it — the same thing `clear` does, with the
   // colour changed first. Here that is one operation: throw the elements
   // away and start from a fresh background rect, at the document root, where
-  // no enclosing transform can reach it.
+  // no enclosing transform can reach it. `defs` is a resource collection,
+  // not a mark, and is untouched (v2 §4.1).
   function wipe() {
     elements = [bgRect(), ...open.map((g) => g.tag)];
   }
@@ -99,23 +209,31 @@ function svgSink({ width, height, background }) {
   const sink = {
     reset(defaults) {
       strokeC = defaults.stroke;
-      fillC = defaults.fill;
+      fillPaint = { kind: "solid", lcha: defaults.fill };
       lineWidth = defaults.width;
       capWord = defaults.cap;
       cornerWord = defaults.corner;
       sizePx = defaults.size;
       alignWord = defaults.align;
       backgroundColor = background;
+      [dashOn, dashOff] = defaults.dash;
+      alphaVal = defaults.alpha;
+      blendWord = defaults.blend;
+      shadowState = null;
+      pendingClip = false;
       open = [];
       pathD = [];
       elements = [bgRect()];
+      defs = [];
+      defIndexByKey = new Map();
+      defCounters = Object.create(null);
     },
 
     stroke(lcha) {
       strokeC = lcha;
     },
     fill(lcha) {
-      fillC = lcha;
+      fillPaint = { kind: "solid", lcha };
     },
     width(w) {
       lineWidth = w;
@@ -127,26 +245,78 @@ function svgSink({ width, height, background }) {
       cornerWord = word;
     },
 
-    line(x1, y1, x2, y2) {
-      emit(`<line x1="${fmt(x1)}" y1="${fmt(y1)}" x2="${fmt(x2)}" y2="${fmt(y2)}"${shapeAttrs()}/>`);
+    // §5.2: a gradient replaces the current fill; a later plain `fill`
+    // replaces the gradient right back — both just reassign `fillPaint`.
+    gradient(kindWord, geomArgs, stops) {
+      const id = defRef("gradient", JSON.stringify([kindWord, geomArgs, stops]), (defId) =>
+        gradientDefBody(defId, kindWord, geomArgs, stops),
+      );
+      fillPaint = { kind: "gradient", id };
     },
-    rect(x, y, w, h) {
-      emit(`<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}"${shapeAttrs()}/>`);
+    shadow(dx, dy, blur, L, C, H) {
+      shadowState = { dx, dy, blur, L, C, H };
+    },
+    blend(word) {
+      blendWord = word;
+    },
+    alpha(a) {
+      alphaVal = a;
+    },
+    dash(on, off) {
+      dashOn = on;
+      dashOff = off;
+    },
+    clip() {
+      pendingClip = true;
+    },
+    unclip() {
+      if (pendingClip) {
+        // No shape ever consumed the clip — nothing was ever opened.
+        pendingClip = false;
+        return;
+      }
+      while (open.length && open[open.length - 1].kind === "xform") {
+        elements.push("</g>");
+        open.pop();
+      }
+      if (open.length && open[open.length - 1].kind === "clip") {
+        elements.push("</g>");
+        open.pop();
+      }
+    },
+
+    line(x1, y1, x2, y2) {
+      const geom = `x1="${fmt(x1)}" y1="${fmt(y1)}" x2="${fmt(x2)}" y2="${fmt(y2)}"`;
+      applyPendingClip("line", geom);
+      emit(`<line ${geom}${shapeAttrs()}/>`);
+    },
+    rect(x, y, w, h, turn) {
+      const rotateAttr = turn !== 0 ? ` transform="rotate(${fmt(turn)} ${fmt(x + w / 2)} ${fmt(y + h / 2)})"` : "";
+      const geom = `x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}"${rotateAttr}`;
+      applyPendingClip("rect", geom);
+      emit(`<rect ${geom}${shapeAttrs()}/>`);
     },
     // r is a radius, and `<circle r>` is a radius, so this is direct — the one
     // place p5's diameter convention would have cost a translation layer.
     circle(x, y, r) {
-      emit(`<circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(r)}"${shapeAttrs()}/>`);
+      const geom = `cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(r)}"`;
+      applyPendingClip("circle", geom);
+      emit(`<circle ${geom}${shapeAttrs()}/>`);
     },
-    ellipse(x, y, rx, ry) {
-      emit(`<ellipse cx="${fmt(x)}" cy="${fmt(y)}" rx="${fmt(rx)}" ry="${fmt(ry)}"${shapeAttrs()}/>`);
+    // The optional rotation argument (v2 §9.2), about the mark's own centre
+    // (x, y) — the one point an ellipse always carries.
+    ellipse(x, y, rx, ry, turn) {
+      const rotateAttr = turn !== 0 ? ` transform="rotate(${fmt(turn)} ${fmt(x)} ${fmt(y)})"` : "";
+      const geom = `cx="${fmt(x)}" cy="${fmt(y)}" rx="${fmt(rx)}" ry="${fmt(ry)}"${rotateAttr}`;
+      applyPendingClip("ellipse", geom);
+      emit(`<ellipse ${geom}${shapeAttrs()}/>`);
     },
-    // `end` arrives already wrapped past `start` (stream.mjs, §7), so the
-    // swept angle is in (0, 360]. SVG's sweep-flag=1 is the positive angular
-    // direction, which with y increasing downward is clockwise — the
-    // protocol's own sense — so it is 1 always. large-arc-flag is set from
-    // the sweep. A full circle cannot be one A command (its endpoints
-    // coincide and SVG draws nothing), so it is two half turns.
+    // `end` arrives already wrapped past `start` (stream.mjs, §7). SVG's
+    // sweep-flag=1 is the positive angular direction, which with y increasing
+    // downward is clockwise — the protocol's own sense — so it is 1 always.
+    // large-arc-flag is set from the sweep. A full circle cannot be one A
+    // command (its endpoints coincide and SVG draws nothing), so it is two
+    // half turns.
     arc(x, y, r, start, end) {
       const at = (deg) => [x + r * Math.cos(toRad(deg)), y + r * Math.sin(toRad(deg))];
       const sweep = end - start;
@@ -160,11 +330,15 @@ function svgSink({ width, height, background }) {
         const [bx, by] = at(end);
         d = `M ${fmt(ax)} ${fmt(ay)} A ${radii} ${sweep > 180 ? 1 : 0} 1 ${fmt(bx)} ${fmt(by)}`;
       }
-      emit(`<path d="${d}"${shapeAttrs()}/>`);
+      const geom = `d="${d}"`;
+      applyPendingClip("path", geom);
+      emit(`<path ${geom}${shapeAttrs()}/>`);
     },
     triangle(x1, y1, x2, y2, x3, y3) {
       const pts = `${fmt(x1)},${fmt(y1)} ${fmt(x2)},${fmt(y2)} ${fmt(x3)},${fmt(y3)}`;
-      emit(`<polygon points="${pts}"${shapeAttrs()}/>`);
+      const geom = `points="${pts}"`;
+      applyPendingClip("polygon", geom);
+      emit(`<polygon ${geom}${shapeAttrs()}/>`);
     },
 
     shape() {
@@ -181,7 +355,16 @@ function svgSink({ width, height, background }) {
       pathD.push("Z");
     },
     end() {
-      if (pathD.length) emit(`<path d="${pathD.join(" ")}"${shapeAttrs()}/>`);
+      if (pathD.length) {
+        const geom = `d="${pathD.join(" ")}"`;
+        applyPendingClip("path", geom);
+        emit(`<path ${geom}${shapeAttrs()}/>`);
+      } else if (pendingClip) {
+        // An empty path defining a clip: nothing to clip to and nothing
+        // painted — consume the flag so a later shape is not mistaken for
+        // the region this `clip` was meant to define.
+        pendingClip = false;
+      }
       pathD = [];
     },
 
@@ -189,10 +372,10 @@ function svgSink({ width, height, background }) {
       openGroup("<g>", "push");
     },
     // stream.mjs never forwards an unmatched pop, so a matching push marker
-    // is always down there. Any transform groups opened since it are closed
-    // first — they are what that push was saving the state ahead of.
+    // is always down there. Any xform or clip groups opened since it are
+    // closed first — they are what that push was saving the state ahead of.
     pop() {
-      while (open.length && open[open.length - 1].kind === "xform") {
+      while (open.length && open[open.length - 1].kind !== "push") {
         elements.push("</g>");
         open.pop();
       }
@@ -212,11 +395,15 @@ function svgSink({ width, height, background }) {
     },
 
     label(x, y, text) {
-      const [fl, fc, fh, fa] = fillC;
+      const fillValue = fillPaint.kind === "gradient" ? `url(#${fillPaint.id})` : rgbHex(...fillPaint.lcha.slice(0, 3));
+      const fillOpacity = (fillPaint.kind === "gradient" ? 1 : fillPaint.lcha[3]) * alphaVal;
+      let extra = "";
+      if (shadowState) extra += ` filter="url(#${shadowDefId()})"`;
+      if (blendWord === "add") extra += ` style="mix-blend-mode:plus-lighter"`;
       emit(
         `<text x="${fmt(x)}" y="${fmt(y)}" font-family="${FONT_FAMILY}" font-size="${fmt(sizePx)}"` +
-          ` text-anchor="${ANCHOR[alignWord]}" fill="${rgbHex(fl, fc, fh)}" fill-opacity="${fmt(fa)}"` +
-          ` stroke="none">${escapeText(text)}</text>`,
+          ` text-anchor="${ANCHOR[alignWord]}" fill="${fillValue}" fill-opacity="${fmt(fillOpacity)}"` +
+          ` stroke="none"${extra}>${escapeText(text)}</text>`,
       );
     },
     size(n) {
@@ -242,10 +429,11 @@ function svgSink({ width, height, background }) {
     },
 
     document() {
+      const defsBlock = defs.length ? `<defs>\n${defs.map((d) => d.body).join("\n")}\n</defs>\n` : "";
       const body = elements.length ? `\n${elements.join("\n")}\n` : "";
       return (
         `<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(width)}" height="${fmt(height)}"` +
-        ` viewBox="0 0 ${fmt(width)} ${fmt(height)}">${body}</svg>\n`
+        ` viewBox="0 0 ${fmt(width)} ${fmt(height)}">${defsBlock}${body}</svg>\n`
       );
     },
   };

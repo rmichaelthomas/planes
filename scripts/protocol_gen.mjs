@@ -39,7 +39,10 @@ const REPO = path.resolve(__dirname, "..");
 
 const PROTOCOL_SRC_PATH = path.join(REPO, "js", "paint", "protocol.mjs");
 const STREAM_SRC_PATH = path.join(REPO, "js", "paint", "stream.mjs");
-const SPEC_PATH = path.join(REPO, "planes-drawing-protocol-v1.md");
+// planes-drawing-protocol-v1.md stays in place, unmodified (v2 §10.1) — the
+// generator reads the v2 document, which is the v1 document plus its deltas,
+// so a verb v1 already had keeps the same group it always had.
+const SPEC_PATH = path.join(REPO, "planes-drawing-protocol-v2.md");
 const PROTOCOL_JSON_PATH = path.join(REPO, "protocol", "protocol.json");
 const ERRORS_JSON_PATH = path.join(REPO, "protocol", "errors.json");
 
@@ -326,7 +329,11 @@ function probeArity(parseCommand, verb) {
   if (result.kind !== "error" || result.tag !== "wrong-arity") {
     throw new Error(`protocol_gen.mjs: probing "${verb}" for arity did not produce wrong-arity (got ${JSON.stringify(result)}) — parseCommand's shape changed; update the prober`);
   }
-  const m = result.message.match(/takes (\d+) argument/);
+  // A v2 verb with an optional tail (ellipse/rect) phrases this as "takes 4
+  // to 5 arguments" rather than "takes 4 arguments" — the "to N" clause is
+  // ignored here (OPTIONAL, read straight from the module below, is the
+  // real source for it) and this still returns the BASE/required count.
+  const m = result.message.match(/takes (\d+)(?: to \d+)? argument/);
   if (!m) throw new Error(`protocol_gen.mjs: could not read an argument count out of "${verb}"'s wrong-arity message: ${result.message}`);
   return Number(m[1]);
 }
@@ -361,7 +368,7 @@ async function buildProtocolJson() {
 // overridable for the same reason: a test adding a verb to a stub module
 // supplies a matching stub group map rather than editing the real one.
 function protocolJsonFromModule(mod, src, { verbGroups = VERB_GROUPS, groups = GROUPS } = {}) {
-  const { VERBS, parseCommand } = mod;
+  const { VERBS, parseCommand, OPTIONAL = {} } = mod;
   if (!VERBS || !parseCommand) {
     throw new Error("protocol_gen.mjs: module no longer exports VERBS/parseCommand — update the generator");
   }
@@ -378,8 +385,37 @@ function protocolJsonFromModule(mod, src, { verbGroups = VERB_GROUPS, groups = G
       // explicitly, not a copy of the verb table.
       return { name, arity: 2, arguments: ["number", "number"], trailing_text: true, group };
     }
+    if (name === "gradient") {
+      // gradient's arity depends on its own first (word) argument — a
+      // second exception alongside label, for the same reason: never
+      // reached through the generic numeric probe below, since probing it
+      // with 64 numeric dummy tokens fails on the kind word, not on count.
+      return {
+        name,
+        arity: 1,
+        arguments: ["word"],
+        variable_arity: true,
+        variants: {
+          linear: { arguments: Array(12).fill("number"), description: "x1 y1 x2 y2 L1 C1 H1 A1 L2 C2 H2 A2" },
+          radial: { arguments: Array(11).fill("number"), description: "x y r L1 C1 H1 A1 L2 C2 H2 A2" },
+        },
+        group,
+        _words: ["linear", "radial"],
+      };
+    }
     const arity = probeArity(parseCommand, name);
     const shape = probeArgumentShape(parseCommand, name, arity);
+    const optional = OPTIONAL[name] || 0;
+    if (optional > 0) {
+      return {
+        name,
+        arity,
+        arguments: [...shape.arguments, ...Array(optional).fill("number")],
+        optional,
+        group,
+        _words: shape.words,
+      };
+    }
     return { name, arity, arguments: shape.arguments, group, _words: shape.words };
   });
 
@@ -403,7 +439,7 @@ function protocolJsonFromModule(mod, src, { verbGroups = VERB_GROUPS, groups = G
   return {
     format: 1,
     protocol: "planes-drawing",
-    version: 1,
+    version: 2,
     prefix: "draw",
     prefix_note: "Every command line begins with this word. A line that does not is prose and is never interpreted.",
     line_shape: "draw <verb> <arg1> <arg2> ... <argN>",

@@ -66,6 +66,27 @@ function fakeCtx() {
     resetTransform() {
       transform = "identity";
     },
+    save: record("save"),
+    restore: record("restore"),
+    clip: record("clip"),
+    drawImage: record("drawImage"),
+    clearRect: record("clearRect"),
+    createLinearGradient(...args) {
+      calls.push(["createLinearGradient", ...args]);
+      return { addColorStop: (...a) => calls.push(["addColorStop", ...a]) };
+    },
+    createRadialGradient(...args) {
+      calls.push(["createRadialGradient", ...args]);
+      return { addColorStop: (...a) => calls.push(["addColorStop", ...a]) };
+    },
+    // Bookkeeping, like resetTransform above — not itself a verb's own
+    // call, so not recorded into `calls`; dash's own tests read it back.
+    setLineDash(d) {
+      this._lineDash = d;
+    },
+    getLineDash() {
+      return this._lineDash || [];
+    },
   };
 }
 
@@ -431,7 +452,7 @@ test("draw protocol 1 as the first line is accepted and does not itself draw", (
 
 test("an unsupported version refuses the whole stream: nothing is drawn", () => {
   const ctx = fakeCtx();
-  const result = paint(ctx, ["draw protocol 2", "draw circle 10 10 5", "some prose"], DIMENSIONS);
+  const result = paint(ctx, ["draw protocol 3", "draw circle 10 10 5", "some prose"], DIMENSIONS);
   assert.equal(result.drawn, 0);
   assert.deepEqual(result.text, []);
   assert.equal(result.errors.length, 1);

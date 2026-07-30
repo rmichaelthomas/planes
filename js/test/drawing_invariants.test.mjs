@@ -60,20 +60,29 @@ test("paint/draw.planes defines exactly one helper per verb, and nothing else", 
   );
 });
 
-test("VERBS is the twenty-six of protocol version 1, exactly", () => {
+test("VERBS is the thirty-three of protocol versions 1-2, exactly", () => {
   assert.deepEqual(VERBS.slice().sort(), [
-    "align", "arc", "background", "cap", "circle", "clear", "close", "corner",
-    "curve", "ellipse", "end", "fill", "label", "line", "pop", "push", "rect",
-    "rotate", "scale", "shape", "size", "stroke", "translate", "triangle",
+    "align", "alpha", "arc", "background", "blend", "cap", "circle", "clear",
+    "clip", "close", "corner", "curve", "dash", "ellipse", "end", "fill",
+    "gradient", "label", "line", "pop", "push", "rect", "rotate", "scale",
+    "shadow", "shape", "size", "stroke", "translate", "triangle", "unclip",
     "vertex", "width",
   ]);
 });
 
-test("no Planes source emits a raw draw string except paint/draw.planes", () => {
+test("no Planes source emits a raw draw string except paint/draw.planes and the protocol declaration", () => {
+  // draw.planes deliberately carries no `protocol` helper (v2 §6.6's own
+  // draw.planes header, and planes-drawing-protocol-v2.md §1.1): a program
+  // states its version once, directly, as `show "draw protocol N"`. That
+  // one exact shape is the only raw "draw " string any other program may
+  // emit — anything else is a hand-assembled protocol line.
   const offenders = fs
     .readdirSync(path.join(REPO, "paint"))
     .filter((f) => f.endsWith(".planes") && f !== "draw.planes")
-    .filter((f) => /show\s+"draw\b/.test(read(path.join("paint", f))));
+    .filter((f) => {
+      const withoutDeclaration = read(path.join("paint", f)).replace(/show\s+"draw protocol \d+"/g, "");
+      return /show\s+"draw\b/.test(withoutDeclaration);
+    });
   assert.deepEqual(offenders, [], "a program assembled a protocol line by hand");
 });
 
@@ -84,6 +93,8 @@ const WALK_OWNED_TAGS = [
   "protocol-repeated", "protocol-late", "unsupported-version",
   "path-already-open", "path-not-open", "path-unclosed",
   "unmatched-pop", "unmatched-push",
+  // v2 additions.
+  "verb-not-in-version", "unmatched-unclip", "clip-unclosed",
 ];
 
 test("every stream-level error tag is raised by stream.mjs", () => {

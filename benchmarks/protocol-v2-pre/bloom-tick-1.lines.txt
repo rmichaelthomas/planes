@@ -1,0 +1,140 @@
+draw clear
+draw background 0.17 0.03 265
+draw corner round
+draw width 2
+draw push
+draw translate 215.0112145 169.3752545
+draw fill ~0.450374689583 0.13 2 0.06009634875
+draw stroke ~0.600374689583 0.19 2 0.3503211625
+draw circle 0 0 20.1336036
+draw push
+draw rotate 2
+draw scale 0.31458755625 0.31458755625
+draw shape
+draw vertex 0 0
+draw curve -19 -14 -13 -39 0 -46
+draw curve 13 -39 19 -14 0 0
+draw close
+draw end
+draw pop
+draw fill ~0.509614479166 0.13 20 0.0753294375
+draw stroke ~0.659614479166 0.19 20 0.401098125
+draw circle 0 0 41.25682
+draw push
+draw rotate 38
+draw scale 0.6446378125 0.6446378125
+draw shape
+draw vertex 0 0
+draw curve -19 -14 -13 -39 0 -46
+draw curve 13 -39 19 -14 0 0
+draw close
+draw end
+draw pop
+draw fill 0.636445546875 0.13 38 0.107943140625
+draw stroke 0.786445546875 0.19 38 0.50981046875
+draw circle 0 0 86.481155
+draw push
+draw rotate 74
+draw scale 1.351268046875 1.351268046875
+draw shape
+draw vertex 0 0
+draw curve -19 -14 -13 -39 0 -46
+draw curve 13 -39 19 -14 0 0
+draw close
+draw end
+draw pop
+draw fill ~0.756571963541 0.13 56 0.138832790625
+draw stroke ~0.906571963541 0.19 56 0.61277596875
+draw circle 0 0 129.314803
+draw push
+draw rotate 110
+draw scale 2.020543796875 2.020543796875
+draw shape
+draw vertex 0 0
+draw curve -19 -14 -13 -39 0 -46
+draw curve 13 -39 19 -14 0 0
+draw close
+draw end
+draw pop
+draw fill ~0.799625310416 0.13 74 0.14990365125
+draw stroke ~0.949625310416 0.19 74 0.6496788375
+draw circle 0 0 144.6663964
+draw push
+draw rotate 146
+draw scale 2.26041244375 2.26041244375
+draw shape
+draw vertex 0 0
+draw curve -19 -14 -13 -39 0 -46
+draw curve 13 -39 19 -14 0 0
+draw close
+draw end
+draw pop
+draw fill ~0.740385520833 0.13 92 0.1346705625
+draw stroke ~0.890385520833 0.19 92 0.598901875
+draw circle 0 0 123.54318
+draw push
+draw rotate 182
+draw scale 1.9303621875 1.9303621875
+draw shape
+draw vertex 0 0
+draw curve -19 -14 -13 -39 0 -46
+draw curve 13 -39 19 -14 0 0
+draw close
+draw end
+draw pop
+draw fill 0.613554453125 0.13 110 0.102056859375
+draw stroke 0.763554453125 0.19 110 0.49018953125
+draw circle 0 0 78.318845
+draw push
+draw rotate 218
+draw scale 1.223731953125 1.223731953125
+draw shape
+draw vertex 0 0
+draw curve -19 -14 -13 -39 0 -46
+draw curve 13 -39 19 -14 0 0
+draw close
+draw end
+draw pop
+draw fill ~0.493428036458 0.13 128 0.071167209375
+draw stroke ~0.643428036458 0.19 128 0.38722403125
+draw circle 0 0 35.485197
+draw push
+draw rotate 254
+draw scale 0.554456203125 0.554456203125
+draw shape
+draw vertex 0 0
+draw curve -19 -14 -13 -39 0 -46
+draw curve 13 -39 19 -14 0 0
+draw close
+draw end
+draw pop
+draw fill ~0.450374689583 0.13 146 0.06009634875
+draw stroke ~0.600374689583 0.19 146 0.3503211625
+draw circle 0 0 20.1336036
+draw push
+draw rotate 290
+draw scale 0.31458755625 0.31458755625
+draw shape
+draw vertex 0 0
+draw curve -19 -14 -13 -39 0 -46
+draw curve 13 -39 19 -14 0 0
+draw close
+draw end
+draw pop
+draw fill ~0.509614479166 0.13 164 0.0753294375
+draw stroke ~0.659614479166 0.19 164 0.401098125
+draw circle 0 0 41.25682
+draw push
+draw rotate 326
+draw scale 0.6446378125 0.6446378125
+draw shape
+draw vertex 0 0
+draw curve -19 -14 -13 -39 0 -46
+draw curve 13 -39 19 -14 0 0
+draw close
+draw end
+draw pop
+draw stroke 0.97 0.11 2 0.75
+draw width 3
+draw arc 0 0 50.25682 4 124
+draw pop

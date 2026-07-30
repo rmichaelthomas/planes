@@ -37,7 +37,7 @@ to tree of branch-length, angle, remaining-depth, max-depth:
     let leaf-center = -branch-length * 0.8 because "the leaf sits just past the twig's tip rather than centred on it, so it reads as growing from the branch instead of skewered by it"
     stroke of 0, 0, 0, 0
     fill of 0.74, 0.15, 138, 0.9
-    ellipse of 0, leaf-center, leaf-width, leaf-length
+    ellipse of 0, leaf-center, leaf-width, leaf-length, 0
     give nothing
   else:
     let climb = (max-depth - remaining-depth) / max-depth because "0 at the trunk and 1 at the tips, so every ramp below is one fraction of the way up the tree rather than a per-generation table"

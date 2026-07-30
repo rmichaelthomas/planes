@@ -62,14 +62,32 @@ function silentCtx() {
     getTransform() { return transform; },
     setTransform(t) { transform = t; },
     resetTransform() { transform = "identity"; },
+    save() {}, restore() {}, clip() {}, drawImage() {}, clearRect() {},
+    setLineDash() {},
+    createLinearGradient() { return { addColorStop() {} }; },
+    createRadialGradient() { return { addColorStop() {} }; },
   };
 }
 const DIMENSIONS = { width: 480, height: 360, background: "#ffffff" };
 
+// An offscreen-canvas factory for the shadow single-cast path (v2 §6.1):
+// Node has neither OffscreenCanvas nor document.createElement, so a mark
+// with both fill and stroke visible under an active `shadow` (garden's bees
+// and fireflies) needs one injected, the same way js/test/shadow_parity.test.mjs
+// does for its own dedicated coverage.
+function offscreenCanvasFactory() {
+  const ctx = silentCtx();
+  return { width: 0, height: 0, getContext: () => ctx };
+}
+
 // Every `draw`-prefixed line the corpus emits, over a run of each program
 // long enough to reach the frames that are not the first one. snake is driven
 // into a wall on purpose: `align` is only ever set on the game-over frame,
-// and a coverage test that never dies would report it missing.
+// and a coverage test that never dies would report it missing. garden is a
+// pure function of tick alone (v2 §11) and is sampled across a full day
+// cycle so every v2 verb — day-only (`gradient`, `alpha`, `dash`, `clip`,
+// `unclip`), and night-only (`blend`, and `shadow` on more than one mark) —
+// is reached by at least one sampled tick.
 async function collectCorpusStream() {
   const verbs = new Set();
   const errors = [];
@@ -78,7 +96,8 @@ async function collectCorpusStream() {
       const m = /^\s*draw\s+(\S+)/.exec(line);
       if (m) verbs.add(m[1]);
     }
-    for (const e of paint(silentCtx(), lines, DIMENSIONS).errors) {
+    const dims = { ...DIMENSIONS, offscreenCanvas: offscreenCanvasFactory };
+    for (const e of paint(silentCtx(), lines, dims).errors) {
       errors.push(`${label}: ${e.tag}: ${e.message}`);
     }
   };
@@ -107,6 +126,14 @@ async function collectCorpusStream() {
     if (!state.alive) break;
   }
   assert.equal(state.alive, false, "snake must reach its game-over frame, which is the only one that sets align");
+
+  const gardenSrc = readExample("garden");
+  const gardenLoader = new BrowserModuleLoader({ base: baseFor("garden") });
+  for (let tick = 0; tick < 240; tick += 20) {
+    const r = await stepGraph(gardenSrc, ctx(tick, [], null), { loader: gardenLoader });
+    assert.equal(r.error, null);
+    record(`garden tick ${tick}`, r.lines);
+  }
 
   return { verbs, errors };
 }

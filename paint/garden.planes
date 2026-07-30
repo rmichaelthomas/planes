@@ -1,0 +1,272 @@
+# paint/garden.planes — a garden through a day, proving the seven v2
+# additions (planes-drawing-protocol-v2.md §6.6, §9) inside one picture:
+#
+#   - the sky and the pond's reflection are both `gradient` fills (one
+#     linear, the moon's glow radial) — two distinct kinds, both stops
+#     interpolated in OKLCH by stream.mjs, never by this program;
+#   - the sun, the moon and every bee and firefly cast a `shadow`;
+#   - fireflies composite with `blend add`, so their light brightens where
+#     two of them overlap;
+#   - the pond's ripples are `clip`ped to the pond's own oval, opened by the
+#     pond itself and released with `unclip`;
+#   - the drifting clouds are drawn under `alpha`, translucent as a group of
+#     independently-dimmed marks;
+#   - the fence rail and the pond's ripples are `dash`ed;
+#   - every leaf and both fence posts carry the optional rotation argument
+#     on `ellipse`/`rect` — a single-argument tilt, no push/rotate/pop —
+#     standing right next to the recursive tree, which still uses
+#     push/rotate/pop for ITS rotation, because both techniques coexist in
+#     this version and neither replaces the other.
+#
+# PURITY (v2 §11). The whole picture is a function of `tick` and the fixed
+# constants below — never of `state`, which this program does not read,
+# does not write, and does not declare a surface for (no `use file`). The
+# garden at day N is the same picture whether N is the first tick ever
+# computed or the thousandth: that is what makes the day scrubber in
+# paint.html meaningful. Drag it backward and the frame it draws is
+# RECOMPUTED from N alone, not eased toward from wherever the picture
+# happened to be — a bee whose position came from N would break this; a bee
+# whose position eased toward a target frame by frame would too. Every
+# moving thing here — the sun and moon's arc, the clouds' drift, the bees'
+# and fireflies' loops — is `tick` fed through `mod`/`sine`/`cosine` and
+# nothing else.
+#
+# `seed` is a fixed constant, not state: it varies bee/firefly/cloud
+# placement without true randomness, the same reason snake.planes's apple
+# placement is a deterministic function of score rather than `random` (one
+# of the seven effect kinds, reachable only through a `foreign ... doing
+# random` declaration this program does not make).
+
+use draw
+use math
+
+# `canvas-width`/`canvas-height`, not `width`/`height`: `width` is also the
+# line-thickness verb draw.planes imports, and a bare reference to the local
+# constant would collide with that function's own name.
+let canvas-width = 480
+let canvas-height = 360
+let horizon = 260 because "the ground begins here; sky above, grass below"
+let day-length = 240 because "ticks per full day-night cycle -- slow enough to read as a cycle, fast enough to drag through with the scrubber in a couple of seconds"
+let seed = 733
+
+let phase = mod of tick, day-length
+let day-fraction = phase / day-length because "0 at the cycle's start, just under 1 at its end"
+let sun-angle = day-fraction * 360 because "one full lap of the sky per day-length ticks; angle 0 is sunrise, 90 is noon, 180 is sunset, 270 is midnight -- sine of each of those is 0, 1, 0, -1, which is exactly the height a day cycle wants"
+let sun-height = sine of sun-angle
+let moon-angle = mod of (sun-angle + 180), 360
+let moon-height = sine of moon-angle because "always the negative of sun-height by construction, computed the same way rather than as 0 - sun-height, so both stay honest about where they come from"
+let sky-mix = (sun-height + 1) / 2 because "0 at midnight's low point, 1 at noon's peak"
+
+let zenith-l = 0.1 + sky-mix * 0.5
+let zenith-c = 0.03 + sky-mix * 0.12
+let zenith-h = 250
+let horizon-l = 0.25 + sky-mix * 0.55
+let horizon-c = 0.04 + sky-mix * 0.14
+let horizon-h = 235 - sky-mix * 15 because "a touch warmer near the horizon at full day than at the zenith"
+
+# ---- plants: a single tilt each, via ellipse's optional rotation argument --
+
+to leaf of x, y, leaf-size, tilt:
+  fill of 0.62, 0.16, 130, 0.95
+  stroke of 0, 0, 0, 0
+  let leaf-ry = leaf-size * 0.42
+  ellipse of x, y, leaf-size, leaf-ry, tilt
+
+to plant of base-x, base-y, lean:
+  stroke of 0.25, 0.1, 120, 1
+  width of 2
+  let tip-x = base-x + lean
+  let tip-y = base-y - 34
+  line of base-x, base-y, tip-x, tip-y
+  let leaf-a-x = base-x + lean * 0.3
+  let leaf-a-y = base-y - 14
+  let leaf-b-x = base-x + lean * 0.6
+  let leaf-b-y = base-y - 24
+  leaf of leaf-a-x, leaf-a-y, 13, (18 + lean)
+  leaf of leaf-b-x, leaf-b-y, 11, (-22 + lean)
+  leaf of tip-x, tip-y, 9, (6 + lean)
+
+# ---- a recursive tree: push/rotate/pop still does what it always did ------
+
+to tree of branch-length, angle, remaining-depth:
+  if remaining-depth <= 0:
+    fill of 0.68, 0.17, 135, 0.9
+    stroke of 0, 0, 0, 0
+    let leaf-length = branch-length * 0.8
+    let leaf-width = branch-length * 0.35
+    ellipse of 0, (0 - leaf-length), leaf-width, leaf-length, angle
+    give nothing
+  else:
+    let bark-lightness = 0.3 + remaining-depth * 0.05
+    stroke of bark-lightness, 0.05, 40, 1
+    width of (remaining-depth * 0.7)
+    line of 0, 0, 0, (0 - branch-length)
+    let child-length = branch-length * 0.7
+    let other-length = branch-length * 0.72
+    push
+    translate of 0, (0 - branch-length)
+    rotate of (0 - angle)
+    tree of child-length, angle, (remaining-depth - 1)
+    pop
+    push
+    translate of 0, (0 - branch-length)
+    rotate of angle
+    tree of other-length, angle, (remaining-depth - 1)
+    pop
+
+# ---- weather: drifting clouds under `alpha` --------------------------------
+
+to cloud of index, cy, drift-speed, tilt:
+  let raw-drift = mod of (tick * drift-speed + index * seed), (canvas-width + 160)
+  let cx = raw-drift - 80
+  alpha of 0.55
+  fill of 0.9, 0.02, 250, 1
+  stroke of 0, 0, 0, 0
+  ellipse of cx, cy, 46, 18, tilt
+  let cx2 = cx + 30
+  let cy2 = cy - 6
+  ellipse of cx2, cy2, 34, 15, (0 - tilt)
+  alpha of 1
+
+# ---- sun and moon: a shadow each, the moon backed by a radial gradient ----
+
+to draw-sun:
+  let sun-x = canvas-width / 2 + (cosine of sun-angle) * (canvas-width * 0.42)
+  let sun-y = horizon - sun-height * (horizon - 40)
+  shadow of 0, 0, 18, 0.95, 0.15, 90
+  fill of 0.96, 0.18, 90, 1
+  stroke of 0, 0, 0, 0
+  circle of sun-x, sun-y, 22
+
+to draw-moon:
+  let moon-x = canvas-width / 2 + (cosine of moon-angle) * (canvas-width * 0.42)
+  let moon-y = horizon - moon-height * (horizon - 40)
+  gradient of "radial", moon-x, moon-y, 40, 0, 0.9, 0.04, 250, 0.35, 0.9, 0.04, 250, 0
+  stroke of 0, 0, 0, 0
+  circle of moon-x, moon-y, 40
+  fill of 0.93, 0.02, 250, 1
+  shadow of 0, 0, 10, 0.9, 0.05, 250
+  circle of moon-x, moon-y, 16
+
+# ---- bees by day: a small shadow each, no blending ------------------------
+
+to bee of index, bee-count:
+  if index >= bee-count:
+    give nothing
+  else:
+    let orbit-angle = mod of (tick * 5 + index * seed), 360
+    let orbit-radius = 60 + index * 18
+    let bx = 240 + (cosine of orbit-angle) * orbit-radius
+    let bob-angle = orbit-angle * 2
+    let by = 150 + (sine of bob-angle) * 14 + index * 10
+    shadow of 1, 2, 3, 0.15, 0.05, 90
+    fill of 0.85, 0.16, 90, 1
+    stroke of 0.1, 0.05, 90, 1
+    width of 0.6
+    circle of bx, by, 4
+    bee of (index + 1), bee-count
+
+# ---- fireflies by night: `blend add` brightens every overlap --------------
+
+to firefly of index, firefly-count:
+  if index >= firefly-count:
+    give nothing
+  else:
+    let drift-angle = mod of (tick * 3 + index * seed * 7), 360
+    let drift-radius = 30 + index * 14
+    let fx = 340 + (cosine of drift-angle) * drift-radius
+    let bob-radius = 18 + index * 9
+    let fy = 220 + (sine of drift-angle) * bob-radius
+    let pulse-angle = mod of (tick * 9 + index * 40), 360
+    let glow = 0.5 + (sine of pulse-angle) * 0.5 because "each firefly pulses on its own phase, so a whole swarm does not blink in lockstep"
+    let glow-blur = 6 + glow * 4
+    let glow-alpha = 0.5 + glow * 0.5
+    blend of "add"
+    # dx 0, dy 0 is a glow, not a cast shadow (v2 section 6.6).
+    shadow of 0, 0, glow-blur, 0.9, 0.1, 60
+    fill of 0.95, 0.12, 60, glow-alpha
+    stroke of 0, 0, 0, 0
+    circle of fx, fy, 2
+    blend of "normal"
+    firefly of (index + 1), firefly-count
+
+# =============================================================================
+# the picture
+
+show "draw protocol 2"
+clear
+
+gradient of "linear", 0, 0, 0, horizon, zenith-l, zenith-c, zenith-h, 1, horizon-l, horizon-c, horizon-h, 1
+stroke of 0, 0, 0, 0
+rect of 0, 0, canvas-width, horizon, 0
+
+let ground-l = 0.22 + sky-mix * 0.12
+let ground-c = 0.05 + sky-mix * 0.03
+fill of ground-l, ground-c, 110, 1
+stroke of 0, 0, 0, 0
+let ground-h = canvas-height - horizon
+rect of 0, horizon, canvas-width, ground-h, 0
+
+cloud of 0, 70, 0.6, 8
+cloud of 1, 100, 0.35, -6
+cloud of 2, 55, 0.85, 4
+
+let pond-x = 120
+let pond-y = 300
+let pond-rx = 70
+let pond-ry = 24
+
+clip
+gradient of "linear", (pond-x - pond-rx), (pond-y - pond-ry), (pond-x - pond-rx), (pond-y + pond-ry), horizon-l, horizon-c, horizon-h, 1, zenith-l, zenith-c, zenith-h, 1
+stroke of 0.1, 0.05, 230, 0.6
+width of 1.5
+ellipse of pond-x, pond-y, pond-rx, pond-ry, 0
+
+let ripple-phase = mod of tick, 40
+let ripple-lift = (ripple-phase / 40) * 4
+stroke of 1, 0, 0, 0.35
+width of 1
+dash of 4, 3
+let ripple-1-y = pond-y - 6 + ripple-lift
+let ripple-1-x1 = pond-x - pond-rx + 6
+let ripple-1-x2 = pond-x + pond-rx - 6
+line of ripple-1-x1, ripple-1-y, ripple-1-x2, ripple-1-y
+let ripple-2-y = pond-y + 4 + ripple-lift * 0.7
+let ripple-2-x1 = pond-x - pond-rx + 12
+let ripple-2-x2 = pond-x + pond-rx - 12
+line of ripple-2-x1, ripple-2-y, ripple-2-x2, ripple-2-y
+dash of 0, 0
+unclip
+
+if sun-height > 0:
+  draw-sun
+
+if moon-height > 0:
+  draw-moon
+
+stroke of 0.3, 0.05, 60, 1
+width of 3
+dash of 10, 6
+line of 380, 300, 460, 300
+dash of 0, 0
+
+fill of 0.4, 0.08, 60, 1
+stroke of 0, 0, 0, 0
+rect of 390, 280, 6, 40, -4
+rect of 430, 280, 6, 40, 3
+
+plant of 260, 340, 6
+plant of 300, 345, -8
+plant of 340, 338, 10
+plant of 200, 348, -4
+
+push
+translate of 400, 340
+tree of 42, 26, 5
+pop
+
+if sun-height > 0.15:
+  bee of 0, 5
+
+if sun-height <= 0.15:
+  firefly of 0, 6

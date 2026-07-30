@@ -1,0 +1,59 @@
+draw clear
+draw stroke 0.5 0 0 0.12
+draw width 1
+draw line 20 0 20 360
+draw line 40 0 40 360
+draw line 60 0 60 360
+draw line 80 0 80 360
+draw line 100 0 100 360
+draw line 120 0 120 360
+draw line 140 0 140 360
+draw line 160 0 160 360
+draw line 180 0 180 360
+draw line 200 0 200 360
+draw line 220 0 220 360
+draw line 240 0 240 360
+draw line 260 0 260 360
+draw line 280 0 280 360
+draw line 300 0 300 360
+draw line 320 0 320 360
+draw line 340 0 340 360
+draw line 360 0 360 360
+draw line 380 0 380 360
+draw line 400 0 400 360
+draw line 420 0 420 360
+draw line 440 0 440 360
+draw line 460 0 460 360
+draw line 0 20 480 20
+draw line 0 40 480 40
+draw line 0 60 480 60
+draw line 0 80 480 80
+draw line 0 100 480 100
+draw line 0 120 480 120
+draw line 0 140 480 140
+draw line 0 160 480 160
+draw line 0 180 480 180
+draw line 0 200 480 200
+draw line 0 220 480 220
+draw line 0 240 480 240
+draw line 0 260 480 260
+draw line 0 280 480 280
+draw line 0 300 480 300
+draw line 0 320 480 320
+draw line 0 340 480 340
+draw stroke 0 0 0 0
+draw fill 0.55 0.19 25 1
+draw circle 370 90 8
+draw fill 0.49 0.14 145 1
+draw rect 421 181 18 18
+draw fill 0.62 0.14 145 1
+draw rect 441 181 18 18
+draw fill 0.82 0.17 128 1
+draw triangle 479.2 190 460.8 199.2 460.8 180.8
+draw size 14
+draw fill 0.15 0 0 1
+draw label 8 18 score: 0
+draw size 18
+draw align center
+draw fill 0.42 0.2 25 1
+draw label 240 180 GAME OVER  -  press Reset to play again
