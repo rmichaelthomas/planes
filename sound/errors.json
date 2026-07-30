@@ -1,0 +1,210 @@
+{
+  "format": 1,
+  "generated_by": "scripts/protocol_gen.mjs",
+  "source_files": [
+    "js/sound/protocol.mjs",
+    "js/sound/stream.mjs"
+  ],
+  "count": 13,
+  "entries": [
+    {
+      "kind": "error",
+      "tag": "wrong-arity",
+      "source": "js/sound/protocol.mjs:66",
+      "raised_in": "parseProtocol",
+      "template": "\"protocol\" takes exactly one argument (the version number) in \"{line}\", got {args.length}",
+      "slots": [
+        "line",
+        "args.length"
+      ],
+      "fix": "write sound protocol 1",
+      "id": "protocol.wrong-arity.parseProtocol"
+    },
+    {
+      "kind": "error",
+      "tag": "bad-protocol-version",
+      "source": "js/sound/protocol.mjs:74",
+      "raised_in": "parseProtocol",
+      "template": "\"protocol\" takes a positive whole number version in \"{line}\", got \"{args[0]}\"",
+      "slots": [
+        "line",
+        "args[0]"
+      ],
+      "fix": "write sound protocol 1",
+      "id": "protocol.bad-protocol-version.parseProtocol"
+    },
+    {
+      "kind": "error",
+      "tag": "unknown-verb",
+      "source": "js/sound/protocol.mjs:92",
+      "raised_in": "parseCommand",
+      "template": "\"sound\" with no verb in \"{line}\"",
+      "slots": [
+        "line"
+      ],
+      "fix": "name a sounding verb after \"sound\", e.g. sound note 3 2 1 0 0.4",
+      "id": "protocol.unknown-verb.parseCommand-1"
+    },
+    {
+      "kind": "error",
+      "tag": "unknown-verb",
+      "source": "js/sound/protocol.mjs:104",
+      "raised_in": "parseCommand",
+      "template": "unrecognised sounding verb \"{verb}\" in \"{line}\"",
+      "slots": [
+        "verb",
+        "line"
+      ],
+      "fix": "use one of: {VERBS.slice().sort().join(\", \")}, or protocol",
+      "id": "protocol.unknown-verb.parseCommand-2"
+    },
+    {
+      "kind": "error",
+      "tag": "wrong-arity",
+      "source": "js/sound/protocol.mjs:114",
+      "raised_in": "parseCommand",
+      "template": "\"{verb}\" takes {arity} argument{arity === 1 ? \"\" : \"s\"} in \"{line}\", got {args.length}",
+      "slots": [
+        "verb",
+        "arity",
+        "arity === 1 ? \"\" : \"s\"",
+        "line",
+        "args.length"
+      ],
+      "fix": "check the argument count against the sound protocol's verb table",
+      "id": "protocol.wrong-arity.parseCommand"
+    },
+    {
+      "kind": "error",
+      "tag": "bad-word",
+      "source": "js/sound/protocol.mjs:124",
+      "raised_in": "parseCommand",
+      "template": "\"{verb}\" takes one of {[...WORDS[verb]].join(\", \")} in \"{line}\", got \"{word}\"",
+      "slots": [
+        "verb",
+        "[...WORDS[verb]].join(\", \")",
+        "line",
+        "word"
+      ],
+      "fix": "use one of: {[...WORDS[verb]].join(\", \")}",
+      "id": "protocol.bad-word.parseCommand"
+    },
+    {
+      "kind": "error",
+      "tag": "bad-number",
+      "source": "js/sound/protocol.mjs:136",
+      "raised_in": "parseCommand",
+      "template": "\"{args[badIndex]}\" is not a valid number in \"{line}\"",
+      "slots": [
+        "args[badIndex]",
+        "line"
+      ],
+      "fix": "use digits with an optional leading - and a decimal point, e.g. 0.4 (no exponent notation; a leading ~ is fine)",
+      "id": "protocol.bad-number.parseCommand"
+    },
+    {
+      "kind": "error",
+      "tag": "protocol-repeated",
+      "source": "js/sound/stream.mjs:104",
+      "raised_in": "walk",
+      "template": "a second \"sound protocol\" declaration is not allowed in one stream",
+      "slots": [],
+      "id": "stream.protocol-repeated.walk"
+    },
+    {
+      "kind": "error",
+      "tag": "protocol-late",
+      "source": "js/sound/stream.mjs:111",
+      "raised_in": "walk",
+      "template": "\"sound protocol\" must appear before the first sounding command",
+      "slots": [],
+      "id": "stream.protocol-late.walk"
+    },
+    {
+      "kind": "error",
+      "tag": "unsupported-version",
+      "source": "js/sound/stream.mjs:126",
+      "raised_in": "walk",
+      "template": "this player implements sound protocol version 1; the stream declared version {requested} and is refused whole",
+      "slots": [
+        "requested"
+      ],
+      "id": "stream.unsupported-version.walk"
+    },
+    {
+      "kind": "error",
+      "tag": "gain-out-of-range",
+      "source": "js/sound/stream.mjs:150",
+      "raised_in": "walk",
+      "template": "\"gain\" takes a level from 0 to 1 in \"{line}\", got {g}",
+      "slots": [
+        "line",
+        "g"
+      ],
+      "id": "stream.gain-out-of-range.walk"
+    },
+    {
+      "kind": "error",
+      "tag": "bad-ratio",
+      "source": "js/sound/stream.mjs:163",
+      "raised_in": "walk",
+      "template": "\"note\" takes a pitch ratio with a positive numerator and denominator in \"{line}\", got {numerator}/{denominator}",
+      "slots": [
+        "line",
+        "numerator",
+        "denominator"
+      ],
+      "id": "stream.bad-ratio.walk"
+    },
+    {
+      "kind": "error",
+      "tag": "bad-time",
+      "source": "js/sound/stream.mjs:172",
+      "raised_in": "walk",
+      "template": "\"note\" starts at or after the tick begins and lasts longer than no time at all in \"{line}\", got at {at} lasting {lasts}",
+      "slots": [
+        "line",
+        "at",
+        "lasts"
+      ],
+      "id": "stream.bad-time.walk"
+    }
+  ],
+  "tags": {
+    "wrong-arity": [
+      "js/sound/protocol.mjs:66",
+      "js/sound/protocol.mjs:114"
+    ],
+    "bad-protocol-version": [
+      "js/sound/protocol.mjs:74"
+    ],
+    "unknown-verb": [
+      "js/sound/protocol.mjs:92",
+      "js/sound/protocol.mjs:104"
+    ],
+    "bad-word": [
+      "js/sound/protocol.mjs:124"
+    ],
+    "bad-number": [
+      "js/sound/protocol.mjs:136"
+    ],
+    "protocol-repeated": [
+      "js/sound/stream.mjs:104"
+    ],
+    "protocol-late": [
+      "js/sound/stream.mjs:111"
+    ],
+    "unsupported-version": [
+      "js/sound/stream.mjs:126"
+    ],
+    "gain-out-of-range": [
+      "js/sound/stream.mjs:150"
+    ],
+    "bad-ratio": [
+      "js/sound/stream.mjs:163"
+    ],
+    "bad-time": [
+      "js/sound/stream.mjs:172"
+    ]
+  }
+}

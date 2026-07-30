@@ -434,8 +434,14 @@ test("rect with turn 0 emits no transform attribute — identical to a v1 stream
 test("rotation is unaffected by the stream's declared version — same geometry with or without draw protocol 2", () => {
   const withDecl = toSvg(["draw protocol 2", "draw ellipse 50 50 10 5 30"], DIMENSIONS).svg;
   const without = toSvg(["draw ellipse 50 50 10 5 30"], DIMENSIONS).svg;
-  const stripProtocolNoop = (s) => s; // the declaration itself draws nothing
-  assert.equal(stripProtocolNoop(withDecl), without);
+  // `data-line` is an INDEX INTO THIS STREAM, so the declaration line shifts
+  // it by one and is expected to: the same mark in two different streams sits
+  // at two different line numbers. Geometry is what this test is about, and
+  // geometry is what is compared.
+  const stripLine = (s) => s.replace(/ data-line="\d+"/g, "");
+  assert.equal(stripLine(withDecl), stripLine(without));
+  assert.match(withDecl, /data-line="1"/);
+  assert.match(without, /data-line="0"/);
 });
 
 // ---- F: library correspondence — one draw.planes helper per live VERBS ---
@@ -521,6 +527,16 @@ async function renderBaselineLabel(label) {
   return lines;
 }
 
+// `data-line` is an ANNOTATION, not geometry: svg.mjs stamps every element
+// with the index of the stream line that emitted it, so a saved SVG is also a
+// map back into the program. It is stripped on BOTH sides here rather than
+// baked into the baselines, because the baselines exist to prove that what a
+// v1 stream MEANS has not changed, and regenerating them to absorb a new
+// attribute would be the one thing they are here to prevent. Every geometry
+// attribute, every colour, every path command is still compared byte for
+// byte; a change to any of them still fails.
+const withoutLineAnnotations = (svg) => svg.replace(/ data-line="\d+"/g, "");
+
 for (const label of baselineFrames()) {
   test(`v1 invariance: ${label} renders byte-identically (SVG) to the committed baseline`, async () => {
     const restore = installFsFetch();
@@ -529,12 +545,29 @@ for (const label of baselineFrames()) {
       const { svg, errors } = toSvg(lines, DIMENSIONS_480x360());
       assert.deepEqual(errors, []);
       const expected = fs.readFileSync(path.join(BENCH_DIR, `${label}.svg`), "utf-8");
-      assert.equal(svg, expected);
+      assert.equal(withoutLineAnnotations(svg), expected);
     } finally {
       restore();
     }
   });
 }
+
+test("every element of a baseline frame carries a data-line index, and it points at the right line", async () => {
+  const restore = installFsFetch();
+  try {
+    const lines = await renderBaselineLabel("turtle");
+    const { svg } = toSvg(lines, DIMENSIONS_480x360());
+    const stamped = [...svg.matchAll(/<(\w+)[^>]*?data-line="(\d+)"/g)];
+    assert.ok(stamped.length > 10, "a real frame stamps many elements");
+    // Every stamped element names a line that IS a drawing command, and never
+    // a line of prose.
+    for (const [, , index] of stamped) {
+      assert.match(lines[Number(index)], /^draw /, `line ${index} is not a command`);
+    }
+  } finally {
+    restore();
+  }
+});
 
 function DIMENSIONS_480x360() {
   return { width: 480, height: 360, background: "#ffffff" };

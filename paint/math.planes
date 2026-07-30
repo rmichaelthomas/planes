@@ -86,3 +86,52 @@ to tangent of d:
   if bottom == 0:
     fail "the tangent is undefined at " + text of d + " degrees, where the cosine is zero" as tangent-undefined
   give (sine of d) / bottom
+
+# `part` AND `floor` ARE THE TWO HALVES OF THE DIVISION `mod` ALREADY PERFORMS,
+# AND THAT IS THE WHOLE ARGUMENT FOR THEM BEING HERE. The harvest rule admits a
+# helper on two-of-three witnesses (v19.1 §229) and neither of these has one;
+# the exception `cosine` and `tangent` were admitted under does not stretch to
+# cover them either, since they are companions of no builtin. They are here
+# because floored `mod` is *defined* by them — `mod of a, b` is
+# `a - b * floor of (a / b)` — so this file already computes both, forty lines
+# up, and offering neither while offering the thing built out of them is the
+# same withholding the cosine/tangent note refuses to do.
+#
+# NEITHER IS WRITTEN WITH `mod`, AND THE REASON IS MEASURED. `part of x` is
+# exactly `mod of x, 1`, and writing it that way is one line — but `mod` is
+# `positive-mod`'s doubling recursion, which is O(log(a/b)) PLANES FRAMES, and
+# a caller hashing an integer near 10^21 pays fifty-odd of them per call.
+# paint/garden.planes calls this about five hundred times a frame; written
+# through `mod` the scene cost 110ms a tick, and there is no play loop at that
+# price.
+#
+# `whole of x` is one exact operation, so both are built on it instead. The
+# care needed is that `whole of` ROUNDS TO NEAREST, half away from zero —
+# `whole of 2.5` is 3 and `whole of -3.7` is -4 — so `x - whole of x` lands in
+# -0.5 to 0.5 rather than 0 to 1. Adding one where it came out negative
+# recovers the floored fraction exactly, on both sides of zero, with no
+# division and no recursion:
+#
+#     x = 3.7   whole 4   -> -0.3  -> 0.7     x = 3.2   whole 3  -> 0.2
+#     x = -3.7  whole -4  ->  0.3               x = -3.2  whole -3 -> -0.2 -> 0.8
+#
+# (`whole of`'s own refusal message says it "rounds a number toward zero",
+# which is what truncation does and not what this builtin does. Reported, not
+# changed — the message lives in interp.py and its twin, and nothing in this
+# build has business editing either.)
+#
+# Both stay EXACT for exact input: comparison, subtraction and `whole of` are
+# all exact, and none of them reaches the approximation `sine` introduces.
+
+# The fraction left over below x: always 0 to 1, never negative.
+to part of x:
+  let f = x - (whole of x)
+  if f < 0:
+    give f + 1
+  else:
+    give f
+
+# The largest whole number not greater than x — `whole of x` for a positive
+# with a small fraction, one lower for a negative with any fraction at all.
+to floor of x:
+  give x - (part of x)

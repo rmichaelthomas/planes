@@ -384,6 +384,39 @@ switch (sub) {
     );
     break;
   }
+  case "trace": {
+    // trace <file> — the canonical form of the interpreter's show/why trace
+    // (interp.mjs's `this.trace`), one line per emitted output line:
+    //
+    //     <source line>\t<the derivation, rendered>
+    //
+    // The derivation renderer is the one `why` itself prints through, so this
+    // compares the real thing rather than a second description of it.
+    // test_js_interp.py runs the same file through interp.py and diffs.
+    loadGrammar();
+    const { render: renderDeriv } = await import("./interp.mjs");
+    const host = new TestHost({ responses: {}, files: {}, now: 1000000.0 });
+    const itp = new Interpreter({ host });
+    const { runFile } = await import("./run_file.mjs");
+    let tag = null;
+    try {
+      await runFile(itp, rest[0]);
+    } catch (e) {
+      if (e instanceof PlanesError) tag = e.tag;
+      else if (e instanceof PlanesSyntaxError) tag = "PARSE";
+      else if (e instanceof RangeError) tag = "recursion-too-deep";
+      else if (e && e.name === "ModuleError") tag = "module-error";
+      else throw e;
+    }
+    out(
+      JSON.stringify({
+        tag,
+        outputCount: itp.output.length,
+        trace: itp.trace.map(([node, line]) => `${line}\t${renderDeriv(node)}`),
+      }),
+    );
+    break;
+  }
   case "render": {
     // render <file> — canonical source, byte-for-byte against render.py.
     loadGrammar();

@@ -282,10 +282,16 @@ export function hoistAndRun(interp, graph, targetKey, loader) {
     }
   }
   let entry = [];
+  // The entry file, by the same key the loop below compares on. The
+  // interpreter reports trace lines in THIS file and no other, so a page
+  // showing the entry source never highlights a line in a module it is not
+  // displaying.
+  interp.entryFile = targetKey;
+  interp.currentFile = targetKey;
   for (const [location, src] of graph) {
     const prog = parseCached(src, known, loader);
     interp.checkDiscardedWrites(prog);
-    interp.hoist(prog, interp.env, renames.get(location) ?? {});
+    interp.hoist(prog, interp.env, renames.get(location) ?? {}, loader.key(location));
     if (loader.key(location) === targetKey) {
       entry = prog;
     } else {

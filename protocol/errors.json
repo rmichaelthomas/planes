@@ -188,7 +188,7 @@
     {
       "kind": "error",
       "tag": "protocol-repeated",
-      "source": "js/paint/stream.mjs:133",
+      "source": "js/paint/stream.mjs:146",
       "raised_in": "walk",
       "template": "a second \"draw protocol\" declaration is not allowed in one stream",
       "slots": [],
@@ -197,7 +197,7 @@
     {
       "kind": "error",
       "tag": "protocol-late",
-      "source": "js/paint/stream.mjs:140",
+      "source": "js/paint/stream.mjs:153",
       "raised_in": "walk",
       "template": "\"draw protocol\" must appear before the first drawing command",
       "slots": [],
@@ -206,7 +206,7 @@
     {
       "kind": "error",
       "tag": "unsupported-version",
-      "source": "js/paint/stream.mjs:155",
+      "source": "js/paint/stream.mjs:168",
       "raised_in": "walk",
       "template": "this renderer implements protocol versions 1-2; the stream declared version {requested} and is refused whole",
       "slots": [
@@ -217,7 +217,7 @@
     {
       "kind": "error",
       "tag": "verb-not-in-version",
-      "source": "js/paint/stream.mjs:170",
+      "source": "js/paint/stream.mjs:183",
       "raised_in": "walk",
       "template": "\"{cmd.verb}\" is not part of protocol version {declaredVersion} in \"{line}\" — write draw protocol 2 to use it",
       "slots": [
@@ -230,7 +230,7 @@
     {
       "kind": "error",
       "tag": "path-already-open",
-      "source": "js/paint/stream.mjs:220",
+      "source": "js/paint/stream.mjs:233",
       "raised_in": "walk",
       "template": "a shape is already open",
       "slots": [],
@@ -239,7 +239,7 @@
     {
       "kind": "error",
       "tag": "path-not-open",
-      "source": "js/paint/stream.mjs:231",
+      "source": "js/paint/stream.mjs:244",
       "raised_in": "walk",
       "template": "vertex outside a shape ... end block",
       "slots": [],
@@ -248,7 +248,7 @@
     {
       "kind": "error",
       "tag": "path-not-open",
-      "source": "js/paint/stream.mjs:241",
+      "source": "js/paint/stream.mjs:254",
       "raised_in": "walk",
       "template": "curve outside a shape ... end block",
       "slots": [],
@@ -257,7 +257,7 @@
     {
       "kind": "error",
       "tag": "path-not-open",
-      "source": "js/paint/stream.mjs:251",
+      "source": "js/paint/stream.mjs:264",
       "raised_in": "walk",
       "template": "close outside a shape ... end block",
       "slots": [],
@@ -266,7 +266,7 @@
     {
       "kind": "error",
       "tag": "path-not-open",
-      "source": "js/paint/stream.mjs:260",
+      "source": "js/paint/stream.mjs:273",
       "raised_in": "walk",
       "template": "end without a preceding shape",
       "slots": [],
@@ -275,7 +275,7 @@
     {
       "kind": "error",
       "tag": "unmatched-pop",
-      "source": "js/paint/stream.mjs:275",
+      "source": "js/paint/stream.mjs:288",
       "raised_in": "walk",
       "template": "pop without a matching push",
       "slots": [],
@@ -284,7 +284,7 @@
     {
       "kind": "error",
       "tag": "unmatched-unclip",
-      "source": "js/paint/stream.mjs:334",
+      "source": "js/paint/stream.mjs:347",
       "raised_in": "walk",
       "template": "unclip without a matching clip",
       "slots": [],
@@ -293,7 +293,7 @@
     {
       "kind": "error",
       "tag": "path-unclosed",
-      "source": "js/paint/stream.mjs:348",
+      "source": "js/paint/stream.mjs:361",
       "raised_in": "walk",
       "template": "a shape was left open at the end of the stream",
       "slots": [],
@@ -302,7 +302,7 @@
     {
       "kind": "error",
       "tag": "unmatched-push",
-      "source": "js/paint/stream.mjs:351",
+      "source": "js/paint/stream.mjs:364",
       "raised_in": "walk",
       "template": "a push was left unmatched at the end of the stream",
       "slots": [],
@@ -311,7 +311,7 @@
     {
       "kind": "error",
       "tag": "clip-unclosed",
-      "source": "js/paint/stream.mjs:354",
+      "source": "js/paint/stream.mjs:367",
       "raised_in": "walk",
       "template": "a clip was left open at the end of the stream",
       "slots": [],
@@ -343,40 +343,40 @@
       "js/paint/protocol.mjs:217"
     ],
     "protocol-repeated": [
-      "js/paint/stream.mjs:133"
+      "js/paint/stream.mjs:146"
     ],
     "protocol-late": [
-      "js/paint/stream.mjs:140"
+      "js/paint/stream.mjs:153"
     ],
     "unsupported-version": [
-      "js/paint/stream.mjs:155"
+      "js/paint/stream.mjs:168"
     ],
     "verb-not-in-version": [
-      "js/paint/stream.mjs:170"
+      "js/paint/stream.mjs:183"
     ],
     "path-already-open": [
-      "js/paint/stream.mjs:220"
+      "js/paint/stream.mjs:233"
     ],
     "path-not-open": [
-      "js/paint/stream.mjs:231",
-      "js/paint/stream.mjs:241",
-      "js/paint/stream.mjs:251",
-      "js/paint/stream.mjs:260"
+      "js/paint/stream.mjs:244",
+      "js/paint/stream.mjs:254",
+      "js/paint/stream.mjs:264",
+      "js/paint/stream.mjs:273"
     ],
     "unmatched-pop": [
-      "js/paint/stream.mjs:275"
+      "js/paint/stream.mjs:288"
     ],
     "unmatched-unclip": [
-      "js/paint/stream.mjs:334"
+      "js/paint/stream.mjs:347"
     ],
     "path-unclosed": [
-      "js/paint/stream.mjs:348"
+      "js/paint/stream.mjs:361"
     ],
     "unmatched-push": [
-      "js/paint/stream.mjs:351"
+      "js/paint/stream.mjs:364"
     ],
     "clip-unclosed": [
-      "js/paint/stream.mjs:354"
+      "js/paint/stream.mjs:367"
     ]
   }
 }
