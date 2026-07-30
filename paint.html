@@ -93,22 +93,11 @@
         <option value="turtle">turtle — a recursive shape, static</option>
         <option value="bloom">bloom — generative, driven by the tick alone</option>
         <option value="snake">snake — playable, arrow keys, a score</option>
-        <option value="garden">garden — a day, pure in the tick alone</option>
       </select>
       <button id="paint-run">Run ▸</button>
       <button id="paint-play" class="secondary">Play ▸</button>
       <button id="paint-reset" class="tertiary">Reset ⟲</button>
       <div class="hint">arrow keys steer snake while it is playing · click the canvas to give it keyboard focus</div>
-    </div>
-
-    <div id="paint-day-row" style="display:none;">
-      <label for="paint-day" class="hint">day:</label>
-      <input type="range" id="paint-day" min="0" max="0" value="0" style="width: 320px; vertical-align: middle;" />
-      <span class="hint" id="paint-day-label">day 0</span>
-      <div class="hint">
-        drag to any point in the cycle — garden.planes is a pure function of the day alone (no state carried across
-        ticks), so the picture at a given day is always the same picture, computed fresh every time this is dragged
-      </div>
     </div>
 
     <div>
@@ -220,13 +209,6 @@
         // still requestAnimationFrame (A.2) — this only skips callbacks
         // between ticks, never adds a second runProgram call to one frame.
         { id: "snake", file: "paint/snake.planes", ticking: true, stepEveryNFrames: 8 },
-        // garden is pure in `tick` alone (planes-drawing-protocol-v2.md
-        // §11) — the day scrubber below is what that guarantee is FOR:
-        // dragging it re-runs the program at whatever day it lands on
-        // (dayLength is garden.planes's own `day-length` constant, so the
-        // scrubber's range matches its cycle exactly), never the retained
-        // frame the exporters use.
-        { id: "garden", file: "paint/garden.planes", ticking: true, stepEveryNFrames: 1, dayLength: 240 },
       ];
 
       const picker = document.getElementById("paint-picker");
@@ -237,9 +219,6 @@
       const saveSvgBtn = document.getElementById("paint-save-svg");
       const savePngBtn = document.getElementById("paint-save-png");
       const recordBtn = document.getElementById("paint-record");
-      const dayRow = document.getElementById("paint-day-row");
-      const dayEl = document.getElementById("paint-day");
-      const dayLabelEl = document.getElementById("paint-day-label");
       const canvas = document.getElementById("paint-canvas");
       const sourceEl = document.getElementById("paint-source");
       const outputEl = document.getElementById("paint-output");
@@ -363,22 +342,6 @@
         });
       }
 
-      // Shows/hides and (re)bounds the day scrubber for whichever program is
-      // now current. Only a program that declares `dayLength` — pure in
-      // `tick` alone, nothing carried across frames — gets one: dragging it
-      // re-runs the program fresh at the day it lands on (runAtDay below),
-      // and that is only an honest thing to do for a program the scrubber
-      // cannot desync from by skipping frames a stateful one would have
-      // needed to pass through.
-      function updateDayRow() {
-        const has = Boolean(current.dayLength);
-        dayRow.style.display = has ? "" : "none";
-        dayEl.disabled = !has;
-        dayEl.max = has ? current.dayLength - 1 : 0;
-        dayEl.value = 0;
-        dayLabelEl.textContent = has ? "day 0" : "";
-      }
-
       function selectProgram(id) {
         stopLoop();
         current = PROGRAMS.find((p) => p.id === id);
@@ -387,7 +350,6 @@
         loop = buildLoop();
         playBtn.disabled = !current.ticking;
         recordBtn.disabled = !current.ticking;
-        updateDayRow();
         clearCanvas();
         showSurface(sourceEl.value);
         runOnce();
@@ -404,32 +366,6 @@
         renderModuleInfo();
         showSurface(sourceEl.value);
       }
-
-      // The day scrubber. Unlike runOnce() (always tick 0) and unlike the
-      // exporters (js/paint/export.mjs — always `lastLines`, the retained
-      // frame), this RE-RUNS the program at an arbitrary tick, with `state`
-      // pinned to `nothing` every time — never the previous day's state,
-      // since garden.planes never has one. That is the pure-in-tick
-      // guarantee made draggable: the picture this paints for a given day is
-      // always the same picture, computed fresh, whichever direction the
-      // scrubber last moved.
-      async function runAtDay(tick) {
-        stopLoop();
-        const generation = runGeneration;
-        const loaderForThisRun = currentLoader;
-        const context = { tick, keys: [], pointer: { x: 0, y: 0, down: false }, state: null };
-        clearCanvas();
-        const result = await stepGraph(sourceEl.value, context, { loader: loaderForThisRun });
-        if (generation !== runGeneration) return; // superseded by a later run
-        renderResult(result);
-        renderModuleInfo();
-      }
-
-      dayEl.addEventListener("input", () => {
-        const tick = Number(dayEl.value);
-        dayLabelEl.textContent = `day ${tick}`;
-        runAtDay(tick);
-      });
 
       runBtn.addEventListener("click", () => {
         stopLoop();
@@ -492,7 +428,6 @@
         stopLoop();
         newLoader();
         loop = buildLoop();
-        updateDayRow();
         clearCanvas();
         showOutput([], false);
         showSurface(sourceEl.value);
@@ -522,7 +457,7 @@
       canvas.addEventListener("mousedown", () => (pointer.down = true));
       window.addEventListener("mouseup", () => (pointer.down = false));
 
-      // Load the four example programs as plain text, same directory, no
+      // Load the three example programs as plain text, same directory, no
       // network dependency — then draw the default (turtle) on load.
       const stale = staleModuleWarning();
       if (stale) showOutput(stale.split("\n"), true);
@@ -535,7 +470,6 @@
         loop = buildLoop();
         playBtn.disabled = !current.ticking;
         recordBtn.disabled = !current.ticking;
-        updateDayRow();
         clearCanvas();
         runOnce();
       });

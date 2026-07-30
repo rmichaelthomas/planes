@@ -171,7 +171,7 @@ test("the language's counts: 32 keywords, 12 builtins, 7 effect kinds", () => {
 
 const offOrigin = (u) => /^(https?:)?\/\//.test(u);
 
-for (const page of ["paint.html", "index.html"]) {
+for (const page of ["paint.html", "index.html", "garden.html"]) {
   test(`${page} loads nothing off-origin: no CDN, no npm package, no bundler`, () => {
     const html = read(page);
     // What counts is what the page FETCHES. A `src` always does. A `<link>`
@@ -201,4 +201,36 @@ test("paint.html says what each export means, under the buttons", () => {
   // Specification §8.1: a still-image renderer captures ONE STREAM, and a
   // learner expecting an animated SVG must be told rather than surprised.
   assert.match(html, /SVG and PNG save the frame on screen now\. Video records ten seconds\./);
+});
+
+test("paint.html carries no garden entry, no day scrubber — garden.html is its own page", () => {
+  const html = read("paint.html");
+  assert.doesNotMatch(html, /garden/i);
+  assert.doesNotMatch(html, /day scrubber|paint-day/i);
+});
+
+test("garden.html exists as a sibling of paint.html, fetches garden.planes rather than inlining it, and says how to serve itself", () => {
+  const html = read("garden.html");
+  // The program is loaded via createProgramSession's own fetch (asserted
+  // against program_session.mjs directly below), never pasted into the
+  // page — garden.html's <textarea> is populated at runtime from that
+  // fetch, not from a literal copy of the source in this file.
+  assert.doesNotMatch(html, /let canvas-width = 480/, "the program is fetched, not pasted into the page");
+  assert.match(html, /createProgramSession\(\{\s*file:\s*"paint\/garden\.planes"/s, "loads its program through the shared session module, by file path");
+  assert.match(html, /python3 -m http\.server/, "states how to serve itself, so the requirement is not rediscovered");
+  for (const id of ["garden-day", "garden-day-back", "garden-day-forward", "garden-seed", "garden-save-svg", "garden-save-png", "garden-surface", "garden-source"]) {
+    assert.ok(html.includes(`id="${id}"`), `no ${id}`);
+  }
+});
+
+test("js/paint/program_session.mjs loads its program by fetch, not by inlining it", () => {
+  const src = read("js/paint/program_session.mjs");
+  assert.match(src, /fetch\(`\$\{file\}/);
+});
+
+test("garden.html imports the shared program-load/scrubber/surface modules rather than reimplementing them inline", () => {
+  const html = read("garden.html");
+  assert.match(html, /from ["']\.\/js\/paint\/program_session\.mjs["']/);
+  assert.match(html, /from ["']\.\/js\/paint\/tick_scrubber\.mjs["']/);
+  assert.match(html, /from ["']\.\/js\/paint\/surface_pane\.mjs["']/);
 });

@@ -18,24 +18,28 @@
 #     push/rotate/pop for ITS rotation, because both techniques coexist in
 #     this version and neither replaces the other.
 #
-# PURITY (v2 §11). The whole picture is a function of `tick` and the fixed
-# constants below — never of `state`, which this program does not read,
-# does not write, and does not declare a surface for (no `use file`). The
-# garden at day N is the same picture whether N is the first tick ever
-# computed or the thousandth: that is what makes the day scrubber in
-# paint.html meaningful. Drag it backward and the frame it draws is
-# RECOMPUTED from N alone, not eased toward from wherever the picture
-# happened to be — a bee whose position came from N would break this; a bee
-# whose position eased toward a target frame by frame would too. Every
-# moving thing here — the sun and moon's arc, the clouds' drift, the bees'
-# and fireflies' loops — is `tick` fed through `mod`/`sine`/`cosine` and
-# nothing else.
+# PURITY (v2 §11). The whole picture is a function of `tick` and `seed` —
+# never of `state`, which this program does not read, does not write, and
+# does not declare a surface for (no `use file`). Both `tick` and `seed` are
+# INPUTS, the same way `tick` always was: crossed in from whatever page runs
+# this program (js/paint/loop.mjs's composePrelude, which now injects both,
+# `seed` defaulting to 0), never bound locally here. The garden at (N, seed)
+# is the same picture whether N is the first tick ever computed or the
+# thousandth: that is what makes garden.html's day scrubber meaningful. Drag
+# it backward and the frame it draws is RECOMPUTED from N and the current
+# seed alone, not eased toward from wherever the picture happened to be — a
+# bee whose position came from N would break this; a bee whose position
+# eased toward a target frame by frame would too. Every moving thing here —
+# the sun and moon's arc, the clouds' drift, the bees' and fireflies' loops
+# — is `tick` fed through `mod`/`sine`/`cosine` and nothing else; `seed`
+# only ever offsets WHICH bee/firefly/cloud phase each index lands on, never
+# whether the picture keeps moving.
 #
-# `seed` is a fixed constant, not state: it varies bee/firefly/cloud
-# placement without true randomness, the same reason snake.planes's apple
-# placement is a deterministic function of score rather than `random` (one
-# of the seven effect kinds, reachable only through a `foreign ... doing
-# random` declaration this program does not make).
+# `seed` varies bee/firefly/cloud placement without true randomness, the
+# same reason snake.planes's apple placement is a deterministic function of
+# score rather than `random` (one of the seven effect kinds, reachable only
+# through a `foreign ... doing random` declaration this program does not
+# make).
 
 use draw
 use math
@@ -47,7 +51,6 @@ let canvas-width = 480
 let canvas-height = 360
 let horizon = 260 because "the ground begins here; sky above, grass below"
 let day-length = 240 because "ticks per full day-night cycle -- slow enough to read as a cycle, fast enough to drag through with the scrubber in a couple of seconds"
-let seed = 733
 
 let phase = mod of tick, day-length
 let day-fraction = phase / day-length because "0 at the cycle's start, just under 1 at its end"

@@ -53,13 +53,23 @@ export function planesLiteral(value) {
   throw new Error(`cannot render ${String(value)} as a Planes literal`);
 }
 
-export function composePrelude({ tick, keys, pointer, state }) {
+// `seed` is a fifth prelude binding, alongside tick/keys/pointer/state: a
+// fixed number for a tick to read, never state (it is never threaded back
+// out through state.json — a program that wants it to vary ticks itself,
+// the way `tick` already does). Defaults to 0 so this stays a neutral,
+// program-agnostic default — a program that cares what value it starts at
+// (paint/garden.planes, whose placement functions read it) is passed one
+// explicitly by whatever page is driving it, the same way a program that
+// cares about `tick` is driven by a loop or a scrubber rather than reading
+// this module's own idea of a sensible tick.
+export function composePrelude({ tick, keys, pointer, state, seed = 0 }) {
   return (
     [
       `let tick = ${planesLiteral(tick)}`,
       `let keys = ${planesLiteral(keys)}`,
       `let pointer = ${planesLiteral(pointer)}`,
       `let state = ${planesLiteral(state)}`,
+      `let seed = ${planesLiteral(seed)}`,
     ].join("\n") + "\n"
   );
 }

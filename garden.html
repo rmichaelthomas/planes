@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Planes draws — garden, a day pure in the tick alone</title>
+    <meta
+      name="description"
+      content="paint/garden.planes, run at an arbitrary day: a pure function of (tick, seed), proving the Drawing Protocol v2 additions in one picture. No build step, no server-side rendering — this page fetches and runs the real .planes source."
+    />
+    <!--
+      SERVING THIS PAGE. This page fetches paint/garden.planes and imports
+      js/*.mjs as ES modules — both requests, from a file:// origin, are
+      opaque-origin and refused by the browser (this is not Chrome-specific;
+      it applies wherever this page is opened from disk). Serve the repo
+      root and load this page over http:
+
+        cd <repo> && python3 -m http.server 8000
+
+      then open http://localhost:8000/garden.html. No install, no build
+      step: this is a static file server, nothing more.
+    -->
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        max-width: 980px; margin: 2rem auto; padding: 0 1rem;
+      }
+      h1 { font-size: 1.4rem; margin-bottom: 0.2rem; }
+      p.sub { color: #666; margin-top: 0; }
+      textarea, pre {
+        font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        width: 100%; box-sizing: border-box;
+      }
+      textarea {
+        min-height: 12rem; padding: 0.75rem; border: 1px solid #ccc;
+        border-radius: 6px; resize: vertical;
+      }
+      input[type="number"] {
+        font-size: 14px; padding: 0.3rem 0.5rem; border-radius: 6px;
+        border: 1px solid #ccc; background: #fff; width: 7rem;
+      }
+      input[type="range"] { width: 320px; vertical-align: middle; }
+      button {
+        margin: 0.75rem 0.4rem 0.75rem 0; padding: 0.5rem 1.1rem; font-size: 14px;
+        border: 0; border-radius: 6px; background: #2d6cdf; color: #fff; cursor: pointer;
+      }
+      button:hover { background: #245ac0; }
+      button.secondary { background: #4a8a5c; }
+      button.secondary:hover { background: #3c7049; }
+      button.tertiary { background: #6b6b6b; }
+      button.tertiary:hover { background: #565656; }
+      button.stepper { padding: 0.5rem 0.8rem; }
+      button:disabled { background: #9aa7b8; cursor: not-allowed; }
+      .hint { color: #888; font-size: 12px; }
+      .columns { display: flex; gap: 1.25rem; flex-wrap: wrap; align-items: flex-start; }
+      .col-canvas { flex: 0 0 auto; }
+      .col-surface { flex: 1 1 260px; min-width: 260px; }
+      canvas {
+        display: block; background: #fff; border: 1px solid #ccc; border-radius: 6px;
+        max-width: 100%;
+      }
+      pre#garden-surface {
+        background: #f6f7f9; padding: 0.75rem; border-radius: 6px;
+        min-height: 3rem; overflow-x: auto; white-space: pre-wrap;
+        max-height: 26rem; overflow-y: auto;
+      }
+      pre#garden-output {
+        background: #f6f7f9; padding: 0.75rem; border-radius: 6px;
+        min-height: 2.5rem; overflow-x: auto; white-space: pre-wrap;
+      }
+      pre#garden-output.error { color: #b00020; }
+      @media (prefers-color-scheme: dark) {
+        textarea, input[type="number"] { background: #1b1d22; border-color: #333; color: #e6e6e6; }
+        pre#garden-surface, pre#garden-output { background: #16181d; color: #e6e6e6; }
+        canvas { background: #16181d; border-color: #333; }
+        p.sub, .hint { color: #999; }
+      }
+      footer { margin-top: 2rem; color: #888; font-size: 12px; }
+      code { background: rgba(128,128,128,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>garden</h1>
+    <p class="sub">
+      <code>paint/garden.planes</code>, run at an arbitrary day. The whole
+      picture is a pure function of two inputs — the day (<code>tick</code>)
+      and the <code>seed</code> below — never of state carried across ticks:
+      this program declares no <code>state.json</code> surface at all. Drag
+      the scrubber anywhere in the cycle, or change the seed, and the page
+      re-runs the program from scratch at exactly the values shown — never
+      an interpolation toward them.
+    </p>
+    <p class="sub">
+      This is a sibling of <a href="paint.html"><code>paint.html</code></a>,
+      not a mode of it: a single fixed program, no picker, no play loop —
+      the day scrubber replaces both, since a pure function needs no loop to
+      explore.
+    </p>
+
+    <div>
+      <label for="garden-day" class="hint">day:</label>
+      <button id="garden-day-back" class="tertiary stepper" type="button">◀</button>
+      <input type="range" id="garden-day" min="0" max="0" value="0" />
+      <button id="garden-day-forward" class="tertiary stepper" type="button">▶</button>
+      <span class="hint" id="garden-day-label">day 0</span>
+    </div>
+    <div>
+      <label for="garden-seed" class="hint">seed:</label>
+      <input type="number" id="garden-seed" value="0" step="1" />
+      <span class="hint">a fixed number, not randomness — the same seed always draws the same garden</span>
+    </div>
+    <div>
+      <button id="garden-reset" class="tertiary">Reset ⟲</button>
+      <button id="garden-reload-modules" class="tertiary" type="button">Reload modules ⟳</button>
+    </div>
+
+    <div>
+      <button id="garden-save-svg" class="secondary">Save SVG ⤓</button>
+      <button id="garden-save-png" class="secondary">Save PNG ⤓</button>
+      <div class="hint">both save the day currently shown — the frame on screen, not a re-run</div>
+    </div>
+
+    <div class="columns">
+      <div class="col-canvas">
+        <canvas
+          id="garden-canvas"
+          width="480"
+          height="360"
+          role="img"
+          aria-label="the painted garden at the current day and seed"
+        ></canvas>
+      </div>
+      <div class="col-surface">
+        <div class="hint">effect surface — computed, not run:</div>
+        <pre id="garden-surface">(loading…)</pre>
+      </div>
+    </div>
+
+    <p class="hint" style="margin-top:1rem;">source (editable — click a day/seed control to re-run with edits applied):</p>
+    <p class="hint">
+      base: <code id="garden-base">paint/garden.planes</code> ·
+      modules: <span id="garden-modules">(none loaded)</span>
+    </p>
+    <textarea id="garden-source" spellcheck="false"></textarea>
+
+    <p class="hint">output — lines the program showed that were not draw commands, or an error:</p>
+    <pre id="garden-output">(no output yet)</pre>
+
+    <footer>
+      Serving: this page fetches <code>paint/garden.planes</code> and
+      imports <code>js/*.mjs</code> as ES modules — both are refused from a
+      <code>file://</code> origin. Serve the repo root
+      (<code>python3 -m http.server 8000</code>) and open
+      <code>http://localhost:8000/garden.html</code>. No bundler, no
+      transpiler, no network dependency beyond that server: everything loads
+      from this same directory.
+      <br /><br />
+      <strong>Purity.</strong> The picture at a given (day, seed) pair is
+      always the same picture — scrub away and back, or retype a seed you
+      used before, and the page redraws exactly what it drew the first time,
+      because every run starts from <code>state: nothing</code> and reads
+      nothing else. <strong>Saving.</strong> SVG and PNG capture the day
+      shown right now, not a fresh run — the same "what's on screen" rule
+      <code>paint.html</code>'s exporters follow.
+      <br /><br />
+      <strong>After an update.</strong> The <code>.planes</code> fetch
+      carries a per-visit token and is never served stale. The
+      <code>.mjs</code> module graph cannot: if a browser ever serves a mix
+      of old and new modules, the output pane says so and names the fix —
+      in Safari, Develop → Empty Caches, because a plain reload keeps ES
+      modules.
+    </footer>
+
+    <script type="module">
+      import { paint } from "./js/paint/painter.mjs";
+      import { toSvg } from "./js/paint/svg.mjs";
+      import { downloadSvg, downloadPng } from "./js/paint/export.mjs";
+      import { createProgramSession } from "./js/paint/program_session.mjs";
+      import { createTickScrubber } from "./js/paint/tick_scrubber.mjs";
+      import { renderSurface } from "./js/paint/surface_pane.mjs";
+      import { staleModuleWarning } from "./js/browser_main.mjs";
+
+      const DAY_LENGTH = 240; // paint/garden.planes's own `day-length` constant
+
+      const dayEl = document.getElementById("garden-day");
+      const dayBackEl = document.getElementById("garden-day-back");
+      const dayForwardEl = document.getElementById("garden-day-forward");
+      const dayLabelEl = document.getElementById("garden-day-label");
+      const seedEl = document.getElementById("garden-seed");
+      const resetBtn = document.getElementById("garden-reset");
+      const reloadModulesBtn = document.getElementById("garden-reload-modules");
+      const saveSvgBtn = document.getElementById("garden-save-svg");
+      const savePngBtn = document.getElementById("garden-save-png");
+      const canvas = document.getElementById("garden-canvas");
+      const sourceEl = document.getElementById("garden-source");
+      const outputEl = document.getElementById("garden-output");
+      const surfaceEl = document.getElementById("garden-surface");
+      const modulesEl = document.getElementById("garden-modules");
+      const ctx = canvas.getContext("2d");
+
+      const DIMENSIONS = { width: canvas.width, height: canvas.height, background: "#ffffff" };
+
+      // One token per page load, the same discipline paint.html's LOAD_TOKEN
+      // follows — busts the .planes fetch on every visit; cannot do the
+      // same for the .mjs graph (staleModuleWarning below is what covers
+      // that gap instead).
+      const LOAD_TOKEN = String(Date.now());
+
+      let session = createProgramSession({ file: "paint/garden.planes", cacheBust: LOAD_TOKEN });
+      // The lines that produced what is on screen right now — every export
+      // works on THIS, never a fresh run, matching paint.html's own rule.
+      let lastLines = [];
+
+      function showOutput(lines, isError) {
+        outputEl.textContent = lines.length ? lines.join("\n") : "(no output)";
+        outputEl.classList.toggle("error", Boolean(isError));
+      }
+
+      function currentSeed() {
+        const n = Number(seedEl.value);
+        return Number.isFinite(n) ? Math.trunc(n) : 0;
+      }
+
+      function renderModuleInfo() {
+        const loaded = session.loadedModules();
+        modulesEl.textContent = loaded.length ? loaded.map((m) => m.name).join(", ") : "(none loaded)";
+      }
+
+      // Runs the CURRENT source (session.load() re-fetches paint/garden.planes
+      // fresh, so an edit made in the textarea is not picked up by this
+      // alone — reloadModulesBtn/newSession() is what re-fetches) at
+      // (tick, seed), and repaints. Never averages toward the target: a
+      // fresh stepGraph call every time, exactly like paint.html's own
+      // runAtDay did before this page existed on its own.
+      async function runAt(tick, seed) {
+        const result = await session.runAt(tick, seed);
+        if (!result) return; // superseded by a newer session
+        renderModuleInfo();
+        if (result.error) {
+          showOutput([...result.lines, `✗ ${result.error.tag}: ${result.error.message}`], true);
+          return;
+        }
+        lastLines = result.lines;
+        const { text, errors } = paint(ctx, result.lines, DIMENSIONS);
+        if (errors.length) {
+          showOutput([...text, ...errors.map((e) => `✗ ${e.tag}: ${e.message}`)], true);
+          return;
+        }
+        showOutput(text, false);
+      }
+
+      const scrubber = createTickScrubber({
+        rangeEl: dayEl,
+        backEl: dayBackEl,
+        forwardEl: dayForwardEl,
+        labelEl: dayLabelEl,
+        max: DAY_LENGTH - 1,
+        labelText: (t) => `day ${t}`,
+        onChange: (tick) => runAt(tick, currentSeed()),
+      });
+
+      seedEl.addEventListener("change", () => runAt(scrubber.getTick(), currentSeed()));
+
+      async function newSession() {
+        session = createProgramSession({ file: "paint/garden.planes", cacheBust: LOAD_TOKEN });
+        const src = await session.load();
+        sourceEl.value = src;
+        await renderSurface(surfaceEl, src, { loader: session.getLoader() });
+        renderModuleInfo();
+        await runAt(scrubber.getTick(), currentSeed());
+      }
+
+      resetBtn.addEventListener("click", () => {
+        scrubber.setTick(0, { fire: false });
+        seedEl.value = "0";
+        newSession();
+      });
+
+      reloadModulesBtn.addEventListener("click", () => newSession());
+
+      saveSvgBtn.addEventListener("click", () => {
+        if (!lastLines.length) {
+          showOutput(["nothing has been drawn yet"], true);
+          return;
+        }
+        const { svg, errors } = toSvg(lastLines, DIMENSIONS);
+        if (errors.length) {
+          showOutput(errors.map((e) => `✗ ${e.tag}: ${e.message}`), true);
+          return;
+        }
+        downloadSvg(svg, "garden");
+      });
+
+      savePngBtn.addEventListener("click", () => {
+        if (!lastLines.length) {
+          showOutput(["nothing has been drawn yet"], true);
+          return;
+        }
+        downloadPng(canvas, lastLines, DIMENSIONS, "garden");
+      });
+
+      const stale = staleModuleWarning();
+      if (stale) showOutput(stale.split("\n"), true);
+
+      newSession();
+    </script>
+  </body>
+</html>
