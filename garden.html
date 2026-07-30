@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Planes draws — garden, a day pure in the tick alone</title>
+    <title>Planes draws — the garden, a scene that lives</title>
     <meta
       name="description"
-      content="paint/garden.planes, run at an arbitrary day: a pure function of (tick, seed), proving the Drawing Protocol v2 additions in one picture. No build step, no server-side rendering — this page fetches and runs the real .planes source."
+      content="paint/garden.planes: a day and night cycle, weather, plants that grow, bees and fireflies, and ambient music in just intonation — all a pure function of (tick, seed). Click anything to ask where it came from. No build step; this page fetches and runs the real .planes source."
     />
     <!--
       SERVING THIS PAGE. This page fetches paint/garden.planes and imports
@@ -21,13 +21,13 @@
       step: this is a static file server, nothing more.
     -->
     <style>
-      :root { color-scheme: light dark; }
+      :root { color-scheme: light dark; --line: #d8d8d8; --dim: #777; }
       body {
         font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        max-width: 980px; margin: 2rem auto; padding: 0 1rem;
+        max-width: 1040px; margin: 2rem auto; padding: 0 1rem;
       }
       h1 { font-size: 1.4rem; margin-bottom: 0.2rem; }
-      p.sub { color: #666; margin-top: 0; }
+      p.sub { color: var(--dim); margin-top: 0; }
       textarea, pre {
         font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
         width: 100%; box-sizing: border-box;
@@ -40,9 +40,9 @@
         font-size: 14px; padding: 0.3rem 0.5rem; border-radius: 6px;
         border: 1px solid #ccc; background: #fff; width: 7rem;
       }
-      input[type="range"] { width: 320px; vertical-align: middle; }
+      input[type="range"] { width: 360px; vertical-align: middle; }
       button {
-        margin: 0.75rem 0.4rem 0.75rem 0; padding: 0.5rem 1.1rem; font-size: 14px;
+        margin: 0.4rem 0.4rem 0.4rem 0; padding: 0.45rem 1rem; font-size: 14px;
         border: 0; border-radius: 6px; background: #2d6cdf; color: #fff; cursor: pointer;
       }
       button:hover { background: #245ac0; }
@@ -50,29 +50,68 @@
       button.secondary:hover { background: #3c7049; }
       button.tertiary { background: #6b6b6b; }
       button.tertiary:hover { background: #565656; }
-      button.stepper { padding: 0.5rem 0.8rem; }
+      button.stepper { padding: 0.45rem 0.7rem; }
+      button[aria-pressed="true"] { background: #1c1c1c; }
       button:disabled { background: #9aa7b8; cursor: not-allowed; }
       .hint { color: #888; font-size: 12px; }
+      .bar { display: flex; gap: 0.2rem; flex-wrap: wrap; align-items: center; }
+      .clock {
+        margin-left: auto; text-align: right; font: 600 17px/1.2 ui-monospace, Menlo, monospace;
+      }
+      .clock small { display: block; font-weight: 400; font-size: 11px; color: var(--dim); }
       .columns { display: flex; gap: 1.25rem; flex-wrap: wrap; align-items: flex-start; }
-      .col-canvas { flex: 0 0 auto; }
+      .col-canvas { flex: 0 0 auto; position: relative; }
       .col-surface { flex: 1 1 260px; min-width: 260px; }
       canvas {
         display: block; background: #fff; border: 1px solid #ccc; border-radius: 6px;
-        max-width: 100%;
+        max-width: 100%; cursor: crosshair;
       }
+      #garden-card {
+        position: absolute; max-width: 274px; z-index: 5; pointer-events: none;
+        background: #fffdf8; color: #1c1a17; border: 1px solid #1c1a17; border-radius: 4px;
+        padding: 0.6rem 0.7rem; box-shadow: 0 8px 26px rgba(0,0,0,.3); font-size: 12px;
+      }
+      #garden-card h4 { margin: 0 0 0.4rem; font-size: 13px; }
+      #garden-card .row { margin: 0 0 0.3rem; padding-left: 0.8rem; position: relative; }
+      #garden-card .row::before {
+        content: ""; position: absolute; left: 0; top: 0.45em; width: 5px; height: 5px;
+        border-radius: 50%; border: 1.5px solid #1c1a17;
+      }
+      #garden-card .row.origin::before { background: #4a5b68; border-color: #4a5b68; }
+      #garden-card .row span { color: #6a655e; }
+      #garden-card .bc {
+        color: #0f7d70; border-left: 2px solid #0f7d70; padding-left: 0.5rem;
+        margin: 0.4rem 0 0 0.8rem; font-size: 11.5px;
+      }
+      #garden-card .tag {
+        display: inline-block; margin-top: 0.5rem; font-size: 10.5px; padding: 2px 6px;
+        border-radius: 3px; border: 1px solid #a65a2e; color: #a65a2e;
+      }
+      #garden-card .note { color: #6d4ba6; }
       pre#garden-surface {
         background: #f6f7f9; padding: 0.75rem; border-radius: 6px;
         min-height: 3rem; overflow-x: auto; white-space: pre-wrap;
-        max-height: 26rem; overflow-y: auto;
+        max-height: 22rem; overflow-y: auto;
       }
       pre#garden-output {
         background: #f6f7f9; padding: 0.75rem; border-radius: 6px;
         min-height: 2.5rem; overflow-x: auto; white-space: pre-wrap;
       }
       pre#garden-output.error { color: #b00020; }
+      #garden-source-view {
+        background: #f6f7f9; padding: 0.5rem 0; border-radius: 6px;
+        max-height: 24rem; overflow: auto; margin: 0;
+      }
+      #garden-source-view .ln {
+        display: block; padding: 0 0.75rem; white-space: pre;
+      }
+      #garden-source-view .ln.drew { cursor: pointer; }
+      #garden-source-view .ln.drew:hover { background: #ffe9a8; }
+      #garden-source-view .ln.lit { background: #ffe9a8; }
       @media (prefers-color-scheme: dark) {
         textarea, input[type="number"] { background: #1b1d22; border-color: #333; color: #e6e6e6; }
-        pre#garden-surface, pre#garden-output { background: #16181d; color: #e6e6e6; }
+        pre#garden-surface, pre#garden-output, #garden-source-view { background: #16181d; color: #e6e6e6; }
+        #garden-source-view .ln.drew:hover, #garden-source-view .ln.lit { background: #3a3320; }
         canvas { background: #16181d; border-color: #333; }
         p.sub, .hint { color: #999; }
       }
@@ -81,44 +120,47 @@
     </style>
   </head>
   <body>
-    <h1>garden</h1>
+    <h1>the garden</h1>
     <p class="sub">
-      <code>paint/garden.planes</code>, run at an arbitrary day. The whole
-      picture is a pure function of two inputs — the day (<code>tick</code>)
-      and the <code>seed</code> below — never of state carried across ticks:
-      this program declares no <code>state.json</code> surface at all. Drag
-      the scrubber anywhere in the cycle, or change the seed, and the page
-      re-runs the program from scratch at exactly the values shown — never
-      an interpolation toward them.
-    </p>
-    <p class="sub">
-      This is a sibling of <a href="paint.html"><code>paint.html</code></a>,
-      not a mode of it: a single fixed program, no picker, no play loop —
-      the day scrubber replaces both, since a pure function needs no loop to
-      explore.
+      <code>paint/garden.planes</code> — a scene that lives. Sun and moon,
+      weather that drifts on its own noise, plants that grow and flower, bees
+      by day and fireflies by night, and ambient notes in exact ratios. The
+      whole thing is a pure function of two inputs: the tick and the
+      <code>seed</code>. Press play, or drag anywhere in the three days.
+      <strong>Click anything</strong> — the sun, a flower, a bee, the rain —
+      to ask where it came from.
     </p>
 
+    <div class="bar">
+      <button id="garden-play" type="button" aria-pressed="false">▶ play</button>
+      <button id="garden-speed-1" class="tertiary" type="button" aria-pressed="true">1×</button>
+      <button id="garden-speed-4" class="tertiary" type="button" aria-pressed="false">4×</button>
+      <button id="garden-speed-16" class="tertiary" type="button" aria-pressed="false">16×</button>
+      <button id="garden-sound" class="tertiary" type="button" aria-pressed="false">♪ sound off</button>
+      <div class="clock">
+        <span id="garden-clock">—</span>
+        <small id="garden-weather">—</small>
+      </div>
+    </div>
+
     <div>
-      <label for="garden-day" class="hint">day:</label>
+      <label for="garden-day" class="hint">tick:</label>
       <button id="garden-day-back" class="tertiary stepper" type="button">◀</button>
       <input type="range" id="garden-day" min="0" max="0" value="0" />
       <button id="garden-day-forward" class="tertiary stepper" type="button">▶</button>
-      <span class="hint" id="garden-day-label">day 0</span>
+      <span class="hint" id="garden-day-label">tick 0</span>
     </div>
     <div>
       <label for="garden-seed" class="hint">seed:</label>
-      <input type="number" id="garden-seed" value="0" step="1" />
-      <span class="hint">a fixed number, not randomness — the same seed always draws the same garden</span>
+      <input type="number" id="garden-seed" value="481027" step="1" />
+      <span class="hint">a fixed number, not randomness — the same seed always grows the same garden</span>
     </div>
     <div>
       <button id="garden-reset" class="tertiary">Reset ⟲</button>
       <button id="garden-reload-modules" class="tertiary" type="button">Reload modules ⟳</button>
-    </div>
-
-    <div>
       <button id="garden-save-svg" class="secondary">Save SVG ⤓</button>
       <button id="garden-save-png" class="secondary">Save PNG ⤓</button>
-      <div class="hint">both save the day currently shown — the frame on screen, not a re-run</div>
+      <span class="hint">both save the frame on screen, not a re-run</span>
     </div>
 
     <div class="columns">
@@ -128,48 +170,55 @@
           width="480"
           height="360"
           role="img"
-          aria-label="the painted garden at the current day and seed"
+          aria-label="the painted garden at the current tick and seed"
         ></canvas>
+        <div id="garden-card" hidden></div>
       </div>
       <div class="col-surface">
-        <div class="hint">effect surface — computed, not run:</div>
+        <div class="hint">effect surface — computed, not run. Asking a question does not change it:</div>
         <pre id="garden-surface">(loading…)</pre>
       </div>
     </div>
 
-    <p class="hint" style="margin-top:1rem;">source (editable — click a day/seed control to re-run with edits applied):</p>
+    <p class="hint" style="margin-top:1rem;">
+      source — a line that drew something is clickable, and hovering it lights up every mark it drew:
+    </p>
     <p class="hint">
       base: <code id="garden-base">paint/garden.planes</code> ·
       modules: <span id="garden-modules">(none loaded)</span>
     </p>
-    <textarea id="garden-source" spellcheck="false"></textarea>
+    <pre id="garden-source-view">(loading…)</pre>
 
-    <p class="hint">output — lines the program showed that were not draw commands, or an error:</p>
+    <p class="hint">output — lines the program showed that were neither drawing nor sound, or an error:</p>
     <pre id="garden-output">(no output yet)</pre>
 
     <footer>
-      Serving: this page fetches <code>paint/garden.planes</code> and
-      imports <code>js/*.mjs</code> as ES modules — both are refused from a
+      Serving: this page fetches <code>paint/garden.planes</code> and imports
+      <code>js/*.mjs</code> as ES modules — both are refused from a
       <code>file://</code> origin. Serve the repo root
       (<code>python3 -m http.server 8000</code>) and open
       <code>http://localhost:8000/garden.html</code>. No bundler, no
-      transpiler, no network dependency beyond that server: everything loads
-      from this same directory.
+      transpiler, no network dependency beyond that server.
       <br /><br />
-      <strong>Purity.</strong> The picture at a given (day, seed) pair is
-      always the same picture — scrub away and back, or retype a seed you
-      used before, and the page redraws exactly what it drew the first time,
-      because every run starts from <code>state: nothing</code> and reads
-      nothing else. <strong>Saving.</strong> SVG and PNG capture the day
-      shown right now, not a fresh run — the same "what's on screen" rule
-      <code>paint.html</code>'s exporters follow.
+      <strong>Purity.</strong> The picture and the notes at a given (tick,
+      seed) pair are always the same picture and the same notes — play forward
+      to a tick or drag straight to it and the frame is identical, because
+      every run starts from <code>state: nothing</code> and reads nothing else.
+      <strong>Saving.</strong> SVG and PNG capture the frame shown right now,
+      not a fresh run — the same "what's on screen" rule
+      <code>paint.html</code>'s exporters follow. <strong>Sound</strong> fires
+      only while playing: never while scrubbing, and never on the export path.
       <br /><br />
-      <strong>After an update.</strong> The <code>.planes</code> fetch
-      carries a per-visit token and is never served stale. The
-      <code>.mjs</code> module graph cannot: if a browser ever serves a mix
-      of old and new modules, the output pane says so and names the fix —
-      in Safari, Develop → Empty Caches, because a plain reload keeps ES
-      modules.
+      <strong>Asking performs nothing.</strong> A question reads the
+      derivation the run already produced. The effect surface beside the canvas
+      is computed from the source without running it, and does not change when
+      you click.
+      <br /><br />
+      <strong>After an update.</strong> The <code>.planes</code> fetch carries
+      a per-visit token and is never served stale. The <code>.mjs</code> module
+      graph cannot: if a browser ever serves a mix of old and new modules, the
+      output pane says so and names the fix — in Safari, Develop → Empty
+      Caches, because a plain reload keeps ES modules.
     </footer>
 
     <script type="module">
@@ -179,38 +228,58 @@
       import { createProgramSession } from "./js/paint/program_session.mjs";
       import { createTickScrubber } from "./js/paint/tick_scrubber.mjs";
       import { renderSurface } from "./js/paint/surface_pane.mjs";
+      import { createSceneLoop } from "./js/paint/loop.mjs";
+      import { walk as walkDrawing } from "./js/paint/stream.mjs";
+      import { markSink } from "./js/paint/marks.mjs";
+      import { hitTest, marksForLine, outlineOf } from "./js/paint/hit.mjs";
+      import { card, expand } from "./js/paint/why.mjs";
+      import { createAudioPlayer } from "./js/sound/audio.mjs";
+      import { schedule as soundSchedule } from "./js/sound/stream.mjs";
       import { staleModuleWarning } from "./js/browser_main.mjs";
 
-      const DAY_LENGTH = 240; // paint/garden.planes's own `day-length` constant
+      // paint/garden.planes's own `day-length`, and how many of them the
+      // scrubber spans. Three days is what gives the weather noise room to
+      // drift and the plants room to grow.
+      const DAY_LENGTH = 100;
+      const DAYS = 3;
+      const TICK_SPAN = DAY_LENGTH * DAYS;
 
-      const dayEl = document.getElementById("garden-day");
-      const dayBackEl = document.getElementById("garden-day-back");
-      const dayForwardEl = document.getElementById("garden-day-forward");
-      const dayLabelEl = document.getElementById("garden-day-label");
-      const seedEl = document.getElementById("garden-seed");
-      const resetBtn = document.getElementById("garden-reset");
-      const reloadModulesBtn = document.getElementById("garden-reload-modules");
-      const saveSvgBtn = document.getElementById("garden-save-svg");
-      const savePngBtn = document.getElementById("garden-save-png");
-      const canvas = document.getElementById("garden-canvas");
-      const sourceEl = document.getElementById("garden-source");
-      const outputEl = document.getElementById("garden-output");
-      const surfaceEl = document.getElementById("garden-surface");
-      const modulesEl = document.getElementById("garden-modules");
+      // How fast the day runs at 1x. Four ticks a second is one day in
+      // twenty-five seconds, so 16x is a day in a little over a second and a
+      // half of scene time — bounded in practice by how fast a tick can be
+      // computed, which is the honest limit and not a hidden one.
+      const TICKS_PER_SECOND = 4;
+
+      const $ = (id) => document.getElementById(id);
+      const dayEl = $("garden-day");
+      const seedEl = $("garden-seed");
+      const canvas = $("garden-canvas");
+      const cardEl = $("garden-card");
+      const outputEl = $("garden-output");
+      const surfaceEl = $("garden-surface");
+      const modulesEl = $("garden-modules");
+      const sourceViewEl = $("garden-source-view");
+      const clockEl = $("garden-clock");
+      const weatherEl = $("garden-weather");
+      const playBtn = $("garden-play");
+      const soundBtn = $("garden-sound");
       const ctx = canvas.getContext("2d");
 
       const DIMENSIONS = { width: canvas.width, height: canvas.height, background: "#ffffff" };
-
-      // One token per page load, the same discipline paint.html's LOAD_TOKEN
-      // follows — busts the .planes fetch on every visit; cannot do the
-      // same for the .mjs graph (staleModuleWarning below is what covers
-      // that gap instead).
       const LOAD_TOKEN = String(Date.now());
 
       let session = createProgramSession({ file: "paint/garden.planes", cacheBust: LOAD_TOKEN });
-      // The lines that produced what is on screen right now — every export
-      // works on THIS, never a fresh run, matching paint.html's own rule.
+      // Everything the frame on screen was made of. Every export, every
+      // question and every highlight reads THIS, never a fresh run.
       let lastLines = [];
+      let lastTrace = [];
+      let lastAnnotations = {};
+      let lastMarks = [];
+      let sourceLines = [];
+      let speed = 1;
+      let soundOn = false;
+      let player = null;
+      let litLine = -1;
 
       function showOutput(lines, isError) {
         outputEl.textContent = lines.length ? lines.join("\n") : "(no output)";
@@ -222,64 +291,314 @@
         return Number.isFinite(n) ? Math.trunc(n) : 0;
       }
 
-      function renderModuleInfo() {
-        const loaded = session.loadedModules();
-        modulesEl.textContent = loaded.length ? loaded.map((m) => m.name).join(", ") : "(none loaded)";
+      // ---- the clock and the weather readout --------------------------------
+      //
+      // Read off the emitted stream, not recomputed: the scene already decided
+      // what time it is and whether it is raining, and a second opinion here
+      // could disagree with the picture. `wet` shows itself as the raindrop
+      // count, which is the one number the program puts on the wire.
+      function updateReadout(tick, lines) {
+        const phase = (tick % DAY_LENGTH) / DAY_LENGTH;
+        const hours = Math.floor(phase * 24);
+        const minutes = Math.floor(((phase * 24) % 1) * 60);
+        const day = Math.floor(tick / DAY_LENGTH) + 1;
+        clockEl.textContent = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+        // Every `line` after the tree's own 31 branches is a raindrop.
+        const drops = Math.max(0, lines.filter((l) => l.startsWith("draw line ")).length - 31);
+        const weather = drops > 25 ? "raining" : drops > 0 ? "drizzle" : "clear";
+        weatherEl.textContent = `${weather} · day ${day} of ${DAYS}`;
       }
 
-      // Runs the CURRENT source (session.load() re-fetches paint/garden.planes
-      // fresh, so an edit made in the textarea is not picked up by this
-      // alone — reloadModulesBtn/newSession() is what re-fetches) at
-      // (tick, seed), and repaints. Never averages toward the target: a
-      // fresh stepGraph call every time, exactly like paint.html's own
-      // runAtDay did before this page existed on its own.
-      async function runAt(tick, seed) {
+      // ---- the source view --------------------------------------------------
+
+      function renderSourceView(src) {
+        sourceLines = src.split("\n");
+        sourceViewEl.textContent = "";
+        sourceLines.forEach((text, i) => {
+          const el = document.createElement("span");
+          el.className = "ln";
+          el.dataset.line = String(i + 1); // the interpreter counts from 1
+          el.textContent = `${String(i + 1).padStart(4)}  ${text}`;
+          sourceViewEl.appendChild(el);
+        });
+      }
+
+      // The map read backwards: from a source line to every mark it drew.
+      // `lastTrace[i]` is the trace entry for output line i, so a source line
+      // reaches its marks through the output-line indices that came from it.
+      function markIndicesForSourceLine(sourceLine) {
+        const streamIndices = new Set();
+        lastTrace.forEach(([, line], i) => {
+          if (line === sourceLine) streamIndices.add(i);
+        });
+        const found = [];
+        for (const index of streamIndices) found.push(...marksForLine(lastMarks, index));
+        return found;
+      }
+
+      function highlightSourceLine(sourceLine) {
+        litLine = sourceLine;
+        for (const el of sourceViewEl.children) {
+          el.classList.toggle("lit", Number(el.dataset.line) === sourceLine);
+        }
+        repaintFrame();
+      }
+
+      // ---- the frame --------------------------------------------------------
+
+      function drawHighlights() {
+        if (litLine < 0) return;
+        const indices = markIndicesForSourceLine(litLine);
+        if (!indices.length) return;
+        ctx.save();
+        ctx.resetTransform();
+        ctx.strokeStyle = "#ffcc33";
+        ctx.lineWidth = 1.5;
+        for (const i of indices) {
+          const pts = outlineOf(lastMarks[i]);
+          if (pts.length < 2) continue;
+          ctx.beginPath();
+          ctx.moveTo(pts[0][0], pts[0][1]);
+          for (const [x, y] of pts.slice(1)) ctx.lineTo(x, y);
+          ctx.closePath();
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function repaintFrame() {
+        if (!lastLines.length) return;
+        const { text, errors } = paint(ctx, lastLines, DIMENSIONS);
+        drawHighlights();
+        return { text, errors };
+      }
+
+      // Runs the program at (tick, seed) and repaints. Never averages toward
+      // the target: a fresh stepGraph call every time.
+      async function runAt(tick, seed, { playing = false } = {}) {
         const result = await session.runAt(tick, seed);
         if (!result) return; // superseded by a newer session
-        renderModuleInfo();
+        modulesEl.textContent = session.loadedModules().length
+          ? session.loadedModules().map((m) => m.name).join(", ")
+          : "(none loaded)";
         if (result.error) {
           showOutput([...result.lines, `✗ ${result.error.tag}: ${result.error.message}`], true);
           return;
         }
         lastLines = result.lines;
-        const { text, errors } = paint(ctx, result.lines, DIMENSIONS);
-        if (errors.length) {
-          showOutput([...text, ...errors.map((e) => `✗ ${e.tag}: ${e.message}`)], true);
+        lastTrace = result.trace ?? [];
+        lastAnnotations = result.annotations ?? {};
+
+        // The mark recorder walks the SAME stream the painter does, and draws
+        // nothing — it is a third sink, not a second painter.
+        const recorder = markSink();
+        walkDrawing(lastLines, recorder);
+        lastMarks = recorder.marks.slice();
+
+        const painted = repaintFrame();
+        if (painted.errors.length) {
+          showOutput([...painted.text, ...painted.errors.map((e) => `✗ ${e.tag}: ${e.message}`)], true);
           return;
         }
-        showOutput(text, false);
+        // A `sound` line is prose to the renderer and a `draw` line is prose
+        // to the player; the output pane is what neither of them claimed.
+        showOutput(painted.text.filter((l) => !l.startsWith("sound ")), false);
+        updateReadout(tick, lastLines);
+
+        if (playing && soundOn && player) {
+          const { errors } = player.play(lastLines);
+          if (errors.length) showOutput(errors.map((e) => `✗ ${e.tag}: ${e.message}`), true);
+        }
       }
+
+      // ---- the scrubber and the loop share one value -------------------------
 
       const scrubber = createTickScrubber({
         rangeEl: dayEl,
-        backEl: dayBackEl,
-        forwardEl: dayForwardEl,
-        labelEl: dayLabelEl,
-        max: DAY_LENGTH - 1,
-        labelText: (t) => `day ${t}`,
-        onChange: (tick) => runAt(tick, currentSeed()),
+        backEl: $("garden-day-back"),
+        forwardEl: $("garden-day-forward"),
+        labelEl: $("garden-day-label"),
+        max: TICK_SPAN - 1,
+        labelText: (t) => `tick ${t} · day ${Math.floor(t / DAY_LENGTH) + 1}`,
+        onChange: (tick) => {
+          // Dragging sets the day and pauses. It never plays a note: the
+          // schedule belongs to a tick that is passing, and scrubbing is not
+          // time passing.
+          if (loop.isRunning()) setPlaying(false);
+          loop.syncTo(tick);
+          hideCard();
+          runAt(tick, currentSeed());
+        },
       });
 
-      seedEl.addEventListener("change", () => runAt(scrubber.getTick(), currentSeed()));
+      const loop = createSceneLoop({
+        run: (tick) => runAt(tick, currentSeed(), { playing: true }),
+        getTick: () => scrubber.getTick(),
+        setTick: (tick) => scrubber.setTick(tick, { fire: false }),
+        span: TICK_SPAN,
+        ticksPerSecond: TICKS_PER_SECOND,
+        getSpeed: () => speed,
+        onError: (e) => showOutput([`✗ ${e.message}`], true),
+      });
 
-      async function newSession() {
-        session = createProgramSession({ file: "paint/garden.planes", cacheBust: LOAD_TOKEN });
-        const src = await session.load();
-        sourceEl.value = src;
-        await renderSurface(surfaceEl, src, { loader: session.getLoader() });
-        renderModuleInfo();
-        await runAt(scrubber.getTick(), currentSeed());
+      function setPlaying(on) {
+        playBtn.setAttribute("aria-pressed", String(on));
+        playBtn.textContent = on ? "❚❚ pause" : "▶ play";
+        if (on) loop.start();
+        else loop.stop();
       }
 
-      resetBtn.addEventListener("click", () => {
-        scrubber.setTick(0, { fire: false });
-        seedEl.value = "0";
-        newSession();
+      playBtn.addEventListener("click", () => setPlaying(!loop.isRunning()));
+
+      for (const [id, value] of [["garden-speed-1", 1], ["garden-speed-4", 4], ["garden-speed-16", 16]]) {
+        $(id).addEventListener("click", () => {
+          speed = value;
+          for (const other of ["garden-speed-1", "garden-speed-4", "garden-speed-16"]) {
+            $(other).setAttribute("aria-pressed", String(other === id));
+          }
+        });
+      }
+
+      soundBtn.addEventListener("click", () => {
+        soundOn = !soundOn;
+        soundBtn.setAttribute("aria-pressed", String(soundOn));
+        soundBtn.textContent = soundOn ? "♪ sound on" : "♪ sound off";
+        // A browser will not start an AudioContext outside a gesture, so it
+        // is constructed here, in the click that asked for it.
+        if (soundOn) {
+          if (!player) player = createAudioPlayer();
+          player.unlock();
+        }
       });
 
-      reloadModulesBtn.addEventListener("click", () => newSession());
+      seedEl.addEventListener("change", () => {
+        hideCard();
+        runAt(scrubber.getTick(), currentSeed());
+      });
 
-      saveSvgBtn.addEventListener("click", () => {
+      // ---- click anything ----------------------------------------------------
+
+      function hideCard() {
+        cardEl.hidden = true;
+        cardEl.textContent = "";
+      }
+
+      const esc = (s) =>
+        String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+      // The one note this mark's line plays, if its source line also emitted
+      // one this tick — the convergence §10 of the build is about: a bee's
+      // note and its flower's height come from the same `g`.
+      function noteForSourceLine(sourceLine) {
+        const notes = soundSchedule(lastLines).notes;
+        if (!notes.length) return null;
+        const soundIndices = [];
+        lastLines.forEach((l, i) => {
+          if (l.startsWith("sound note ")) soundIndices.push(i);
+        });
+        for (let i = 0; i < soundIndices.length && i < notes.length; i++) {
+          if (lastTrace[soundIndices[i]] && lastTrace[soundIndices[i]][1] === sourceLine) return notes[i];
+        }
+        return notes[0];
+      }
+
+      function renderCard(index, x, y) {
+        const mark = lastMarks[index];
+        const entry = lastTrace[mark.line];
+        if (!entry) return;
+        const [node, sourceLine] = entry;
+        const c = card(node, {
+          annotations: lastAnnotations,
+          line: sourceLine,
+          sourceText: sourceLines[sourceLine - 1] ?? "",
+        });
+        const deeper = expand(node, { annotations: lastAnnotations });
+        const note = noteForSourceLine(sourceLine);
+
+        const rows = c.rows.length
+          ? c.rows
+              .map(
+                (row) =>
+                  `<div class="row"><b>${esc(row.value)}</b> <span>from ${esc(
+                    row.step ? row.step.label : "a value",
+                  )}</span></div>`,
+              )
+              .join("")
+          : `<div class="row"><b>${esc(c.value)}</b> <span>from ${esc(
+              c.step ? c.step.label : "a value",
+            )}</span></div>`;
+
+        const becauseHtml = c.because
+          .map((b) => `<div class="bc">${esc(b.name)} — “${esc(b.text)}”</div>`)
+          .join("");
+
+        const deeperHtml = deeper.length
+          ? `<div class="row"><span>one step further: ${deeper
+              .map((d) => esc(d.value))
+              .join(", ")}</span></div>`
+          : "";
+
+        const noteHtml = note
+          ? `<div class="row note"><b>${note.numerator}/${note.denominator}</b> <span>its note — ${
+              note.numerator === note.denominator ? "the base" : "an exact ratio"
+            }, ${Math.round(note.frequency * 10) / 10} Hz</span></div>`
+          : "";
+
+        // The title is the SOURCE LINE ITSELF, trimmed: a reader who clicks a
+        // petal wants to know which line drew it, and `ellipse of px, py, ...`
+        // says that better than any name this page could invent for it.
+        const heading = (sourceLines[sourceLine - 1] ?? "").trim() || `line ${sourceLine}`;
+        cardEl.innerHTML =
+          `<h4>${esc(heading)}</h4><div class="row"><span>line ${sourceLine} of paint/garden.planes</span></div>` +
+          rows +
+          becauseHtml +
+          deeperHtml +
+          noteHtml +
+          `<div class="row origin"><span>${esc(c.origin.text)}</span></div>` +
+          (c.approximate ? `<span class="tag">${esc(c.approximateNote)}</span>` : "") +
+          `<div class="row"><span>asking performed nothing — the effect surface beside the canvas is unchanged</span></div>`;
+
+        const rect = canvas.getBoundingClientRect();
+        const scale = rect.width / canvas.width;
+        cardEl.hidden = false;
+        cardEl.style.left = `${Math.max(4, Math.min(rect.width - 280, x * scale + 12))}px`;
+        cardEl.style.top = `${Math.max(4, y * scale - 8)}px`;
+
+        highlightSourceLine(sourceLine);
+        const el = [...sourceViewEl.children].find((e) => Number(e.dataset.line) === sourceLine);
+        if (el) el.scrollIntoView({ block: "nearest" });
+      }
+
+      canvas.addEventListener("click", (event) => {
+        // Clicking pauses, and answers about the frame on screen.
+        if (loop.isRunning()) setPlaying(false);
+        const rect = canvas.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * canvas.width;
+        const y = ((event.clientY - rect.top) / rect.height) * canvas.height;
+        const index = hitTest(lastMarks, x, y, { area: DIMENSIONS });
+        if (index < 0) {
+          hideCard();
+          highlightSourceLine(-1);
+          return;
+        }
+        renderCard(index, x, y);
+      });
+
+      // Hovering a source line lights up every mark it drew — the same map,
+      // read backwards.
+      sourceViewEl.addEventListener("mouseover", (event) => {
+        const el = event.target.closest(".ln");
+        if (!el) return;
+        const line = Number(el.dataset.line);
+        if (line !== litLine) highlightSourceLine(line);
+      });
+      sourceViewEl.addEventListener("mouseleave", () => {
+        if (litLine >= 0) highlightSourceLine(-1);
+      });
+
+      // ---- exports ----------------------------------------------------------
+
+      $("garden-save-svg").addEventListener("click", () => {
         if (!lastLines.length) {
           showOutput(["nothing has been drawn yet"], true);
           return;
@@ -292,13 +611,34 @@
         downloadSvg(svg, "garden");
       });
 
-      savePngBtn.addEventListener("click", () => {
+      $("garden-save-png").addEventListener("click", () => {
         if (!lastLines.length) {
           showOutput(["nothing has been drawn yet"], true);
           return;
         }
         downloadPng(canvas, lastLines, DIMENSIONS, "garden");
       });
+
+      // ---- session ----------------------------------------------------------
+
+      async function newSession() {
+        session = createProgramSession({ file: "paint/garden.planes", cacheBust: LOAD_TOKEN });
+        const src = await session.load();
+        renderSourceView(src);
+        await renderSurface(surfaceEl, src, { loader: session.getLoader() });
+        await runAt(scrubber.getTick(), currentSeed());
+      }
+
+      $("garden-reset").addEventListener("click", () => {
+        setPlaying(false);
+        scrubber.setTick(0, { fire: false });
+        loop.syncTo(0);
+        seedEl.value = "481027";
+        hideCard();
+        newSession();
+      });
+
+      $("garden-reload-modules").addEventListener("click", () => newSession());
 
       const stale = staleModuleWarning();
       if (stale) showOutput(stale.split("\n"), true);

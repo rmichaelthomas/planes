@@ -306,6 +306,30 @@ export class Interpreter {
     this.foreigns = new Map();
     this.modules = new Set();
     this.output = [];
+    // One entry per line in `output`, in the same order and always the same
+    // length: [derivation, source line] for the expression that produced it.
+    // Interpreter-level OBSERVATION, like `effects` — not a language feature,
+    // nothing a program can read, and it performs nothing: the node is the one
+    // `eval` already built, kept rather than dropped. The effect log has never
+    // carried a derivation, and the record plane that does is off unless
+    // `record` is set and is forbidden from changing output/effects/surface —
+    // so this is the third thing, and the smallest one that answers "which
+    // expression drew this line". Per run and replaced, never accumulated.
+    // interp.py carries the identical field for the identical reason.
+    this.trace = [];
+    // WHICH FILE A LINE IS IN. The trace's line has to name a line in the
+    // source the CALLER handed over, or it is worse than nothing: a page
+    // showing garden.planes and highlighting line 45 of draw.planes points the
+    // reader at a file that is not on their screen. Each Function remembers
+    // the file it was defined in, `currentFile` tracks whose body is running,
+    // and `callSites` records where each active call was WRITTEN. A `show`
+    // inside a helper then reports the innermost call site written in the
+    // entry file — for `circle of x, y, r`, exactly the line that was clicked.
+    // A single-file program is unaffected. interp.py carries the identical
+    // three fields for the identical reason.
+    this.currentFile = null;
+    this.entryFile = null;
+    this.callSites = [];
     this.effects = [];
     this.annotations = new Map();
     if (host !== null) this.host = host;
@@ -381,7 +405,19 @@ export class Interpreter {
     }
   }
 
-  hoist(stmts, env, renames = null) {
+  // The line to record for an emitted output line, in the ENTRY source. A
+  // `show` written in the entry file reports its own line; one written in a
+  // module reports the innermost call site that WAS written in the entry
+  // file. Zero when neither exists — a module's own top-level `show`.
+  trace_line(stmtLine) {
+    if (this.currentFile === this.entryFile) return stmtLine;
+    for (let i = this.callSites.length - 1; i >= 0; i--) {
+      if (this.callSites[i][0] === this.entryFile) return this.callSites[i][1];
+    }
+    return 0;
+  }
+
+  hoist(stmts, env, renames = null, file = null) {
     renames = renames ?? {};
     const rn = (k) => (k in renames ? renames[k] : k);
     for (const s of stmts) {
@@ -391,9 +427,10 @@ export class Interpreter {
       }
       if (s.__node === "FuncDef") {
         const fn = new PlanesFunction(s.name, s.params, s.body, env);
+        fn.file = file;
         this.funcs.set(rn(s.name), fn);
         fn.local = s.name;
-        this.hoist(s.body, env, renames);
+        this.hoist(s.body, env, renames, file);
       }
     }
   }
@@ -426,10 +463,15 @@ export class Interpreter {
       );
     }
     if (k === "FuncDef") {
-      this.funcs.set(
-        stmt.name,
-        new PlanesFunction(stmt.name, stmt.params, stmt.body, env),
-      );
+      // Re-registered when the definition is REACHED, not only when it was
+      // hoisted, so a definition in a nested scope closes over that scope's
+      // env. It has to carry the file too — dropped, this quietly replaced
+      // every hoisted function with a file-less copy and every trace line
+      // pointed at a call site instead of at the `show` itself. interp.py
+      // carries the same one line for the same reason.
+      const fn = new PlanesFunction(stmt.name, stmt.params, stmt.body, env);
+      fn.file = this.currentFile;
+      this.funcs.set(stmt.name, fn);
       return null;
     }
     if (k === "Assign") {
@@ -450,6 +492,7 @@ export class Interpreter {
       const v = this.eval(stmt.expr, env);
       const text = fmt(v.value);
       this.output.push(text);
+      this.trace.push([v.node, this.trace_line(stmt.line)]);
       this.host.show(text);
       this.effects.push(["show", text]);
       this.maybe_record("show", text, this.host_anchor(), v.node);
@@ -460,6 +503,14 @@ export class Interpreter {
       const because =
         stmt.expr.__node === "Var" ? this.annotations.get(stmt.expr.name) ?? null : null;
       this.output.push(explain(v, because));
+      // `why` writes to `output` too, so it writes to `trace` too: the two are
+      // `why` writes to `output` too, so it writes to `trace` too: the two are
+      // the same length by construction, not by convention. ZERO, and not the
+      // statement's own line, because a `Why` node does not carry one —
+      // giving it one changes the AST's SHAPE, which grammar/parser.planes
+      // pins, and an AST field is therefore a grammar change. interp.py
+      // records the identical zero for the identical reason.
+      this.trace.push([v.node, 0]);
       return v;
     }
     if (k === "If") {
@@ -563,7 +614,7 @@ export class Interpreter {
     if (k === "Nothing") return lit(null);
     if (k === "Var") {
       if (this.funcs.has(node.name) && !env.has(node.name)) {
-        return this.call(node.name, [], env);
+        return this.call(node.name, [], env, node.line ?? 0);
       }
       return env.get(node.name);
     }
@@ -643,7 +694,7 @@ export class Interpreter {
       const val = obj.value.has(node.name) ? obj.value.get(node.name) : null;
       return new Traced(val, new Deriv("field", `.${node.name}`, val, [obj.node]));
     }
-    if (k === "Call") return this.call(node.name, node.args, env);
+    if (k === "Call") return this.call(node.name, node.args, env, node.line ?? 0);
     if (k === "Builtin") return this.builtin(node.name, this.eval(node.arg, env));
     if (k === "Round") {
       const v = this.eval(node.value, env);
@@ -997,7 +1048,7 @@ export class Interpreter {
     return new Traced(results, new Deriv("comprehension", label, results, [source.node, ...nodes.slice(0, 3)]));
   }
 
-  call(name, args, env) {
+  call(name, args, env, line = 0) {
     if (!this.funcs.has(name) && builtinNames().has(name)) {
       if (args.length !== 1) {
         throw new PlanesError("wrong-arity", `'${name}' takes 1 value, given ${args.length}`, `write it as \`${name} of x\``);
@@ -1041,6 +1092,13 @@ export class Interpreter {
       const a = arg_vals[i];
       inner.bind_local(fn.params[i], new Traced(a.value, new Deriv("name", fn.params[i], a.value, [a.node])));
     }
+    // Where this call was WRITTEN, and whose body is now running. Both are
+    // restored on every exit path — including a `give` and a depth refusal —
+    // so an early return can never leave the interpreter believing it is
+    // somewhere it is not.
+    this.callSites.push([this.currentFile, line]);
+    const outerFile = this.currentFile;
+    this.currentFile = fn.file ?? null;
     try {
       for (const s of fn.body) {
         if (s.__node !== "Note") this.exec_stmt(s, inner);
@@ -1068,6 +1126,9 @@ export class Interpreter {
         );
       }
       throw e;
+    } finally {
+      this.currentFile = outerFile;
+      this.callSites.pop();
     }
   }
 
@@ -1340,7 +1401,7 @@ export function explain(traced, because = null) {
   return text;
 }
 
-function render(node) {
+export function render(node) {
   const k = node.kind;
   if (k === "literal") return node.label;
   if (k === "name" || k === "item") return `${node.label} (${fmt(node.value)})`;

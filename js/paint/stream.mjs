@@ -102,6 +102,17 @@ export function walk(lines, sink) {
   const errors = [];
   const text = [];
   let drawn = 0;
+  // The index of the line being walked, and the line itself, handed to the
+  // sink BEFORE it is dispatched (§5b of the build this came from). This is
+  // the whole of what the walk gained: a sink that wants to know which line
+  // drew a mark is told, and every sink that does not care inherits a no-op.
+  //
+  // NOT A MATRIX. The walk tracks `pushDepth` and nothing else about the
+  // transform, and that stays true — a sink that needs the CTM keeps its own
+  // (js/paint/marks.mjs does exactly that). Putting one here would make this
+  // module know how a renderer composes space, which is the one thing it has
+  // never known.
+  let index = -1;
 
   let versionSet = false;
   let declaredVersion = 1; // §1.1: absent is version 1
@@ -115,6 +126,8 @@ export function walk(lines, sink) {
 
   try {
     for (const line of lines) {
+      index += 1;
+      if (sink.at) sink.at(index, line);
       const cmd = parseCommand(line);
 
       if (cmd.kind === "prose") {

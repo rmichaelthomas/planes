@@ -17,7 +17,7 @@ import sys
 import tempfile
 
 from host import TestHost
-from interp import Interpreter, PlanesError
+from interp import Interpreter, PlanesError, render
 from lexer import PlanesSyntaxError
 from modules import ModuleError
 
@@ -196,6 +196,103 @@ def test_error_tags_and_details_agree():
         if want_tag is not None:
             assert pt == want_tag, f"src:\n{src}\n expected {want_tag}, got {pt}"
         assert po == jo, f"src:\n{src}\n py_out={po} js_out={jo}"
+
+
+# ================================================================ the show/why trace
+
+
+def _py_trace(path):
+    """The canonical trace form: one `<source line>\t<rendered derivation>`
+    per emitted output line. The renderer is `why`'s own, so this compares the
+    real thing rather than a second description of it."""
+    host = TestHost()
+    itp = Interpreter(host=host)
+    src = open(path, encoding="utf-8").read()
+    tag = None
+    try:
+        if _uses_import(src):
+            itp.run_file(path)
+        else:
+            itp.run(src)
+    except PlanesError as e:
+        tag = e.tag
+    except ModuleError:
+        tag = "module-error"
+    except RecursionError:
+        tag = "recursion-too-deep"
+    except PlanesSyntaxError:
+        tag = "PARSE"
+    return {"tag": tag, "outputCount": len(itp.output),
+            "trace": [f"{line}\t{render(node)}" for node, line in itp.trace]}
+
+
+def _js_trace(path):
+    r = subprocess.run([NODE, "js/cli.mjs", "trace", path],
+                       cwd=REPO, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise AssertionError(f"node failed on {path}: {r.stderr}")
+    return json.loads(r.stdout)
+
+
+def test_the_trace_is_exactly_as_long_as_the_output_for_every_corpus_program():
+    """Gate D. `output` and `trace` are the same list length by construction —
+    every append to one is an append to the other — so a consumer indexing one
+    with the other's index is never off by the number of `why`s that ran."""
+    files = sorted(
+        f for f in glob.glob("**/*.planes", recursive=True) if ".venv" not in f)
+    assert len(files) >= 40, len(files)
+    for f in files:
+        d = _py_trace(f)
+        assert len(d["trace"]) == d["outputCount"], \
+            f"{f}: {len(d['trace'])} trace entries for {d['outputCount']} output lines"
+
+
+def test_the_python_and_javascript_traces_agree_in_canonical_form():
+    """Gate E. Not just the same length — the same derivations, rendered the
+    same way, naming the same source lines."""
+    files = sorted(
+        f for f in glob.glob("**/*.planes", recursive=True) if ".venv" not in f)
+    mismatches = []
+    for f in files:
+        py = _py_trace(f)
+        js = _js_trace(f)
+        if py != js:
+            i = next((k for k in range(min(len(py["trace"]), len(js["trace"])))
+                      if py["trace"][k] != js["trace"][k]), None)
+            detail = (f"first diff @ {i}: py={py['trace'][i]!r} js={js['trace'][i]!r}"
+                      if i is not None else
+                      f"py={len(py['trace'])} entries js={len(js['trace'])}")
+            mismatches.append(f"{f}: {detail}")
+    assert not mismatches, "trace divergences:\n" + "\n".join(mismatches)
+
+
+def test_a_show_inside_an_imported_helper_reports_the_line_that_called_it():
+    """The trace names a line in the file the CALLER handed over. Without
+    this a page showing garden.planes highlights line 45 of draw.planes,
+    which is a file the reader is not looking at."""
+    with tempfile.TemporaryDirectory() as d:
+        with open(os.path.join(d, "helper.planes"), "w", encoding="utf-8") as fh:
+            fh.write("to announce of x:\n  show \"value \" + text of x\n")
+        entry = os.path.join(d, "entry.planes")
+        with open(entry, "w", encoding="utf-8") as fh:
+            fh.write("use helper\n\nannounce of 7\nshow \"direct\"\n")
+        py = _py_trace(entry)
+        js = _js_trace(entry)
+        assert py == js
+        lines = [t.split("\t")[0] for t in py["trace"]]
+        # `announce of 7` is on line 3 of the entry file; the `show` inside
+        # the helper is on line 2 of the helper, and is not what is reported.
+        assert lines == ["3", "4"], lines
+
+
+def test_the_trace_adds_no_effect_of_its_own():
+    """`why` performs nothing (test_why_in_planes.py pins that for the
+    language) and neither does keeping a derivation beside each output line:
+    the effect log is byte-identical either way."""
+    src = 'let a = 2\nshow text of a\nwhy a\nshow "done"\n'
+    (po, pt, pe, pf), (jo, jt, je, jf) = _run_src(src)
+    assert pe == je == [["show", "2"], ["show", "done"]]
+    assert len(po) == 3  # the `why` line is output, not effect
 
 
 if __name__ == "__main__":

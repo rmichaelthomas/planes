@@ -218,9 +218,41 @@ test("garden.html exists as a sibling of paint.html, fetches garden.planes rathe
   assert.doesNotMatch(html, /let canvas-width = 480/, "the program is fetched, not pasted into the page");
   assert.match(html, /createProgramSession\(\{\s*file:\s*"paint\/garden\.planes"/s, "loads its program through the shared session module, by file path");
   assert.match(html, /python3 -m http\.server/, "states how to serve itself, so the requirement is not rediscovered");
-  for (const id of ["garden-day", "garden-day-back", "garden-day-forward", "garden-seed", "garden-save-svg", "garden-save-png", "garden-surface", "garden-source"]) {
+  for (const id of [
+    "garden-day", "garden-day-back", "garden-day-forward", "garden-seed",
+    "garden-save-svg", "garden-save-png", "garden-surface",
+    // The source is shown as a LINE-ADDRESSABLE VIEW, not the editable
+    // textarea this page used to carry. Two reasons, and the second is the
+    // one that forced it: a textarea cannot highlight one line, and hovering
+    // a source line to light up every mark it drew is the whole point of the
+    // map running both ways. The first is that the textarea was never
+    // editable in the sense it advertised — nothing read it back, and only
+    // "Reload modules" re-fetched the file.
+    "garden-source-view",
+    // A scene that lives: play, three speeds, a clock, a weather readout,
+    // sound, and a card to answer a click with.
+    "garden-play", "garden-speed-1", "garden-speed-4", "garden-speed-16",
+    "garden-sound", "garden-clock", "garden-weather", "garden-card",
+  ]) {
     assert.ok(html.includes(`id="${id}"`), `no ${id}`);
   }
+});
+
+test("garden.html's play loop, hit testing and why panel come from shared modules, not inline reimplementations", () => {
+  const html = read("garden.html");
+  for (const mod of ["loop", "marks", "hit", "why", "stream"]) {
+    assert.match(html, new RegExp(`from ["']\\./js/paint/${mod}\\.mjs["']`), `garden.html does not import ${mod}.mjs`);
+  }
+  assert.match(html, /from ["']\.\/js\/sound\/audio\.mjs["']/);
+  assert.match(html, /from ["']\.\/js\/sound\/stream\.mjs["']/);
+});
+
+test("sound fires only while playing — never on a scrub and never on the export path", () => {
+  const html = read("garden.html");
+  // The one call into the live player is guarded by all three of: this frame
+  // came from the loop, sound is on, and a player exists.
+  assert.match(html, /if \(playing && soundOn && player\) \{/);
+  assert.equal((html.match(/player\.play\(/g) ?? []).length, 1, "exactly one place plays");
 });
 
 test("js/paint/program_session.mjs loads its program by fetch, not by inlining it", () => {

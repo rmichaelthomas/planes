@@ -408,6 +408,12 @@ class Function:
     body: list
     env: Env
     local: str = ""      # the name the defining file knows it by
+    # The file this function was DEFINED in, as the loader's own key, or None
+    # for a single-file program. `trace_line` uses it to report lines in the
+    # source the caller handed over rather than in a module the reader is not
+    # looking at. A field rather than an attribute set after construction:
+    # this dataclass declares slots, so an ad-hoc attribute is silently lost.
+    file: Optional[str] = None
 
 
 # ================================================================ interpreter
@@ -437,6 +443,39 @@ class Interpreter:
         # prints doubles every `show`; one that prints neither loses every
         # `why`. planes.py hit the first of those — see its `CliHost`.
         self.output = []
+        # One entry per line in `output`, in the same order and always the same
+        # length: (derivation, source line) for the expression that produced
+        # it. Interpreter-level OBSERVATION, like `effects` — not a language
+        # feature, nothing a program can read, and it performs nothing: the
+        # node is the one `eval` already built, kept rather than dropped.
+        #
+        # WHY IT IS HERE AND NOT IN `effects`. The effect log records that a
+        # `show` happened and with what text; it has never carried where the
+        # text came from. The record plane (§95-102) does carry it — Show hands
+        # `v.node` to `maybe_record` below — but that plane is off unless
+        # `record=True` and is forbidden from changing `output`, `effects` or
+        # the surface, so a page cannot turn it on to ask a question. This is
+        # the third thing, and it is the smallest one that answers "which
+        # expression drew this line".
+        #
+        # Per run and replaced, never accumulated: a page constructs one
+        # Interpreter per tick, so this is per frame by construction.
+        self.trace = []
+        # WHICH FILE A LINE IS IN. The trace's line has to name a line in the
+        # source the CALLER handed over, or it is worse than nothing: a page
+        # showing garden.planes and highlighting line 45 of draw.planes points
+        # the reader at a file that is not on their screen. So each Function
+        # remembers the file it was defined in, `current_file` tracks whose
+        # body is running, and `call_sites` records where each active call was
+        # WRITTEN. A `show` inside a helper then reports the innermost call
+        # site written in the entry file — which for `circle of x, y, r` is
+        # exactly the line the reader clicked on.
+        #
+        # A single-file program is unaffected: current_file and entry_file are
+        # both None, so a `show` reports its own line, exactly as before.
+        self.current_file = None
+        self.entry_file = None
+        self.call_sites = []
         self.effects = []            # ordered record of what the program did
         self.annotations = {}        # name -> latest `because` text, display-only
 
@@ -530,11 +569,15 @@ class Interpreter:
         check_collisions(graph)
         known = names_in_graph(graph)
         renames = rename_map(graph)
+        # The entry file, by the same absolute-path key the loop below
+        # compares on. `trace_line` reports lines in THIS file and no other.
+        self.entry_file = os.path.abspath(path)
+        self.current_file = self.entry_file
         entry = []
         for p, src in graph:
             prog = parse(src, known)
             self.check_discarded_writes(prog)
-            self.hoist(prog, self.env, renames.get(p, {}))
+            self.hoist(prog, self.env, renames.get(p, {}), os.path.abspath(p))
             if os.path.abspath(p) == os.path.abspath(path):
                 entry = prog
             else:
@@ -547,7 +590,22 @@ class Interpreter:
             self.exec_stmt(stmt, self.env)
         return self.output
 
-    def hoist(self, stmts, env, renames=None):
+    def trace_line(self, stmt_line):
+        """The line to record for an emitted output line, in the ENTRY source.
+
+        A `show` written in the entry file reports its own line. One written
+        in a module reports the innermost call site that WAS written in the
+        entry file — the line the reader is looking at. Zero when neither
+        exists, which only happens for a module's own top-level `show`.
+        """
+        if self.current_file == self.entry_file:
+            return stmt_line
+        for where, line in reversed(self.call_sites):
+            if where == self.entry_file:
+                return line
+        return 0
+
+    def hoist(self, stmts, env, renames=None, file=None):
         """Register function definitions before executing anything.
 
         Source order controls execution, not visibility: a program may call a
@@ -562,6 +620,7 @@ class Interpreter:
                 continue
             if isinstance(s, FuncDef):
                 fn = Function(s.name, s.params, s.body, env)
+                fn.file = file
                 # A rename replaces the exported name. Registering both would
                 # put the colliding name back, which is the thing the rename
                 # was written to fix. The defining file still reaches its own
@@ -569,7 +628,7 @@ class Interpreter:
                 exported = renames.get(s.name, s.name)
                 self.funcs[exported] = fn
                 fn.local = s.name
-                self.hoist(s.body, env, renames)
+                self.hoist(s.body, env, renames, file)
 
     def exec_block(self, stmts, env):
         result = None
@@ -610,7 +669,16 @@ class Interpreter:
                 "this is a bug in Planes, not in your program — please report it")
 
         if isinstance(stmt, FuncDef):
-            self.funcs[stmt.name] = Function(stmt.name, stmt.params, stmt.body, env)
+            # Re-registered when the definition is REACHED, not only when it
+            # was hoisted, so a definition in a nested scope closes over that
+            # scope's env. `file` comes from whichever file is executing —
+            # which for a top-level definition is the same file `hoist`
+            # already recorded, and for a nested one is where it actually is.
+            # Dropped, this quietly replaced every hoisted function with a
+            # file-less copy and every trace line pointed at a call site
+            # instead of at the `show` itself.
+            self.funcs[stmt.name] = Function(stmt.name, stmt.params, stmt.body,
+                                             env, file=self.current_file)
             return None
 
         if isinstance(stmt, Assign):
@@ -636,6 +704,7 @@ class Interpreter:
             v = self.eval(stmt.expr, env)
             text = fmt(v.value)
             self.output.append(text)
+            self.trace.append((v.node, self.trace_line(stmt.line)))
             self.host.show(text)
             self.effects.append(("show", text))
             self.maybe_record("show", text, self.host_anchor(), derivation=v.node)
@@ -646,6 +715,20 @@ class Interpreter:
             because = self.annotations.get(stmt.expr.name) \
                 if isinstance(stmt.expr, Var) else None
             self.output.append(explain(v, because))
+            # `why` writes to `output` too, so it writes to `trace` too: the
+            # two are the same length by construction, not by convention, and a
+            # consumer indexing one with the other's index is never off by the
+            # number of `why`s that happened to run.
+            #
+            # ZERO, and not the statement's own line, because a `Why` node does
+            # not carry one. Giving it one is a change to the AST's SHAPE, and
+            # the AST's shape is pinned by grammar/parser.planes — the
+            # self-hosted parser this repository checks its own parser against
+            # — so an AST field is a grammar change, which this build may not
+            # make. Nothing is lost: the panel that reads this trace asks about
+            # drawn marks, which are `show`s, and `why` prints its own
+            # explanation already. js/interp.mjs records the identical zero.
+            self.trace.append((v.node, 0))
             return v
 
         if isinstance(stmt, If):
@@ -756,7 +839,7 @@ class Interpreter:
 
         if isinstance(node, Var):
             if node.name in self.funcs and not env.has(node.name):
-                return self.call(node.name, [], env)
+                return self.call(node.name, [], env, getattr(node, 'line', 0))
             return env.get(node.name)
 
         if isinstance(node, RecordLit):
@@ -818,7 +901,7 @@ class Interpreter:
             return Traced(val, Deriv("field", f".{node.name}", val, [obj.node]))
 
         if isinstance(node, Call):
-            return self.call(node.name, node.args, env)
+            return self.call(node.name, node.args, env, node.line)
 
         if isinstance(node, Builtin):
             return self.eval_builtin(node, env)
@@ -1208,7 +1291,7 @@ class Interpreter:
         return Traced(results, Deriv("comprehension", label, results,
                                      [source.node] + nodes[:3]))
 
-    def call(self, name, args, env):
+    def call(self, name, args, env, line=0):
         # A user's own definition wins over a builtin of the same name.
         # Builtins are ordinary functions, so shadowing one is fine and is
         # the escape hatch if a name is wanted for something else.
@@ -1258,6 +1341,13 @@ class Interpreter:
         inner = Env(fn.env)
         for p, a in zip(fn.params, arg_vals):
             inner.bind_local(p, Traced(a.value, Deriv("name", p, a.value, [a.node])))
+        # Where this call was WRITTEN, and whose body is now running. Both are
+        # restored on every exit path, including a `give` and a depth refusal,
+        # so an early return can never leave the interpreter believing it is
+        # somewhere it is not.
+        self.call_sites.append((self.current_file, line))
+        outer_file = self.current_file
+        self.current_file = getattr(fn, "file", None)
         try:
             for s in fn.body:
                 if not isinstance(s, Note):
@@ -1283,6 +1373,9 @@ class Interpreter:
                 "plain number with no collection involved, `for each` has "
                 "nothing to iterate over, so restructure the computation "
                 "to avoid unbounded recursion depth instead")
+        finally:
+            self.current_file = outer_file
+            self.call_sites.pop()
 
     def call_foreign(self, decl, args, env):
         """Call a host function.

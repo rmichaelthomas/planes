@@ -41,15 +41,35 @@ export function runProgram(src, { files = {}, responses = {} } = {}) {
   const itp = new Interpreter({ host });
   try {
     itp.run(src);
-    return { output: itp.output, effects: itp.effects, files: host.files, error: null };
+    return { ...observed(itp, host), error: null };
   } catch (e) {
     let error;
     if (e instanceof PlanesError) error = { tag: e.tag, message: e.message };
     else if (e instanceof PlanesSyntaxError) error = { tag: "syntax", message: e.message };
     else if (e instanceof RangeError) error = { tag: "recursion-too-deep", message: e.message };
     else throw e;
-    return { output: itp.output, effects: itp.effects, files: host.files, error };
+    return { ...observed(itp, host), error };
   }
+}
+
+// Everything a caller can observe about a finished run, in one place so the
+// single-file and module-graph entry points cannot drift apart about what they
+// hand back.
+//
+// `trace` is interp.mjs's own show/why trace — one entry per output line, in
+// the same order, carrying the derivation of the expression that produced it
+// and its source line. `annotations` is the `because` text each name last
+// carried. Both are OBSERVATION, not effect: nothing here runs anything, and
+// `effects` is byte-identical with or without a caller reading them
+// (js/test/trace.test.mjs pins that).
+function observed(itp, host) {
+  return {
+    output: itp.output,
+    trace: itp.trace,
+    annotations: Object.fromEntries(itp.annotations),
+    effects: itp.effects,
+    files: host.files,
+  };
 }
 
 // A sentinel location for the entry source itself — it is never fetched (the
@@ -87,7 +107,7 @@ export async function runProgramGraph(src, { base, files = {}, responses = {}, l
     check_collisions(graph, ldr);
     const targetKey = ldr.key(ENTRY);
     hoistAndRun(itp, graph, targetKey, ldr);
-    return { output: itp.output, effects: itp.effects, files: host.files, error: null };
+    return { ...observed(itp, host), error: null };
   } catch (e) {
     let error;
     if (e instanceof PlanesError) error = { tag: e.tag, message: e.message };
@@ -95,7 +115,7 @@ export async function runProgramGraph(src, { base, files = {}, responses = {}, l
     else if (e instanceof RangeError) error = { tag: "recursion-too-deep", message: e.message };
     else if (e && e.name === "ModuleError") error = { tag: "module-error", message: e.message };
     else throw e;
-    return { output: itp.output, effects: itp.effects, files: host.files, error };
+    return { ...observed(itp, host), error };
   }
 }
 

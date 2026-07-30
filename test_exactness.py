@@ -359,6 +359,21 @@ def test_no_implementation_reaches_for_a_host_trigonometric_function():
         "paint_svg.test.mjs",
         "protocol_v2.test.mjs",         # v2 §9.2: rotated ellipse/rect corners,
                                          # hand-computed the same way to check against
+        # The same category, arrived at from the other side. `painter.mjs`
+        # needs no trigonometry because a canvas context has `rotate`; these
+        # two have no context to delegate to, so they compose the rotation
+        # matrix themselves — `marks.mjs` to record the transform a mark was
+        # drawn under, `hit.mjs` to invert it and to sample an outline. Both
+        # are renderer-side geometry over plain JS numbers: neither touches a
+        # Planes value and neither is an implementation of `sine`.
+        "marks.mjs",
+        "hit.mjs",
+        # A waveform is one period of a function of phase (sound protocol
+        # §8's closed set of three), computed over plain JS numbers on the
+        # player's side of the line — the sound protocol's counterpart of
+        # `draw rotate 30` being the renderer's arithmetic, not the
+        # program's. Nothing here is a Planes value either.
+        "wav.mjs",
     }
     offenders = []
     roots = (glob.glob(os.path.join(REPO, "*.py"))

@@ -151,7 +151,25 @@ function svgSink({ width, height, background }) {
     );
   }
 
-  const emit = (el) => elements.push(el);
+  // The index of the stream line currently being walked, set by `at` below.
+  // Every element carries it as `data-line`, so a saved SVG is not only a
+  // picture but a map back into the program that drew it — open it in an
+  // editor, click a shape, read which line emitted it.
+  let currentLine = -1;
+
+  const emit = (el) => elements.push(withLine(el));
+
+  // Appended as the LAST attribute of the opening tag, never inserted after
+  // the tag name: every geometry attribute keeps the position it has always
+  // had, so a reader (and a test) reading `<circle cx=... cy=... r=...` still
+  // reads exactly that.
+  function withLine(el) {
+    if (currentLine < 0 || el.startsWith("</")) return el;
+    const close = el.indexOf(">");
+    if (close === -1) return el;
+    const at = el[close - 1] === "/" ? close - 1 : close;
+    return `${el.slice(0, at)} data-line="${currentLine}"${el.slice(at)}`;
+  }
   const bgRect = () =>
     `<rect x="0" y="0" width="${fmt(width)}" height="${fmt(height)}" fill="${backgroundColor}"/>`;
 
@@ -207,6 +225,9 @@ function svgSink({ width, height, background }) {
   }
 
   const sink = {
+    at(index) {
+      currentLine = index;
+    },
     reset(defaults) {
       strokeC = defaults.stroke;
       fillPaint = { kind: "solid", lcha: defaults.fill };

@@ -74,13 +74,35 @@ export function composePrelude({ tick, keys, pointer, state, seed = 0 }) {
   );
 }
 
+// How many lines this module prepends before a program's own first line.
+// `composePrelude` ends with a newline and `step`/`stepGraph` add one more
+// between it and the source, so a program's line 1 is this many lines down.
+// Computed from the prelude itself, never counted by hand.
+export const PRELUDE_LINES = composePrelude({
+  tick: 0,
+  keys: [],
+  pointer: { x: 0, y: 0, down: false },
+  state: null,
+}).split("\n").length;
+
+// The interpreter counts lines in what it was HANDED, which is the prelude
+// plus the program. A caller who handed over a program wants line numbers in
+// that program — otherwise every trace entry points six lines past where the
+// reader is looking, and a why panel titles a mark with `use sound`. Rebased
+// here, where the prelude is added, rather than in the interpreter, which
+// correctly knows nothing about any of this.
+function rebaseTrace(trace) {
+  return trace.map(([node, line]) => [node, line - PRELUDE_LINES]);
+}
+
 // The shared tail of a tick, once a runProgram-shaped result is in hand:
-// thread state.json back out as next tick's state, and corroborate the
-// static effect surface (A.3) — a tick's actual effects should never touch
-// the network boundary.
-function stepResult(context, { output, effects, files, error }) {
+// thread state.json back out as next tick's state, rebase the trace onto the
+// program's own line numbers, and corroborate the static effect surface
+// (A.3) — a tick's actual effects should never touch the network boundary.
+function stepResult(context, { output, trace = [], annotations = {}, effects, files, error }) {
+  trace = rebaseTrace(trace);
   if (error) {
-    return { lines: output, state: context.state, surfaceSafe: false, error };
+    return { lines: output, trace, annotations, state: context.state, surfaceSafe: false, error };
   }
 
   let nextState = context.state;
@@ -91,6 +113,8 @@ function stepResult(context, { output, effects, files, error }) {
       return {
         lines: output,
         state: context.state,
+        trace,
+        annotations,
         surfaceSafe: false,
         error: { tag: "bad-state-json", message: "state.json did not parse as JSON" },
       };
@@ -98,7 +122,10 @@ function stepResult(context, { output, effects, files, error }) {
   }
 
   const surfaceSafe = !effects.some(([kind]) => kind === "ask");
-  return { lines: output, state: nextState, surfaceSafe, error: null };
+  // `trace` and `annotations` ride alongside `lines`: one trace entry per
+  // line, in the same order, so a caller that knows which line it is looking
+  // at knows where that line came from without a second run.
+  return { lines: output, trace, annotations, state: nextState, surfaceSafe, error: null };
 }
 
 // Runs one tick: composes the prelude, runs the whole program, paints
@@ -124,6 +151,99 @@ export async function stepGraph(src, context, { loader, base } = {}) {
   const prelude = composePrelude(context);
   const result = await runProgramGraph(prelude + "\n" + src, { base, loader });
   return stepResult(context, result);
+}
+
+// A loop for a program whose tick IS a position in a cycle rather than a
+// counter — the garden's day, which the page can also scrub to directly.
+// createLoop below owns its own tick and counts up forever; this one owns a
+// FLOAT position, advances it by wall-clock time, and hands the integer part
+// to whoever asked. That is the difference between "a frame happened" and
+// "this much of the day passed", and it is what lets play and the scrubber
+// share one value: playing writes it, dragging writes it, and both make the
+// same picture at the same number.
+//
+// WALL-CLOCK, NOT PER-FRAME. `day += 1` per animation frame would run the day
+// at whatever rate the machine happens to render, and a slow frame would
+// slow time down rather than skip it. Advancing by elapsed seconds means a
+// tick the machine had no time to draw is SKIPPED, not queued: at 16x the day
+// still passes in the same few seconds, with fewer frames shown. Which is the
+// honest behaviour for a scene that is a pure function of its own clock.
+//
+// It runs `run(tick)` and awaits it, and never starts a second run before the
+// first returns (createLoop's rule 2, met the same way). An erroring run stops
+// the loop (rule 1).
+export function createSceneLoop({
+  run,
+  getTick,
+  setTick,
+  span,
+  ticksPerSecond = 4,
+  getSpeed = () => 1,
+  schedule,
+  cancel,
+  now = () => (typeof performance !== "undefined" ? performance.now() : Date.now()),
+  onError = null,
+}) {
+  const sched =
+    schedule ||
+    (typeof requestAnimationFrame !== "undefined" ? requestAnimationFrame : (fn) => setTimeout(fn, 16));
+  const cancelFn =
+    cancel || (typeof cancelAnimationFrame !== "undefined" ? cancelAnimationFrame : clearTimeout);
+
+  let running = false;
+  let pending = false;
+  let handle = null;
+  let last = 0;
+  let position = 0;
+
+  async function frame() {
+    if (!running) return;
+    const t = now();
+    const elapsed = Math.min(0.25, (t - last) / 1000);
+    last = t;
+    if (!pending) {
+      position += elapsed * ticksPerSecond * getSpeed();
+      position = ((position % span) + span) % span;
+      const tick = Math.floor(position);
+      if (tick !== getTick()) {
+        setTick(tick);
+        pending = true;
+        try {
+          await run(tick);
+        } catch (e) {
+          pending = false;
+          running = false;
+          if (onError) onError(e);
+          return;
+        }
+        pending = false;
+        if (!running) return;
+      }
+    }
+    handle = sched(frame);
+  }
+
+  return {
+    start() {
+      if (running) return;
+      running = true;
+      last = now();
+      position = getTick();
+      handle = sched(frame);
+    },
+    stop() {
+      running = false;
+      if (handle !== null) cancelFn(handle);
+      handle = null;
+    },
+    // A drag writes the position too, so releasing the scrubber and pressing
+    // play resumes from where the reader left it rather than from where the
+    // loop had got to.
+    syncTo(tick) {
+      position = tick;
+    },
+    isRunning: () => running,
+  };
 }
 
 // Drives `step` from a scheduler — requestAnimationFrame in a real page, or

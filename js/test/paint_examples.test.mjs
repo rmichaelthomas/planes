@@ -129,7 +129,10 @@ async function collectCorpusStream() {
 
   const gardenSrc = readExample("garden");
   const gardenLoader = new BrowserModuleLoader({ base: baseFor("garden") });
-  for (let tick = 0; tick < 240; tick += 20) {
+  // Three days of 100 ticks (paint/garden.planes's own `day-length`), sampled
+  // every 20 — enough to cross dawn and dusk twice each, so the day-only and
+  // night-only branches are both walked.
+  for (let tick = 0; tick < 300; tick += 20) {
     const r = await stepGraph(gardenSrc, ctx(tick, [], null), { loader: gardenLoader });
     assert.equal(r.error, null);
     record(`garden tick ${tick}`, r.lines);
@@ -138,11 +141,28 @@ async function collectCorpusStream() {
   return { verbs, errors };
 }
 
-// Empty, and the PR says so: after the Phase A refinement every verb in the
-// table is drawn by one of the three programs. A verb that genuinely cannot
-// be placed honestly belongs here with the reason it could not, rather than
-// forced into a program that has no use for it.
-const COVERAGE_ALLOWLIST = new Map();
+// A verb that genuinely cannot be placed honestly belongs here with the
+// reason it could not, rather than forced into a program that has no use for
+// it. The Phase A refinement emptied this map; the garden rewrite put three
+// entries back, and the three share one reason.
+//
+// The garden was the ONLY program that drew `clip`, `unclip` and `dash`, and
+// it drew them because the corpus needed the coverage rather than because the
+// picture did — a masked region and a dashed outline in a scene with neither
+// a window nor a dotted line in it. The build that rewrote it forbids all
+// three outright and gates on their absence, which settles the contradiction
+// in the picture's favour: a corpus that keeps a verb alive by planting it
+// somewhere it does not belong is measuring itself, not the protocol.
+//
+// The three are not untested. js/test/protocol_v2.test.mjs exercises every
+// one of them directly, in both sinks, including the nesting rules and every
+// refusal — what is missing is a REAL PROGRAM that reaches for them, and this
+// map is the honest place to say so rather than the place to hide it.
+const COVERAGE_ALLOWLIST = new Map([
+  ["clip", "no program in this corpus masks a region; the garden's masked region existed for this test and the scene rewrite removed it"],
+  ["unclip", "same as clip — it has nothing to release"],
+  ["dash", "no program in this corpus draws a dashed outline; the garden's dashes existed for this test and the scene rewrite removed them"],
+]);
 
 test("every drawing verb is exercised somewhere in the corpus", async () => {
   const restore = installFsFetch();

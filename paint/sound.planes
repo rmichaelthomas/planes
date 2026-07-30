@@ -1,0 +1,38 @@
+# paint/sound.planes — one helper per verb in planes-sound-protocol-v1.md,
+# and nothing else (specification §9). The specification's verb table and this
+# file are the same thing written twice; a test reads the table straight out of
+# js/sound/protocol.mjs and asserts the correspondence verb for verb, no
+# extras, no omissions. `protocol` itself is excluded — it is a stream
+# directive, not a sounding verb, and a program states its version once,
+# directly, as `show "sound protocol 1"`.
+#
+# TWO WORDS MOVED, AND BOTH MOVED IN THE SPECIFICATION TOO. `lasts`, not `for`:
+# `for` is a reserved word in this language and a parameter cannot be named it.
+# `silence`, not `clear`: `clear` is already a verb of the DRAWING protocol and
+# paint/draw.planes already defines a helper of that name — and a program
+# emitting both protocols, which is the entire point of the two prefixes,
+# imports both libraries into one module graph, where two helpers of one name
+# is a collision the loader refuses. Neither rename is local to this file: the
+# specification and the library use the same words, so a collision in one
+# renames both (planes-drawing-protocol-v2.md §6.5's rule, met again).
+#
+# `note` is not reserved and is safe to define: the parser reads the word
+# `note` positionally, and only when it is immediately followed by `:` (a Note
+# annotation block). `note of 3, 2, 1, 0, 0.4` is followed by `of`, so it is an
+# ordinary call.
+
+# `kind`, not `shape`: `shape` is a verb of the DRAWING protocol and
+# paint/draw.planes defines a helper of that name, so a parameter called
+# `shape` in a graph that imports both would resolve to that zero-argument
+# function and quietly concatenate `nothing`.
+to wave of kind:
+  show "sound wave " + kind
+
+to gain of level:
+  show "sound gain " + text of level
+
+to note of numerator, denominator, octave, at, lasts:
+  show "sound note " + text of numerator + " " + text of denominator + " " + text of octave + " " + text of at + " " + text of lasts
+
+to silence:
+  show "sound silence"

@@ -1,0 +1,68 @@
+{
+  "format": 1,
+  "protocol": "planes-sound",
+  "version": 1,
+  "prefix": "sound",
+  "prefix_note": "Every command line begins with this word. A line that does not is prose and is never interpreted — including a line of the drawing protocol, which a player passes through untouched.",
+  "line_shape": "sound <verb> <arg1> <arg2> ... <argN>",
+  "line_shape_note": "One command per line. Tokens (the prefix, the verb, and each argument) are separated by one or more whitespace characters. Each verb's own `arity` and `arguments` entry says how many argument tokens follow it and what kind each one is; for a verb listed in `word_arguments`, the permitted values for its `\"word\"`-typed argument are that entry, keyed by verb name.",
+  "declaration": {
+    "verb": "protocol",
+    "arity": 1,
+    "argument": "positive integer version",
+    "note": "Not a sounding verb. Must precede the first sounding command, so a player cannot refuse a phrase it has already begun.",
+    "example": "sound protocol 1"
+  },
+  "verbs": [
+    {
+      "name": "wave",
+      "arity": 1,
+      "arguments": [
+        "word"
+      ],
+      "group": "voice"
+    },
+    {
+      "name": "gain",
+      "arity": 1,
+      "arguments": [
+        "number"
+      ],
+      "group": "voice"
+    },
+    {
+      "name": "note",
+      "arity": 5,
+      "arguments": [
+        "number",
+        "number",
+        "number",
+        "number",
+        "number"
+      ],
+      "group": "notes"
+    },
+    {
+      "name": "silence",
+      "arity": 0,
+      "arguments": [],
+      "group": "notes"
+    }
+  ],
+  "word_arguments": {
+    "wave": [
+      "sine",
+      "triangle",
+      "square"
+    ]
+  },
+  "number_grammar": {
+    "pattern": "^-?\\d+(\\.\\d+)?$",
+    "tilde_prefix": "accepted and discarded; a rational whose decimal expansion does not terminate renders with a leading ~ elsewhere in the language",
+    "exponent_notation": false
+  },
+  "groups": [
+    "voice",
+    "notes"
+  ]
+}
