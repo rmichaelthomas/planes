@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Planes draws — the garden, a scene that lives</title>
+    <title>the garden — a scene that lives</title>
     <meta
       name="description"
       content="paint/garden.planes: a day and night cycle, weather, plants that grow, bees and fireflies, and ambient music in just intonation — all a pure function of (tick, seed). Click anything to ask where it came from. No build step; this page fetches and runs the real .planes source."
@@ -21,205 +21,356 @@
       step: this is a static file server, nothing more.
     -->
     <style>
-      :root { color-scheme: light dark; --line: #d8d8d8; --dim: #777; }
-      body {
-        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        max-width: 1040px; margin: 2rem auto; padding: 0 1rem;
+      /* The identity tokens, verbatim from the-living-garden.html. One
+         appearance: paper. No dark-mode block — a showcase that changes its
+         clothes with the viewer's OS is two designs neither of which was
+         drawn. */
+      :root {
+        --paper:#F7F2E9; --graphite:#211D19; --line:#D6C9B4; --clay:#A65A2E;
+        --slate:#4A5B68; --amber:#F59E0B; --blue:#3B82F6; --teal:#14B8A6; --violet:#8B5CF6;
+        --ink-60:rgba(33,29,25,.62); --ink-40:rgba(33,29,25,.40);
+        --display:"Red Hat Display",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+        --mono:"Martian Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
       }
-      h1 { font-size: 1.4rem; margin-bottom: 0.2rem; }
-      p.sub { color: var(--dim); margin-top: 0; }
-      textarea, pre {
-        font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-        width: 100%; box-sizing: border-box;
+
+      /* Self-hosted, from identity/fonts/. The footer promises no network
+         dependency beyond the static server, and a Google Fonts <link> would
+         make that sentence false. Both families are VARIABLE fonts — one file
+         each, a weight range on the wght axis, not one file per weight. */
+      @font-face {
+        font-family:"Red Hat Display"; font-style:normal; font-weight:700 900;
+        font-display:swap; src:url("identity/fonts/red-hat-display.woff2") format("woff2");
       }
-      textarea {
-        min-height: 12rem; padding: 0.75rem; border: 1px solid #ccc;
-        border-radius: 6px; resize: vertical;
+      @font-face {
+        font-family:"Martian Mono"; font-style:normal; font-weight:400 500;
+        font-display:swap; src:url("identity/fonts/martian-mono.woff2") format("woff2");
       }
-      input[type="number"] {
-        font-size: 14px; padding: 0.3rem 0.5rem; border-radius: 6px;
-        border: 1px solid #ccc; background: #fff; width: 7rem;
+
+      *{box-sizing:border-box}
+      body{
+        margin:0; padding:18px 14px 48px; background:var(--paper); color:var(--graphite);
+        font-family:var(--mono); font-size:12px; line-height:1.55; -webkit-font-smoothing:antialiased;
       }
-      input[type="range"] { width: 360px; vertical-align: middle; }
-      button {
-        margin: 0.4rem 0.4rem 0.4rem 0; padding: 0.45rem 1rem; font-size: 14px;
-        border: 0; border-radius: 6px; background: #2d6cdf; color: #fff; cursor: pointer;
+      .wrap{max-width:1040px;margin:0 auto}
+
+      /* ---------- header ---------- */
+      header{
+        display:flex; justify-content:space-between; align-items:flex-end; gap:14px;
+        flex-wrap:wrap; border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:16px;
       }
-      button:hover { background: #245ac0; }
-      button.secondary { background: #4a8a5c; }
-      button.secondary:hover { background: #3c7049; }
-      button.tertiary { background: #6b6b6b; }
-      button.tertiary:hover { background: #565656; }
-      button.stepper { padding: 0.45rem 0.7rem; }
-      button[aria-pressed="true"] { background: #1c1c1c; }
-      button:disabled { background: #9aa7b8; cursor: not-allowed; }
-      .hint { color: #888; font-size: 12px; }
-      .bar { display: flex; gap: 0.2rem; flex-wrap: wrap; align-items: center; }
-      .clock {
-        margin-left: auto; text-align: right; font: 600 17px/1.2 ui-monospace, Menlo, monospace;
+      .brand{display:flex; align-items:center; gap:13px}
+      /* The mark is CONSUMED from the generated asset, never redrawn. */
+      .brand img{width:44px; height:44px; display:block; flex:0 0 44px}
+      h1{font-family:var(--display); font-weight:900; font-size:25px; letter-spacing:-.02em; margin:0}
+      .sub{font-size:10.5px; color:var(--ink-60); margin-top:2px}
+      .clock{font-family:var(--display); font-weight:700; font-size:17px; letter-spacing:-.01em; text-align:right}
+      .clock small{
+        display:block; font-family:var(--mono); font-weight:400; font-size:10px;
+        color:var(--ink-60); letter-spacing:.04em;
       }
-      .clock small { display: block; font-weight: 400; font-size: 11px; color: var(--dim); }
-      .columns { display: flex; gap: 1.25rem; flex-wrap: wrap; align-items: flex-start; }
-      .col-canvas { flex: 0 0 auto; position: relative; }
-      .col-surface { flex: 1 1 260px; min-width: 260px; }
-      canvas {
-        display: block; background: #fff; border: 1px solid #ccc; border-radius: 6px;
-        max-width: 100%; cursor: crosshair;
+
+      /* ---------- controls ---------- */
+      .bar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px}
+      button{
+        font-family:var(--mono); font-size:11px; font-weight:500; padding:7px 13px;
+        border:1px solid var(--line); border-radius:3px; background:transparent;
+        color:var(--ink-60); cursor:pointer;
+        transition:background .12s, color .12s, border-color .12s;
       }
-      #garden-card {
-        position: absolute; max-width: 274px; z-index: 5; pointer-events: none;
-        background: #fffdf8; color: #1c1a17; border: 1px solid #1c1a17; border-radius: 4px;
-        padding: 0.6rem 0.7rem; box-shadow: 0 8px 26px rgba(0,0,0,.3); font-size: 12px;
+      button:hover{background:var(--line); color:var(--graphite)}
+      button[aria-pressed="true"]{background:var(--graphite); border-color:var(--graphite); color:var(--paper)}
+      button.accent{border-color:var(--clay); color:var(--clay)}
+      button.accent[aria-pressed="true"]{background:var(--clay); border-color:var(--clay); color:var(--paper)}
+      button:focus-visible, input:focus-visible{outline:2px solid var(--clay); outline-offset:2px}
+      button.quiet{font-size:10.5px; padding:5px 9px}
+      .seedin{
+        font-family:var(--mono); font-size:11px; font-weight:600; width:92px; padding:7px 8px;
+        border:1px solid var(--line); border-radius:3px; background:#fff; color:var(--graphite);
       }
-      #garden-card h4 { margin: 0 0 0.4rem; font-size: 13px; }
-      #garden-card .row { margin: 0 0 0.3rem; padding-left: 0.8rem; position: relative; }
-      #garden-card .row::before {
-        content: ""; position: absolute; left: 0; top: 0.45em; width: 5px; height: 5px;
-        border-radius: 50%; border: 1.5px solid #1c1a17;
+      .barlabel{font-size:10.5px; color:var(--ink-40); letter-spacing:.06em}
+      .spacer{flex:1 1 auto}
+
+      /* ---------- the canvas ---------- */
+      .frame{position:relative}
+      /* #0B1026 is the-living-garden.html's own canvas background, taken
+         verbatim from the layout authority — the one hex here outside §3.1's
+         token list, and the standing rule is that where this page and that
+         mockup disagree on palette the mockup wins. It is the night sky the
+         scene opens on, and it is what the canvas shows for the one frame
+         before the program's own sky lands on top of it. */
+      canvas{
+        display:block; width:100%; height:auto; border:1px solid var(--line);
+        border-radius:3px; background:#0B1026; cursor:pointer;
       }
-      #garden-card .row.origin::before { background: #4a5b68; border-color: #4a5b68; }
-      #garden-card .row span { color: #6a655e; }
-      #garden-card .bc {
-        color: #0f7d70; border-left: 2px solid #0f7d70; padding-left: 0.5rem;
-        margin: 0.4rem 0 0 0.8rem; font-size: 11.5px;
+      .canvas-foot{
+        display:flex; align-items:center; justify-content:space-between; gap:12px;
+        margin-top:10px; flex-wrap:wrap;
       }
-      #garden-card .tag {
-        display: inline-block; margin-top: 0.5rem; font-size: 10.5px; padding: 2px 6px;
-        border-radius: 3px; border: 1px solid #a65a2e; color: #a65a2e;
+      .scrub{display:flex; align-items:center; gap:8px; flex:1 1 auto; min-width:280px}
+      .scrub input[type="range"]{
+        flex:1 1 auto; max-width:420px; height:3px; -webkit-appearance:none; appearance:none;
+        background:var(--line); border-radius:2px; outline:none;
       }
-      #garden-card .note { color: #6d4ba6; }
-      pre#garden-surface {
-        background: #f6f7f9; padding: 0.75rem; border-radius: 6px;
-        min-height: 3rem; overflow-x: auto; white-space: pre-wrap;
-        max-height: 22rem; overflow-y: auto;
+      .scrub input[type="range"]::-webkit-slider-thumb{
+        -webkit-appearance:none; appearance:none; width:13px; height:13px; border-radius:50%;
+        background:var(--clay); cursor:pointer; border:0;
       }
-      pre#garden-output {
-        background: #f6f7f9; padding: 0.75rem; border-radius: 6px;
-        min-height: 2.5rem; overflow-x: auto; white-space: pre-wrap;
+      .scrub input[type="range"]::-moz-range-thumb{
+        width:13px; height:13px; border-radius:50%; background:var(--clay); cursor:pointer; border:0;
       }
-      pre#garden-output.error { color: #b00020; }
-      #garden-source-view {
-        background: #f6f7f9; padding: 0.5rem 0; border-radius: 6px;
-        max-height: 24rem; overflow: auto; margin: 0;
+      .scrublabel{font-size:10.5px; color:var(--ink-60); min-width:118px}
+      .hint{font-size:10.5px; color:var(--ink-40); margin-top:8px}
+
+      /* ---------- legend ---------- */
+      .legend{
+        display:flex; gap:20px; flex-wrap:wrap; margin-top:12px; padding:11px 13px;
+        border:1px solid var(--line); border-radius:3px; background:rgba(255,255,255,.5);
+        font-size:10.5px; color:var(--ink-60);
       }
-      #garden-source-view .ln {
-        display: block; padding: 0 0.75rem; white-space: pre;
+      .legend b{color:var(--graphite); font-weight:600}
+
+      /* ---------- the surface ---------- */
+      .surface{
+        margin-top:18px; border:1px solid var(--line); border-radius:3px;
+        background:rgba(255,255,255,.55); padding:12px 14px;
       }
-      #garden-source-view .ln.drew { cursor: pointer; }
-      #garden-source-view .ln.drew:hover { background: #ffe9a8; }
-      #garden-source-view .ln.lit { background: #ffe9a8; }
-      @media (prefers-color-scheme: dark) {
-        textarea, input[type="number"] { background: #1b1d22; border-color: #333; color: #e6e6e6; }
-        pre#garden-surface, pre#garden-output, #garden-source-view { background: #16181d; color: #e6e6e6; }
-        #garden-source-view .ln.drew:hover, #garden-source-view .ln.lit { background: #3a3320; }
-        canvas { background: #16181d; border-color: #333; }
-        p.sub, .hint { color: #999; }
+      .eyebrow{
+        font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+        color:var(--ink-40); margin-bottom:7px;
       }
-      footer { margin-top: 2rem; color: #888; font-size: 12px; }
-      code { background: rgba(128,128,128,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      .surface pre{margin:0; font-family:var(--mono); font-size:11px; line-height:1.7; white-space:pre-wrap}
+      .sfc-pure{color:var(--teal); font-weight:600}
+      .sfc-approx{color:var(--clay); font-weight:600}
+      .sfc-dim{color:var(--ink-40)}
+      .surface details{margin-top:10px}
+      .surface summary{
+        cursor:pointer; font-size:10.5px; color:var(--ink-60); list-style:none;
+        padding-top:9px; border-top:1px solid var(--line);
+      }
+      .surface summary::-webkit-details-marker{display:none}
+      .surface summary::before{content:"▸ "; color:var(--ink-40)}
+      .surface details[open] summary::before{content:"▾ "}
+      .surface details pre{
+        margin-top:9px; max-height:22rem; overflow:auto; color:var(--ink-60);
+        white-space:pre-wrap;
+      }
+
+      /* ---------- the why card ---------- */
+      /* pointer-events:auto, unlike the mockup's card, because this one can
+         be DISMISSED. A card with no way out is the defect the first build
+         shipped: it covered the picture, every click through it opened
+         another one, and the only escape was the tick stepper. */
+      #garden-card{
+        position:absolute; max-width:300px; background:var(--paper);
+        border:1px solid var(--graphite); border-radius:3px; padding:12px 13px;
+        box-shadow:0 8px 26px rgba(0,0,0,.28); z-index:5; font-size:11.5px;
+      }
+      #garden-card .head{
+        display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
+      }
+      #garden-card h4{
+        font-family:var(--display); font-weight:700; font-size:14px;
+        letter-spacing:-.01em; margin:0 0 3px;
+      }
+      #garden-card .close{
+        flex:0 0 auto; border:0; background:none; padding:0 0 0 6px; margin:-2px -2px 0 0;
+        font-size:15px; line-height:1; color:var(--ink-40); cursor:pointer;
+      }
+      #garden-card .close:hover{background:none; color:var(--graphite)}
+      #garden-card .where{font-size:10px; color:var(--ink-40); margin-bottom:10px}
+      .step{position:relative; padding:0 0 0 18px; margin-bottom:10px}
+      .step::before{
+        content:""; position:absolute; left:4px; top:7px; bottom:-10px; width:1px; background:var(--line);
+      }
+      .step:last-of-type::before{display:none}
+      .step .dot{
+        position:absolute; left:0; top:4px; width:9px; height:9px; border-radius:50%;
+        border:1.5px solid var(--graphite); background:var(--paper);
+      }
+      .step .line{font-size:11.5px; line-height:1.5}
+      .step .val{font-weight:600}
+      .step .src{color:var(--ink-60)}
+      .step .because{
+        display:block; margin-top:4px; font-size:10.5px; line-height:1.6;
+        color:var(--teal); border-left:2px solid var(--teal); padding-left:8px;
+      }
+      .step.shared .dot{border-color:var(--clay); background:var(--clay)}
+      .step.shared .val{color:var(--clay)}
+      .step.origin .dot{border-color:var(--slate); background:var(--slate)}
+      .divider{height:1px; background:var(--line); margin:13px 0}
+      .badge{
+        display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:500;
+        padding:4px 9px; border-radius:2px; border:1px solid var(--clay); color:var(--clay);
+      }
+      .badge.calm{border-color:var(--slate); color:var(--slate)}
+      .badge-note{font-size:10px; color:var(--ink-60); margin-top:6px; line-height:1.6}
+      .noteline{
+        background:rgba(166,90,46,.07); border:1px solid rgba(166,90,46,.28);
+        border-radius:3px; padding:10px 12px; margin-top:2px;
+      }
+      .noteline .k{
+        font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--clay);
+        display:block; margin-bottom:5px;
+      }
+      .closing{font-size:10px; color:var(--ink-40); margin-top:11px; line-height:1.6}
+
+      /* ---------- source ---------- */
+      .source{
+        margin-top:22px; border:1px solid var(--line); border-radius:3px;
+        background:#fff; overflow:hidden;
+      }
+      .source-head{
+        padding:9px 14px; border-bottom:1px solid var(--line);
+        display:flex; justify-content:space-between; align-items:center; gap:10px;
+        font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-40);
+      }
+      #garden-source-view{
+        margin:0; padding:10px 0; font-family:var(--mono); font-size:11px; line-height:1.85;
+        max-height:24rem; overflow:auto;
+      }
+      #garden-source-view .ln{display:block; padding:0 14px; white-space:pre}
+      #garden-source-view .ln.drew{cursor:pointer}
+      #garden-source-view .ln:hover, #garden-source-view .ln.hl{background:rgba(245,158,11,.22)}
+      .kw{color:var(--clay); font-weight:600}
+      .bc{color:var(--teal)}
+      .cm{color:var(--ink-40)}
+      .lit{color:var(--slate)}
+
+      /* ---------- output ---------- */
+      .output{margin-top:14px}
+      #garden-output{
+        margin:0; padding:10px 12px; border:1px solid var(--line); border-radius:3px;
+        background:rgba(255,255,255,.5); font-family:var(--mono); font-size:10.5px;
+        line-height:1.7; min-height:2.2rem; overflow-x:auto; white-space:pre-wrap;
+        color:var(--ink-60);
+      }
+      /* An error is clay's own darker register, not a system red — and it is
+         DERIVED from the token rather than being a fourteenth hex constant
+         that happens to look related to it. */
+      #garden-output.error{
+        color:color-mix(in oklab, var(--clay) 78%, var(--graphite));
+        border-color:rgba(166,90,46,.5); background:rgba(166,90,46,.06);
+      }
+
+      footer{
+        margin-top:26px; padding-top:14px; border-top:1px solid var(--line);
+        font-size:10.5px; color:var(--ink-40); line-height:1.75; max-width:640px;
+      }
+      footer p{margin:0 0 7px}
+      footer code{font-family:var(--mono); color:var(--ink-60)}
+      footer button.link{
+        border:0; background:none; padding:0; font-size:10.5px; color:var(--ink-60);
+        text-decoration:underline; cursor:pointer;
+      }
+      footer button.link:hover{background:none; color:var(--graphite)}
+      @media (prefers-reduced-motion:reduce){*{transition:none!important}}
     </style>
   </head>
   <body>
-    <h1>the garden</h1>
-    <p class="sub">
-      <code>paint/garden.planes</code> — a scene that lives. Sun and moon,
-      weather that drifts on its own noise, plants that grow and flower, bees
-      by day and fireflies by night, and ambient notes in exact ratios. The
-      whole thing is a pure function of two inputs: the tick and the
-      <code>seed</code>. Press play, or drag anywhere in the three days.
-      <strong>Click anything</strong> — the sun, a flower, a bee, the rain —
-      to ask where it came from.
-    </p>
+    <div class="wrap">
+      <header>
+        <div class="brand">
+          <img src="identity/planes-small-on-light.svg" alt="Planes" width="44" height="44" />
+          <div>
+            <h1>the garden</h1>
+            <div class="sub">click anything — the sun, a bee, a flower, the rain</div>
+          </div>
+        </div>
+        <div class="clock">
+          <span id="garden-clock">—</span>
+          <small id="garden-weather">—</small>
+        </div>
+      </header>
 
-    <div class="bar">
-      <button id="garden-play" type="button" aria-pressed="false">▶ play</button>
-      <button id="garden-speed-1" class="tertiary" type="button" aria-pressed="true">1×</button>
-      <button id="garden-speed-4" class="tertiary" type="button" aria-pressed="false">4×</button>
-      <button id="garden-speed-16" class="tertiary" type="button" aria-pressed="false">16×</button>
-      <button id="garden-sound" class="tertiary" type="button" aria-pressed="false">♪ sound off</button>
-      <div class="clock">
-        <span id="garden-clock">—</span>
-        <small id="garden-weather">—</small>
+      <div class="bar">
+        <button id="garden-play" class="accent" type="button" aria-pressed="false">▶ play</button>
+        <button id="garden-fast" type="button" aria-pressed="false">fast-forward</button>
+        <button id="garden-sound" class="accent" type="button" aria-pressed="false">♪ sound off</button>
+        <span class="barlabel">seed</span>
+        <input class="seedin" id="garden-seed" type="number" value="481027" step="1" />
+        <button id="garden-reseed" type="button">new seed</button>
+        <span class="spacer"></span>
+        <button id="garden-reset" class="quiet" type="button">Reset ⟲</button>
       </div>
-    </div>
 
-    <div>
-      <label for="garden-day" class="hint">tick:</label>
-      <button id="garden-day-back" class="tertiary stepper" type="button">◀</button>
-      <input type="range" id="garden-day" min="0" max="0" value="0" />
-      <button id="garden-day-forward" class="tertiary stepper" type="button">▶</button>
-      <span class="hint" id="garden-day-label">tick 0</span>
-    </div>
-    <div>
-      <label for="garden-seed" class="hint">seed:</label>
-      <input type="number" id="garden-seed" value="481027" step="1" />
-      <span class="hint">a fixed number, not randomness — the same seed always grows the same garden</span>
-    </div>
-    <div>
-      <button id="garden-reset" class="tertiary">Reset ⟲</button>
-      <button id="garden-reload-modules" class="tertiary" type="button">Reload modules ⟳</button>
-      <button id="garden-save-svg" class="secondary">Save SVG ⤓</button>
-      <button id="garden-save-png" class="secondary">Save PNG ⤓</button>
-      <span class="hint">both save the frame on screen, not a re-run</span>
-    </div>
-
-    <div class="columns">
-      <div class="col-canvas">
+      <div class="frame">
         <canvas
           id="garden-canvas"
-          width="480"
-          height="360"
+          width="1440"
+          height="1080"
           role="img"
           aria-label="the painted garden at the current tick and seed"
         ></canvas>
         <div id="garden-card" hidden></div>
       </div>
-      <div class="col-surface">
-        <div class="hint">effect surface — computed, not run. Asking a question does not change it:</div>
-        <pre id="garden-surface">(loading…)</pre>
+
+      <div class="canvas-foot">
+        <div class="scrub">
+          <button id="garden-day-back" class="quiet" type="button" aria-label="one tick back">◀</button>
+          <input type="range" id="garden-day" min="0" max="0" value="0" aria-label="tick" />
+          <button id="garden-day-forward" class="quiet" type="button" aria-label="one tick forward">▶</button>
+          <span class="scrublabel" id="garden-day-label">tick 0</span>
+        </div>
+        <div>
+          <button id="garden-save-svg" class="quiet" type="button">Save SVG ⤓</button>
+          <button id="garden-save-png" class="quiet" type="button">Save PNG ⤓</button>
+        </div>
       </div>
+      <div class="hint">same seed, same garden — on any machine, forever</div>
+
+      <div class="legend" id="garden-legend">
+        <span><b>one day</b> ≈ 25 seconds</span>
+        <span><b>weather</b> drifts on its own noise</span>
+        <span><b>bees</b> by day, <b>fireflies</b> by night</span>
+        <span><b>flowers</b> open with the sun</span>
+        <span>every note is an exact ratio</span>
+      </div>
+
+      <div class="surface">
+        <div class="eyebrow">effect surface — computed, not run</div>
+        <pre id="garden-surface-summary">(loading…)</pre>
+        <details>
+          <summary>show the full surface</summary>
+          <pre id="garden-surface">(loading…)</pre>
+        </details>
+      </div>
+
+      <div class="source">
+        <div class="source-head">
+          <span>garden.planes</span>
+          <span id="garden-source-meta">—</span>
+        </div>
+        <pre id="garden-source-view">(loading…)</pre>
+      </div>
+
+      <div class="output">
+        <pre id="garden-output">(no output yet)</pre>
+      </div>
+
+      <footer>
+        <p>
+          Serving: this page fetches <code>paint/garden.planes</code> and imports
+          <code>js/*.mjs</code> as ES modules, so it needs a static server
+          (<code>python3 -m http.server 8000</code>) and no network beyond it.
+        </p>
+        <p>
+          <strong>Purity.</strong> The picture and the notes at a given (tick, seed) are always the
+          same picture and the same notes — play forward to a tick or drag straight to it and the
+          frame is identical. <strong>Asking performs nothing:</strong> a question reads the
+          derivation the run already produced, and the surface above is computed without running a
+          line.
+        </p>
+        <p>
+          <strong>Saving.</strong> SVG and PNG capture the frame on screen, not a fresh run. Sound
+          fires only while playing or when you click a mark — never while scrubbing, never on export.
+        </p>
+        <p>
+          After an update, the <code>.planes</code> fetch is never served stale but the
+          <code>.mjs</code> graph can be — if the output pane says so,
+          <button class="link" id="garden-reload-modules" type="button">reload modules</button>.
+        </p>
+      </footer>
     </div>
-
-    <p class="hint" style="margin-top:1rem;">
-      source — a line that drew something is clickable, and hovering it lights up every mark it drew:
-    </p>
-    <p class="hint">
-      base: <code id="garden-base">paint/garden.planes</code> ·
-      modules: <span id="garden-modules">(none loaded)</span>
-    </p>
-    <pre id="garden-source-view">(loading…)</pre>
-
-    <p class="hint">output — lines the program showed that were neither drawing nor sound, or an error:</p>
-    <pre id="garden-output">(no output yet)</pre>
-
-    <footer>
-      Serving: this page fetches <code>paint/garden.planes</code> and imports
-      <code>js/*.mjs</code> as ES modules — both are refused from a
-      <code>file://</code> origin. Serve the repo root
-      (<code>python3 -m http.server 8000</code>) and open
-      <code>http://localhost:8000/garden.html</code>. No bundler, no
-      transpiler, no network dependency beyond that server.
-      <br /><br />
-      <strong>Purity.</strong> The picture and the notes at a given (tick,
-      seed) pair are always the same picture and the same notes — play forward
-      to a tick or drag straight to it and the frame is identical, because
-      every run starts from <code>state: nothing</code> and reads nothing else.
-      <strong>Saving.</strong> SVG and PNG capture the frame shown right now,
-      not a fresh run — the same "what's on screen" rule
-      <code>paint.html</code>'s exporters follow. <strong>Sound</strong> fires
-      only while playing: never while scrubbing, and never on the export path.
-      <br /><br />
-      <strong>Asking performs nothing.</strong> A question reads the
-      derivation the run already produced. The effect surface beside the canvas
-      is computed from the source without running it, and does not change when
-      you click.
-      <br /><br />
-      <strong>After an update.</strong> The <code>.planes</code> fetch carries
-      a per-visit token and is never served stale. The <code>.mjs</code> module
-      graph cannot: if a browser ever serves a mix of old and new modules, the
-      output pane says so and names the fix — in Safari, Develop → Empty
-      Caches, because a plain reload keeps ES modules.
-    </footer>
 
     <script type="module">
       import { paint } from "./js/paint/painter.mjs";
@@ -232,10 +383,11 @@
       import { walk as walkDrawing } from "./js/paint/stream.mjs";
       import { markSink } from "./js/paint/marks.mjs";
       import { hitTest, marksForLine, outlineOf } from "./js/paint/hit.mjs";
-      import { card, expand } from "./js/paint/why.mjs";
+      import { card } from "./js/paint/why.mjs";
       import { createAudioPlayer } from "./js/sound/audio.mjs";
-      import { schedule as soundSchedule } from "./js/sound/stream.mjs";
+      import { schedule as soundSchedule, BASE_HZ } from "./js/sound/stream.mjs";
       import { staleModuleWarning } from "./js/browser_main.mjs";
+      import vocabulary from "./grammar/vocabulary.json" with { type: "json" };
 
       // paint/garden.planes's own `day-length`, and how many of them the
       // scrubber spans. Three days is what gives the weather noise room to
@@ -245,10 +397,32 @@
       const TICK_SPAN = DAY_LENGTH * DAYS;
 
       // How fast the day runs at 1x. Four ticks a second is one day in
-      // twenty-five seconds, so 16x is a day in a little over a second and a
-      // half of scene time — bounded in practice by how fast a tick can be
-      // computed, which is the honest limit and not a hidden one.
+      // twenty-five seconds — which is what the legend says, rather than the
+      // mockup's hundred: the mockup was drawn against a scene that did not
+      // exist yet, and a legend that flatters a mockup is a legend that lies.
       const TICKS_PER_SECOND = 4;
+      const FAST_SPEED = 16;
+
+      // THE BACKING STORE IS THREE TIMES THE PROGRAM'S COORDINATE SPACE.
+      // `paint/garden.planes` draws in 480x360 and is untouched; the canvas
+      // holds 1440x1080 device pixels so a full-column picture is not a
+      // postcard stretched to fit. This is the SAME mechanism the PNG export
+      // has always used (js/paint/export.mjs's pngDataUrl: size the backing
+      // store, then hand the painter `scale` alongside the program's own
+      // width and height) — reused, not reimplemented. Marks, hit-testing and
+      // highlights all stay in PROGRAM coordinates; only the rasteriser knows
+      // about the multiplier.
+      const CANVAS_SCALE = 3;
+      const DIMENSIONS = { width: 480, height: 360, background: "#ffffff", scale: CANVAS_SCALE };
+
+      // The five just intervals the scene uses, named. An unlisted ratio is
+      // shown as its ratio and NOT named — inventing a name for 7/4 because a
+      // table had five rows is the kind of confident wrongness this page is
+      // supposed to be an argument against.
+      const INTERVAL_NAMES = new Map([
+        ["1/1", "unison"], ["9/8", "whole tone"], ["5/4", "major third"],
+        ["3/2", "fifth"], ["5/3", "major sixth"],
+      ]);
 
       const $ = (id) => document.getElementById(id);
       const dayEl = $("garden-day");
@@ -257,15 +431,16 @@
       const cardEl = $("garden-card");
       const outputEl = $("garden-output");
       const surfaceEl = $("garden-surface");
-      const modulesEl = $("garden-modules");
+      const surfaceSummaryEl = $("garden-surface-summary");
       const sourceViewEl = $("garden-source-view");
+      const sourceMetaEl = $("garden-source-meta");
       const clockEl = $("garden-clock");
       const weatherEl = $("garden-weather");
       const playBtn = $("garden-play");
+      const fastBtn = $("garden-fast");
       const soundBtn = $("garden-sound");
       const ctx = canvas.getContext("2d");
 
-      const DIMENSIONS = { width: canvas.width, height: canvas.height, background: "#ffffff" };
       const LOAD_TOKEN = String(Date.now());
 
       let session = createProgramSession({ file: "paint/garden.planes", cacheBust: LOAD_TOKEN });
@@ -280,6 +455,9 @@
       let soundOn = false;
       let player = null;
       let litLine = -1;
+
+      const esc = (s) =>
+        String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
       function showOutput(lines, isError) {
         outputEl.textContent = lines.length ? lines.join("\n") : "(no output)";
@@ -311,6 +489,29 @@
 
       // ---- the source view --------------------------------------------------
 
+      // The tint reads the vocabulary the language actually publishes rather
+      // than restating a keyword list here — grammar/vocabulary.json is the
+      // same file browser_main.mjs parses with, so the two cannot drift.
+      const KEYWORDS = new Set(vocabulary.keywords.map((k) => k.word));
+      const BUILTINS = new Set(vocabulary.builtins.map((b) => b.name));
+
+      function tint(text) {
+        const comment = text.indexOf("#");
+        const code = comment >= 0 ? text.slice(0, comment) : text;
+        const rest = comment >= 0 ? text.slice(comment) : "";
+        const html = code.replace(
+          /"(?:\\.|[^"\\])*"|\d+(?:\.\d+)?|[A-Za-z_][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)*/g,
+          (token) => {
+            if (token.startsWith('"')) return `<span class="bc">${esc(token)}</span>`;
+            if (/^\d/.test(token)) return `<span class="lit">${esc(token)}</span>`;
+            if (KEYWORDS.has(token) || BUILTINS.has(token) || token === "because")
+              return `<span class="kw">${esc(token)}</span>`;
+            return esc(token);
+          },
+        );
+        return html + (rest ? `<span class="cm">${esc(rest)}</span>` : "");
+      }
+
       function renderSourceView(src) {
         sourceLines = src.split("\n");
         sourceViewEl.textContent = "";
@@ -318,9 +519,10 @@
           const el = document.createElement("span");
           el.className = "ln";
           el.dataset.line = String(i + 1); // the interpreter counts from 1
-          el.textContent = `${String(i + 1).padStart(4)}  ${text}`;
+          el.innerHTML = `<span class="cm">${String(i + 1).padStart(4)}</span>  ${tint(text)}`;
           sourceViewEl.appendChild(el);
         });
+        sourceMetaEl.textContent = `${sourceLines.length} lines`;
       }
 
       // The map read backwards: from a source line to every mark it drew.
@@ -336,11 +538,33 @@
         return found;
       }
 
+      function markLineInSource(sourceLine) {
+        for (const el of sourceViewEl.children) {
+          el.classList.toggle("hl", Number(el.dataset.line) === sourceLine);
+        }
+      }
+
+      // TWO DIFFERENT THINGS, AND THE FIRST BUILD RAN THEM TOGETHER.
+      //
+      // Hovering a source line asks "what did this line draw?", and the
+      // answer is an outline around every mark it made — that is the map read
+      // backwards, and it is the point of the source pane.
+      //
+      // Clicking a mark asks the opposite question, and does NOT want the
+      // answer drawn on the picture. The first build routed both through one
+      // function, so clicking anything painted amber outlines over the scene —
+      // and clicking the sky, whose one line covers half the canvas, drew a
+      // rule straight across it. A click marks the line; it does not deface
+      // the frame.
       function highlightSourceLine(sourceLine) {
         litLine = sourceLine;
-        for (const el of sourceViewEl.children) {
-          el.classList.toggle("lit", Number(el.dataset.line) === sourceLine);
-        }
+        markLineInSource(sourceLine);
+        repaintFrame();
+      }
+
+      function markSourceLine(sourceLine) {
+        litLine = -1;
+        markLineInSource(sourceLine);
         repaintFrame();
       }
 
@@ -351,8 +575,10 @@
         const indices = markIndicesForSourceLine(litLine);
         if (!indices.length) return;
         ctx.save();
-        ctx.resetTransform();
-        ctx.strokeStyle = "#ffcc33";
+        // Program coordinates, same as the marks carry — the transform does
+        // the multiplying, so no outline point is ever scaled by hand.
+        ctx.setTransform(CANVAS_SCALE, 0, 0, CANVAS_SCALE, 0, 0);
+        ctx.strokeStyle = "#F59E0B";
         ctx.lineWidth = 1.5;
         for (const i of indices) {
           const pts = outlineOf(lastMarks[i]);
@@ -378,9 +604,6 @@
       async function runAt(tick, seed, { playing = false } = {}) {
         const result = await session.runAt(tick, seed);
         if (!result) return; // superseded by a newer session
-        modulesEl.textContent = session.loadedModules().length
-          ? session.loadedModules().map((m) => m.name).join(", ")
-          : "(none loaded)";
         if (result.error) {
           showOutput([...result.lines, `✗ ${result.error.tag}: ${result.error.message}`], true);
           return;
@@ -450,14 +673,11 @@
 
       playBtn.addEventListener("click", () => setPlaying(!loop.isRunning()));
 
-      for (const [id, value] of [["garden-speed-1", 1], ["garden-speed-4", 4], ["garden-speed-16", 16]]) {
-        $(id).addEventListener("click", () => {
-          speed = value;
-          for (const other of ["garden-speed-1", "garden-speed-4", "garden-speed-16"]) {
-            $(other).setAttribute("aria-pressed", String(other === id));
-          }
-        });
-      }
+      fastBtn.addEventListener("click", () => {
+        const fast = speed === 1;
+        speed = fast ? FAST_SPEED : 1;
+        fastBtn.setAttribute("aria-pressed", String(fast));
+      });
 
       soundBtn.addEventListener("click", () => {
         soundOn = !soundOn;
@@ -465,13 +685,21 @@
         soundBtn.textContent = soundOn ? "♪ sound on" : "♪ sound off";
         // A browser will not start an AudioContext outside a gesture, so it
         // is constructed here, in the click that asked for it.
-        if (soundOn) {
-          if (!player) player = createAudioPlayer();
-          player.unlock();
-        }
+        if (soundOn) ensurePlayer().unlock();
       });
 
+      function ensurePlayer() {
+        if (!player) player = createAudioPlayer();
+        return player;
+      }
+
       seedEl.addEventListener("change", () => {
+        hideCard();
+        runAt(scrubber.getTick(), currentSeed());
+      });
+
+      $("garden-reseed").addEventListener("click", () => {
+        seedEl.value = String(Math.floor(Math.random() * 900000) + 100000);
         hideCard();
         runAt(scrubber.getTick(), currentSeed());
       });
@@ -481,107 +709,447 @@
       function hideCard() {
         cardEl.hidden = true;
         cardEl.textContent = "";
+        markSourceLine(-1);
       }
 
-      const esc = (s) =>
-        String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      // WHAT A MARK AND A NOTE ACTUALLY SHARE. `paint/garden.planes`'s own
+      // comment above `sing-bee` says the note's chain and the height's chain
+      // "converge on one node". They do not, and this was measured rather than
+      // assumed: the note's derivation reaches 228 nodes, of which only ten
+      // are shared with ANY mark, and the most specific of those is
+      // `bee-cycle` — a timing constant. `g` is not among them.
+      //
+      // The reason is line 685: `let g = plant-g of (bee-target of i, leg)`
+      // CALLS plant-g again. A second call builds a second derivation with the
+      // same shape and the same value, not the same object. So what the bee
+      // and the flower share is the NUMBER, arrived at twice — which is still
+      // the whole point, and is what the card says, because it is what is
+      // true. Joining on node identity would find nothing; joining on the
+      // source line would find nothing either (the note is emitted from the
+      // bee's code, not the flower's).
+      function namedValues(node, want, found = new Map(), seen = new Set()) {
+        if (!node || seen.has(node)) return found;
+        seen.add(node);
+        if (node.kind === "name" && want.has(node.label)) {
+          const v = node.value;
+          const text = v && typeof v === "object" && typeof v.text === "function" ? v.text() : String(v);
+          if (!found.has(text)) found.set(text, node.label);
+        }
+        for (const input of Array.isArray(node.inputs) ? node.inputs : []) {
+          namedValues(input, want, found, seen);
+        }
+        return found;
+      }
 
-      // The one note this mark's line plays, if its source line also emitted
-      // one this tick — the convergence §10 of the build is about: a bee's
-      // note and its flower's height come from the same `g`.
-      function noteForSourceLine(sourceLine) {
+      const SHARED_NAMES = new Set(["g"]);
+
+      // ---- WHAT IS CLICKABLE ------------------------------------------------
+      //
+      // NOT EVERYTHING. The first build made every mark answerable, which
+      // sounds generous and reads as noise: clicking the sky returned
+      // `rect of 0, 0, canvas-width, sky-split, 0` and outlined the entire
+      // upper half of the picture. `the-living-garden.html` answers six
+      // subjects and no more — the sun or moon, a flower, a bee, a firefly,
+      // the rain, the tree — and that list is the right one, because those
+      // are the things a reader can point at and name.
+      //
+      // A mark's subject is read off the program's own structure: the
+      // enclosing `to <name>` of the line that drew it. That is a fact about
+      // the source, not a name this page invented — which is the distinction
+      // that kept the heading as a raw source line last build, and the
+      // distinction that lets it be "this flower" now.
+      const SUBJECTS = new Map([
+        ["plant-petal", "flower"],
+        ["draw-plant", "flower"],
+        ["tree-branch", "tree"],
+        ["draw-bee", "bee"],
+        ["draw-firefly", "firefly"],
+        ["draw-rain", "rain"],
+        ["sky-body", "sky-body"],
+      ]);
+
+      function definitionAt(sourceLine) {
+        for (let i = sourceLine - 1; i >= 0; i--) {
+          const m = /^to ([a-z][a-z0-9-]*)/.exec(sourceLines[i] ?? "");
+          if (m) return m[1];
+        }
+        return null;
+      }
+
+      function subjectOf(mark, sourceLine) {
+        const kind = SUBJECTS.get(definitionAt(sourceLine));
+        if (!kind) return null;
+        // `draw-plant` draws the stem AND the flower's two circles. Only the
+        // flower is the flower — Rob's rule, and the one that makes a click
+        // land where a reader was aiming. The leaves are `plant-leaf`, a
+        // different definition, and are not clickable at all.
+        if (kind === "flower" && mark.kind !== "circle" && mark.kind !== "ellipse") return null;
+        return kind;
+      }
+
+      function subjectTitle(kind, tick) {
+        if (kind !== "sky-body") {
+          return { flower: "this flower", tree: "the tree", bee: "this bee",
+                   firefly: "this firefly", rain: "the rain" }[kind];
+        }
+        // Which body is up is the same phase the clock reads, not a second
+        // opinion: day runs from a quarter past midnight to three quarters.
+        const phase = (tick % DAY_LENGTH) / DAY_LENGTH;
+        return phase >= 0.25 && phase < 0.75 ? "the sun" : "the moon";
+      }
+
+      // The marks a click may land on, and their indices in the real array.
+      function clickableMarks() {
+        const list = [];
+        const indices = [];
+        lastMarks.forEach((mark, i) => {
+          const entry = lastTrace[mark.line];
+          if (!entry || !subjectOf(mark, entry[1])) return;
+          list.push(mark);
+          indices.push(i);
+        });
+        return { list, indices };
+      }
+
+      // ---- THE FLOWER'S NOTE ------------------------------------------------
+      //
+      // `paint/garden.planes` emits a note only when a bee LANDS — 25 ticks
+      // out of 300. So "click a flower and hear it" cannot be answered by
+      // waiting for the program to play one; at nine ticks in ten there is
+      // nothing to find, which is exactly what the first build did and why it
+      // was silent.
+      //
+      // The program's rule is four lines (`pentatonic-n`/`pentatonic-d` at
+      // 633 and 648, `k = whole of (g * 5)` at 686, octave 1 at 687), and it
+      // is RESTATED here rather than re-derived, because a page cannot call
+      // into a program's functions. A restatement that drifts is a page that
+      // lies, so it does not go unchecked: js/test/garden_card.test.mjs runs
+      // every bee-landing tick in the scrubber's span and asserts this table
+      // reproduces the ratio the program actually emitted. If the scale ever
+      // changes, that suite goes red before anyone hears a wrong note.
+      // ONE COPY, READ BY THE TEST. The suite parses these two literals out
+      // of this file rather than keeping its own, so there is no second table
+      // to drift from the first.
+      const PENTATONIC = [[1, 1], [9, 8], [5, 4], [3, 2], [5, 3]];
+      const FLOWER_OCTAVE = 1;
+
+      function flowerNote(g) {
+        // `whole of` ROUNDS — half away from zero (js/planes_num.mjs's
+        // roundTo) — it does not truncate, whatever interp.mjs's own error
+        // prose for a bad argument says. `whole of 3.54` is 4, so a flower
+        // with g 0.708994 plays 5/3 and not 3/2. This suite caught that on
+        // its first run, which is the entire argument for having it.
+        const k = Math.max(0, Math.min(PENTATONIC.length - 1, Math.round(g * 5)));
+        const [numerator, denominator] = PENTATONIC[k];
+        return {
+          numerator, denominator, octave: FLOWER_OCTAVE, at: 0, lasts: 1.6,
+          wave: "sine", gain: 0.06,
+          frequency: BASE_HZ * Math.pow(2, FLOWER_OCTAVE) * (numerator / denominator),
+        };
+      }
+
+      // Did a bee actually play this flower's note on THIS tick? Rare (25
+      // ticks in 300) and worth saying when it happens, because then the
+      // number really was read twice in one frame.
+      function beePlayedThisTick(g) {
         const notes = soundSchedule(lastLines).notes;
-        if (!notes.length) return null;
+        if (!notes.length) return false;
         const soundIndices = [];
         lastLines.forEach((l, i) => {
           if (l.startsWith("sound note ")) soundIndices.push(i);
         });
         for (let i = 0; i < soundIndices.length && i < notes.length; i++) {
-          if (lastTrace[soundIndices[i]] && lastTrace[soundIndices[i]][1] === sourceLine) return notes[i];
+          const entry = lastTrace[soundIndices[i]];
+          if (entry && namedValues(entry[0], SHARED_NAMES).has(g)) return true;
         }
-        return notes[0];
+        return false;
       }
+
+      // ---- WHAT THE CARD SAYS -----------------------------------------------
+      //
+      // NAMES, NOT COORDINATES. `card().rows` is one row per number in the
+      // drawing command, which for `circle of p.tip-x, p.tip-y, (8 + p.g *
+      // 6.4)` reads "~186.931231836987 from .tip-x" — true, and useless to
+      // anyone who is not debugging the renderer. What a reader wants is the
+      // shape the original mockup had: a few NAMED values, each with the
+      // expression that produced it.
+      //
+      // Both halves are read, not invented. The names and their values come
+      // off the derivation graph, nearest first. The expression comes out of
+      // the PROGRAM'S OWN TEXT — the line that binds the name, inside the
+      // definition that drew the mark where there is one — so the card shows
+      // `(24 + g * 96) * grow`, which is what the author wrote, rather than
+      // `*`, which is all the derivation node's label carries.
+      // The tick and the seed end a chain; they are the origin row, not a step.
+      const INPUT_NAMES = new Set(["tick", "seed", "keys", "pointer", "state"]);
+
+      // A value a reader can read. `why.mjs`'s own valueText rounds for the
+      // same reason: `plant-x of i` is exact to fifty digits, and fifty
+      // digits in a card is not more truthful, it is unreadable.
+      function readable(value) {
+        if (value === null || value === undefined) return "nothing";
+        if (typeof value === "boolean") return value ? "true" : "false";
+        if (typeof value === "object" && typeof value.text === "function") {
+          const text = value.text();
+          const n = Number(text.replace(/^~/, ""));
+          if (Number.isFinite(n) && /\.\d{5,}/.test(text)) {
+            return `${text.startsWith("~") ? "~" : ""}${Math.round(n * 1000) / 1000}`;
+          }
+          return text;
+        }
+        if (typeof value === "number") {
+          return Number.isInteger(value) ? String(value) : String(Math.round(value * 1000) / 1000);
+        }
+        if (typeof value === "string") return value;
+        return null; // a record or a list is not a step a reader wants
+      }
+
+      function namedNodes(node) {
+        const found = [];
+        const queue = [node];
+        const walked = new Set();
+        while (queue.length) {
+          const current = queue.shift();
+          if (!current || walked.has(current)) continue;
+          walked.add(current);
+          if (current.kind === "name" && !INPUT_NAMES.has(current.label)) {
+            const text = readable(current.value);
+            if (text !== null && !found.some((f) => f.name === current.label)) {
+              found.push({ name: current.label, value: text });
+            }
+          }
+          for (const input of Array.isArray(current.inputs) ? current.inputs : []) {
+            queue.push(input);
+          }
+        }
+        return found;
+      }
+
+      // The right-hand side of the line that binds `name`.
+      //
+      // ONLY WHEN IT IS UNAMBIGUOUS. `y` is bound in `draw-rain` and again as
+      // a parameter elsewhere, and the first version of this took the first
+      // match in the file — so a flower's card explained its y with the
+      // RAIN's expression. A binding counts if it is inside the definition
+      // that drew the mark, or if the whole program binds that name exactly
+      // once. Otherwise the row shows the value and no expression, because a
+      // confident wrong answer is the one thing this page must never give.
+      function bindingOf(name, definition) {
+        const pattern = new RegExp(
+          `^\\s*(?:let\\s+)?${name.replace(/-/g, "\\-")}\\s*=\\s*(.+?)(?:\\s+because\\s.*)?$`,
+        );
+        const all = [];
+        let inScope = null;
+        let current = null;
+        for (const text of sourceLines) {
+          const def = /^to ([a-z][a-z0-9-]*)/.exec(text);
+          if (def) current = def[1];
+          const m = pattern.exec(text);
+          if (!m) continue;
+          all.push(m[1].trim());
+          if (inScope === null && current === definition) inScope = m[1].trim();
+        }
+        if (inScope) return inScope;
+        return all.length === 1 ? all[0] : null;
+      }
+
+      // One note, now, through the real player and the real stream walk — a
+      // four-line stream in the protocol the program itself emits, so nothing
+      // here is a second audio path.
+      function playOneNote(note) {
+        const lines = [
+          "sound protocol 1",
+          `sound wave ${note.wave}`,
+          `sound gain ${note.gain}`,
+          `sound note ${note.numerator} ${note.denominator} ${note.octave} 0 ${note.lasts}`,
+        ];
+        const { errors } = ensurePlayer().play(lines);
+        if (errors.length) showOutput(errors.map((e) => `✗ ${e.tag}: ${e.message}`), true);
+      }
+
+      function intervalText(note) {
+        const ratio = `${note.numerator}/${note.denominator}`;
+        const name = INTERVAL_NAMES.get(ratio);
+        const octave =
+          note.octave === 0 ? "" : ` × 2<sup>${note.octave}</sup>`;
+        return name
+          ? `from base (${BASE_HZ})${octave} × ${name} (${ratio})`
+          : `from base (${BASE_HZ})${octave} × ${ratio}`;
+      }
+
+      // How many named steps a card shows before it stops. Four is the
+      // original mockup's count, and the point at which a card stops reading
+      // like an answer and starts reading like a stack trace.
+      const MAX_STEPS = 4;
 
       function renderCard(index, x, y) {
         const mark = lastMarks[index];
         const entry = lastTrace[mark.line];
         if (!entry) return;
         const [node, sourceLine] = entry;
+        const kind = subjectOf(mark, sourceLine);
+        if (!kind) return;
+        const definition = definitionAt(sourceLine);
         const c = card(node, {
           annotations: lastAnnotations,
           line: sourceLine,
           sourceText: sourceLines[sourceLine - 1] ?? "",
         });
-        const deeper = expand(node, { annotations: lastAnnotations });
-        const note = noteForSourceLine(sourceLine);
 
-        const rows = c.rows.length
-          ? c.rows
-              .map(
-                (row) =>
-                  `<div class="row"><b>${esc(row.value)}</b> <span>from ${esc(
-                    row.step ? row.step.label : "a value",
-                  )}</span></div>`,
-              )
-              .join("")
-          : `<div class="row"><b>${esc(c.value)}</b> <span>from ${esc(
-              c.step ? c.step.label : "a value",
-            )}</span></div>`;
+        const step = (value, src, cls = "", because = "") =>
+          `<div class="step ${cls}"><span class="dot"></span><div class="line">` +
+          `<span class="val">${esc(value)}</span> <span class="src">${src}</span>` +
+          (because ? `<span class="because">“${esc(because)}”</span>` : "") +
+          `</div></div>`;
 
-        const becauseHtml = c.because
-          .map((b) => `<div class="bc">${esc(b.name)} — “${esc(b.text)}”</div>`)
+        // WHICH NAMES EARN A ROW. Walking the chain nearest-first returns the
+        // drawing command's own locals — `r`, `x`, `y`, `p` — which is what
+        // the renderer needed and not what a reader asked. The names worth
+        // showing are the ones the AUTHOR marked worth showing: a `because`
+        // is the program saying "this value matters, and here is why". Those
+        // come first, then `g` (a flower's whole identity, and the number its
+        // note is picked from), then whatever else the chain names, up to the
+        // mockup's four.
+        const all = namedNodes(node).filter((n) => {
+          // A name bound to a bare literal explains nothing: `day-length 100
+          // from 100` is a row that costs a line and answers no question.
+          const binding = bindingOf(n.name, definition);
+          return binding !== n.value;
+        });
+        const g = all.find((n) => n.name === "g");
+        const annotated = all.filter((n) => lastAnnotations[n.name] !== undefined);
+        // `g` KEEPS ITS SLOT. It is the flower's whole identity — its height
+        // and its note both come from it, which is the one thing this card
+        // exists to show — and four annotated names would otherwise crowd it
+        // out of its own card.
+        const chosen = g ? [g] : [];
+        for (const candidate of [...annotated, ...all]) {
+          if (chosen.length >= MAX_STEPS) break;
+          if (!chosen.some((c) => c.name === candidate.name)) chosen.push(candidate);
+        }
+        // Nearest-first for reading, with `g` wherever the chain put it.
+        chosen.sort((a, b) => all.indexOf(a) - all.indexOf(b));
+        const rows = chosen
+          .map((n) => {
+            const binding = bindingOf(n.name, definition);
+            const shared = kind === "flower" && n.name === "g" ? "shared" : "";
+            return step(
+              `${n.name} ${n.value}`,
+              binding ? `from ${esc(binding)}` : "",
+              shared,
+              lastAnnotations[n.name] ?? "",
+            );
+          })
           .join("");
 
-        const deeperHtml = deeper.length
-          ? `<div class="row"><span>one step further: ${deeper
-              .map((d) => esc(d.value))
-              .join(", ")}</span></div>`
-          : "";
+        // A flower's note is a pure function of its own `g`, whether or not a
+        // bee happened to land on this tick.
+        const note = kind === "flower" && g ? flowerNote(Number(g.value)) : null;
+        const alsoPlayed = note ? beePlayedThisTick(g.value) : false;
 
         const noteHtml = note
-          ? `<div class="row note"><b>${note.numerator}/${note.denominator}</b> <span>its note — ${
-              note.numerator === note.denominator ? "the base" : "an exact ratio"
-            }, ${Math.round(note.frequency * 10) / 10} Hz</span></div>`
+          ? `<div class="divider"></div><div class="noteline">` +
+            `<span class="k">${alsoPlayed ? "the note you just heard" : "this flower's note"}</span>` +
+            `<div class="line"><span class="val">${Math.round(note.frequency * 10) / 10} Hz</span> ` +
+            `<span class="src">${intervalText(note)}</span></div>` +
+            `<div class="badge-note">The same <b style="color:var(--clay)">g ${esc(g.value)}</b> ` +
+            `set this flower's height and picked its note.` +
+            (alsoPlayed
+              ? " A bee reached it on this tick, so the program played it too."
+              : " A bee plays it when it lands — you can ask any time.") +
+            `</div></div>`
           : "";
 
-        // The title is the SOURCE LINE ITSELF, trimmed: a reader who clicks a
-        // petal wants to know which line drew it, and `ellipse of px, py, ...`
-        // says that better than any name this page could invent for it.
-        const heading = (sourceLines[sourceLine - 1] ?? "").trim() || `line ${sourceLine}`;
+        const badges =
+          `<div class="divider"></div>` +
+          (c.approximate
+            ? `<span class="badge">approximate — the chain reaches <code>sine</code></span>` +
+              `<div class="badge-note">Not unpredictable — every machine computes this sine identically.</div>`
+            : `<span class="badge calm">exact — nothing in this chain approximates</span>` +
+              `<div class="badge-note">Every value here is a rational held as a rational.</div>`) +
+          (note
+            ? `<div style="margin-top:10px"><span class="badge calm">` +
+              `${note.numerator}/${note.denominator} is exactly ` +
+              `${note.numerator}/${note.denominator}</span></div>` +
+              `<div class="badge-note">A ratio is held as a ratio, forever.</div>`
+            : "");
+
+        // The heading names the THING, not the drawing command. The enclosing
+        // `to <name>` of the line that drew this mark is a fact about the
+        // source, which is what makes "this flower" a reading rather than an
+        // invention — the line number is still underneath it.
         cardEl.innerHTML =
-          `<h4>${esc(heading)}</h4><div class="row"><span>line ${sourceLine} of paint/garden.planes</span></div>` +
+          `<div class="head"><h4>${esc(subjectTitle(kind, scrubber.getTick()))}</h4>` +
+          `<button class="close" type="button" aria-label="close">✕</button></div>` +
+          `<div class="where">line ${sourceLine} · ${esc(definition)}</div>` +
           rows +
-          becauseHtml +
-          deeperHtml +
+          `<div class="step origin"><span class="dot"></span><div class="line">` +
+          `<span class="src">${esc(c.origin.text)}</span></div></div>` +
           noteHtml +
-          `<div class="row origin"><span>${esc(c.origin.text)}</span></div>` +
-          (c.approximate ? `<span class="tag">${esc(c.approximateNote)}</span>` : "") +
-          `<div class="row"><span>asking performed nothing — the effect surface beside the canvas is unchanged</span></div>`;
+          badges +
+          `<div class="closing">asking performed nothing — the effect surface above is unchanged</div>`;
+        cardEl.querySelector(".close").addEventListener("click", hideCard);
 
+        // The card is positioned in CSS pixels, so the program coordinate is
+        // scaled by the ratio of the element's laid-out width to the
+        // program's own width — never to the backing store's.
         const rect = canvas.getBoundingClientRect();
-        const scale = rect.width / canvas.width;
+        const scale = rect.width / DIMENSIONS.width;
         cardEl.hidden = false;
-        cardEl.style.left = `${Math.max(4, Math.min(rect.width - 280, x * scale + 12))}px`;
-        cardEl.style.top = `${Math.max(4, y * scale - 8)}px`;
+        cardEl.style.left = `${Math.max(4, Math.min(rect.width - 306, x * scale + 12))}px`;
+        cardEl.style.top = "0px";
+        // Measured once it has content and pulled back up to sit inside the
+        // frame, so a tall answer never runs off the bottom of the picture.
+        const wanted = y * scale - 8;
+        const highest = Math.max(4, rect.height - cardEl.offsetHeight - 4);
+        cardEl.style.top = `${Math.max(4, Math.min(wanted, highest))}px`;
 
-        highlightSourceLine(sourceLine);
+        // The source line is marked, and the SOURCE PANE is scrolled to it —
+        // but the PAGE is not. `scrollIntoView` walks every scrollable
+        // ancestor, so a click on a flower jumped the whole document down to
+        // the listing and threw the reader out of the picture they were
+        // looking at. Setting scrollTop moves the one box that should move.
+        markSourceLine(sourceLine);
         const el = [...sourceViewEl.children].find((e) => Number(e.dataset.line) === sourceLine);
-        if (el) el.scrollIntoView({ block: "nearest" });
+        if (el) {
+          sourceViewEl.scrollTop =
+            el.offsetTop - sourceViewEl.offsetTop - sourceViewEl.clientHeight / 2;
+        }
+
+        if (note) playOneNote(note);
       }
 
       canvas.addEventListener("click", (event) => {
-        // Clicking pauses, and answers about the frame on screen.
+        // Clicking pauses. The card describes ONE frame — its numbers are the
+        // values at this tick — so a card over a running scene would be stale
+        // before it finished rendering.
         if (loop.isRunning()) setPlaying(false);
         const rect = canvas.getBoundingClientRect();
-        const x = ((event.clientX - rect.left) / rect.width) * canvas.width;
-        const y = ((event.clientY - rect.top) / rect.height) * canvas.height;
-        const index = hitTest(lastMarks, x, y, { area: DIMENSIONS });
-        if (index < 0) {
+        // PROGRAM coordinates, not backing-store pixels: the marks are in the
+        // space `paint/garden.planes` drew in, and that is what hitTest reads.
+        const x = ((event.clientX - rect.left) / rect.width) * DIMENSIONS.width;
+        const y = ((event.clientY - rect.top) / rect.height) * DIMENSIONS.height;
+        // Only the six subjects are hit-tested, so a click that lands on the
+        // sky, the grass or a leaf reads as "nothing here" and closes the
+        // card instead of answering with a gradient's coordinates.
+        const { list, indices } = clickableMarks();
+        const found = hitTest(list, x, y, { area: DIMENSIONS });
+        if (found < 0) {
           hideCard();
-          highlightSourceLine(-1);
           return;
         }
-        renderCard(index, x, y);
+        renderCard(indices[found], x, y);
+      });
+
+      // Every ordinary way out: the ✕, the Escape key, a click on empty sky,
+      // and a click anywhere off the picture.
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") hideCard();
+      });
+      document.addEventListener("click", (event) => {
+        if (cardEl.hidden) return;
+        if (canvas.contains(event.target) || cardEl.contains(event.target)) return;
+        hideCard();
       });
 
       // Hovering a source line lights up every mark it drew — the same map,
@@ -616,8 +1184,71 @@
           showOutput(["nothing has been drawn yet"], true);
           return;
         }
+        // The exporter restores the canvas to `dimensions` when it is done,
+        // which for this page means the program's 480x360 — so the on-screen
+        // backing store is put back to its own 3x afterwards and repainted.
         downloadPng(canvas, lastLines, DIMENSIONS, "garden");
+        canvas.width = DIMENSIONS.width * CANVAS_SCALE;
+        canvas.height = DIMENSIONS.height * CANVAS_SCALE;
+        repaintFrame();
       });
+
+      // ---- the surface, summarized ------------------------------------------
+      //
+      // WHAT THE SURFACE ACTUALLY CARRIES, having read js/shapes.mjs rather
+      // than guessing. The methods are `isPure()`, `kinds()`, `boundaries()`,
+      // `targets()`, `producesApproximate()` and `approximationRoutes()`.
+      //
+      // THIS GARDEN IS NOT PURE, and the summary says so. The mockup's first
+      // line reads "pure — this program touches nothing outside itself"; the
+      // real program declares one effect kind, `show`, at one boundary,
+      // `console` — because that is how a drawing leaves a Planes program.
+      // Every one of its seventy targets is a `draw` or `sound` command. So
+      // the honest claim is not "it touches nothing" but "it touches exactly
+      // one thing, and that thing IS the picture" — which is the stronger
+      // sentence anyway, and the one the analyser can back.
+      function renderSurfaceSummary(surface) {
+        if (!surface) return;
+        const lines = [];
+        if (surface.isPure()) {
+          lines.push(`<span class="sfc-pure">pure — this program touches nothing outside itself</span>`);
+        } else {
+          const boundaries = surface.boundaries();
+          const targets = surface.targets();
+          // Derived, not asserted: is everything it emits the two protocols?
+          const onlyProtocols =
+            targets.length > 0 &&
+            targets.every((t) => t.startsWith("draw ") || t.startsWith("sound "));
+          lines.push(
+            `<span class="sfc-pure">${esc(boundaries.join(", "))} — the only boundary it touches` +
+              (onlyProtocols
+                ? `, and every one of the ${targets.length} things it writes there is the picture or the notes`
+                : "") +
+              `</span>`,
+          );
+        }
+        if (surface.producesApproximate()) {
+          lines.push(
+            `<span class="sfc-approx">numbers: approximate — this program reaches \`sine\`</span>`,
+          );
+          // The LONGEST route, not the first. `approximationRoutes()` is
+          // sorted by name, so the first is `(top level) -> sine` — true, and
+          // the least informative thing in the list. A reader meeting this
+          // idea once should meet a chain that looks like one.
+          const routes = surface.approximationRoutes();
+          const longest = routes.reduce((a, b) => (b.length > a.length ? b : a), routes[0] ?? "");
+          if (longest) {
+            lines.push(
+              `<span class="sfc-dim">  ${esc(longest)}` +
+                (routes.length > 1 ? `   (the longest of ${routes.length} routes)` : "") +
+                `</span>`,
+            );
+          }
+        } else {
+          lines.push(`<span class="sfc-pure">numbers: exact throughout</span>`);
+        }
+        surfaceSummaryEl.innerHTML = lines.join("\n");
+      }
 
       // ---- session ----------------------------------------------------------
 
@@ -625,7 +1256,8 @@
         session = createProgramSession({ file: "paint/garden.planes", cacheBust: LOAD_TOKEN });
         const src = await session.load();
         renderSourceView(src);
-        await renderSurface(surfaceEl, src, { loader: session.getLoader() });
+        const { surface } = await renderSurface(surfaceEl, src, { loader: session.getLoader() });
+        renderSurfaceSummary(surface);
         await runAt(scrubber.getTick(), currentSeed());
       }
 
@@ -634,6 +1266,8 @@
         scrubber.setTick(0, { fire: false });
         loop.syncTo(0);
         seedEl.value = "481027";
+        speed = 1;
+        fastBtn.setAttribute("aria-pressed", "false");
         hideCard();
         newSession();
       });
@@ -643,7 +1277,10 @@
       const stale = staleModuleWarning();
       if (stale) showOutput(stale.split("\n"), true);
 
-      newSession();
+      // A showcase opens alive. Sound never auto-starts — that needs a
+      // gesture, and a page that made noise on load would be a page nobody
+      // opens twice.
+      newSession().then(() => setPlaying(true));
     </script>
   </body>
 </html>

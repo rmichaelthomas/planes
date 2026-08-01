@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>tutor — the garden</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@700;900&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F7F2E9; --graphite:#211D19; --line:#D6C9B4;
+    --clay:#A65A2E; --slate:#4A5B68;
+    --amber:#F59E0B; --blue:#3B82F6; --teal:#14B8A6; --violet:#8B5CF6;
+    --ink-60:rgba(33,29,25,.62); --ink-40:rgba(33,29,25,.40);
+    --display:"Red Hat Display",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"Martian Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper); color:var(--graphite);
+    font-family:var(--mono); font-size:12.5px; line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+    padding:20px 16px 64px;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+
+  /* ---------- header ---------- */
+  header{
+    display:flex;align-items:flex-end;justify-content:space-between;
+    gap:16px;flex-wrap:wrap;
+    border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:20px;
+  }
+  .brand{display:flex;align-items:baseline;gap:12px}
+  .mark{
+    width:26px;height:26px;flex:0 0 26px;align-self:center;position:relative;
+  }
+  .mark i{position:absolute;inset:0;border:1.5px solid var(--graphite);display:block}
+  .mark i:nth-child(1){transform:skewY(-18deg) scaleY(.52)}
+  .mark i:nth-child(2){transform:skewY(18deg) scaleY(.52)}
+  .mark i:nth-child(3){transform:skewX(-18deg) scaleX(.52)}
+  .mark i:nth-child(4){border-color:var(--clay);transform:rotate(45deg) scale(.62)}
+  h1{
+    font-family:var(--display);font-weight:900;font-size:26px;letter-spacing:-.02em;
+    margin:0;line-height:1;
+  }
+  .sub{font-size:11px;color:var(--ink-60);letter-spacing:.02em}
+
+  .seedbox{display:flex;align-items:center;gap:8px}
+  .seedbox label{font-size:10.5px;color:var(--ink-60);text-transform:lowercase;letter-spacing:.08em}
+  input[type=number]{
+    font-family:var(--mono);font-size:13px;font-weight:600;width:112px;
+    padding:6px 8px;border:1px solid var(--line);border-radius:3px;
+    background:#fff;color:var(--graphite);
+  }
+  input[type=number]:focus-visible,button:focus-visible{outline:2px solid var(--clay);outline-offset:2px}
+
+  /* ---------- controls ---------- */
+  button{
+    font-family:var(--mono);font-size:11.5px;font-weight:500;
+    padding:7px 13px;border:1px solid var(--graphite);border-radius:3px;
+    background:transparent;color:var(--graphite);cursor:pointer;
+    transition:background .12s,color .12s;
+  }
+  button:hover{background:var(--graphite);color:var(--paper)}
+  button.quiet{border-color:var(--line);color:var(--ink-60)}
+  button.quiet:hover{background:var(--line);color:var(--graphite)}
+  button.play{border-color:var(--clay);color:var(--clay)}
+  button.play:hover{background:var(--clay);color:var(--paper)}
+
+  /* ---------- grid ---------- */
+  .stage{display:grid;grid-template-columns:1fr 330px;gap:22px;align-items:start}
+  @media (max-width:860px){.stage{grid-template-columns:1fr}}
+
+  canvas{
+    display:block;width:100%;height:auto;border:1px solid var(--line);
+    border-radius:3px;cursor:pointer;background:#fff;
+  }
+  .canvas-foot{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    margin-top:10px;flex-wrap:wrap;
+  }
+  .daynav{display:flex;align-items:center;gap:8px}
+  .daynum{font-weight:600;min-width:66px;text-align:center}
+
+  .hint{font-size:10.5px;color:var(--ink-40);margin-top:8px}
+
+  /* ---------- surface pane ---------- */
+  .surface{
+    margin-top:18px;border:1px solid var(--line);border-radius:3px;
+    background:rgba(255,255,255,.55);padding:12px 14px;
+  }
+  .eyebrow{
+    font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-40);margin-bottom:7px;
+  }
+  .surface pre{margin:0;font-family:var(--mono);font-size:11px;line-height:1.7;white-space:pre-wrap}
+  .sfc-pure{color:var(--teal);font-weight:600}
+  .sfc-approx{color:var(--clay);font-weight:600}
+  .sfc-dim{color:var(--ink-40)}
+
+  /* ---------- why panel ---------- */
+  .why{
+    border:1px solid var(--graphite);border-radius:3px;background:#fff;
+    padding:0;overflow:hidden;position:sticky;top:20px;
+  }
+  .why-head{
+    padding:11px 14px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+  }
+  .why-title{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:-.01em}
+  .why-body{padding:14px}
+
+  .empty{color:var(--ink-40);font-size:11.5px;line-height:1.7}
+  .empty b{color:var(--graphite);font-weight:600}
+
+  .step{
+    position:relative;padding:0 0 0 18px;margin-bottom:11px;
+  }
+  .step::before{
+    content:"";position:absolute;left:4px;top:7px;bottom:-11px;width:1px;background:var(--line);
+  }
+  .step:last-of-type::before{display:none}
+  .step .dot{
+    position:absolute;left:0;top:4px;width:9px;height:9px;border-radius:50%;
+    border:1.5px solid var(--graphite);background:var(--paper);
+  }
+  .step .line{font-size:12px;line-height:1.5}
+  .step .val{font-weight:600}
+  .step .src{color:var(--ink-60)}
+  .step .because{
+    display:block;margin-top:4px;font-size:11px;line-height:1.6;
+    color:var(--teal);border-left:2px solid var(--teal);padding-left:8px;
+  }
+  .step.shared .dot{border-color:var(--clay);background:var(--clay)}
+  .step.shared .val{color:var(--clay)}
+  .step.origin .dot{border-color:var(--slate);background:var(--slate)}
+
+  .divider{height:1px;background:var(--line);margin:15px 0}
+
+  .badge{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:10.5px;font-weight:500;padding:4px 9px;border-radius:2px;
+    border:1px solid var(--clay);color:var(--clay);
+  }
+  .badge.calm{border-color:var(--slate);color:var(--slate)}
+  .badge-note{font-size:10.5px;color:var(--ink-60);margin-top:6px;line-height:1.6}
+
+  .noteline{
+    background:rgba(166,90,46,.07);border:1px solid rgba(166,90,46,.28);
+    border-radius:3px;padding:10px 12px;margin-top:2px;
+  }
+  .noteline .k{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--clay);display:block;margin-bottom:5px}
+
+  /* ---------- source ---------- */
+  .source{
+    margin-top:22px;border:1px solid var(--line);border-radius:3px;
+    background:#fff;overflow:hidden;
+  }
+  .source-head{
+    padding:9px 14px;border-bottom:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:center;
+    font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-40);
+  }
+  .source pre{
+    margin:0;padding:14px;font-family:var(--mono);font-size:11px;line-height:1.85;
+    overflow-x:auto;
+  }
+  .kw{color:var(--clay);font-weight:600}
+  .bc{color:var(--teal)}
+  .cm{color:var(--ink-40)}
+  .lit{color:var(--slate)}
+  .hl{background:rgba(245,158,11,.22);border-radius:2px;padding:1px 0}
+
+  footer{
+    margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
+    font-size:10.5px;color:var(--ink-40);line-height:1.75;max-width:640px;
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <div>
+        <h1>the garden</h1>
+        <div class="sub">a mockup · click a plant to ask it why</div>
+      </div>
+    </div>
+    <div class="seedbox">
+      <label for="seed">seed</label>
+      <input id="seed" type="number" value="481027" min="0" max="999999" step="1" />
+      <button class="quiet" id="reseed">new</button>
+    </div>
+  </header>
+
+  <div class="stage">
+    <div>
+      <canvas id="garden" width="1440" height="760" aria-label="a garden of nine plants"></canvas>
+
+      <div class="canvas-foot">
+        <div class="daynav">
+          <button class="quiet" id="back">◀</button>
+          <span class="daynum">day <span id="daynum">40</span></span>
+          <button class="quiet" id="fwd">▶</button>
+        </div>
+        <button class="play" id="hear">▶ hear this row</button>
+      </div>
+      <div class="hint">same seed, same garden — on any phone, forever</div>
+
+      <div class="surface">
+        <div class="eyebrow">effect surface — computed, not run</div>
+        <pre><span class="sfc-pure">pure — this program touches nothing outside itself</span>
+<span class="sfc-approx">numbers: approximate — this program reaches `sine`</span>
+<span class="sfc-dim">  (top level)  ->  plant  ->  growth  ->  blend  ->  cosine  ->  sine</span></pre>
+      </div>
+
+      <div class="source">
+        <div class="source-head"><span>garden.planes</span><span>36 lines</span></div>
+<pre><span class="cm"># a garden that is a pure function of one number</span>
+<span class="kw">use</span> draw
+<span class="kw">use</span> sound
+
+<span class="kw">let</span> seed = <span class="lit">481027</span>
+<span class="kw">let</span> ground = <span class="lit">0.28</span> <span class="kw">because</span> <span class="bc">"dark enough that the leaves read as light"</span>
+
+<span class="cm"># value noise: two corners, blended with a cosine</span>
+<span class="kw">to</span> blend <span class="kw">of</span> a, b, t:
+  <span class="kw">let</span> smooth = (<span class="lit">1</span> - cosine <span class="kw">of</span> (t * <span class="lit">180</span>)) / <span class="lit">2</span>
+  <span class="kw">give</span> a + (b - a) * smooth
+
+<span class="kw">to</span> growth <span class="kw">of</span> column, day:
+  <span class="kw">let</span> x = column * <span class="lit">0.7</span> + day * <span class="lit">0.02</span>
+  <span class="kw">give</span> blend <span class="kw">of</span> (corner <span class="kw">of</span> x), (corner <span class="kw">of</span> (x + <span class="lit">1</span>)), (part <span class="kw">of</span> x)
+
+<span class="hl"><span class="kw">to</span> plant <span class="kw">of</span> column, day:
+  <span class="kw">let</span> g = growth <span class="kw">of</span> column, day
+  <span class="kw">let</span> height = <span class="lit">40</span> + g * <span class="lit">140</span> <span class="kw">because</span> <span class="bc">"tall enough to catch the light, short enough to stay in frame"</span></span>
+  stem <span class="kw">of</span> column, height
+  <span class="cm"># the same g picks the note</span>
+  note <span class="kw">of</span> (<span class="lit">220</span> * (interval <span class="kw">of</span> g))
+
+<span class="kw">for</span> <span class="kw">each</span> column <span class="kw">in</span> [<span class="lit">0</span>,<span class="lit">1</span>,<span class="lit">2</span>,<span class="lit">3</span>,<span class="lit">4</span>,<span class="lit">5</span>,<span class="lit">6</span>,<span class="lit">7</span>,<span class="lit">8</span>]:
+  plant <span class="kw">of</span> column, day</pre>
+      </div>
+    </div>
+
+    <aside class="why" id="why">
+      <div class="why-head">
+        <span class="why-title">why</span>
+        <button class="quiet" id="clear" style="display:none">clear</button>
+      </div>
+      <div class="why-body" id="whybody">
+        <p class="empty">Click any plant in the garden.<br><br>It will tell you where its height came from — one step at a time, down to the number you chose. <b>And the note you hear is the same number.</b></p>
+      </div>
+    </aside>
+  </div>
+
+  <footer>
+    Mockup only — nothing here runs Planes. The chain, the surface pane and the <code>why</code> line format mirror what the real page would compute. Just intonation throughout: every interval is an exact ratio, so a fifth is 3/2 and stays 3/2.
+  </footer>
+</div>
+
+<script>
+const RATIOS = [[1,1],[9,8],[5,4],[3,2],[5,3]];
+const RNAME  = ["unison","whole tone","major third","fifth","major sixth"];
+const BASE   = 220;
+
+let seed = 481027, day = 40, sel = null, actx = null;
+
+const cv = document.getElementById('garden');
+const ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height;
+
+function hash(i, s){
+  let h = Math.imul(i|0, 374761393) + Math.imul(s|0, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+// cosine-blended value noise — the cosine is why the surface says approximate
+function blend(a,b,t){ const s = (1 - Math.cos(t * Math.PI)) / 2; return a + (b-a)*s; }
+function growth(col, d){
+  const x = col*0.7 + d*0.02, i = Math.floor(x), f = x - i;
+  return { g: blend(hash(i,seed), hash(i+1,seed), f), a:hash(i,seed), b:hash(i+1,seed), f, i, x };
+}
+function interval(g){ const k = Math.min(4, Math.floor(g*5)); return k; }
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const skyG = growth(99, day).g;
+  const sky = ctx.createLinearGradient(0,0,0,H);
+  sky.addColorStop(0, `hsl(${205 + skyG*40}, 32%, ${72 + skyG*14}%)`);
+  sky.addColorStop(1, `hsl(${38 + skyG*20}, 42%, ${88 - skyG*6}%)`);
+  ctx.fillStyle = sky; ctx.fillRect(0,0,W,H);
+
+  const gy = H*0.80;
+  ctx.fillStyle = '#2E2A22'; ctx.fillRect(0,gy,W,H-gy);
+  ctx.strokeStyle = 'rgba(214,201,180,.5)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke();
+
+  for(let c=0;c<9;c++){
+    const {g} = growth(c, day);
+    const h = (40 + g*140) * (H/420);
+    const x = (W/9)*(c+0.5);
+    const on = sel === c;
+
+    ctx.save();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = on ? '#A65A2E' : `hsl(${142 - g*34}, ${34+g*22}%, ${28+g*16}%)`;
+    ctx.lineWidth = on ? 8 : 5.5;
+    ctx.beginPath(); ctx.moveTo(x,gy);
+    ctx.quadraticCurveTo(x + (g-0.5)*44, gy-h*0.55, x + (g-0.5)*30, gy-h);
+    ctx.stroke();
+
+    const leaves = 2 + Math.floor(g*4);
+    for(let l=0;l<leaves;l++){
+      const t = 0.30 + (l/leaves)*0.62;
+      const lx = x + (g-0.5)*30*t, ly = gy - h*t;
+      const side = l%2 ? 1 : -1, len = (17 + g*22) * (H/420);
+      ctx.fillStyle = on ? 'rgba(166,90,46,.85)' : `hsla(${140 - g*36}, ${40+g*20}%, ${34+g*20}%, .92)`;
+      ctx.beginPath();
+      ctx.ellipse(lx + side*len*0.55, ly, len, len*0.34, side*(-0.42 - g*0.25), 0, Math.PI*2);
+      ctx.fill();
+    }
+    const bud = (7 + g*11) * (H/420);
+    ctx.fillStyle = on ? '#A65A2E' : `hsl(${18 + g*300}, 58%, ${58 + g*12}%)`;
+    ctx.beginPath(); ctx.arc(x + (g-0.5)*30, gy-h, bud, 0, Math.PI*2); ctx.fill();
+
+    if(on){
+      ctx.strokeStyle = 'rgba(166,90,46,.45)'; ctx.lineWidth = 2;
+      ctx.setLineDash([7,7]);
+      ctx.strokeRect(x - W/18 + 6, gy - h - bud - 16, W/9 - 12, h + bud + 22);
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+  }
+}
+
+function fmt(n, p=2){ return Number(n.toFixed(p)).toString(); }
+
+function play(freq, when=0, dur=0.42){
+  actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+  const t = actx.currentTime + when;
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = 'triangle'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.16, t+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  o.connect(g).connect(actx.destination);
+  o.start(t); o.stop(t+dur+0.05);
+}
+
+function select(c){
+  sel = c; draw();
+  const {g,a,b,f} = growth(c, day);
+  const h = 40 + g*140;
+  const k = interval(g), [num,den] = RATIOS[k];
+  const freq = BASE * num/den;
+  play(freq);
+
+  document.getElementById('clear').style.display = '';
+  document.getElementById('whybody').innerHTML = `
+    <div style="font-family:var(--display);font-weight:700;font-size:14px;margin-bottom:12px">
+      this plant &middot; column ${c}
+    </div>
+
+    <div class="step">
+      <span class="dot"></span>
+      <div class="line"><span class="val">height ${fmt(h,1)}</span>
+      <span class="src">from 40 + g (${fmt(g)}) &times; 140</span>
+      <span class="because">"tall enough to catch the light, short enough to stay in frame"</span></div>
+    </div>
+
+    <div class="step shared">
+      <span class="dot"></span>
+      <div class="line"><span class="val">g ${fmt(g,4)}</span>
+      <span class="src">from blend of ${fmt(a)}, ${fmt(b)}, ${fmt(f)}</span></div>
+    </div>
+
+    <div class="step">
+      <span class="dot"></span>
+      <div class="line"><span class="val">smooth ${fmt((1-Math.cos(f*Math.PI))/2,4)}</span>
+      <span class="src">from (1 &minus; cosine of ${fmt(f*180,1)}) / 2</span></div>
+    </div>
+
+    <div class="step origin">
+      <span class="dot"></span>
+      <div class="line"><span class="val">seed ${seed}</span>
+      <span class="src">&mdash; you chose this. Nothing outside the program was touched.</span></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="noteline">
+      <span class="k">the note you just heard</span>
+      <div class="line"><span class="val">${fmt(freq,1)} Hz</span>
+      <span class="src">from base (220) &times; ${RNAME[k]} (${num}/${den})</span></div>
+      <div class="badge-note">
+        The same <b style="color:var(--clay)">g ${fmt(g,4)}</b> chose the height and the note.
+        That is one node in the chain, read twice.
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <span class="badge">approximate &mdash; the chain reaches <code>sine</code></span>
+    <div class="badge-note">Approximate is not the same as unpredictable. The sine is bit&#8209;identical across all three implementations by construction, so this exact garden grows on every machine.</div>
+    <div style="margin-top:10px"><span class="badge calm">3/2 is exactly 3/2</span></div>
+    <div class="badge-note">The intervals never drift. A fifth is a ratio, held as a ratio, forever.</div>
+  `;
+}
+
+cv.addEventListener('click', e=>{
+  const r = cv.getBoundingClientRect();
+  select(Math.max(0, Math.min(8, Math.floor(((e.clientX-r.left)/r.width)*9))));
+});
+document.getElementById('hear').addEventListener('click', ()=>{
+  for(let c=0;c<9;c++){
+    const {g} = growth(c, day); const [n,d] = RATIOS[interval(g)];
+    play(BASE*n/d, c*0.19, 0.34);
+  }
+});
+document.getElementById('back').addEventListener('click', ()=>{ day=Math.max(0,day-4); tick(); });
+document.getElementById('fwd').addEventListener('click', ()=>{ day+=4; tick(); });
+document.getElementById('seed').addEventListener('input', e=>{ seed = parseInt(e.target.value||0,10); tick(); });
+document.getElementById('reseed').addEventListener('click', ()=>{
+  seed = Math.floor(Math.random()*900000)+100000;
+  document.getElementById('seed').value = seed; tick();
+});
+document.getElementById('clear').addEventListener('click', ()=>{
+  sel=null; draw();
+  document.getElementById('clear').style.display='none';
+  document.getElementById('whybody').innerHTML =
+    '<p class="empty">Click any plant in the garden.<br><br>It will tell you where its height came from — one step at a time, down to the number you chose. <b>And the note you hear is the same number.</b></p>';
+});
+
+function tick(){ document.getElementById('daynum').textContent = day; draw(); if(sel!==null) select(sel); }
+draw();
+</script>
+</body>
+</html>
