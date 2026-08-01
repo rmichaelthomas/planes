@@ -125,8 +125,8 @@ export class Parser {
   // commitment, and a bare token mismatch honours its letter and not its
   // substance: `expected }, found ':'` is true and tells nobody what to write.
   //   * a reserved word where a NAME was wanted gets its own message — that is
-  //     never a punctuation slip, it is the 42-name reserved surface (32
-  //     keywords + 10 builtins) being hit. The builtin half already errored
+  //     never a punctuation slip, it is the 45-name reserved surface (32
+  //     keywords + 13 builtins) being hit. The builtin half already errored
   //     naming the collision; this is the keyword half, in the same voice.
   //   * every other site may pass a `fix` clause naming what to write instead.
   expect(kind, value = null, fix = null) {

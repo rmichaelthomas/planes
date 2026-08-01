@@ -953,8 +953,8 @@ export class Interpreter {
       return new Traced(n, new Deriv("op", "number of", n, [arg.node]));
     }
     if (name === "sine") {
-      // The eleventh builtin, and the only operation in the language that
-      // returns an approximate value (checkpoint v21.0 §§251-253). Takes
+      // The eleventh builtin, and the operation that approximates at EVERY
+      // argument, unlike `root` (checkpoint v21.0 §§251-253). Takes
       // DEGREES, consistent with the drawing protocol's `rotate`: degrees are
       // whole numbers and stay exact under this language's arithmetic, where
       // radians would arrive already approximated.
@@ -1031,7 +1031,7 @@ export class Interpreter {
     throw new PlanesError(
       "unknown-builtin",
       `no builtin is named '${name}'`,
-      "the twelve builtins are fixed and the lexer recognises only those, so reaching this is a " +
+      "the thirteen builtins are fixed and the lexer recognises only those, so reaching this is a " +
         "defect in the interpreter rather than in the program — worth reporting with the source",
     );
   }

@@ -207,7 +207,7 @@ and the fix is *report it*:
 
 ```
 unknown-builtin: no builtin is named 'frobnicate'
-  try: the ten builtins are fixed and the lexer recognises only those, so reaching this is a defect in the interpreter rather than in the program — worth reporting with the source
+  try: the thirteen builtins are fixed and the lexer recognises only those, so reaching this is a defect in the interpreter rather than in the program — worth reporting with the source
 ```
 
 Telling you the failure is not your fault is a next move. Marking these as

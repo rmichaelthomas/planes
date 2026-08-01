@@ -89,11 +89,14 @@ def test_value_properties_section_records_exactness_descriptively():
     assert exactness["property"] == "exactness"
     assert exactness["values"] == ["exact", "approximate"]
     assert exactness["default"] == "exact"
-    assert "sine" in exactness["introduced_by"]
+    # Both operations that introduce approximation, and they do not do it the
+    # same way -- `sine` at every argument, `root` only at some. The list held
+    # only `sine` for two builds after `root` shipped.
+    assert set(exactness["introduced_by"]) == {"sine", "root"}
     rule_names = {r["rule"] for r in exactness["rules"]}
     assert rule_names == {
         "entry", "named-precision-reduction-stays-exact", "propagation",
-        "comparison", "static-derivability",
+        "comparison", "static-derivability", "approximation-is-per-argument",
     }
 
 
@@ -352,6 +355,171 @@ def test_check_escape_table_exits_nonzero_when_the_note_is_missing_one():
     finally:
         grammar_gen.VOCAB_JSON_PATH = original_path
         os.unlink(broken_path)
+
+
+# ================================================================ the precedence ladder
+#
+# rules.json records `calls` per form but never named the one structure an
+# agent most needs and cannot get from an unordered call graph: the binding
+# order. It is derived from `calls`, never written down -- so these tests
+# re-derive it independently rather than comparing it to a literal list, and
+# then check the derivation against how the parser actually binds.
+
+RULES_PATH = "grammar/rules.json"
+
+
+def load_rules_doc():
+    with open(RULES_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def test_the_ladder_is_the_calls_chain_walked_from_the_start():
+    """Re-derived here from rules.json's own `calls` data, by the rule the
+    section states: follow the single expression-level successor until a form
+    has anything but one. Nothing in this test names a form."""
+    doc = load_rules_doc()
+    ladder = doc["precedence"]
+    by_method = {f["parser_method"]: f for f in doc["forms"]}
+
+    method = ladder["start"]
+    walked = [by_method[method]["form"]]
+    seen = {method}
+    while True:
+        successors = [c for c in by_method[method]["calls"] if c in by_method]
+        if len(successors) != 1 or successors[0] in seen:
+            break
+        method = successors[0]
+        seen.add(method)
+        walked.append(by_method[method]["form"])
+
+    assert ladder["loosest_first"] == walked
+    assert len(walked) > 1
+
+
+def test_every_level_is_a_real_parser_method():
+    doc = load_rules_doc()
+    for form in doc["precedence"]["loosest_first"]:
+        assert hasattr(Parser, f"parse_{form}"), form
+
+
+def test_the_ladder_says_what_it_is_not():
+    """The same honesty rules.json's own note keeps about not being a BNF."""
+    note = load_rules_doc()["precedence"]["note"]
+    assert "not a grammar" in note
+    assert "statement forms" in note
+    assert load_rules_doc()["precedence"]["derived_from"] == "calls"
+
+
+# One expression per adjacent pair in the ladder, and the shape it must have:
+# the tighter level nested inside the looser one. This is the check that ties
+# the derived order to the parser rather than to itself.
+LADDER_BEHAVIOUR = [
+    ("or", "and", "a or b and c", "(Var or (Var and Var))"),
+    ("and", "not", "a and not b", "(Var and (not Var))"),
+    ("not", "comparison", "not a == b", "(not (Var == Var))"),
+    ("comparison", "plus", "a == [1] plus 2", "(Var == ([..] plus Num))"),
+    ("plus", "additive", "[1] plus 2 + 3", "([..] plus (Num + Num))"),
+    ("additive", "multiplicative", "1 + 2 * 3", "(Num + (Num * Num))"),
+]
+
+
+def _shape(n):
+    t = type(n).__name__
+    if t == "BinOp":
+        return f"({_shape(n.left)} {n.op} {_shape(n.right)})"
+    if t == "Not":
+        return f"(not {_shape(n.expr)})"
+    if t == "ListPlus":
+        return f"({_shape(n.base)} plus {_shape(n.item)})"
+    if t == "ListLit":
+        return "[..]"
+    return t          # `Num` for a literal, `Var` for a name
+
+
+def test_the_derived_order_is_the_order_the_parser_binds_in():
+    doc = load_rules_doc()
+    order = doc["precedence"]["loosest_first"]
+    for looser, tighter, src, expected in LADDER_BEHAVIOUR:
+        assert order.index(looser) < order.index(tighter), \
+            f"{looser} should be looser than {tighter} in {order}"
+        got = _shape(parse(f"x = {src}\n")[0].expr)
+        assert got == expected, f"{src} parsed as {got}, expected {expected}"
+
+
+def test_every_adjacent_pair_in_the_ladder_that_can_be_shown_is_shown():
+    """The behaviour table above covers every adjacent pair down to the last
+    one two infix operators can express. Below `multiplicative` the levels are
+    unary, postfix and primary, which bind by position rather than by an
+    operator with something to its left, so there is no two-operator sentence
+    to write for them."""
+    order = load_rules_doc()["precedence"]["loosest_first"]
+    covered = {(a, b) for a, b, _, _ in LADDER_BEHAVIOUR}
+    infix = order[:order.index("multiplicative") + 1]
+    for a, b in zip(infix, infix[1:]):
+        assert (a, b) in covered, f"no behavioural check for {a} -> {b}"
+
+
+def test_a_branching_chain_emits_no_ladder_rather_than_a_guess():
+    """A parser change that branches the ladder must show up as an ABSENT
+    section, not a wrong one -- a guessed ladder is the hand-written grammar
+    ruling D2 declined, arrived at by a different route."""
+    import grammar_gen
+
+    forms = [
+        {"parser_method": "parse_or", "form": "or",
+         "calls": ["parse_and", "parse_comparison"]},
+        {"parser_method": "parse_and", "form": "and", "calls": []},
+        {"parser_method": "parse_comparison", "form": "comparison",
+         "calls": []},
+    ]
+    levels, why = grammar_gen._precedence_ladder(forms)
+    assert levels is None
+    assert "does not have exactly one" in why
+
+
+def test_a_cycle_emits_no_ladder():
+    import grammar_gen
+
+    forms = [
+        {"parser_method": "parse_or", "form": "or", "calls": ["parse_and"]},
+        {"parser_method": "parse_and", "form": "and", "calls": ["parse_or"]},
+    ]
+    levels, why = grammar_gen._precedence_ladder(forms)
+    assert levels is None
+    assert "revisits" in why
+
+
+def test_a_missing_start_emits_no_ladder():
+    import grammar_gen
+
+    levels, why = grammar_gen._precedence_ladder(
+        [{"parser_method": "parse_statement", "form": "statement",
+          "calls": []}])
+    assert levels is None
+    assert "is not among the parser's forms" in why
+
+
+def test_the_absent_ladder_says_so_in_the_generated_note():
+    """rules.json's own note carries the reason, so a reader of the artifact
+    learns the section is missing on purpose."""
+    import grammar_gen
+
+    doc = grammar_gen.generate_rules()
+    assert "precedence" in doc
+    assert "No `precedence` section is emitted" not in doc["note"]
+
+    real = grammar_gen._precedence_ladder
+    grammar_gen._precedence_ladder = lambda forms: (None, "the chain branches")
+    try:
+        broken = grammar_gen.generate_rules()
+    finally:
+        grammar_gen._precedence_ladder = real
+    assert "precedence" not in broken
+    assert "No `precedence` section is emitted: the chain branches." \
+        in broken["note"]
+    # The inventory itself is untouched either way.
+    assert broken["count"] == doc["count"]
+    assert broken["forms"] == doc["forms"]
 
 
 if __name__ == "__main__":

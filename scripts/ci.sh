@@ -25,10 +25,13 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 FAST=0
 if [ "${1:-}" = "--fast" ]; then FAST=1; fi
 
-# The `--fast` tier: the eleven suites that account for 80.2% of the serial
-# suite time (193.9 s total, measured on 10 cores after A.1 and A.2 landed;
-# see gate-timing-post.md). Each line carries its measured cost so a reader
-# can see why it is here and re-derive the list from .ci-logs/timings.tsv.
+# The `--fast` tier: the slowest suites, which accounted for 80.2% of the
+# serial suite time when this list stood at eleven entries (193.9 s total,
+# measured on 10 cores after A.1 and A.2 landed; see gate-timing-post.md).
+# Each line carries its measured cost so a reader can see why it is here and
+# re-derive the list from .ci-logs/timings.tsv. The count is NOT written down
+# here or in the banner below — it is read off the list, because the list grew
+# to twelve and the two prose copies of "eleven" did not.
 #
 # --fast IS NOT THE GATE. It is for iterating on a change without waiting for
 # the JavaScript agreement suites. Nothing may be merged on it: it skips the
@@ -139,7 +142,7 @@ timed_soft() {
 
 echo "== test suite =="
 if [ "$FAST" -eq 1 ]; then
-  echo "   (--fast: iteration tier, NOT the gate — 11 slowest suites skipped)"
+  echo "   (--fast: iteration tier, NOT the gate — $((${#FAST_SKIP[@]} / 2)) slowest suites skipped)"
   timed "test suite (--fast)" python3 scripts/run_suites.py "${FAST_SKIP[@]}"
 else
   timed "test suite" python3 scripts/run_suites.py

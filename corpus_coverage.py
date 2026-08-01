@@ -4,7 +4,7 @@
 Reports, over a set of .planes files (`corpus/` by default):
 
   * which of the 32 reserved words appear,
-  * which of the 10 builtins appear,
+  * which of the 13 builtins appear,
   * which of the 7 effect kinds appear,
   * which grammar-derived compositions appear.
 
@@ -191,7 +191,7 @@ def reserved_words_in(src):
 
 def builtins_in(prog):
     """Which builtins are actually called. A builtin is a Call by one of the
-    ten builtin names; a user function of the same name shadows it
+    thirteen builtin names; a user function of the same name shadows it
     (test_names.py's test_user_definition_shadows_a_builtin), so a
     locally-defined name is not counted as the builtin."""
     defined = {s.name for s in prog if type(s).__name__ == "FuncDef"}

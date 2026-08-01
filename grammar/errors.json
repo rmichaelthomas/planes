@@ -584,7 +584,7 @@
       "slots": [
         "node.name"
       ],
-      "fix": "the twelve builtins are fixed and the lexer recognises only those, so reaching this is a defect in the interpreter rather than in the program \u2014 worth reporting with the source"
+      "fix": "the thirteen builtins are fixed and the lexer recognises only those, so reaching this is a defect in the interpreter rather than in the program \u2014 worth reporting with the source"
     },
     {
       "id": "interp.not-a-collection.eval_foreach",

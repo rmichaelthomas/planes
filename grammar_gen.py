@@ -548,6 +548,66 @@ def _produces_node_type(node):
     return types
 
 
+PRECEDENCE_START = "parse_or"
+
+_RULES_NOTE = ("A form inventory, not a formal grammar (D.3) -- deriving a "
+               "true BNF from recursive-descent code is not mechanical.")
+
+_PRECEDENCE_NOTE = (
+    "The binding order of the EXPRESSION forms, loosest first, derived from "
+    "`calls` by walking from `" + PRECEDENCE_START + "` and following the "
+    "single-successor edge at each step -- the one structure an agent needs "
+    "that an unordered call graph does not carry. It is not a grammar: it "
+    "says which level binds tighter than which, and nothing about what "
+    "either level accepts. It says nothing about statement forms at all. "
+    "The walk stops where a form's successors stop being exactly one, so the "
+    "last level named here is the tightest one on a linear chain, not the "
+    "last form the parser has. If a parser change ever branches the chain "
+    "this section is ABSENT rather than wrong, and rules.json's own note "
+    "says why -- a guessed ladder would be the hand-written grammar D2 "
+    "declined, arrived at by a different route.")
+
+
+def _precedence_ladder(forms):
+    """(levels, why_not) -- the linear chain of expression forms from
+    `PRECEDENCE_START` down, or (None, reason) when the walk is not linear.
+
+    A form's expression-level successors are the entries in its `calls` that
+    are themselves forms in this inventory: `check_*` guards are not levels,
+    and a name the inventory does not have cannot be walked into. The walk
+    stops when that count is anything but one -- which is ordinary
+    termination, not failure. Failure is a successor the inventory does not
+    have, a cycle, or a start that branches immediately, and each returns
+    None so the caller emits nothing.
+    """
+    by_method = {f["parser_method"]: f for f in forms}
+    if PRECEDENCE_START not in by_method:
+        return None, (f"`{PRECEDENCE_START}` is not among the parser's forms, "
+                      f"so there is no chain to walk from")
+
+    def successors(method):
+        return [c for c in by_method[method]["calls"] if c in by_method]
+
+    chain = [PRECEDENCE_START]
+    seen = {PRECEDENCE_START}
+    while True:
+        here = chain[-1]
+        nxt = successors(here)
+        if len(nxt) != 1:
+            break
+        if nxt[0] in seen:
+            return None, (f"the walk from `{PRECEDENCE_START}` revisits "
+                          f"`{nxt[0]}`, so the chain is a cycle rather than "
+                          f"a ladder")
+        chain.append(nxt[0])
+        seen.add(nxt[0])
+
+    if len(chain) < 2:
+        return None, (f"`{PRECEDENCE_START}` does not have exactly one "
+                      f"expression-level successor, so no ladder starts there")
+    return [by_method[m]["form"] for m in chain], None
+
+
 def generate_rules():
     with open(PARSER_PATH, encoding="utf-8") as f:
         src = f.read()
@@ -571,14 +631,27 @@ def generate_rules():
         })
 
     forms.sort(key=lambda f: f["source"])
-    return {
+
+    levels, why_not = _precedence_ladder(forms)
+    note = _RULES_NOTE
+    doc = {
         "format": 1,
         "generated_by": "grammar_gen.py",
-        "note": "A form inventory, not a formal grammar (D.3) -- deriving a "
-                "true BNF from recursive-descent code is not mechanical.",
+        "note": note,
         "count": len(forms),
-        "forms": forms,
     }
+    if levels is None:
+        doc["note"] = (note + " No `precedence` section is emitted: "
+                       + why_not + ".")
+    else:
+        doc["precedence"] = {
+            "note": _PRECEDENCE_NOTE,
+            "derived_from": "calls",
+            "start": PRECEDENCE_START,
+            "loosest_first": levels,
+        }
+    doc["forms"] = forms
+    return doc
 
 
 # ================================================================ D.4: grammar/vocabulary.planes

@@ -3,6 +3,23 @@
   "generated_by": "grammar_gen.py",
   "note": "A form inventory, not a formal grammar (D.3) -- deriving a true BNF from recursive-descent code is not mechanical.",
   "count": 26,
+  "precedence": {
+    "note": "The binding order of the EXPRESSION forms, loosest first, derived from `calls` by walking from `parse_or` and following the single-successor edge at each step -- the one structure an agent needs that an unordered call graph does not carry. It is not a grammar: it says which level binds tighter than which, and nothing about what either level accepts. It says nothing about statement forms at all. The walk stops where a form's successors stop being exactly one, so the last level named here is the tightest one on a linear chain, not the last form the parser has. If a parser change ever branches the chain this section is ABSENT rather than wrong, and rules.json's own note says why -- a guessed ladder would be the hand-written grammar D2 declined, arrived at by a different route.",
+    "derived_from": "calls",
+    "start": "parse_or",
+    "loosest_first": [
+      "or",
+      "and",
+      "not",
+      "comparison",
+      "plus",
+      "additive",
+      "multiplicative",
+      "unary",
+      "postfix",
+      "primary"
+    ]
+  },
   "forms": [
     {
       "form": "paren_is_arglist",

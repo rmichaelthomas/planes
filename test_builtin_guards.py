@@ -49,7 +49,11 @@ from modules import ModuleError
 NODE = shutil.which("node")
 REPO = os.path.dirname(os.path.abspath(__file__))
 
-# The eleven builtins, and one value of every kind the language has.
+# Ten of the thirteen builtins, and one value of every kind the language has.
+# The three the cross-product leaves out take a NUMBER or a numeric text, so
+# their guards are one refusal each rather than a sweep, and each is pinned
+# where its own build put it: `sine` in test_exactness.py, `root` in
+# test_square_root.py, and `number of` further down this file.
 BUILTINS = ("count", "text", "lower", "upper", "whole", "normalize", "join",
             "rest", "ask", "read")
 VALUES = (("number", "5"), ("text", '"ab"'), ("list", "[1, 2]"),

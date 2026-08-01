@@ -9,7 +9,7 @@ The language's grammar, as loadable data (addendum v4.2 sections 69.1 and
 | `rules.json` | A **form inventory**, not a formal grammar — one entry per `parse_*` method: what token it opens with, what AST node it produces, what sub-forms it calls, and the surface form from that method's own docstring. Deriving a true BNF from recursive-descent code is not mechanical; this is what can honestly be generated instead. | **Generated** by `grammar_gen.py`. Never hand-edit. |
 | `errors.json` | Every `PlanesError` / `PlanesSyntaxError` / `PlanesAmbiguity` / `RuleConflict` / `RuleNotSupported` construction in the repo, found by walking the AST of every `.py` file — not by regex. Includes a `tags` index: every distinct error tag and every site that raises it. | **Generated** by `grammar_gen.py`. Never hand-edit. |
 | `messages/amber.json` | The message templates amber's four refusal sites render from (addendum v4.2 section 69.5, ruling D5). Authored as data from the start — no amber message text lives inline in `parser.py`. | **Hand-edited.** |
-| `core.json` | The subset a self-hosting implementation may use (root `README.md`) — the port surface a second host must implement to run `grammar/interp.planes`. Declared here as a single source of truth, the same role `vocabulary.json` plays for the full surface, and enforced by `core_check.py`, which fails when `interp.planes` uses any keyword or builtin outside it. | **Hand-edited.** `grammar_gen.py` never reads or writes it; `core_check.py` reads it directly. |
+| `core.json` | The subset a self-hosting implementation may use (root `README.md`) — the port surface a second host must implement to run `grammar/interp.planes`. Declared here as a single source of truth, the same role `vocabulary.json` plays for the full surface, and enforced by `core_check.py`, which fails when `interp.planes` uses any keyword or builtin outside it. `core_check.py` also holds this file against `vocabulary.json` itself: every keyword and builtin the vocabulary declares must be in a core list or in the matching `excluded_` map with a reason, and the `size` strings must parse to the real counts. That guard exists because this file drifted exactly as a hand-edited file does — `root` was outside the core with no reason recorded, and nothing said so. | **Hand-edited.** `grammar_gen.py` never reads or writes it; `core_check.py` reads it directly. |
 
 ## Why the split (ruling D2)
 
@@ -49,7 +49,11 @@ like any other input, not written.
 
 ## CI
 
-`scripts/ci.sh` runs, in order: the full test suite, `audit_locked_vs_built.py`,
-`grammar_gen.py --check`, `ruff check .`, and `mypy .`. Every step exits
-non-zero on failure. There was no existing CI configuration in this repo to
-extend, so this script is that gate, until one exists.
+`scripts/ci.sh` runs, in order: the full test suite, the JavaScript test
+enumeration and `node --test`, `audit_locked_vs_built.py`,
+`grammar_gen.py --check`, `protocol_gen.mjs --check`, `core_check.py` (twice —
+once for `interp.planes`, once for `json.planes`), the two coverage reports,
+`ruff check .`, and `mypy .`. Every step exits non-zero on failure except the
+two coverage reports, which are reports by construction and never gate. There
+was no existing CI configuration in this repo to extend, so this script is that
+gate, until one exists.
