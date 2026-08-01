@@ -328,6 +328,68 @@ def test_the_graduated_assertion_is_in_a_suite_the_gate_runs():
     assert os.path.basename(graduated).startswith("test_")
 
 
+def test_every_servable_page_reaches_the_deploy():
+    """garden.html shipped in #52 and 404'd on GitHub Pages for two builds
+    while Deploy Pages reported success on every push. The workflow copied a
+    hardcoded `cp index.html paint.html _site/`, and copying a list of files
+    that all exist always succeeds -- a page absent from the list is invisible
+    to the only thing that could have noticed. The deploy must be DERIVED from
+    the tree, and the derivation must be checked against the authored set."""
+    wf = os.path.join(REPO, ".github", "workflows", "pages.yml")
+    if not os.path.exists(wf):
+        return
+    with open(wf, encoding="utf-8") as fh:
+        yml = fh.read()
+    body = "\n".join(ln for ln in yml.splitlines()
+                     if not ln.lstrip().startswith("#"))
+
+    # No page may be named individually in the copy -- that is the allowlist.
+    pages = [f for f in os.listdir(REPO) if f.endswith(".html")]
+    assert pages, "no root pages to deploy"
+    for page in pages:
+        assert f"cp {page}" not in body and f" {page} _site" not in body, (
+            f"pages.yml names {page} in the copy: an allowlist is how "
+            f"garden.html went missing. Copy ./*.html instead.")
+    assert "cp ./*.html _site/" in body, (
+        "pages.yml must copy every root page, not a named few")
+
+    # js/ must be walked, not enumerated per-directory: `js/*.mjs` plus
+    # `js/paint/*.mjs` is what left js/sound/ out of the deploy in #52.
+    assert "find js -name '*.mjs'" in body, (
+        "pages.yml must walk js/ so a new module directory ships with the "
+        "page that imports it")
+
+    # And the built tree is checked against what was authored. Without
+    # --source the checker shares the allowlist's blind spot exactly: it
+    # walks only the pages that shipped, so an omitted page has no
+    # references to fail on and the check passes.
+    checker = os.path.join(REPO, "scripts", "check_pages_surface.py")
+    assert os.path.exists(checker), "the deploy's own check is missing"
+    assert "check_pages_surface.py _site --source=." in body, (
+        "pages.yml must run the surface check against _site WITH --source, "
+        "or an omitted page passes unnoticed")
+
+    # The check is real here and now, not only on a runner.
+    r = _py("scripts/check_pages_surface.py", REPO, f"--source={REPO}")
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_the_landing_page_links_to_the_pages_it_ships_with():
+    """The deploy carried paint.html and garden.html while index.html linked
+    to nothing but the repo, so a shipped page was unreachable by anyone who
+    did not already know its filename -- indistinguishable, from outside,
+    from the page not being deployed at all."""
+    idx = os.path.join(REPO, "index.html")
+    with open(idx, encoding="utf-8") as fh:
+        html = fh.read()
+    for page in sorted(f for f in os.listdir(REPO)
+                       if f.endswith(".html") and f != "index.html"):
+        if page == "the-living-garden.html":
+            continue  # superseded by garden.html; deployed, not advertised
+        assert f'href="./{page}"' in html, (
+            f"{page} is deployed but index.html does not link to it")
+
+
 if __name__ == "__main__":
     fails = []
     tests = [(n, f) for n, f in sorted(globals().items())
