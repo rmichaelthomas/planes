@@ -619,7 +619,7 @@ than hand-kept, so a tool never has to parse prose to learn the vocabulary.
 | `grammar/vocabulary.json` | keywords, builtins, effect kinds, token classes |
 | `grammar/errors.json` | every error site: tag, class, template, slots, fix |
 | `grammar/rules.json` | every rule form the parser accepts |
-| `grammar/core.json` | the subset a self-hosting implementation may use |
+| `grammar/core.json` | the subset a self-hosting implementation may use — `interp.planes` **and every file it reaches through `use`** |
 
 ```json
 {
@@ -672,7 +672,8 @@ An orientation, not an inventory. For the complete list, ask the repo:
 
 ```bash
 $ bash scripts/ci.sh
-== suites: 56 files, 56 reporting, 1124 oks, 10 job(s), 45.6s wall ==
+...
+all checks passed
 ```
 
 It runs the suites, the JavaScript tests, the locked-construct audit, the
@@ -680,6 +681,17 @@ grammar-data check, the core-subset check for every self-hosted file, the
 coverage reports, `ruff` and `mypy`. `scripts/ci.sh --fast` skips the twelve slowest
 suites for iteration and is **not** the gate — it skips the
 cross-implementation agreement, which is the thing worth checking.
+
+The suite and ok counts print on the run's own `== suites: … ==` line. They are
+not reproduced here: this README carried `56 files, 1124 oks` until it was six
+suites and a hundred and fifty-three oks out of date, which is the same defect
+class as any other number nobody re-derives.
+
+"The core-subset check for every self-hosted file" is worth reading twice,
+because it was **not true when it was written**. `core_check.py` checked
+`interp.planes` alone, and a second host runs `interp.planes` plus everything it
+reaches through `use`. It follows the graph now, so one run covers all five
+self-hosted files — and the sentence and the checker finally agree.
 
 Two habits it enforces, both learned the hard way:
 
