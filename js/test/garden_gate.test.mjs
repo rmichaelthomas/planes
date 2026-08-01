@@ -445,3 +445,52 @@ test("the sound schedule's own lines trace back into garden.planes too", async (
     restore();
   }
 });
+
+// ---- the page's two speeds, and the legend that advertises them ------------
+//
+// `createSceneLoop` advances by elapsed x ticksPerSecond x speed and floors
+// it, so a rate the renderer cannot deliver does not run slower — it SKIPS the
+// ticks it cannot draw. The old fast-forward asked for 64 ticks a second
+// against a measured ceiling of 31.2 and drew every OTHER frame of the day.
+//
+// The ceiling is a fact about a machine and is not asserted here; what is
+// asserted is that the page does not ASK for more than the budget the scene
+// was sized against, which is the same 60ms-per-tick number benchmarks/
+// density.md sets. A future build that wants a faster fast-forward has to move
+// that budget, with a measurement, rather than move this number alone.
+
+const FRAME_BUDGET_MS = 60;
+
+test("neither speed asks for more ticks a second than the frame budget allows", () => {
+  const page = fs.readFileSync(path.join(REPO, "garden.html"), "utf-8");
+  const base = Number(/const TICKS_PER_SECOND = ([\d.]+);/.exec(page)[1]);
+  const fast = Number(/const FAST_SPEED = ([\d.]+);/.exec(page)[1]);
+  const affordable = 1000 / FRAME_BUDGET_MS; // 16.7 ticks a second, per tick budget
+  assert.ok(base > 0 && fast >= 1, `base ${base}, fast ${fast}`);
+  // The base rate must fit inside the per-tick budget outright.
+  assert.ok(base <= affordable, `base ${base}/s exceeds the ${FRAME_BUDGET_MS}ms tick budget`);
+  // Fast-forward is allowed to spend the measured headroom above that budget —
+  // the scene actually costs 23-35ms, not 60 — but not without limit. 31.2/s
+  // is what this machine delivered; 32 is the round number above it, and past
+  // it the loop is provably dropping ticks.
+  assert.ok(base * fast <= 32, `fast-forward asks for ${base * fast}/s, past the measured 31.2/s ceiling`);
+});
+
+test("the legend is written from the tick rate, never restated beside it", () => {
+  const page = fs.readFileSync(path.join(REPO, "garden.html"), "utf-8");
+  // The one number a reader checks against a stopwatch must not be a literal
+  // that a speed change can leave behind — which it was, at "25 seconds",
+  // through two builds.
+  assert.match(page, /const DAY_SECONDS = 100 \/ TICKS_PER_SECOND;/);
+  assert.match(page, /garden-day-seconds"\)\.textContent =/);
+  assert.doesNotMatch(page, /one day<\/b> ≈ \d/, "the legend hardcodes a day length again");
+});
+
+test("the garden records WebM off the same canvas its other exports read", () => {
+  const page = fs.readFileSync(path.join(REPO, "garden.html"), "utf-8");
+  assert.match(page, /recordCanvas, VIDEO_SECONDS/, "imported from the shared exporter");
+  assert.match(page, /recordCanvas\(canvas, "garden"/, "records the page's own canvas");
+  // A recording of a paused garden is ten seconds of one frame.
+  assert.match(page, /if \(!loop\.isRunning\(\)\) setPlaying\(true\);/);
+  assert.match(page, /id="garden-record"/);
+});

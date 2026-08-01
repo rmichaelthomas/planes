@@ -325,12 +325,13 @@
         <div>
           <button id="garden-save-svg" class="quiet" type="button">Save SVG ⤓</button>
           <button id="garden-save-png" class="quiet" type="button">Save PNG ⤓</button>
+          <button id="garden-record" class="quiet" type="button">Record WebM ⏺</button>
         </div>
       </div>
       <div class="hint">same seed, same garden — on any machine, forever</div>
 
       <div class="legend" id="garden-legend">
-        <span><b>one day</b> ≈ 25 seconds</span>
+        <span><b>one day</b> ≈ <span id="garden-day-seconds">12.5</span> seconds</span>
         <span><b>weather</b> drifts on its own noise</span>
         <span><b>bees</b> by day, <b>fireflies</b> by night</span>
         <span><b>flowers</b> open with the sun</span>
@@ -386,7 +387,7 @@
     <script type="module">
       import { paint } from "./js/paint/painter.mjs";
       import { toSvg } from "./js/paint/svg.mjs";
-      import { downloadSvg, downloadPng } from "./js/paint/export.mjs";
+      import { downloadSvg, downloadPng, recordCanvas, VIDEO_SECONDS } from "./js/paint/export.mjs";
       import { createProgramSession } from "./js/paint/program_session.mjs";
       import { createTickScrubber } from "./js/paint/tick_scrubber.mjs";
       import { renderSurface } from "./js/paint/surface_pane.mjs";
@@ -407,12 +408,33 @@
       const DAYS = 3;
       const TICK_SPAN = DAY_LENGTH * DAYS;
 
-      // How fast the day runs at 1x. Four ticks a second is one day in
-      // twenty-five seconds — which is what the legend says, rather than the
-      // mockup's hundred: the mockup was drawn against a scene that did not
-      // exist yet, and a legend that flatters a mockup is a legend that lies.
-      const TICKS_PER_SECOND = 4;
-      const FAST_SPEED = 16;
+      // How fast the day runs, and how fast fast-forward runs — both chosen
+      // against a measurement rather than a feel, because the loop's own
+      // pacing makes the second one lie if it is not.
+      //
+      // `createSceneLoop` is time-based: it advances `position` by elapsed x
+      // ticksPerSecond x speed and takes `Math.floor` of it, so a rate the
+      // renderer cannot deliver does not run slower — it SKIPS the ticks it
+      // cannot draw. Measured on this machine at this page's own scale 3, one
+      // tick end to end (run, mark walk, paint) costs 23 to 35ms, a ceiling of
+      // 31.2 ticks a second:
+      //
+      //     4/s   one day 25s     renders every tick   (the old base: slow)
+      //     8/s   one day 12.5s   renders every tick   <- base
+      //    24/s   one day 4.2s    renders every tick   <- fast-forward
+      //    32/s   one day 3.1s    skips ~3%
+      //    64/s   one day 1.6s    skips ~51%           (the old 16x)
+      //
+      // The old fast-forward asked for 64 and got 31: it was drawing every
+      // OTHER frame of the day and calling it speed. 3x lands at 24, which is
+      // under the ceiling, so fast-forward is now genuinely faster AND draws
+      // every tick it claims to.
+      const TICKS_PER_SECOND = 8;
+      const FAST_SPEED = 3;
+      // One day in seconds, derived — the legend below is written from this
+      // rather than restating it, so the page cannot advertise a speed it does
+      // not run at.
+      const DAY_SECONDS = 100 / TICKS_PER_SECOND;
 
       // THE BACKING STORE IS THREE TIMES THE PROGRAM'S COORDINATE SPACE.
       // `paint/garden.planes` draws in 480x360 and is untouched; the canvas
@@ -1240,6 +1262,39 @@
         downloadSvg(svg, "garden");
       });
 
+      // Ten seconds of WebM off the same canvas the other two exports read —
+      // the third sink onto the same picture, not a second renderer.
+      //
+      // A recording of a PAUSED garden is ten seconds of one frame, so this
+      // starts the day if it is not already running, exactly as paint.html
+      // does. At 8 ticks a second, ten seconds is 80 ticks: most of a day,
+      // dawn through dusk, which is the thing worth having a video of.
+      let recording = null;
+      const recordBtn = $("garden-record");
+      recordBtn.addEventListener("click", () => {
+        if (recording) {
+          recording.stop();
+          return;
+        }
+        if (!lastLines.length) {
+          showOutput(["nothing has been drawn yet"], true);
+          return;
+        }
+        if (!loop.isRunning()) setPlaying(true);
+        try {
+          recording = recordCanvas(canvas, "garden", {
+            onFinish: () => {
+              recording = null;
+              recordBtn.textContent = "Record WebM ⏺";
+            },
+          });
+        } catch (e) {
+          showOutput([`✗ ${e.message}`], true);
+          return;
+        }
+        recordBtn.textContent = `Recording ${VIDEO_SECONDS}s ⏹`;
+      });
+
       $("garden-save-png").addEventListener("click", () => {
         if (!lastLines.length) {
           showOutput(["nothing has been drawn yet"], true);
@@ -1334,6 +1389,9 @@
       });
 
       $("garden-reload-modules").addEventListener("click", () => newSession());
+
+      $("garden-day-seconds").textContent =
+        Number.isInteger(DAY_SECONDS) ? String(DAY_SECONDS) : DAY_SECONDS.toFixed(1);
 
       const stale = staleModuleWarning();
       if (stale) showOutput(stale.split("\n"), true);
