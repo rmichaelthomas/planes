@@ -282,6 +282,38 @@ export function staleModuleWarning() {
   );
 }
 
+// The same question as staleModuleWarning, asked of the DRAWING modules — and
+// it has to be asked separately, because that check compares the loaded
+// vocabulary against the loaded interpreter and is blind to everything under
+// js/paint/. A protocol version bump makes the two come apart in exactly the
+// way a browser cache produces: a page cache-busts its `.planes` fetch and
+// CANNOT cache-bust its own `.mjs` graph, so the program arrives fresh,
+// declaring a version the cached walk has never heard of, and §1.1 refuses the
+// whole stream. That refusal is correct. On its own it is also unreadable —
+// the picture is simply absent, and the message names a version number rather
+// than a remedy.
+//
+// A page never ships a program its own renderer cannot draw. So when THIS
+// page's own program is refused for its version, the renderer is old, not the
+// program wrong, and the remedy is the same one staleModuleWarning gives.
+export function staleRendererWarning(errors, highestVersion) {
+  const refused = (errors || []).find((e) => e.tag === "unsupported-version");
+  if (!refused) return null;
+  return (
+    "This page is running a mix of old and new code — empty your browser's " +
+    "cache and reload.\n\n" +
+    `The drawing modules this page loaded implement protocol versions up to ` +
+    `${highestVersion}, and this page's own program declares a later one. A page ` +
+    "never ships a program its own renderer cannot draw, so the two came from " +
+    "different versions of this repo: the program is fetched fresh every load " +
+    "and the modules are not, because there is no build step to version their " +
+    "URLs.\n\n" +
+    "In Safari: Develop → Empty Caches, then reload — a plain reload keeps ES " +
+    "modules. In Chrome or Firefox: hold Shift and click reload.\n\n" +
+    `(the renderer's own words: ${refused.message})`
+  );
+}
+
 // ---- DOM wiring (only in a browser, and only on a page that has these
 // exact four elements — paint.html imports runProgram/analyseProgram/
 // surfaceReport from this module too, under its own element ids, and must

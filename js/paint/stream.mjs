@@ -26,6 +26,15 @@ import { parseCommand, GRADIENT_GEOMETRY } from "./protocol.mjs";
 
 const SUPPORTED_VERSIONS = new Set([1, 2, 3]);
 
+// The highest version THIS COPY of the walk implements. Exported so a page can
+// answer a question it otherwise cannot: "is my renderer older than my
+// program?" A page cache-busts its `.planes` fetch and cannot cache-bust its
+// own `.mjs` graph — there is no build step — so after a version bump a
+// browser can hold a stale walk against a fresh program, and §1.1 then
+// correctly refuses the whole stream and draws nothing. Correct, and
+// indistinguishable from a broken page unless something says so.
+export const HIGHEST_VERSION = Math.max(...SUPPORTED_VERSIONS);
+
 // The version each verb first appeared in. A stream declaring less than a
 // verb's own version is an error, not a silent draw (planes-drawing-protocol-
 // v2.md §10.2, v3 §4.4) — unlike an OPTIONAL argument, which widens an

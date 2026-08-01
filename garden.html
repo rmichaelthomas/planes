@@ -391,13 +391,13 @@
       import { createTickScrubber } from "./js/paint/tick_scrubber.mjs";
       import { renderSurface } from "./js/paint/surface_pane.mjs";
       import { createSceneLoop } from "./js/paint/loop.mjs";
-      import { walk as walkDrawing } from "./js/paint/stream.mjs";
+      import { walk as walkDrawing, HIGHEST_VERSION } from "./js/paint/stream.mjs";
       import { markSink } from "./js/paint/marks.mjs";
       import { hitTest, marksForLine, outlineOf } from "./js/paint/hit.mjs";
       import { card } from "./js/paint/why.mjs";
       import { createAudioPlayer } from "./js/sound/audio.mjs";
       import { schedule as soundSchedule, BASE_HZ } from "./js/sound/stream.mjs";
-      import { staleModuleWarning } from "./js/browser_main.mjs";
+      import { staleModuleWarning, staleRendererWarning } from "./js/browser_main.mjs";
       import vocabulary from "./grammar/vocabulary.json" with { type: "json" };
 
       // paint/garden.planes's own `day-length`, and how many of them the
@@ -666,6 +666,14 @@
 
         const painted = repaintFrame();
         if (painted.errors.length) {
+          // A version refusal on THIS page's own program is a cache problem,
+          // not a picture problem, and saying so is the difference between a
+          // blank canvas that blames the reader and one that names the fix.
+          const stale = staleRendererWarning(painted.errors, HIGHEST_VERSION);
+          if (stale) {
+            showOutput(stale.split("\n"), true);
+            return;
+          }
           showOutput([...painted.text, ...painted.errors.map((e) => `✗ ${e.tag}: ${e.message}`)], true);
           return;
         }

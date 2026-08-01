@@ -23,7 +23,8 @@ import { loadGrammar } from "../loader_node.mjs";
 
 loadGrammar();
 
-const { unimplementedBuiltins, staleModuleWarning } = await import("../browser_main.mjs");
+const { unimplementedBuiltins, staleModuleWarning, staleRendererWarning } = await import("../browser_main.mjs");
+const { HIGHEST_VERSION } = await import("../paint/stream.mjs");
 const vocab = (await import("../../grammar/vocabulary.json", { with: { type: "json" } })).default;
 
 test("a consistent module set reports nothing", () => {
@@ -84,4 +85,51 @@ test("the probe is cheap enough to run on every page load", () => {
   for (let i = 0; i < 5; i++) unimplementedBuiltins();
   const each = (performance.now() - t0) / 5;
   assert.ok(each < 25, `${each.toFixed(1)}ms per check is too much for a page load`);
+});
+
+// ---- the same failure, one layer over: a stale DRAWING module ---------------
+//
+// staleModuleWarning compares the loaded vocabulary against the loaded
+// interpreter and is blind to everything under js/paint/. A protocol version
+// bump makes those come apart the same way: garden.html cache-busts its
+// `.planes` fetch and cannot cache-bust its own `.mjs` graph, so a browser can
+// hold a v2 walk against a v3 program. §1.1 then refuses the whole stream and
+// draws nothing — correct, and on its own indistinguishable from a broken
+// page. It happened for real the first time this repo bumped the version with
+// a page already open.
+
+test("a version refusal on the page's own program is reported as a stale cache, with the remedy", () => {
+  const errors = [{
+    tag: "unsupported-version",
+    message: "this renderer implements protocol versions 1-2; the stream declared version 3 and is refused whole",
+  }];
+  const warning = staleRendererWarning(errors, 2);
+  assert.ok(warning, "a version refusal must produce a warning");
+  assert.match(warning, /mix of old and new code/);
+  assert.match(warning, /empty your browser's cache and reload/);
+  assert.match(warning, /Empty Caches/, "Safari's own wording, since that is where it bites");
+  assert.match(warning, /hold Shift and click reload/);
+  // The renderer's own message is carried, not swallowed — the version number
+  // in it is the tell that says which half is stale.
+  assert.match(warning, /versions 1-2/);
+});
+
+test("any other refusal is left alone — this is not a catch-all for drawing errors", () => {
+  for (const tag of ["unknown-verb", "wrong-arity", "bad-number", "verb-not-in-version"]) {
+    assert.equal(staleRendererWarning([{ tag, message: "x" }], HIGHEST_VERSION), null, tag);
+  }
+  assert.equal(staleRendererWarning([], HIGHEST_VERSION), null);
+  assert.equal(staleRendererWarning(undefined, HIGHEST_VERSION), null);
+});
+
+test("a consistent module set reports nothing here either — the garden's own program is drawable", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync(new URL("../../paint/garden.planes", import.meta.url), "utf-8");
+  const declared = /show "draw protocol (\d+)"/.exec(src);
+  assert.ok(declared, "the garden declares a protocol version");
+  assert.ok(
+    Number(declared[1]) <= HIGHEST_VERSION,
+    `the garden declares protocol ${declared[1]} and the walk implements up to ${HIGHEST_VERSION} — ` +
+    "a page must never ship a program its own renderer cannot draw",
+  );
 });
