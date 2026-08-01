@@ -306,3 +306,35 @@ test("garden.html imports the shared program-load/scrubber/surface modules rathe
   assert.match(html, /from ["']\.\/js\/paint\/tick_scrubber\.mjs["']/);
   assert.match(html, /from ["']\.\/js\/paint\/surface_pane\.mjs["']/);
 });
+
+// ---- a page that enumerates the verb table must enumerate all of it --------
+//
+// paint.html's footer names every verb by hand, in its groups, and says how
+// many there are. It said "Drawing Protocol v2 — thirty-three verbs" for a
+// whole build after v3 shipped `blur`, on the live site, and nothing noticed:
+// the count was prose and the list was prose, and prose does not fail a gate.
+//
+// This is the same shape as draw.planes ↔ VERBS, one layer out — two things
+// written twice, so the second one is checked against the first.
+
+test("paint.html's footer names every verb in the table, and no verb it does not have", () => {
+  const html = read("paint.html");
+  const footer = html.split("<footer>")[1].split("</footer>")[0];
+  const named = new Set([...footer.matchAll(/<code>([a-z]+)<\/code>/g)].map((m) => m[1]));
+
+  const missing = VERBS.filter((v) => !named.has(v));
+  assert.deepEqual(missing, [],
+    `paint.html's footer does not name: ${missing.join(", ")}`);
+
+  // The count in the same sentence has to agree with the table too. Spelled
+  // out, because that is how the page says it.
+  const WORDS = {
+    26: "twenty-six", 27: "twenty-seven", 28: "twenty-eight", 29: "twenty-nine",
+    30: "thirty", 31: "thirty-one", 32: "thirty-two", 33: "thirty-three",
+    34: "thirty-four", 35: "thirty-five", 36: "thirty-six",
+  };
+  const word = WORDS[VERBS.length];
+  assert.ok(word, `no spelled-out form for ${VERBS.length} verbs — add one`);
+  assert.ok(footer.includes(`${word} verbs`),
+    `paint.html's footer must say "${word} verbs"; the table has ${VERBS.length}`);
+});
