@@ -302,7 +302,42 @@ to draw-star of i, total:
 # ---- sun and moon -----------------------------------------------------------
 #
 # Two marks each: a wide soft glow under `blend add`, then the crisp disc.
-# dx 0, dy 0 is a glow rather than a cast shadow.
+#
+# WHAT READS AS THE SUN IS THE GLOW, NOT THE DISC. The mockup's core disc is
+# radius 36 in a 1720-wide canvas and its glow is 110 — and the glow is drawn
+# ADDITIVELY in a near-white (255,214,140), so at full light it saturates to a
+# solid white circle three times the disc's size, with the disc invisible
+# inside it. That saturating circle IS the sun a reader sees.
+#
+# Two things were wrong and only one of them was a number.
+#
+# THE COLOUR. The glow was L 0.70, a deep orange that can never saturate
+# however much of it is added, so nothing clipped and only a small core
+# showed. Every colour here is the mockup's own now, converted once: glow
+# (255,214,140) is OKLCH 0.90 0.10 80, disc (255,244,214) is 0.97 0.04 85,
+# moon glow (196,214,255) is 0.88 0.06 266, moon disc (232,238,255) is
+# 0.95 0.02 269 — each round-trips exactly through js/paint/color.mjs's own
+# rgbHex.
+#
+# THE SIZE, and it is measured against what the mockup LOOKS like rather than
+# against the constant it is written with. Transcribing the mockup's own
+# radii (110 -> 30.7 glow, 36 -> 10 disc) gives a sun a third the size of the
+# one in the mockup, because in the mockup the visible sun is not the disc at
+# all: the glow clips to flat white across most of its 110 and the 36-radius
+# disc disappears inside it. The apparent disc measures ~111 in a 1720-wide
+# frame, which at this canvas's own 480/1720 = 0.2791 is 31 — so 31 is the
+# disc here, with the glow at 58 keeping the mockup's halo-to-body ratio.
+# Additive clipping is a property of the medium, and the honest way to match
+# a picture that depends on it is to match the picture.
+#
+# THE DISC IS DRAWN ADDITIVELY TOO, and that is the whole reason the two read
+# as one body. The mockup's `ctx.restore()` falls AFTER its core disc, so the
+# disc composites under `lighter` exactly as the glow does — it lands on
+# already-saturated white and disappears into it. Switching back to `normal`
+# before the disc, which is what this did, paints a small cream circle ON TOP
+# of the white glow: two circles, a big soft one with a distinct little one
+# inside, instead of one sun. The `blend of "normal"` now closes the pair
+# rather than splitting it.
 
 to sky-body of u, disc-r, glow-r, glow-blur, l, c, h, glow-a, disc-l, disc-c, disc-h:
   let body-x = u * canvas-width * 1.06 - canvas-width * 0.03
@@ -312,9 +347,9 @@ to sky-body of u, disc-r, glow-r, glow-blur, l, c, h, glow-a, disc-l, disc-c, di
   fill of l, c, h, glow-a
   circle of body-x, body-y, glow-r
   no-blur
-  blend of "normal"
   fill of disc-l, disc-c, disc-h, 0.98
   circle of body-x, body-y, disc-r
+  blend of "normal"
 
 # ---- clouds -----------------------------------------------------------------
 #
@@ -616,9 +651,9 @@ if night >= 0.05:
   draw-star of 0, 34
 
 if phase >= 0.25 and phase < 0.75:
-  sky-body of ((phase - 0.25) * 2), 13, 30, 14.5, 0.7, 0.16, 68, (0.30 + light * 0.35), 0.97, 0.06, 88
+  sky-body of ((phase - 0.25) * 2), 31, 58, 26, 0.90, 0.10, 80, (0.30 + light * 0.35), 0.97, 0.04, 85
 else:
-  sky-body of ((mod of (phase + 0.25), 1) * 2), 9, 20, 8.4, 0.62, 0.07, 254, 0.3, 0.95, 0.02, 258
+  sky-body of ((mod of (phase + 0.25), 1) * 2), 21, 38, 17, 0.88, 0.06, 266, 0.3, 0.95, 0.02, 269
 
 draw-cloud of 0, 6
 no-blur
