@@ -132,6 +132,35 @@ def test_a_non_core_builtin_is_refused_by_name():
         assert got["core"]["line"] == 1, got["core"]
 
 
+def test_a_let_in_an_uncalled_function_does_not_refuse():
+    """THE ASSERTION THAT SEPARATES THIS FROM A SECOND COPY OF core_check.py.
+
+    The restriction is evaluation-time, so a construct the run never REACHES is
+    never refused — and this is the case where the two checks give different
+    answers on purpose. core_check.py flags the `let` below; the restricted run
+    does not, because nothing calls the function. Both are right about their own
+    question, and a restricted run that completes therefore means "every
+    construct this run reached was core", never "every construct in the file is
+    core". If this ever starts refusing, the mode has become a source scan."""
+    src = ("to never-called of n:\n"
+           "  let x = n * 2\n"
+           "  give x\n"
+           "show 1\n")
+    got, _ = _run_source(src, "--core")
+    assert "core" not in got, (
+        f"refused a `let` the run never reached — this is a source scan now, "
+        f"not an evaluation-time check: {got['core']}")
+    assert got["output"] == ["1"], got
+    # and the static check, on the same text, does flag it
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "probe.planes")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(src)
+        core_keywords, core_builtins, _ = core_check.load_core()
+        static = core_check.violations(p, core_keywords, core_builtins)
+    assert [(c, v) for _, c, v in static] == [("keyword", "let")], static
+
+
 def test_a_wholly_core_program_runs_clean_under_restriction():
     """The positive control. A restricted mode that refused everything would
     pass every test above and be worthless."""
@@ -301,6 +330,90 @@ def test_core_check_py_follows_the_graph_and_finds_the_same_sixteen():
         "core.json or a rewritten module, and this build forbids both")
     assert "REPORTED, NOT GATED" in r.stdout
     assert LEXER in r.stdout
+
+
+# =========================================== F — graduated from the verify script
+#
+# scripts/verify-core-sufficiency.mjs asserted these against CRAFTED core
+# documents, and the retirement rule sends its durable assertions here rather
+# than leaving them in a file nothing runs. They are the anti-vacuity half: each
+# breaks the subject deliberately and confirms the answer changes. Without them,
+# every assertion above would still pass against a mode that had `let`, `rule`,
+# `when` and `why` hardcoded and never opened grammar/core.json at all.
+#
+# The one assertion NOT graduated is the byte-identity comparison against `main`:
+# it needs a git worktree of a commit that will have moved by next month, and its
+# durable form already exists — test_js_metacircular.py compares this whole stack
+# against the Python implementation on every gate run, so a change to the
+# flag-off behaviour fails there.
+
+def _crafted(**edits):
+    """grammar/core.json with one edit, written where --core-json can read it."""
+    with open(os.path.join(REPO, "grammar", "core.json"), encoding="utf-8") as f:
+        doc = json.load(f)
+    for word in edits.get("add_keywords", []):
+        doc["keywords"] = sorted(set(doc["keywords"]) | {word})
+        doc["excluded_keywords"].pop(word, None)
+    for word in edits.get("drop_keywords", []):
+        doc["keywords"] = [k for k in doc["keywords"] if k != word]
+        doc["excluded_keywords"][word] = "crafted, for the anti-vacuity check"
+    d = tempfile.mkdtemp()
+    p = os.path.join(d, "core.json")
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(doc, f)
+    return p
+
+
+def test_the_mode_reads_core_json_rather_than_a_hardcoded_list():
+    """Move `let` INTO the core and the identical restricted run stops refusing.
+    A mode with the four excluded keywords baked in would refuse anyway."""
+    src = ("total = 0\n"
+           "for each n in [1, 2, 3]:\n"
+           "  let doubled = n * 2\n"
+           "  total = total + doubled\n"
+           "show total\n")
+    core = _crafted(add_keywords=["let"])
+    got, _ = _run_source(src, "--core", "--core-json", core)
+    assert "core" not in got, got
+    assert got["output"] == ["12"], got
+
+
+def test_narrowing_the_core_makes_a_previously_clean_program_refuse():
+    """The other direction. `use` is core, and the seven-effects program above
+    passes because of it; take it out and the same program must stop."""
+    core = _crafted(drop_keywords=["use"])
+    got, _ = _run_source("use file\nshow 1\n", "--core", "--core-json", core)
+    assert "core" in got, got
+    assert got["core"]["construct"] == "use", got["core"]
+
+
+def test_when_is_the_whole_gap_and_the_corpus_then_runs_restricted():
+    """THE DECISIVE CONTROL, and the reason the finding is a number and not a
+    direction. Widen the core by `when` and nothing else, and all three
+    metacircular stages complete under restriction over the whole corpus, each
+    producing output byte-identical to the unrestricted run. The declared port
+    surface is short by one keyword — not by an unknown amount."""
+    core = _crafted(add_keywords=["when"])
+    files = [f for f in sorted(glob.glob("**/*.planes", recursive=True))
+             if ".venv" not in f]
+    std = [f for f in files
+           if not any(ln.strip().startswith("use ")
+                      for ln in open(f, encoding="utf-8").read().splitlines())]
+    for stage, batch in (("run", std), ("lex", files), ("parse", std)):
+        strict = subprocess.run(
+            [NODE, "js/cli.mjs", "meta", stage, "--core", "--core-json", core,
+             *batch], cwd=REPO, capture_output=True, text=True)
+        assert strict.returncode == 0, strict.stderr[:400]
+        got = json.loads(strict.stdout)
+        assert isinstance(got, list), (
+            f"meta {stage} still refused with `when` in the core: "
+            f"{got.get('core')} — a SECOND construct is missing, and the "
+            f"finding is no longer one keyword")
+        assert len(got) == len(batch), (stage, len(got), len(batch))
+        plain = subprocess.run([NODE, "js/cli.mjs", "meta", stage, *batch],
+                               cwd=REPO, capture_output=True, text=True)
+        assert strict.stdout == plain.stdout, (
+            f"meta {stage}: the restriction changed an answer")
 
 
 def test_core_checks_graph_block_says_which_modules_conform():

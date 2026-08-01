@@ -200,6 +200,26 @@ See `feat-core-sufficiency-benchmarks-post.md` for the full table. In summary:
 
 ---
 
+## The gate found one thing about itself
+
+`scripts/verify-core-sufficiency.mjs` was written, run (27 of 28 assertions passing,
+the 28th being the finding itself, reported and non-blocking), and committed — and
+`test_gate.py` then failed the branch, correctly, under the retirement rule: *a
+verification script graduates into a suite or is deleted when its build merges, in
+either language.* It did both in this PR. The durable assertions — including the whole
+crafted-core anti-vacuity group, which is what proves the mode reads `core.json` rather
+than a hardcoded list of four words — are now in `test_js_core_restricted.py` and run
+on every gate. The script is gone. `core-sufficiency-verification.md` is the record of
+its last run.
+
+The one assertion not graduated is the byte-identity comparison against a `main`
+worktree: it pins a commit that will have moved by next month, and its durable form
+already exists, because `test_js_metacircular.py` compares this stack against the
+Python implementation on every gate run and would fail if the flag-off behaviour had
+changed.
+
+---
+
 ## Two things found on the way
 
 **§5.1 was already done.** The prompt directed an unconditional correction of
