@@ -338,10 +338,10 @@ test("H: the language did not change — grammar/ regenerates identically from i
   assert.match(r, /up to date/);
 });
 
-test("H: the counts are where they were — 32 keywords, 12 builtins, 7 effect kinds", () => {
+test("H: the counts are where they were — 32 keywords, 13 builtins, 7 effect kinds", () => {
   const vocab = JSON.parse(fs.readFileSync(path.join(REPO, "grammar", "vocabulary.json"), "utf-8"));
   assert.equal(vocab.keywords.length, 32);
-  assert.equal(vocab.builtins.length, 12);
+  assert.equal(vocab.builtins.length, 13);
   assert.equal(Object.keys(vocab.effect_kinds).length, 7);
 });
 

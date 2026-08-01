@@ -42,7 +42,7 @@ PROBE = {
     "count": "[1]", "lower": '"A"', "upper": '"a"', "text": "1",
     "whole": "1.5", "ask": '"https://example.invalid"', "read": '"x"',
     "normalize": '"a"', "join": '["a"]', "rest": "[1, 2]", "sine": "0",
-    "number": '"1.5"',
+    "number": '"1.5"', "root": "9",
 }
 
 # The tags that mean "this interpreter has never heard of it". Every other

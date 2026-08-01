@@ -165,6 +165,30 @@ class Surface:
     def produces_approximate(self):
         return bool(self.approximate)
 
+    def approximation_strength(self):
+        """"always" if any route reaches an operation that approximates at
+        every argument, "sometimes" if every route ends at one that only
+        sometimes does, and None when there is no route at all.
+
+        `sine` is the whole of "always" today and `root` the whole of
+        "sometimes"; the distinction is the operation's, not this method's.
+        """
+        found = None
+        for route in self.approximate:
+            strength = APPROXIMATION_SOURCES.get(route[-1])
+            if strength == "always":
+                return "always"
+            if strength == "sometimes":
+                found = "sometimes"
+        return found
+
+    def approximation_sentence(self):
+        """The one line the surface prints about numbers."""
+        if self.approximation_strength() == "sometimes":
+            return ("numbers: may be approximate — this program reaches `root`, "
+                    "which is exact when its argument is a perfect square")
+        return "numbers: approximate — this program reaches `sine`"
+
     def approximation_routes(self):
         """Each route, as `entry -> ... -> sine`, shortest first."""
         return ["  ->  ".join(path) for path in self.approximate]
@@ -235,7 +259,7 @@ class Surface:
         if self.is_pure():
             if self.produces_approximate():
                 return ("pure — this program touches nothing outside itself\n"
-                        + "numbers: approximate — this program reaches `sine`\n"
+                        + self.approximation_sentence() + "\n"
                         + "\n".join(f"  {r}" for r in self.approximation_routes()))
             return "pure — this program touches nothing outside itself"
         if self.is_library():
@@ -254,7 +278,7 @@ class Surface:
                 seen.add(key)
                 lines.append(f"  {e}")
         if self.produces_approximate():
-            lines.append("numbers: approximate — this program reaches `sine`")
+            lines.append(self.approximation_sentence())
             for route in self.approximation_routes():
                 lines.append(f"  {route}")
         if self.unresolved:
@@ -333,13 +357,25 @@ class Consts:
 
 # ================================================================ approximation
 #
-# The only operation in the language that introduces approximation is `sine`,
-# so "does this program produce approximate values" is a reachability question
+# "Does this program produce approximate values" is a reachability question
 # over the call graph — answerable WITHOUT RUNNING ANYTHING, which is the whole
 # claim. The route is reported too, because "yes" without "how" is the kind of
 # answer this analyser exists not to give.
-
-APPROXIMATION_SOURCE = "sine"
+#
+# TWO SOURCES, AND THEY DO NOT MEAN THE SAME THING. `sine` approximates at
+# EVERY argument, so reaching it is a promise that approximate values are
+# produced. `root` approximates only when its argument is not a perfect square
+# (square-root-spec.md §2), so reaching it is a promise of nothing —
+# `root of 9` is exactly 3. A surface that flattened the two into one sentence
+# would be less informative, not more, so the strength is carried alongside
+# the source and the wording follows it.
+#
+# This is not a new kind of imprecision. The effect surface has always been a
+# MAY-analysis: a program whose network call sits inside a function nothing
+# calls still reports `network`. `root` adds a second wording, not a second
+# standard of proof.
+APPROXIMATION_SOURCES = {"sine": "always", "root": "sometimes"}
+APPROXIMATION_SOURCE = "sine"   # kept: the always-source, named where one is needed
 
 
 def called_names(node, out):
@@ -461,7 +497,11 @@ class Analyser:
         A user function named `sine` shadows the builtin (the names mandate),
         and then nothing here is a source of approximation at all.
         """
-        if APPROXIMATION_SOURCE in self.funcs:
+        # A user function of the same name shadows the builtin (the names
+        # mandate), and then that name is not a source of approximation here.
+        sources = {n: strength for n, strength in APPROXIMATION_SOURCES.items()
+                   if n not in self.funcs}
+        if not sources:
             return []
 
         calls = {}
@@ -470,13 +510,20 @@ class Analyser:
         top_calls = called_names(
             [st for st in prog if not isinstance(st, FuncDef)], set())
 
-        def route_from(entry, seeds):
-            """Breadth-first, so the route reported is the shortest one."""
+        def route_from(entry, seeds, target):
+            """Breadth-first, so the route reported is the shortest one.
+
+            ONE TARGET AT A TIME. A single walk that stopped at whichever
+            source it met first reported only that one — so a program reaching
+            both `root` and `sine` was described by whichever came up in the
+            queue, and a `sine` program could be announced with `root`'s much
+            weaker sentence. Each source gets its own walk.
+            """
             queue = [(n, [entry, n]) for n in sorted(seeds)]
             seen = set(seeds)
             while queue:
                 name, path = queue.pop(0)
-                if name == APPROXIMATION_SOURCE:
+                if name == target:
                     return path
                 for nxt in sorted(calls.get(name, ())):
                     if nxt not in seen:
@@ -484,16 +531,19 @@ class Analyser:
                         queue.append((nxt, path + [nxt]))
             return None
 
-        found = []
-        top = route_from("(top level)", top_calls)
-        if top is not None:
-            found.append(tuple(top))
+        def routes_from(entry, seeds):
+            out = []
+            for target in sorted(sources):
+                r = route_from(entry, seeds, target)
+                if r is not None:
+                    out.append(tuple(r))
+            return out
+
+        found = list(routes_from("(top level)", top_calls))
         for name in sorted(self.funcs):
             if self.func_file.get(name, self.entry_file) != self.entry_file:
                 continue
-            r = route_from(name, calls[name])
-            if r is not None:
-                found.append(tuple(r))
+            found.extend(routes_from(name, calls[name]))
         # A library reports every function that can produce one; an
         # application's own top-level route comes first.
         return found

@@ -1094,6 +1094,8 @@ to eval-builtin of name, arg:
     give builtin-number-of of arg
   if name == "sine":
     give builtin-sine of arg
+  if name == "root":
+    give builtin-root of arg
   if name == "join":
     give builtin-join of arg
   if name == "rest":
@@ -1102,7 +1104,7 @@ to eval-builtin of name, arg:
     fail { message: "ask is an effect -- effects are interp.planes build 3, not build 1", fix: "run it through the build-3 entry point, which threads the effect log; build 1 evaluates expressions only" } as build-3-effect
   if name == "read":
     fail { message: "read is an effect -- effects are interp.planes build 3, not build 1", fix: "run it through the build-3 entry point, which threads the effect log; build 1 evaluates expressions only" } as build-3-effect
-  fail { message: "unknown builtin '" + name + "'", fix: "the twelve builtins are fixed and the lexer recognises only those, so reaching this is a defect in the interpreter rather than in the program — worth reporting with the source" } as unknown-builtin
+  fail { message: "unknown builtin '" + name + "'", fix: "the thirteen builtins are fixed and the lexer recognises only those, so reaching this is a defect in the interpreter rather than in the program — worth reporting with the source" } as unknown-builtin
 
 # ================================================================ sine
 #
@@ -1157,8 +1159,9 @@ to sine-round of x:
 
 # Floor, from a round that goes half away from zero: the rounded value is
 # within one of the true one, so a result above it steps down. `whole of`
-# cannot serve here -- it rounds, it does not floor.
-to sine-floor of x:
+# cannot serve here -- it rounds, it does not floor. Shared by `sine` and
+# `root`, which is why it is no longer named for either.
+to floor-of of x:
   w = round x to 0 places
   if w > x:
     give w - 1
@@ -1187,7 +1190,7 @@ to sine-series of degrees:
 to sine-of-degrees of d:
   scale = sine-working-scale
   # 1. into [0, 360), floored, exactly
-  r = d - (360 * (sine-floor of (d / 360)))
+  r = d - (360 * (floor-of of (d / 360)))
   # 2. into [0, 45], exactly -- sign flips and subtractions only
   sign = 1
   if r >= 180:
@@ -2580,3 +2583,83 @@ to evaluate-source of src:
 to evaluate-with of defs-src, expr-src:
   env = functions-env-of of defs-src
   give canonical-of-value of (eval of (node-of-source of expr-src), env)
+
+# ================================================================ square root
+#
+# THE THIRTEENTH BUILTIN, AND THE FIRST WHOSE EXACTNESS ITS ARGUMENT DECIDES.
+#
+# `sine` approximates at every argument because its algorithm has no exact
+# path at any of them. `root of 9` is exactly 3, and reporting it approximate
+# would describe this interpreter's laziness rather than the number.
+#
+# THE PART THAT IS HARDER HERE THAN IN THE OTHER TWO. Python and JavaScript
+# read a value's numerator and denominator straight off the Fraction, and
+# sqrt(n/d) of a reduced fraction is rational exactly when both are perfect
+# squares. This interpreter has `+ - * /`, comparison and `round to N places`,
+# and no way to look inside a number at all. So the fraction is RECOVERED,
+# by the continued-fraction expansion -- which terminates for every exact
+# rational, and gives back the reduced n and d. Without it `root of (1 / 9)`
+# would come back approximate here and exactly 1/3 in the other two, and a
+# divergence in the third implementation is the one thing the self-hosted
+# interpreter exists to make impossible.
+
+# x = n/d, reduced, d > 0. Called with the convergent seeds 1, 0, 0, 1.
+to rational-parts-from of x, h1, h2, k1, k2:
+  a = floor-of of x
+  h = a * h1 + h2
+  k = a * k1 + k2
+  f = x - a
+  if f == 0:
+    give { n: h, d: k }
+  give rational-parts-from of (1 / f), h, h1, k, k1
+
+to rational-parts of x:
+  give rational-parts-from of x, 1, 0, 0, 1
+
+# A power of ten at or above the root: the Newton start that costs a handful
+# of steps where starting from n itself costs one per digit.
+to root-guess of n, g:
+  if g * g >= n:
+    give g
+  give root-guess of n, (g * 10)
+
+# x*x <= n < (x+1)*(x+1), which is the definition rather than a tolerance.
+to root-settle of n, x:
+  if x * x > n:
+    give root-settle of n, (x - 1)
+  if (x + 1) * (x + 1) <= n:
+    give root-settle of n, (x + 1)
+  give x
+
+to root-newton of n, x:
+  next = floor-of of ((x + (floor-of of (n / x))) / 2)
+  if next >= x:
+    give root-settle of n, x
+  give root-newton of n, next
+
+to root-isqrt of n:
+  if n < 2:
+    give n
+  give root-newton of n, (root-guess of n, 1)
+
+# 10^30, the same result scale sine keeps.
+to root-result-scale:
+  give 1000000000000000000000000000000
+
+to builtin-root of arg:
+  if not (arg.kind == "number"):
+    fail { message: "cannot take the square root of " + (detail-of-value of arg), fix: "root takes a number — e.g. root of 9; if this is text, convert it first with number of" } as not-a-number
+  if arg.value < 0:
+    fail { message: "cannot take the square root of " + (text of arg.value), fix: "root takes a number that is not negative — this language has no imaginary number, so a negative radicand has no value to return; test the sign before taking the root" } as not-a-number
+  parts = rational-parts of arg.value
+  rn = root-isqrt of parts.n
+  rd = root-isqrt of parts.d
+  if rn * rn == parts.n:
+    if rd * rd == parts.d:
+      # Exact -- and it keeps whatever the argument carried.
+      give make-number-carrying of (rn / rd), arg.approx
+  # Doubling before the floor and halving after is how a floor becomes a
+  # round-half-away with no division and no rounding mode to disagree about.
+  scale = root-result-scale
+  scaled = root-isqrt of (floor-of of (4 * (parts.n) * scale * scale / (parts.d)))
+  give make-number-carrying of ((floor-of of ((scaled + 1) / 2)) / scale), { op: "root", detail: "an exact integer square root where the argument is a perfect square, otherwise Newton's method on integers scaled by 10^30, a result rounded to 30 places, half away from zero" }

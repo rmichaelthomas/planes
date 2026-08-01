@@ -58,7 +58,7 @@ def test_reported_core_size_is_the_port_surface():
     # -- it delegates to the host the same way `whole` and the rest already
     # do) and provably avoids `sine`, because it IMPLEMENTS the series rather
     # than calling it (§5.5).
-    assert "builtins    : 11 of 12" in r.stdout
+    assert "builtins    : 11 of 13" in r.stdout
 
 
 def test_core_json_excludes_exactly_let_rule_when_why():

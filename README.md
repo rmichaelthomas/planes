@@ -38,7 +38,7 @@ Not a single network call was made to produce that surface.
 |---|---|
 | [Run it](#run-it) | the three implementations, and a browser |
 | [Three implementations](#three-implementations) | what self-hosting buys, and what "they agree" means |
-| [The vocabulary](#the-vocabulary) | 32 words, 12 builtins, 7 effect kinds |
+| [The vocabulary](#the-vocabulary) | 32 words, 13 builtins, 7 effect kinds |
 | [The language](#the-language) | syntax, in one page |
 | [Numbers are exact](#numbers-are-exact) | rationals, not floats |
 | [Effect surface](#effect-surface) | what a program *can* do |
@@ -122,8 +122,8 @@ JavaScript stack too, so neither guarantee depends on Python.
 
 ## The vocabulary
 
-Closed, and asserted. The whole reserved surface is 44 names — 32 keywords plus
-12 builtins — and both counts are pinned by the test suite, so adding a word is
+Closed, and asserted. The whole reserved surface is 45 names — 32 keywords plus
+13 builtins — and both counts are pinned by the test suite, so adding a word is
 a visible decision rather than a drift. For scale: Python has 35 keywords. The
 small number here is not the vocabulary, it is [the host](#the-host) — seven
 methods, which is what makes the effect surface computable at all.
@@ -137,14 +137,18 @@ nothing  of  or   places plus  round rule   show
 to   true  use   when   where  why   with   write
 ```
 
-**12 builtins** — ordinary functions, not keywords, called as `count of xs`:
+**13 builtins** — ordinary functions, not keywords, called as `count of xs`:
 
 ```
-ask  count  join  lower  normalize  number  read  rest  sine  text  upper  whole
+ask  count  join  lower  normalize  number  read  rest  root  sine  text  upper  whole
 ```
 
-`sine` takes **degrees** and is the only operation in the language that
-returns an approximate value — see [Exact, and approximate](#exact-and-approximate).
+`sine` takes **degrees** and returns an approximate value for **every**
+argument, including `sine of 0` — its algorithm has no exact path at any of
+them. `root` is the square root, and is the one operation whose exactness its
+ARGUMENT decides: `root of 9` is exactly `3`, `root of 2` is approximate, and
+a negative argument is refused rather than given an imaginary answer. The
+rules, and why the two differ, are in [`square-root-spec.md`](square-root-spec.md).
 
 `number` is the other direction of `text` — `number of "12.5"` is the exact
 number `12.5`. It refuses rather than guesses: non-numeric text, the empty
@@ -445,14 +449,14 @@ every error names its fix, and that is counted rather than asserted:
 
 ```
 $ python3 errors_coverage.py
-  names a fix                  109 of 114  (96%)
-  deliberately names none        5 of 114  (4%)
-  should name one and does not   0 of 114  (0%)
+  names a fix                  111 of 116  (96%)
+  deliberately names none        5 of 116  (4%)
+  should name one and does not   0 of 116  (0%)
 
-  114 raise sites across interp.planes, parser.planes, lexer.planes, json.planes:
-  names a fix                   74 of 114  (65%)
-  deliberately names none       40 of 114  (35%)
-  should name one and does not   0 of 114  (0%)
+  116 raise sites across interp.planes, parser.planes, lexer.planes, json.planes:
+  names a fix                   76 of 116  (66%)
+  deliberately names none       40 of 116  (34%)
+  should name one and does not   0 of 116  (0%)
 ```
 
 **Both work lists are zero** — the commitment is kept in the reference
