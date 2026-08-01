@@ -8,7 +8,7 @@
 // module-loading half over fetch).
 
 import fs from "node:fs";
-import { setVocabulary, setAmberTemplates } from "./grammar_data.mjs";
+import { setVocabulary, setAmberTemplates, setCore } from "./grammar_data.mjs";
 
 function readJson(relPath) {
   const url = new URL(relPath, import.meta.url);
@@ -20,4 +20,9 @@ function readJson(relPath) {
 export function loadGrammar() {
   setVocabulary(readJson("../grammar/vocabulary.json"));
   setAmberTemplates(readJson("../grammar/messages/amber.json"));
+  // grammar/core.json travels with the vocabulary rather than behind its own
+  // flag: the core-restricted mode must never be able to run against a core it
+  // only half-loaded, and a third small JSON read is not measurable against the
+  // two already here (see feat-core-sufficiency-benchmarks-post.md).
+  setCore(readJson("../grammar/core.json"));
 }

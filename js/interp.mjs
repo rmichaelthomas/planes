@@ -16,6 +16,8 @@ import {
 } from "./planes_text.mjs";
 import { parse, findDiscardedWrites } from "./parser.mjs";
 import { builtinNames, effectKinds } from "./lexer.mjs";
+import { core } from "./grammar_data.mjs";
+import { keywordsOf, lineOf, recordLines, suspectKinds } from "./core_restrict.mjs";
 
 // ================================================================ values
 
@@ -244,6 +246,36 @@ export class PlanesError extends Error {
   }
 }
 
+// What a host that implements ONLY grammar/core.json's declared port surface says
+// when the program it is running reaches past it.
+//
+// Deliberately NOT a PlanesError. A PlanesError is something wrong with the
+// PROGRAM — the language raising at its author. This is something absent from the
+// HOST: the construct is perfectly legal Planes, and a full implementation runs
+// it. It is the shape a second host's own failure would take, which is the whole
+// point of running under restriction. Carries the construct, the file and the
+// line, per §3.1; nothing is skipped and no value is substituted.
+export class CoreRestrictionError extends Error {
+  constructor(construct, category, file, line, approximateLine = false) {
+    const where = `${file ?? "<source>"}:${line ?? "?"}`;
+    const about = approximateLine ? " (the enclosing statement)" : "";
+    super(
+      `core-restricted: this host implements only the core declared in ` +
+        `grammar/core.json, and '${construct}' is a ${category} outside it — ` +
+        `reached at ${where}${about}\n` +
+        `  try: implement '${construct}' in the host, or move it into ` +
+        `grammar/core.json's "${category}s" if the declared port surface is ` +
+        `the thing that is wrong`,
+    );
+    this.name = "CoreRestrictionError";
+    this.construct = construct;
+    this.category = category;
+    this.file = file;
+    this.line = line;
+    this.approximateLine = approximateLine;
+  }
+}
+
 // _Give — the return-value control-flow signal. Named GiveSignal to avoid the
 // AST Give node factory.
 class GiveSignal {
@@ -300,7 +332,63 @@ class PlanesFunction {
 // ================================================================ interpreter
 
 export class Interpreter {
-  constructor({ http = null, fs = null, host = null, record = false } = {}) {
+  constructor({
+    http = null,
+    fs = null,
+    host = null,
+    record = false,
+    coreOnly = false,
+    coreSurvey = false,
+  } = {}) {
+    // ---- the core-restricted mode (opt-in, off by default).
+    //
+    // `coreOnly` arms it. Armed, every evaluation is checked against the port
+    // surface grammar/core.json declares, so a completed run is evidence that the
+    // DECLARED CORE WAS ENOUGH and a stop names precisely what it was not enough
+    // for. Unarmed, `coreOnly` is false, the guards below are a single
+    // already-false boolean test each, and the interpreter behaves exactly as it
+    // did before this field existed.
+    //
+    // TWO ARMED BEHAVIOURS, and the difference matters:
+    //
+    //   refuse (the default, `coreSurvey` false) — the honest simulation of a
+    //     second host that implements only the core. The first non-core construct
+    //     REACHED throws CoreRestrictionError and the run is over, exactly as a
+    //     host missing the construct would end. This is what answers the
+    //     sufficiency question, and it can only ever report one construct: the
+    //     first one.
+    //
+    //   survey (`coreSurvey` true) — a census, not a host. It records every
+    //     distinct non-core construct reached, with its file and line, and carries
+    //     on. This is not a lenient restricted mode and must never be read as one:
+    //     nothing it runs is a host anybody could build. It exists because the
+    //     per-file table this build owes (§4.2) asks which constructs each MODULE
+    //     reaches, and a run that stops at the first cannot say.
+    //
+    // The core is READ, never copied (js/grammar_data.mjs's `core()`), and the
+    // suspect set is derived from it — widen or narrow core.json and this
+    // follows, with no second place to edit.
+    this.coreOnly = coreOnly || coreSurvey;
+    this.coreSurvey = coreSurvey;
+    this.coreKeywords = null;
+    this.coreBuiltins = null;
+    this.coreSuspect = null;
+    // The census: one entry per distinct (file, line, construct), so the lexer's
+    // per-character loop contributes its `when` once and not once per character.
+    this.coreReached = [];
+    this.coreSeen = new Set();
+    // The line of the statement currently executing, maintained ONLY under
+    // restriction. Expression nodes below the statement carry no line of their
+    // own (giving them one would change the AST's shape), so a report from inside
+    // one names this and says it is the enclosing statement's.
+    this.coreStmtLine = null;
+    if (this.coreOnly) {
+      const doc = core();
+      this.coreKeywords = new Set(doc.keywords);
+      this.coreBuiltins = new Set(doc.builtins);
+      this.coreSuspect = suspectKinds(this.coreKeywords);
+      recordLines(true);
+    }
     this.env = new Env();
     this.funcs = new Map();
     this.foreigns = new Map();
@@ -444,8 +532,69 @@ export class Interpreter {
     return result;
   }
 
+  // ---- the two evaluation-time guards (§3.2: runtime, not static).
+  //
+  // A static pre-pass over the token stream would only restate core_check.py in a
+  // second language. These fire where the construct is REACHED, which is the only
+  // place the converse claim — that a host implementing the core can actually run
+  // interp.planes — is testable at all.
+  checkCore(node) {
+    if (!this.coreSuspect.has(node.__node)) return;
+    for (const word of keywordsOf(node)) {
+      if (!this.coreKeywords.has(word)) {
+        const own = lineOf(node);
+        this.refuseCore(
+          new CoreRestrictionError(
+            word,
+            "keyword",
+            this.currentFile ?? this.entryFile,
+            own ?? this.coreStmtLine,
+            own === null,
+          ),
+        );
+      }
+    }
+  }
+
+  checkCoreBuiltin(name, line) {
+    if (!this.coreBuiltins.has(name)) {
+      this.refuseCore(
+        new CoreRestrictionError(
+          name,
+          "builtin",
+          this.currentFile ?? this.entryFile,
+          line ?? this.coreStmtLine,
+          line === null || line === undefined,
+        ),
+      );
+    }
+  }
+
+  // Refuse, or — in census mode only — write it down and carry on. The throw is
+  // the default and the one a host would make; the census branch is reached only
+  // when the caller asked for a survey and never by a run calling itself
+  // restricted.
+  refuseCore(err) {
+    if (!this.coreSurvey) throw err;
+    const key = `${err.file}:${err.line}:${err.construct}`;
+    if (this.coreSeen.has(key)) return;
+    this.coreSeen.add(key);
+    this.coreReached.push({
+      construct: err.construct,
+      category: err.category,
+      file: err.file,
+      line: err.line,
+      approximateLine: err.approximateLine,
+    });
+  }
+
   exec_stmt(stmt, env) {
     const k = stmt.__node;
+    if (this.coreOnly) {
+      this.checkCore(stmt);
+      const ln = lineOf(stmt);
+      if (ln !== null) this.coreStmtLine = ln;
+    }
     if (k === "Use") {
       this.modules.add(stmt.module);
       return null;
@@ -605,6 +754,7 @@ export class Interpreter {
   // ---- expressions
   eval(node, env) {
     const k = node.__node;
+    if (this.coreOnly) this.checkCore(node);
     if (k === "Num") return lit(node.value);
     if (k === "Str") {
       const label = `"${escapeStringLiteral(node.value)}"`;
@@ -695,7 +845,12 @@ export class Interpreter {
       return new Traced(val, new Deriv("field", `.${node.name}`, val, [obj.node]));
     }
     if (k === "Call") return this.call(node.name, node.args, env, node.line ?? 0);
-    if (k === "Builtin") return this.builtin(node.name, this.eval(node.arg, env));
+    if (k === "Builtin")
+      return this.builtin(
+        node.name,
+        this.eval(node.arg, env),
+        this.coreOnly ? lineOf(node) : null,
+      );
     if (k === "Round") {
       const v = this.eval(node.value, env);
       const p = this.eval(node.places, env);
@@ -833,7 +988,11 @@ export class Interpreter {
     return new Traced(v, new Deriv("op", node.op, v, [left.node, right.node]));
   }
 
-  builtin(name, arg) {
+  // `line` is supplied by the caller (a Call node carries one; a Builtin node
+  // does not) and is only read under restriction — the third and last evaluation
+  // -time guard, and the one that answers for `sine` and `root`.
+  builtin(name, arg, line = null) {
+    if (this.coreOnly) this.checkCoreBuiltin(name, line);
     if (name === "ask") {
       if (!this.modules.has("http")) {
         throw new PlanesError("module-not-used", "asking a url needs the http module", "add `use http` at the top");
@@ -1080,7 +1239,7 @@ export class Interpreter {
         throw new PlanesError("wrong-arity", `'${name}' takes 1 value, given ${args.length}`, `write it as \`${name} of x\``);
       }
       const arg = args[0] instanceof Traced ? args[0] : this.eval(args[0], env);
-      return this.builtin(name, arg);
+      return this.builtin(name, arg, line || null);
     }
     if (this.foreigns.has(name) && !this.funcs.has(name)) {
       return this.call_foreign(this.foreigns.get(name), args, env);

@@ -76,6 +76,51 @@ export function vocabularyLoaded() {
   return _vocab !== null;
 }
 
+// grammar/core.json — the declared port surface, injected by the same route and
+// for the same reason as the vocabulary: js/core_restrict.mjs and the interpreter
+// both need it, neither may statically import node:fs, and there must be exactly
+// one copy of it in the process. A browser page that never sets it simply has no
+// core-restricted mode; `coreLoaded()` says so and the interpreter refuses to arm
+// rather than guessing at a core it cannot read.
+let _core = null;
+const REQUIRED_CORE_KEYS = ["keywords", "builtins", "effect_kinds_all_core"];
+
+export function setCore(doc) {
+  if (doc.format !== GRAMMAR_FORMAT_VERSION) {
+    throw new GrammarDataError(
+      "grammar-data-missing",
+      `core format ${JSON.stringify(doc.format)} is not ${GRAMMAR_FORMAT_VERSION}`,
+      "regenerate the grammar data with a version of planes matching " +
+        "this interpreter",
+    );
+  }
+  const missing = REQUIRED_CORE_KEYS.filter((k) => !(k in doc));
+  if (missing.length) {
+    throw new GrammarDataError(
+      "grammar-data-missing",
+      `core is missing: ${missing.join(", ")}`,
+      "reinstall planes — grammar/core.json is hand-edited, and " +
+        "core_check.py holds it against the vocabulary",
+    );
+  }
+  _core = doc;
+}
+
+export function core() {
+  if (_core === null) {
+    throw new GrammarDataError(
+      "grammar-data-missing",
+      "core not loaded",
+      "call loadGrammar() (Node) or setCore(...) (browser) first",
+    );
+  }
+  return _core;
+}
+
+export function coreLoaded() {
+  return _core !== null;
+}
+
 // Amber's refusal-message templates — grammar/messages/amber.json, keyed by id.
 // parser.py loads these lazily (render_amber); here they are injected the same
 // way the vocabulary is.

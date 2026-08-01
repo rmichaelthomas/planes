@@ -17,7 +17,7 @@ import { loadGrammar } from "./loader_node.mjs";
 import { tokenize, PlanesSyntaxError } from "./lexer.mjs";
 import { parse, PlanesAmbiguity } from "./parser.mjs";
 import { canonicalProgram } from "./canonical.mjs";
-import { Interpreter, PlanesError, lit } from "./interp.mjs";
+import { Interpreter, PlanesError, CoreRestrictionError, lit } from "./interp.mjs";
 import { TestHost } from "./host.mjs";
 import { sha256Hex } from "./sha256.mjs";
 import { PlanesNumber, Fraction, Inexact } from "./planes_num.mjs";
@@ -29,7 +29,57 @@ import {
   StringEscapeError,
 } from "./planes_text.mjs";
 
-const [, , sub, ...rest] = process.argv;
+const [, , sub, ...rawRest] = process.argv;
+
+// --core / --core-survey — the core-restricted mode (§3.5). Pulled out of argv
+// before anything else reads it so `meta run --core <files>` and
+// `meta run <files>` reach the IDENTICAL code path below and cannot answer
+// differently for a reason other than the restriction. That is the same
+// reasoning `runOne` is shared verbatim between `run` and `run-batch` for.
+const CORE_REFUSE = rawRest.includes("--core");
+const CORE_SURVEY = rawRest.includes("--core-survey");
+// `--core-json PATH` runs the restriction against a DIFFERENT core document, so
+// the checker can be exercised end to end against a crafted core rather than
+// only against the one true file. core_check.py has carried `--core PATH` for
+// exactly this reason ("so the drift guard can be run end to end against a
+// crafted core.json, not only unit-tested"); this is that affordance on the
+// other side of the same claim.
+const coreJsonAt = rawRest.indexOf("--core-json");
+const CORE_JSON = coreJsonAt === -1 ? null : rawRest[coreJsonAt + 1];
+const rest = rawRest.filter(
+  (a, i) =>
+    a !== "--core" &&
+    a !== "--core-survey" &&
+    a !== "--core-json" &&
+    !(coreJsonAt !== -1 && i === coreJsonAt + 1),
+);
+
+// Called immediately after loadGrammar() everywhere the core is consulted.
+async function applyCoreOverride() {
+  if (CORE_JSON === null) return;
+  const { setCore } = await import("./grammar_data.mjs");
+  setCore(JSON.parse(fs.readFileSync(CORE_JSON, "utf-8")));
+}
+
+// The interpreter options the flags select — one object, so no call site can
+// arm half of it.
+function coreOpts() {
+  return { coreOnly: CORE_REFUSE, coreSurvey: CORE_SURVEY };
+}
+
+// A CoreRestrictionError, as the JSON a caller compares. `refused: true` is the
+// finding, not a crash: a restricted run that stops is this build's whole point.
+function coreRefusal(e) {
+  return {
+    refused: true,
+    construct: e.construct,
+    category: e.category,
+    file: e.file,
+    line: e.line,
+    approximateLine: e.approximateLine,
+    message: String(e.message),
+  };
+}
 
 function out(s) {
   process.stdout.write(s);
@@ -355,6 +405,7 @@ switch (sub) {
     // graph (use X -> sibling X.planes) via run_file.mjs, the port of
     // interp.py's run_file. Node-only.
     loadGrammar();
+    await applyCoreOverride();
     const cfg =
       rest[1] !== undefined && rest[1] !== "" ? JSON.parse(rest[1]) : {};
     const host = new TestHost({
@@ -362,13 +413,15 @@ switch (sub) {
       files: cfg.files ?? {},
       now: cfg.now ?? 1000000.0,
     });
-    const itp = new Interpreter({ host });
+    const itp = new Interpreter({ host, ...coreOpts() });
     const { runFile } = await import("./run_file.mjs");
     let tag = null;
+    let refusal = null;
     try {
       await runFile(itp, rest[0]);
     } catch (e) {
-      if (e instanceof PlanesError) tag = e.tag;
+      if (e instanceof CoreRestrictionError) refusal = coreRefusal(e);
+      else if (e instanceof PlanesError) tag = e.tag;
       else if (e instanceof PlanesSyntaxError) tag = "PARSE";
       else if (e instanceof RangeError) tag = "recursion-too-deep";
       else if (e && e.name === "ModuleError") tag = "module-error";
@@ -380,6 +433,8 @@ switch (sub) {
         tag,
         effects: itp.effects,
         files: itp.host.files ?? {},
+        ...(refusal ? { core: refusal } : {}),
+        ...(CORE_SURVEY ? { coreReached: itp.coreReached } : {}),
       }),
     );
     break;
@@ -620,6 +675,36 @@ switch (sub) {
     out(JSON.stringify(found.map((r) => [r.name, fingerprint(r)])));
     break;
   }
+  case "core-classify": {
+    // core-classify — what the JavaScript side reads out of grammar/core.json,
+    // and whether its node -> keyword map can see the whole vocabulary.
+    //
+    // Invariant 7 says core_check.py and this mode must classify the same
+    // construct the same way. That is only worth asserting if the two answers
+    // can be put side by side, so this emits one of them; test_js_core_restricted
+    // .py holds it against the other. It reports the LOADED core — no literal —
+    // so a divergence here would be a divergence in the file, not in a copy.
+    loadGrammar();
+    await applyCoreOverride();
+    const { core } = await import("./grammar_data.mjs");
+    const { coverageGaps, APPROXIMATE_KEYWORDS } = await import(
+      "./core_restrict.mjs"
+    );
+    const { keywords: kw } = await import("./lexer.mjs");
+    const doc = core();
+    const all = [...kw()].sort();
+    out(
+      JSON.stringify({
+        keywords: [...doc.keywords].sort(),
+        builtins: [...doc.builtins].sort(),
+        effectKindsAllCore: doc.effect_kinds_all_core === true,
+        allKeywords: all,
+        coverageGaps: coverageGaps(all),
+        approximate: Object.keys(APPROXIMATE_KEYWORDS).sort(),
+      }),
+    );
+    break;
+  }
   case "meta": {
     // meta <stage> <corpusfile...> — the metacircular conformance run (A.1):
     // load grammar/<stage>.planes into a JS Interpreter (a Planes
@@ -627,6 +712,7 @@ switch (sub) {
     // file with it. stage in {lex, parse, run}. One grammar load amortised over
     // all files. Emits a JSON array of per-file results (or {error: tag}).
     loadGrammar();
+    await applyCoreOverride();
     const { runFile } = await import("./run_file.mjs");
     const stage = rest[0];
     const files = rest.slice(1);
@@ -636,8 +722,26 @@ switch (sub) {
       run: "grammar/interp.planes",
       json: "grammar/json.planes",
     }[stage];
-    const stageItp = new Interpreter({ host: new TestHost() });
-    await runFile(stageItp, stageFile);
+    // THE SUBJECT OF THE RESTRICTION IS THIS FILE, not the corpus.
+    //
+    // `stageItp` is the JavaScript interpreter, and the Planes source it
+    // evaluates is grammar/<stage>.planes plus its module graph — that is what
+    // gets restricted. A corpus file below is handed to it as TEXT, tokenised and
+    // parsed by the Planes program into Planes records; the JavaScript
+    // interpreter never sees its AST and cannot refuse anything in it. A corpus
+    // program may use whatever it likes (failure mode 6).
+    const stageItp = new Interpreter({ host: new TestHost(), ...coreOpts() });
+    try {
+      await runFile(stageItp, stageFile);
+    } catch (e) {
+      if (e instanceof CoreRestrictionError) {
+        // The restricted host could not even LOAD the stage. Report it and stop:
+        // there is nothing to run the corpus with.
+        out(JSON.stringify({ core: coreRefusal(e), stage, loaded: false }));
+        break;
+      }
+      throw e;
+    }
 
     const num = (v) => (v instanceof PlanesNumber ? Number(v.asInt()) : v);
     const results = [];
@@ -684,11 +788,31 @@ switch (sub) {
           throw new Error(`unknown meta stage: ${stage}`);
         }
       } catch (e) {
+        if (e instanceof CoreRestrictionError) {
+          // The stage loaded but reached past the core while PROCESSING. One
+          // refusal ends the run — a host missing the construct has nothing
+          // further to offer — so this reports and stops rather than continuing
+          // to the next file with a host that has already failed.
+          out(
+            JSON.stringify({
+              core: coreRefusal(e),
+              stage,
+              loaded: true,
+              file: f,
+              filesDone: results.length,
+            }),
+          );
+          process.exit(0);
+        }
         if (e instanceof PlanesError) results.push({ error: e.tag });
         else if (e instanceof RangeError) results.push({ error: "recursion-too-deep" });
         else if (e instanceof PlanesSyntaxError) results.push({ error: "PARSE" });
         else throw e;
       }
+    }
+    if (CORE_SURVEY) {
+      out(JSON.stringify({ coreReached: stageItp.coreReached, stage, results }));
+      break;
     }
     out(JSON.stringify(results));
     break;
