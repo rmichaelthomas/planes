@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Planes on Planes — what the second layer costs</title>
+    <meta
+      name="description"
+      content="A Planes implementation written in Planes, running on the JavaScript one, in your browser. The same program run twice — once directly, once through the self-hosted interpreter — with both outputs compared and both timings shown."
+    />
+    <link rel="canonical" href="https://github.com/rmichaelthomas/planes" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Planes on Planes — what the second layer costs" />
+    <meta
+      property="og:description"
+      content="A Planes implementation written in Planes, running on the JavaScript one, in your browser. The same program run twice — once directly, once through the self-hosted interpreter — with both outputs compared and both timings shown."
+    />
+    <meta
+      property="og:image"
+      content="https://raw.githubusercontent.com/rmichaelthomas/planes/main/identity/planes-social.png"
+    />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="640" />
+    <meta property="og:url" content="https://github.com/rmichaelthomas/planes" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <style>
+      /* THE IDENTITY TOKENS, shared verbatim with every other page on this
+         site. One appearance: paper. No dark-mode block — a page that changes
+         its clothes with the viewer's OS is two designs neither of which was
+         drawn, and that is the rule this site follows. */
+      :root {
+        --paper:#F7F2E9; --graphite:#211D19; --line:#D6C9B4; --clay:#A65A2E;
+        --ink-60:rgba(33,29,25,.62); --ink-40:rgba(33,29,25,.40);
+        --display:"Red Hat Display",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+        --mono:"Martian Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+      }
+      @font-face {
+        font-family:"Red Hat Display"; font-style:normal; font-weight:700 900;
+        font-display:swap; src:url("identity/fonts/red-hat-display.woff2") format("woff2");
+      }
+      @font-face {
+        font-family:"Martian Mono"; font-style:normal; font-weight:400 500;
+        font-display:swap; src:url("identity/fonts/martian-mono.woff2") format("woff2");
+      }
+
+      *{box-sizing:border-box}
+      body{
+        margin:0 auto; padding:34px 16px 56px; background:var(--paper);
+        color:var(--graphite); font-family:var(--mono); font-size:12.5px;
+        line-height:1.6; -webkit-font-smoothing:antialiased; max-width:980px;
+      }
+      h1{
+        font-family:var(--display); font-weight:900; font-size:28px; line-height:1.05;
+        letter-spacing:-.02em; margin:0 0 5px;
+      }
+      p.sub{margin:0 0 18px; font-size:11.5px; line-height:1.7; color:var(--ink-60)}
+      p.sub a{color:var(--clay)}
+      em{font-style:normal; font-weight:500; color:var(--graphite)}
+
+      textarea, select, pre{font-family:var(--mono)}
+      textarea{
+        width:100%; padding:11px 12px; font-size:11.5px; line-height:1.75;
+        border:1px solid var(--line); border-radius:3px; background:#fff;
+        color:var(--graphite); resize:vertical; min-height:20rem;
+      }
+      select{
+        font-family:var(--mono); font-size:11px; padding:7px 9px; border-radius:3px;
+        border:1px solid var(--line); background:#fff; color:var(--graphite);
+        margin:11px 6px 11px 0;
+      }
+
+      /* This site's control language: an outline, not a filled block. */
+      button{
+        font-family:var(--mono); font-size:11px; font-weight:500; padding:7px 13px;
+        margin:11px 6px 11px 0; border:1px solid var(--line); border-radius:3px;
+        background:transparent; color:var(--ink-60); cursor:pointer;
+        transition:background .12s, color .12s, border-color .12s;
+      }
+      button:hover{background:var(--line); color:var(--graphite)}
+      button.accent{border-color:var(--clay); color:var(--clay)}
+      button.accent:hover{background:var(--clay); border-color:var(--clay); color:var(--paper)}
+      button.tertiary{font-size:10.5px; padding:5px 9px}
+      button:disabled{color:var(--ink-40); border-color:var(--line); background:transparent; cursor:not-allowed}
+      button:disabled:hover{background:transparent; color:var(--ink-40)}
+      button:focus-visible, select:focus-visible, textarea:focus-visible{
+        outline:2px solid var(--clay); outline-offset:2px;
+      }
+
+      .hint{color:var(--ink-40); font-size:10.5px}
+      footer{
+        margin-top:30px; padding-top:14px; border-top:1px solid var(--line);
+        color:var(--ink-40); font-size:10.5px; line-height:1.75;
+      }
+      footer a{color:var(--clay)}
+      code{
+        font-family:var(--mono); font-size:.92em; background:rgba(33,29,25,.06);
+        padding:.1em .35em; border-radius:2px;
+      }
+
+      /* ---------- page-specific, built from the primitives above ---------- */
+      label.field{font-size:10.5px; color:var(--ink-40); margin-right:4px}
+
+      /* The two panes. One grid, so they cannot drift out of line, and a
+         single column under 700px rather than two unreadable ones. */
+      .panes{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:4px}
+      @media (max-width:700px){ .panes{grid-template-columns:1fr} }
+      .pane h2{
+        font-family:var(--mono); font-size:10.5px; font-weight:500;
+        color:var(--ink-40); margin:0 0 5px; letter-spacing:.02em;
+      }
+      .pane h2 .ms{color:var(--clay); font-weight:500}
+      pre.out{
+        margin:0; padding:11px 12px; font-size:11.5px; line-height:1.7;
+        white-space:pre-wrap; overflow-x:auto; min-height:7rem; max-height:22rem;
+        overflow-y:auto; border:1px solid var(--line); border-radius:3px;
+        background:#fff;
+      }
+      pre.out.error{color:var(--clay)}
+
+      /* The verdict. Quiet when the two agree — agreement is the expected
+         case and should not shout — and the accent when they do not, which
+         is the only genuinely interesting outcome on this page. */
+      .verdict{
+        margin:12px 0 0; padding:10px 12px; border:1px solid var(--line);
+        border-radius:3px; background:#fff; font-size:11.5px; line-height:1.7;
+      }
+      .verdict.differ{border-color:var(--clay); color:var(--clay)}
+      .verdict strong{font-weight:500}
+      .timings{
+        margin:8px 0 0; padding:10px 12px; border:1px solid var(--line);
+        border-radius:3px; background:#fff; font-size:11px; line-height:1.85;
+        color:var(--ink-60);
+      }
+      .timings b{color:var(--graphite); font-weight:500}
+      .timings .ratio{color:var(--clay); font-weight:500}
+      .engine{color:var(--ink-40); font-size:10.5px}
+      pre.stale{
+        margin:0 0 14px; padding:11px 12px; font-size:11.5px; line-height:1.7;
+        white-space:pre-wrap; border:1px solid var(--clay); border-radius:3px;
+        background:#fff; color:var(--clay);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Planes on Planes</h1>
+    <p class="sub"><a href="./index.html">← all of Planes</a></p>
+    <p class="sub">
+      <code>grammar/interp.planes</code> is a Planes interpreter
+      <em>written in Planes</em>. This page loads it into the JavaScript
+      interpreter and runs your program through it — two interpretive layers —
+      then runs the same program <em>directly</em> on the JavaScript interpreter,
+      and compares the two. The comparison is code, not eyesight: the verdict
+      below is computed.
+      <br /><br />
+      v11.0 §136 ruled that this route gives the worst performance of any
+      implementation option. It has never carried a number. The
+      <em>ratio</em> below is that number, in this browser.
+    </p>
+
+    <pre class="stale" id="stale" hidden></pre>
+
+    <textarea id="source" spellcheck="false">
+# Small enough to run twice quickly; real enough not to be a toy.
+# Arithmetic that is exact, a function call, and output.
+
+to tax of amount, rate:
+  give amount * rate
+
+subtotal = 0.1 + 0.2
+show "0.1 + 0.2 = " + text of subtotal
+
+items = [1200, 340, 89]
+total = 0
+for each price in items:
+  total = total + price
+
+show "subtotal: " + text of total
+show "tax: " + text of (tax of total, 0.08)
+</textarea>
+
+    <div>
+      <label class="field" for="stage">stage</label>
+      <select id="stage">
+        <option value="run" selected>run — execute the program</option>
+        <option value="parse">parse — the canonical AST</option>
+        <option value="lex">lex — the token stream</option>
+      </select>
+      <button id="both" class="accent">Run both ▸</button>
+      <button id="ceiling" class="tertiary">Recursion ceiling ⇣</button>
+      <span class="hint">⌘/Ctrl + Enter to run both</span>
+    </div>
+
+    <div class="panes">
+      <div class="pane">
+        <h2>Direct — <code>js/interp.mjs</code> <span class="ms" id="ms-direct"></span></h2>
+        <pre class="out" id="out-direct">(not run yet)</pre>
+      </div>
+      <div class="pane">
+        <h2>
+          Through <code>interp.planes</code> <span class="ms" id="ms-meta"></span>
+        </h2>
+        <pre class="out" id="out-meta">(not run yet)</pre>
+      </div>
+    </div>
+
+    <p class="verdict" id="verdict">
+      Press <strong>Run both ▸</strong>. The two panes are compared in code — this
+      line reports what the comparison returned, never what it ought to return.
+    </p>
+
+    <p class="timings" id="timings">
+      <span class="engine" id="engine"></span>
+    </p>
+
+    <footer>
+      The self-hosted stack is <code>grammar/lexer.planes</code>,
+      <code>grammar/parser.planes</code> and <code>grammar/interp.planes</code> —
+      the same files <code>test_js_metacircular.py</code> checks against the
+      Python implementation on every gate run. This page fetches them as
+      <code>.planes</code> sources at run time, so it needs the folder as well as
+      the modules. Opens directly in Safari or Firefox. Chrome blocks ES-module
+      loading over <code>file://</code> as a security policy — for Chrome, serve
+      the folder with <code>python3 -m http.server</code> and open
+      <code>http://localhost:8000/</code>. No bundler, no transpiler.
+    </footer>
+
+    <script type="module">
+      import {
+        STAGES,
+        loadStage,
+        compare,
+        direct,
+        throughStage,
+        measureRatio,
+        recursionCeiling,
+      } from "./js/meta_browser.mjs";
+      import { staleModuleWarning } from "./js/browser_main.mjs";
+
+      const $ = (id) => document.getElementById(id);
+      const stageSel = $("stage");
+      const source = $("source");
+      const bothBtn = $("both");
+      const ceilBtn = $("ceiling");
+
+      // One token per page load, appended to every `.planes` fetch. A `.planes`
+      // module is a LEAF fetch — nothing resolves relative to it — so a query
+      // string is a complete fix for a stale copy here, unlike on the `.mjs`
+      // graph, which cannot be busted without a build step. That half is not
+      // prevented from going stale; it is made to say so, below.
+      const CACHE_BUST = String(Date.now());
+      const BASE = new URL(".", window.location.href).href;
+
+      // Engine and version, read rather than guessed, because §225 found JSC
+      // roughly 4x JIT-cold Chrome and a figure without an engine beside it is a
+      // description of somebody's browser rather than of the architecture.
+      function engineName() {
+        const ua = navigator.userAgent;
+        let m;
+        if ((m = ua.match(/Firefox\/([\d.]+)/))) return `Firefox ${m[1]} (SpiderMonkey)`;
+        if ((m = ua.match(/Edg\/([\d.]+)/))) return `Edge ${m[1]} (V8)`;
+        if ((m = ua.match(/Chrome\/([\d.]+)/))) return `Chrome ${m[1]} (V8)`;
+        if ((m = ua.match(/Version\/([\d.]+).*Safari/))) return `Safari ${m[1]} (JSC)`;
+        if (/Safari/.test(ua)) return "WebKit (JSC)";
+        return ua;
+      }
+      $("engine").textContent = `engine: ${engineName()}`;
+
+      // One loaded stage per stage name, kept for the life of the page. Loading
+      // grammar/interp.planes and its graph is five fetches and real time; a
+      // page that reloaded it per press would be timing the fetch, and the
+      // ratio would mean nothing.
+      const stages = new Map();
+      async function stageFor(name) {
+        if (!stages.has(name)) {
+          setVerdict(
+            `Loading the <code>${name}</code> stage and its module graph…`,
+            false,
+          );
+          stages.set(
+            name,
+            await loadStage(name, { base: BASE, cacheBust: CACHE_BUST }),
+          );
+        }
+        return stages.get(name);
+      }
+
+      function setVerdict(html, differ) {
+        const el = $("verdict");
+        el.innerHTML = html;
+        el.classList.toggle("differ", Boolean(differ));
+      }
+
+      function renderResult(stage, r) {
+        if (r.error) return `✗ ${r.error.tag}: ${r.error.message}`;
+        if (stage === "run") {
+          const lines = [...r.result.output];
+          if (r.result.tag) lines.push(`✗ ${r.result.tag}`);
+          return lines.length ? lines.join("\n") : "(no output)";
+        }
+        if (stage === "parse") return r.result;
+        return r.result.map((t) => `${t[0]}  ${t[1]}  line ${t[2]}`).join("\n");
+      }
+
+      function paint(pane, msEl, stage, r) {
+        const el = $(pane);
+        el.textContent = renderResult(stage, r);
+        el.classList.toggle("error", Boolean(r.error));
+        $(msEl).textContent = `${r.ms.toFixed(1)} ms`;
+      }
+
+      async function runBoth() {
+        const name = stageSel.value;
+        bothBtn.disabled = true;
+        try {
+          const loaded = await stageFor(name);
+          const c = compare(loaded, source.value);
+
+          paint("out-direct", "ms-direct", name, c.direct);
+          paint("out-meta", "ms-meta", name, c.metacircular);
+
+          if (c.direct.error || c.metacircular.error) {
+            setVerdict(
+              "One of the two runs did not finish, so there is nothing to " +
+                "compare and no ratio to report. The failing pane says why.",
+              true,
+            );
+          } else if (c.identical) {
+            setVerdict(
+              "<strong>Identical.</strong> The self-hosted interpreter and the " +
+                "JavaScript one produced the same " +
+                `${STAGES[name].describe}, compared field by field in code.`,
+              false,
+            );
+          } else {
+            setVerdict(
+              "<strong>THEY DIFFER.</strong> The two panes are not the same " +
+                `${STAGES[name].describe}. That is a divergence between the ` +
+                "self-hosted implementation and the JavaScript one, and it is " +
+                "worth reporting — the gate asserts they agree across the " +
+                "whole corpus.",
+              true,
+            );
+          }
+
+          // THIS PRESS is what c reports. THE RATIO needs many calls: a
+          // browser coarsens performance.now() (1 ms in JSC), so a single
+          // direct run measures 0.0 and the ratio would be a dash in Safari
+          // every single time. Batch-time both sides instead.
+          let warm = null;
+          if (!c.direct.error && !c.metacircular.error) {
+            warm = measureRatio(loaded, source.value);
+          }
+          const ratio =
+            warm && warm.ratio !== null
+              ? `<span class="ratio">${Math.round(warm.ratio)}×</span>`
+              : "—";
+          $("timings").innerHTML =
+            `this press: <b>${c.direct.ms.toFixed(1)} ms</b> direct · ` +
+            `<b>${c.metacircular.ms.toFixed(1)} ms</b> through ` +
+            `<code>interp.planes</code> ` +
+            (warm
+              ? `<br />warm, per call: <b>${warm.directMs.toFixed(3)} ms</b> direct · ` +
+                `<b>${warm.metacircularMs.toFixed(1)} ms</b> through ` +
+                `<code>interp.planes</code> — the second layer costs ${ratio} ` +
+                `<span class="engine">(${warm.iterations.direct} and ` +
+                `${warm.iterations.metacircular} calls)</span>`
+              : "") +
+            `<br />stage load, paid once and amortised over every press: ` +
+            `<b>${c.loadMs.toFixed(1)} ms</b> for ` +
+            `${loaded.modules.length} module(s) — ` +
+            `${loaded.modules.map((m) => m.name).join(", ")}` +
+            `<br /><span class="engine">engine: ${engineName()}</span>`;
+        } catch (e) {
+          setVerdict(`✗ ${String((e && e.message) || e)}`, true);
+        } finally {
+          bothBtn.disabled = false;
+        }
+      }
+
+      async function measureCeiling() {
+        const name = "run";
+        stageSel.value = name;
+        ceilBtn.disabled = true;
+        bothBtn.disabled = true;
+        setVerdict("Measuring the recursion ceiling both ways…", false);
+        try {
+          const loaded = await stageFor(name);
+          // Yield once so the line above paints before the search blocks.
+          await new Promise((r) => setTimeout(r, 0));
+          const d = recursionCeiling((src) => direct("run", src), { cap: 4096 });
+          const m = recursionCeiling((src) => throughStage(loaded, src), { cap: 4096 });
+          const factor = m.ceiling > 0 ? (d.ceiling / m.ceiling).toFixed(1) : "—";
+          setVerdict(
+            `<strong>Recursion ceiling.</strong> Direct: ` +
+              `<strong>${d.ceiling}</strong>${d.capped ? "+ (search capped)" : ""} frames. ` +
+              `Through <code>interp.planes</code>: <strong>${m.ceiling}</strong>` +
+              `${m.capped ? "+ (search capped)" : ""} frames. The second layer costs ` +
+              `<strong>${factor}×</strong> the stack depth — every user frame now sits ` +
+              `on interpreter frames of its own.`,
+            false,
+          );
+          $("timings").innerHTML =
+            `<span class="engine">engine: ${engineName()} · ` +
+            `ceilings are engine-specific and stack-size-specific; ` +
+            `this is this browser's answer, not the language's.</span>`;
+        } catch (e) {
+          setVerdict(`✗ ${String((e && e.message) || e)}`, true);
+        } finally {
+          ceilBtn.disabled = false;
+          bothBtn.disabled = false;
+        }
+      }
+
+      // The `.mjs` graph cannot be cache-busted without a build step, so it is
+      // made to say when it has gone stale rather than answering wrongly.
+      const stale = staleModuleWarning();
+      if (stale) {
+        $("stale").textContent = stale;
+        $("stale").hidden = false;
+      }
+
+      bothBtn.addEventListener("click", runBoth);
+      ceilBtn.addEventListener("click", measureCeiling);
+      stageSel.addEventListener("change", () => {
+        $("out-direct").textContent = "(not run yet)";
+        $("out-meta").textContent = "(not run yet)";
+        $("ms-direct").textContent = "";
+        $("ms-meta").textContent = "";
+        setVerdict(
+          `Press <strong>Run both ▸</strong> to compare the <code>${stageSel.value}</code> stage.`,
+          false,
+        );
+      });
+      source.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") runBoth();
+      });
+    </script>
+  </body>
+</html>
