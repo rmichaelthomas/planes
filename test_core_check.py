@@ -64,14 +64,22 @@ def test_all_seven_effect_kinds_confirmed_used():
 
 
 def test_reported_core_size_is_the_port_surface():
-    # 28 of 32 keywords, eleven of the 13 builtins, all 7 effect kinds — larger
-    # than the "half the keywords / 3 builtins" CORE_SUBSET.md predicted.
+    # 29 of 32 keywords, eleven of the 13 builtins, all 7 effect kinds — larger
+    # than the "half the keywords / 3 builtins" reports/CORE_SUBSET.md predicted.
+    #
+    # 29, not 28: the port surface is what a second host must implement to run
+    # the GRAPH, and `when` reaches it through grammar/lexer.planes rather than
+    # through grammar/interp.planes. The two numbers were identical for three
+    # builds, which is precisely why nobody noticed they were different
+    # questions — so the assertion now pins BOTH, and their difference.
     kw, blt, core = core_check.load_core()
-    assert len(kw) == 28
+    assert len(kw) == 29
     assert len(blt) == 11
     assert core["effect_kinds_all_core"] is True
     r = _run()
-    assert "keywords    : 28 of 32" in r.stdout
+    assert "keywords    : 29 of 32" in r.stdout
+    assert "ALONE uses 28 keywords" in r.stdout
+    assert "['when'] reach the port surface through a module" in r.stdout
     # 11 of 13: interp.planes uses eleven builtins (`number` among them, A-Q19
     # -- it delegates to the host the same way `whole` and the rest already
     # do) and provably avoids two, `sine` and `root`, because it IMPLEMENTS
@@ -79,9 +87,16 @@ def test_reported_core_size_is_the_port_surface():
     assert "builtins    : 11 of 13" in r.stdout
 
 
-def test_core_json_excludes_exactly_let_rule_when_why():
+def test_core_json_excludes_exactly_let_rule_and_why():
+    """`when` used to be a fourth. It was excluded on the strength of
+    grammar/interp.planes alone, while grammar/lexer.planes — which
+    interp.planes reaches through `use parser` — needed it sixteen times.
+    reports/CORE_SUBSET.md §1.1 had it in the core all along; §4a records the
+    round trip. Three excluded keywords now, and all three are provably unused
+    across the WHOLE graph, not merely across the entry file."""
     core = _real_core()
-    assert set(core["excluded_keywords"]) == {"let", "rule", "when", "why"}
+    assert set(core["excluded_keywords"]) == {"let", "rule", "why"}
+    assert "when" in core["keywords"]
 
 
 def test_core_json_excludes_exactly_sine_and_root_and_says_why():

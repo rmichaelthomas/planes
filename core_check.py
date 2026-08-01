@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-"""core_check.py — does grammar/interp.planes stay inside the declared core,
-and does grammar/core.json still describe the language it claims to?
+"""core_check.py — does grammar/interp.planes AND EVERY MODULE IT REACHES stay
+inside the declared core, and does grammar/core.json still describe the language
+it claims to?
 
 Run from the repo root:  python3 core_check.py
 
-The obligation, open since the core subset was declared (checkpoint v10.0
-§127, CORE_SUBSET.md): the core -- the subset a second host must implement to
+The obligation, open since the core subset was declared (checkpoint v10.0 §127,
+reports/CORE_SUBSET.md): the core -- the subset a second host must implement to
 run interp.planes -- was to be declared before interp.planes was written,
 mechanically checkable, and derived from evidence. The first two held; this is
 the third. interp.planes now exists, so the checker can finally run against the
 thing it was written for.
+
+"AND EVERY MODULE IT REACHES" was not in that first sentence for three builds,
+and its absence was the whole of a real defect: a second host runs the graph,
+not the entry file, and this checked the entry file. See "the module graph"
+below.
 
 Modelled on audit_locked_vs_built.py, inverted: that confirms every LOCKED
 construct has code evidence; this confirms interp.planes uses NOTHING outside
@@ -42,11 +48,12 @@ would falsify a documented property of the split. Reported in its own block:
 "interp.planes uses something it may not" and "core.json describes a language
 that is not this one" are different failures.
 
-Exit code is the count of violations plus the count of drift findings (0 =
-both clean), so it drops into CI as a gate. It also reports the two
-confirmations A.4 asks for -- whether `with` is used, and whether all seven
-effect kinds are used -- and the core's real size against the full 32/13/7
-surface, which is the port surface for a second host.
+Exit code is the count of entry-file violations, plus module-graph violations,
+plus drift findings (0 = all three clean), so it drops into CI as a gate. It
+also reports the two confirmations A.4 asks for -- whether `with` is used, and
+whether all seven effect kinds are used -- and the port surface's real size
+against the full 32/13/7 vocabulary, measured over the GRAPH, with the entry
+file's own smaller usage printed beside it and the difference named.
 
 Usage:  python3 core_check.py [file] [--core PATH]
         (defaults: grammar/interp.planes, grammar/core.json)
@@ -163,7 +170,7 @@ def drift(core, keywords, builtins, effect_kinds):
 
 # ================================================================ the module graph
 #
-# WHY THIS IS HERE, AND WHY IT DOES NOT GATE.
+# WHY THIS IS HERE, AND WHY IT GATES.
 #
 # `violations` tokenizes ONE FILE. The declared core was derived from
 # grammar/interp.planes alone, and interp.planes conforms -- but interp.planes is
@@ -172,25 +179,24 @@ def drift(core, keywords, builtins, effect_kinds):
 # parser.planes, json.planes, and lexer.planes and vocabulary.planes beneath them.
 # core.json's claim is about the graph; the check was about one file.
 #
-# The core-restricted JavaScript interpreter (js/core_restrict.mjs, this build)
-# ran interp.planes and its graph and refused at grammar/lexer.planes:89, on
-# `when` -- a keyword core.json EXCLUDES, with a reason ("dispatch is flat
-# `if k == ...` ... so `when` is NOT needed") that is true of interp.planes and
-# false of the graph interp.planes needs. All sixteen of lexer.planes's `when`
-# sites are reached at evaluation time on an ordinary corpus file; none is dead.
-# See core-sufficiency-report.md.
+# The core-restricted JavaScript interpreter (js/core_restrict.mjs) ran
+# interp.planes and its graph under a host implementing only the declared core,
+# and refused at grammar/lexer.planes:89 on `when` -- a keyword core.json then
+# EXCLUDED, on a reason true of interp.planes and false of the graph
+# interp.planes needs. All sixteen of lexer.planes's `when` sites are reached at
+# evaluation time on an ordinary corpus file; none was dead.
 #
-# So this block REPORTS and does not gate, and the reason is not squeamishness.
-# There are exactly two ways to make it green: rewrite grammar/lexer.planes, or
-# widen grammar/core.json. This build forbids both by invariant, precisely so the
-# finding cannot erase itself -- and the choice between them is a decision about
-# what the port surface IS, which belongs to whoever makes it, not to the checker
-# that found the gap. Reported in the shape ci.sh already has for a measurement
-# that is not a gate (errors_coverage, corpus_coverage, both `timed_soft`).
-#
-# When the gap closes -- `when` joins the core, or lexer.planes stops needing it
-# -- this block prints nothing, and that is the day to consider whether it should
-# start gating.
+# The gap was one keyword and `when` has since joined the core, restoring what
+# reports/CORE_SUBSET.md §1.1 had listed as core all along, with
+# grammar/parser.planes's node dispatch as its justifying program -- a program
+# that used `when` twenty-eight times when the derivation was written and zero
+# times by the time the exclusion was. That is why this block was a report for
+# exactly one build and is a gate now: the only two ways to green it were
+# rewriting the module or widening the core, and until somebody chose, a checker
+# had no business failing a build over a decision nobody had made. The choice is
+# made. The graph is green. A construct reaching past the core from inside a
+# module now fails the gate exactly as one in the entry file always has, which is
+# what the port surface claiming to be a port surface requires.
 
 def graph_of(path):
     """Every file `path` reaches through `use`, in dependency order, itself last.
@@ -303,12 +309,12 @@ def main():
         clean = [p for p in reached if p not in offenders]
         if clean:
             print(f"\n  the other {len(clean)} conform: " + ", ".join(clean))
-        print("\n  REPORTED, NOT GATED. core.json's claim is about the artifact "
+        print("\n  THIS FAILS THE GATE. core.json's claim is about the artifact "
               "a second host\n  runs, which is this graph and not the entry "
-              "file alone -- so this is a\n  real gap in the declared port "
-              "surface, and closing it means either\n  widening core.json or "
-              "rewriting the module. That is a decision about\n  what the port "
-              "surface IS, and not one a checker gets to make.")
+              "file alone, so a construct\n  reached from inside a module is "
+              "outside the port surface exactly as one\n  in the entry file is. "
+              "Either implement it and add it to core.json's\n  \"keywords\" / "
+              "\"builtins\", or rewrite the module so it does not need it.")
     elif reached:
         print(f"all {len(reached)} module(s) {target} reaches through `use` "
               "conform too:\n  " + ", ".join(reached))
@@ -339,10 +345,10 @@ def main():
     print()
     if with_line is not None:
         print(f"CONFIRMED: `with` is used ({target}:{with_line}) -- it stays "
-              "in the core, prediction discharged (CORE_SUBSET.md §4).")
+              "in the core, prediction discharged (reports/CORE_SUBSET.md §4).")
     else:
         print("NOT CONFIRMED: `with` is unused -- it should leave the core "
-              "(CORE_SUBSET.md §4's prediction was wrong).")
+              "(reports/CORE_SUBSET.md §4's prediction was wrong).")
 
     # --- A.4 confirmation 2: are all seven effect kinds used? (Phase 5 corrob.)
     surface = analyse_file(target, follow=True)
@@ -350,34 +356,61 @@ def main():
     all_seven = set(EFFECT_KINDS)
     if kinds >= all_seven:
         print(f"CONFIRMED: all seven effect kinds are used {sorted(all_seven)} "
-              "-- the core includes them all (CORE_SUBSET.md §2a).")
+              "-- the core includes them all (reports/CORE_SUBSET.md §2a).")
     else:
         print(f"NOT CONFIRMED: effect kinds used are {sorted(kinds)}, "
               f"missing {sorted(all_seven - kinds)}.")
 
     # --- A.4 item 4: the core's real size -- the port surface for a 2nd host.
-    used_keywords = sorted(
-        {t.value for t in _toks(target)
-         if t.value in KEYWORDS and t.kind not in ("STRING", "NUMBER")})
-    used_builtins = sorted(
-        {t.value for t in _toks(target)
-         if t.kind == "NAME" and t.value in BUILTIN_NAMES})
+    #
+    # THIS BLOCK USED TO REPORT THE ENTRY FILE AND CALL IT THE PORT SURFACE.
+    # It was the same number for three builds, because interp.planes happened to
+    # use every keyword the core declared -- and being the same number is how
+    # nobody noticed they were different questions. A second host runs the GRAPH,
+    # so the graph's usage is the port surface and the entry file's is a
+    # component of it. Both are printed, labelled, because when they diverge the
+    # difference is the interesting part: today it is `when`, used by
+    # grammar/lexer.planes and by nothing above it.
+    entry_kw, entry_bi = _used(target)
+    graph_kw, graph_bi = _used(target, *modules_reached(target))
     print()
-    print("CORE SIZE (the port surface a second host must implement):")
-    print(f"  keywords    : {len(used_keywords)} of {len(KEYWORDS)}  "
-          f"(excluded: {sorted(set(KEYWORDS) - set(used_keywords))})")
-    print(f"  builtins    : {len(used_builtins)} of {len(BUILTIN_NAMES)}  "
-          f"(excluded: {sorted(set(BUILTIN_NAMES) - set(used_builtins))})")
+    print("PORT SURFACE (what a second host must implement to run the GRAPH):")
+    print(f"  keywords    : {len(graph_kw)} of {len(KEYWORDS)}  "
+          f"(unused: {sorted(set(KEYWORDS) - graph_kw)})")
+    print(f"  builtins    : {len(graph_bi)} of {len(BUILTIN_NAMES)}  "
+          f"(unused: {sorted(set(BUILTIN_NAMES) - graph_bi)})")
     print(f"  effect kinds: {len(kinds & all_seven)} of {len(all_seven)}")
     print(f"  declared core.json: {len(core_keywords)} keywords, "
           f"{len(core_builtins)} builtins, all 7 effect kinds")
+    print()
+    print(f"  {target} ALONE uses {len(entry_kw)} keywords and "
+          f"{len(entry_bi)} builtins.")
+    only_graph = sorted(graph_kw - entry_kw)
+    if only_graph:
+        print(f"  {sorted(graph_kw - entry_kw)} reach the port surface through "
+              f"a module and not through it —\n  which is the whole reason this "
+              f"checker follows `use`.")
 
-    sys.exit(len(viols) + len(drifts))
+    sys.exit(len(viols) + len(graph) + len(drifts))
 
 
 def _toks(path):
     with open(path, encoding="utf-8") as f:
         return list(tokenize(f.read()))
+
+
+def _used(*paths):
+    """(keywords, builtins) actually used across `paths`. Reads through the
+    language's own lexer, so the checker and the language never disagree about
+    what a token is."""
+    kw, bi = set(), set()
+    for p in paths:
+        for t in _toks(p):
+            if t.value in KEYWORDS and t.kind not in ("STRING", "NUMBER"):
+                kw.add(t.value)
+            if t.kind == "NAME" and t.value in BUILTIN_NAMES:
+                bi.add(t.value)
+    return kw, bi
 
 
 if __name__ == "__main__":

@@ -1,5 +1,23 @@
 # Is the declared core enough? — the measured answer
 
+> **RESOLVED, 2026-08-01, in the build immediately after this one.** `when` has
+> joined `grammar/core.json`'s `keywords`; the port surface is 29 keywords, not 28;
+> `core_check.py`'s graph block now **gates** rather than reports; and the whole
+> module graph runs under restriction. The measurement below stands exactly as it
+> was taken — **nothing in the body of this report has been edited** — but its
+> verdict sentence describes the repo as it was at `17d2881`, not as it is now.
+>
+> The choice this report declined to make ("the measurement does not choose") was
+> made on the evidence that `reports/CORE_SUBSET.md` §1.1 had listed `when` as core
+> from the beginning, with `grammar/parser.planes`'s node dispatch — 28 `when`
+> tokens at `135ecb4`, 0 by the time the exclusion was written — as its justifying
+> program. The exclusion was a correct observation about two files, generalised to a
+> graph of five. See `reports/CORE_SUBSET.md` §4a.
+>
+> The evidence here is not lost by the fix: `test_js_core_restricted.py`'s
+> `test_the_gap_that_was_found_stays_found_if_when_ever_leaves_again` reproduces
+> every number in this report against a crafted core, on every gate run.
+
 **Build:** `feat/core-sufficiency`
 **Base:** `main` at `90d5ae9` — "The hand-edited files get the gate the generated ones
 already had (#62)"
