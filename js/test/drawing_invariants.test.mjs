@@ -229,12 +229,21 @@ test("garden.html exists as a sibling of paint.html, fetches garden.planes rathe
     // editable in the sense it advertised — nothing read it back, and only
     // "Reload modules" re-fetched the file.
     "garden-source-view",
-    // A scene that lives: play, three speeds, a clock, a weather readout,
+    // A scene that lives: play, a speed toggle, a clock, a weather readout,
     // sound, and a card to answer a click with.
-    "garden-play", "garden-speed-1", "garden-speed-4", "garden-speed-16",
+    //
+    // ONE TOGGLE, NOT THREE BUTTONS. The 1x/4x/16x triple this list used to
+    // name was replaced by `garden-fast` when the page was built to its
+    // spec (garden-page-spec.md §3.4): three buttons to express two states
+    // is the mockup's grammar refused, and a control nobody moved off 1x is
+    // a control that was measuring nothing.
+    "garden-play", "garden-fast",
     "garden-sound", "garden-clock", "garden-weather", "garden-card",
   ]) {
     assert.ok(html.includes(`id="${id}"`), `no ${id}`);
+  }
+  for (const gone of ["garden-speed-1", "garden-speed-4", "garden-speed-16"]) {
+    assert.ok(!html.includes(`id="${gone}"`), `${gone} came back`);
   }
 });
 
@@ -247,12 +256,35 @@ test("garden.html's play loop, hit testing and why panel come from shared module
   assert.match(html, /from ["']\.\/js\/sound\/stream\.mjs["']/);
 });
 
-test("sound fires only while playing — never on a scrub and never on the export path", () => {
+test("sound fires while playing or on a click that landed on a note — never on a scrub, never on the export path", () => {
   const html = read("garden.html");
-  // The one call into the live player is guarded by all three of: this frame
-  // came from the loop, sound is on, and a player exists.
+  // The loop's call is guarded by all three of: this frame came from the
+  // loop, sound is on, and a player exists.
   assert.match(html, /if \(playing && soundOn && player\) \{/);
-  assert.equal((html.match(/player\.play\(/g) ?? []).length, 1, "exactly one place plays");
+
+  // THE SECOND SOURCE IS NEW AND IS NOT A LOOSENING. garden-page-spec.md
+  // §3.8 makes a click on a mark play that mark's note, so "exactly one
+  // place plays" stopped being the invariant — but the shape of the old
+  // assertion (a literal `player.play(` count) would have kept passing
+  // anyway, because the new call goes through `ensurePlayer()`. A check that
+  // survives the change it was meant to notice is worse than no check, so it
+  // is replaced rather than left to keep reporting green.
+  const playSites = html.match(/\bplay\(\s*(lastLines|lines)\s*\)/g) ?? [];
+  assert.equal(playSites.length, 2, `expected the loop and the click, got ${playSites.length}`);
+  assert.match(html, /function playOneNote\(note\)/, "the click's note goes through one named path");
+  // The click path is reached only from the card, which is reached only from
+  // a hit — and it builds its own four-line stream rather than replaying the
+  // frame, so clicking cannot sound the whole tick.
+  assert.match(html, /if \(found\) playOneNote\(found\.note\);/);
+  assert.match(html, /sound note \$\{note\.numerator\} \$\{note\.denominator\}/);
+
+  // Neither the scrubber nor either exporter reaches a player.
+  const scrubBody = html.slice(html.indexOf("onChange: (tick)"), html.indexOf("const loop = createSceneLoop"));
+  assert.ok(!/play\(/.test(scrubBody), "scrubbing must not play");
+  const svgHandler = html.slice(html.indexOf('$("garden-save-svg")'), html.indexOf('$("garden-save-png")'));
+  const pngHandler = html.slice(html.indexOf('$("garden-save-png")'), html.indexOf("// ---- the surface, summarized"));
+  assert.ok(!/playOneNote|\.play\(/.test(svgHandler), "SVG export must not play");
+  assert.ok(!/playOneNote|\.play\(/.test(pngHandler), "PNG export must not play");
 });
 
 test("js/paint/program_session.mjs loads its program by fetch, not by inlining it", () => {

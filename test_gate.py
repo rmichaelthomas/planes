@@ -374,18 +374,53 @@ def test_every_servable_page_reaches_the_deploy():
     assert r.returncode == 0, r.stdout + r.stderr
 
 
+def _reference_mockups():
+    """The pages that exist to be COMPARED AGAINST, not visited.
+
+    Derived, not hardcoded: `garden-page-spec.md` names its reference
+    implementations in its own preamble, and a page is exempt from the
+    landing-page rule below exactly when a spec cites it that way. A new
+    product page cannot become exempt by being added -- someone would have to
+    write it into a spec as a reference implementation first, which is the
+    point at which it stopped being a destination.
+    """
+    cited = set()
+    for name in os.listdir(REPO):
+        if not name.endswith("-spec.md"):
+            continue
+        with open(os.path.join(REPO, name), encoding="utf-8") as fh:
+            head = fh.read(2000)
+        # ONLY the reference-implementations sentence. The preamble also says
+        # "**For:** `garden.html`" and the body names `paint.html`, so a scan
+        # of the whole head exempts the very pages the rule exists to protect
+        # -- which is how the first version of this emptied itself out.
+        marker = head.find("Reference implementation")
+        if marker < 0:
+            continue
+        sentence = head[marker:]
+        end = sentence.find(". ")
+        cited.update(re.findall(r"`([A-Za-z0-9._-]+\.html)`",
+                                sentence[:end] if end > 0 else sentence))
+    return cited
+
+
 def test_the_landing_page_links_to_the_pages_it_ships_with():
     """The deploy carried paint.html and garden.html while index.html linked
     to nothing but the repo, so a shipped page was unreachable by anyone who
     did not already know its filename -- indistinguishable, from outside,
-    from the page not being deployed at all."""
+    from the page not being deployed at all.
+
+    Reference mockups are exempt because they are not destinations; every
+    other page the deploy carries has to be reachable from the front door."""
     idx = os.path.join(REPO, "index.html")
     with open(idx, encoding="utf-8") as fh:
         html = fh.read()
-    for page in sorted(f for f in os.listdir(REPO)
-                       if f.endswith(".html") and f != "index.html"):
-        if page == "the-living-garden.html":
-            continue  # superseded by garden.html; deployed, not advertised
+    exempt = _reference_mockups()
+    pages = sorted(f for f in os.listdir(REPO)
+                   if f.endswith(".html") and f != "index.html")
+    linked = [p for p in pages if p not in exempt]
+    assert linked, "every page is exempt -- the rule has been emptied out"
+    for page in linked:
         assert f'href="./{page}"' in html, (
             f"{page} is deployed but index.html does not link to it")
 

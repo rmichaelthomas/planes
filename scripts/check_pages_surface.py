@@ -40,12 +40,27 @@ _HTML_REF = re.compile(r"""\b(?:src|href)\s*=\s*["']([^"'\n]+)["']""")
 # extension directly. Any quoted `<dir>/<name>.planes` counts as a fetch.
 _PLANES_REF = re.compile(r"""["']([A-Za-z0-9_./-]+\.planes)["']""")
 
+# `url(...)` inside a <style> block or a stylesheet. Nothing else here sees
+# it: a page can name a font, an image or a cursor this way and no import and
+# no src= attribute is involved. garden.html's @font-face reaches
+# identity/fonts/ through exactly this form.
+_CSS_URL = re.compile(r"""url\(\s*["']?([^"')\n]+?)["']?\s*\)""")
+
 # Line and block comments, so prose is never mistaken for a specifier. Quotes
 # inside a comment are the only thing this needs to defeat, so a plain strip
 # is enough -- it is not trying to be a JS tokenizer.
 _COMMENTS = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
 
-_LOADABLE = (".mjs", ".js", ".json", ".planes", ".css")
+# Everything a page can load from the served root. IMAGES AND FONTS BELONG
+# HERE: the first version of this list held only the script-ish extensions, so
+# `<img src="identity/planes-small-on-light.svg">` was read as "not ours to
+# resolve" and a missing mark passed the check silently -- the same blind spot
+# as the allowlist, one asset class over.
+_LOADABLE = (
+    ".mjs", ".js", ".json", ".planes", ".css",
+    ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico",
+    ".woff2", ".woff", ".ttf", ".otf",
+)
 
 
 def _is_local(spec):
@@ -114,6 +129,7 @@ def check(root, source=None):
             text = _COMMENTS.sub(" ", text)
 
         refs = set(_SPECIFIER.findall(text)) | set(_PLANES_REF.findall(text))
+        refs |= set(_CSS_URL.findall(text))
         if path.endswith(".html"):
             refs |= set(_HTML_REF.findall(text))
 

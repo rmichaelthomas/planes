@@ -23,6 +23,8 @@ on:
       - "*.html"
       - "js/**"
       - "paint/**"
+      - "identity/*.svg"
+      - "identity/fonts/**"
       - "grammar/vocabulary.json"
       - "grammar/messages/amber.json"
       - ".github/workflows/pages.yml"
@@ -59,6 +61,17 @@ jobs:
               done
 
           cp paint/*.planes _site/paint/
+
+          # The identity assets a page consumes: the generated marks and the
+          # self-hosted typefaces. garden.html reaches both, the mark through
+          # <img src> and the fonts through @font-face url() — neither of
+          # which is an import, which is why the surface check had to learn to
+          # follow them. render_logo.py and the identity suites stay behind:
+          # they generate these files, they are not served with them.
+          mkdir -p _site/identity/fonts
+          cp identity/*.svg _site/identity/
+          cp identity/fonts/* _site/identity/fonts/
+
           cp grammar/vocabulary.json _site/grammar/vocabulary.json
           cp grammar/messages/amber.json _site/grammar/messages/amber.json
 
