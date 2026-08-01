@@ -3,7 +3,7 @@
 // runProgram() in browser_main.mjs is the deliverable's engine, pure of the
 // DOM: it loads the grammar as JSON modules (the real grammar/*.json, no copy)
 // and runs a program against the in-memory BrowserHost. Testing it under Node
-// exercises the exact code path index.html runs in a browser — everything but
+// exercises the exact code path try.html runs in a browser — everything but
 // the DOM rendering — so a green run here is strong evidence the page works.
 //
 // Run: node --test js/test/
@@ -14,10 +14,11 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runProgram, analyseProgram, surfaceReport } from "../browser_main.mjs";
 
-// The exact program the page ships with, read from index.html — so these tests
-// guard the real demo, not a copy that can drift.
+// The exact program the page ships with, read from try.html — so these tests
+// guard the real demo, not a copy that can drift. (It was index.html until the
+// demo moved there and index became the hub; the hub carries no program.)
 function pageSample() {
-  const html = fileURLToPath(new URL("../../index.html", import.meta.url));
+  const html = fileURLToPath(new URL("../../try.html", import.meta.url));
   const src = fs.readFileSync(html, "utf-8");
   return src.split('<textarea id="source" spellcheck="false">')[1].split("</textarea>")[0];
 }
@@ -49,7 +50,7 @@ test("the browser VFS seeds files and captures writes", () => {
   assert.equal(r.files["out.json"], "[\n  1,\n  2\n]");
 });
 
-test("the sample program in index.html runs clean and performs no network send", () => {
+test("the sample program in try.html runs clean and performs no network send", () => {
   // A regression guard on the actual demo: it must run without error, and the
   // ask hidden behind `fetch` must NOT execute at the top level.
   const r = runProgram(pageSample());
