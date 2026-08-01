@@ -1,21 +1,26 @@
 name: Deploy Pages
 
-# Deploys index.html and paint.html to GitHub Pages via Actions (not a
-# root/docs branch source) so the repo root doesn't have to double as the
-# servable web root. Both pages are otherwise ordinary root-relative fetches
-# and imports: paint.html loads js/browser_main.mjs, js/paint/painter.mjs and
-# js/paint/loop.mjs, and fetches sibling paint/*.planes; browser_main.mjs in
-# turn imports ../grammar/vocabulary.json and ../grammar/messages/amber.json.
-# The build step below reassembles exactly that sibling shape under _site/ —
-# js/test/ and the rest of grammar/ (the self-hosted .planes sources and its
-# own tests) are not part of what either page reaches, so they aren't shipped.
+# Deploys the root HTML pages to GitHub Pages via Actions (not a root/docs
+# branch source) so the repo root doesn't have to double as the servable web
+# root. The pages are otherwise ordinary root-relative fetches and imports:
+# they load js/browser_main.mjs and modules under js/paint/ and js/sound/, and
+# fetch sibling paint/*.planes; browser_main.mjs in turn imports
+# ../grammar/vocabulary.json and ../grammar/messages/amber.json. The build step
+# below reassembles exactly that sibling shape under _site/ — js/test/ and the
+# rest of grammar/ (the self-hosted .planes sources and its own tests) are not
+# part of what any page reaches, so they aren't shipped.
+#
+# The copy is DERIVED from the tree, never an allowlist. An allowlist is how
+# garden.html shipped in #52 and 404'd on Pages for two builds while this
+# workflow reported success on every push: copying a list of files that all
+# exist always succeeds, so a page missing from the list fails silently.
+# test_gate.py::test_every_servable_page_reaches_the_deploy holds the line.
 
 on:
   push:
     branches: [main]
     paths:
-      - "index.html"
-      - "paint.html"
+      - "*.html"
       - "js/**"
       - "paint/**"
       - "grammar/vocabulary.json"
@@ -41,13 +46,28 @@ jobs:
       - name: Assemble the servable surface
         run: |
           set -euo pipefail
-          mkdir -p _site/js/paint _site/paint _site/grammar/messages
-          cp index.html paint.html _site/
-          cp js/*.mjs _site/js/
-          cp js/paint/*.mjs _site/js/paint/
+          mkdir -p _site/paint _site/grammar/messages
+
+          # Every root page, not a named few.
+          cp ./*.html _site/
+
+          # Every module directory under js/ except the test tree.
+          find js -name '*.mjs' -not -path 'js/test/*' -print0 \
+            | while IFS= read -r -d '' f; do
+                mkdir -p "_site/$(dirname "$f")"
+                cp "$f" "_site/$f"
+              done
+
           cp paint/*.planes _site/paint/
           cp grammar/vocabulary.json _site/grammar/vocabulary.json
           cp grammar/messages/amber.json _site/grammar/messages/amber.json
+
+      # `--source` is the load-bearing half: without it the check walks only
+      # the pages that made it into _site, which is blind in exactly the way
+      # the old allowlist was. It compares the served set against the authored
+      # set first, then resolves every reference.
+      - name: Every authored page ships, and its imports resolve inside _site
+        run: python3 scripts/check_pages_surface.py _site --source=.
 
       - uses: actions/configure-pages@v5
 

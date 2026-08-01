@@ -59,6 +59,20 @@
       }
       footer { margin-top: 2rem; color: #888; font-size: 12px; }
       code { background: rgba(128,128,128,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+      nav.pages {
+        display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1.25rem 0 1.75rem;
+      }
+      nav.pages a {
+        flex: 1 1 15rem; padding: 0.7rem 0.9rem; border: 1px solid #d0d3d9;
+        border-radius: 8px; text-decoration: none; color: inherit;
+      }
+      nav.pages a:hover { border-color: #2d6cdf; }
+      nav.pages strong { display: block; font-size: 0.95rem; }
+      nav.pages span { color: #666; font-size: 12px; }
+      @media (prefers-color-scheme: dark) {
+        nav.pages a { border-color: #333; }
+        nav.pages span { color: #999; }
+      }
     </style>
   </head>
   <body>
@@ -70,6 +84,20 @@
       <strong>Surface ⊚</strong> tells you what it <em>would</em> touch — which
       boundaries, which destinations — without running a line of it.
     </p>
+
+    <nav class="pages">
+      <a href="./paint.html"
+        ><strong>Planes draws ▲</strong
+        ><span>turtle, bloom, snake — one program, two renderers</span></a
+      >
+      <a href="./garden.html"
+        ><strong>The garden ❀</strong
+        ><span
+          >a scene that lives: weather, growth, sound — click any mark to ask
+          where it came from</span
+        ></a
+      >
+    </nav>
 
     <textarea id="source" spellcheck="false">
 # Planes runs here — and can tell you what a program would touch
