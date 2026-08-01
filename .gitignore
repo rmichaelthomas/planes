@@ -30,4 +30,9 @@ config.json
 # reference copy was sitting untracked in the working tree when a `git add -A`
 # ran, which is the whole reason this line exists: the file is a reference to
 # look at, never a file this repo carries.
-the-living-garden.html
+#
+# Mockups live in `mockups/` now, which is what keeps them off the served
+# site: the deploy is `cp ./*.html _site/`, so a page is published by being at
+# the ROOT. This one is ignored as well as unserved, because it is a local
+# copy of a retired file rather than one the repo keeps.
+mockups/the-living-garden.html
