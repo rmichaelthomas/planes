@@ -7,9 +7,14 @@
 //
 // Computing it means restating the program's rule in the page:
 //
-//     let k = whole of (g * 5)                      (garden.planes:686)
-//     note of (pentatonic-n of k), (pentatonic-d of k), 1, 0, 1.6   (:687)
-//     pentatonic-n / pentatonic-d                          (:633, :648)
+//     let k = whole of (g * 5)
+//     note of (pentatonic-n of k), (pentatonic-d of k), 1, 0, 1.6
+//     pentatonic-n / pentatonic-d
+//
+// all inside `sing-bee`. The line number is DERIVED from the source below,
+// not written down: editing a comment in garden.planes moves every line
+// after it, and a suite pinned to 687 would start silently checking nothing
+// the moment someone did.
 //
 // A restatement nobody checks is a page that will eventually lie about what
 // the program does. So this reads the table OUT OF THE PAGE — there is no
@@ -36,7 +41,14 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 const PAINT = path.join(REPO, "paint");
 const SEED = 481027;
 const SPAN = 300;
-const NOTE_LINE = 687; // `note of (pentatonic-n of k), ...` inside sing-bee
+// The bee's note line, found rather than remembered. The dawn, dusk and
+// night notes are literals and are not this one.
+function noteLineIn(src) {
+  const lines = src.split("\n");
+  const i = lines.findIndex((l) => /^\s*note of \(pentatonic-n of k\)/.test(l));
+  assert.ok(i >= 0, "garden.planes no longer plays a note from the pentatonic table");
+  return i + 1; // the interpreter counts from 1
+}
 
 function installFsFetch() {
   const real = globalThis.fetch;
@@ -102,6 +114,7 @@ test("the page's flower-note rule reproduces every note the program actually pla
   try {
     const loader = new BrowserModuleLoader({ base: pathToFileURL(path.join(PAINT, "garden.planes")).href });
     const rule = pageRule();
+    const noteLine = noteLineIn(gardenSrc());
     assert.deepEqual(rule.ratios, [[1, 1], [9, 8], [5, 4], [3, 2], [5, 3]],
       "the page's table is no longer the program's five just ratios");
 
@@ -121,7 +134,7 @@ test("the page's flower-note rule reproduces every note the program actually pla
       });
       for (let i = 0; i < indices.length && i < notes.length; i++) {
         const entry = trace[indices[i]];
-        if (!entry || entry[1] !== NOTE_LINE) continue; // dawn/dusk/night are literals
+        if (!entry || entry[1] !== noteLine) continue; // dawn/dusk/night are literals
         const gs = [...gValues(entry[0])];
         assert.equal(gs.length, 1, `tick ${tick}: expected one g in the bee's chain, got ${gs.length}`);
         const predicted = rule.noteFor(Number(gs[0]));
