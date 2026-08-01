@@ -1,7 +1,7 @@
 {
   "format": 1,
   "protocol": "planes-drawing",
-  "version": 2,
+  "version": 3,
   "prefix": "draw",
   "prefix_note": "Every command line begins with this word. A line that does not is prose and is never interpreted.",
   "line_shape": "draw <verb> <arg1> <arg2> ... <argN>",
@@ -289,9 +289,33 @@
             "number",
             "number",
             "number",
+            "number",
             "number"
           ],
-          "description": "x y r L1 C1 H1 A1 L2 C2 H2 A2"
+          "description": "x y r [r-inner] L1 C1 H1 A1 L2 C2 H2 A2",
+          "optional": 1
+        },
+        "mid": {
+          "arguments": [
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number",
+            "number"
+          ],
+          "description": "p x1 y1 x2 y2 L1 C1 H1 A1 Lm Cm Hm Am L2 C2 H2 A2"
         }
       },
       "group": "paint-and-compositing"
@@ -345,6 +369,14 @@
         "number"
       ],
       "group": "colour-and-line"
+    },
+    {
+      "name": "blur",
+      "arity": 1,
+      "arguments": [
+        "number"
+      ],
+      "group": "colour-and-line"
     }
   ],
   "word_arguments": {
@@ -365,7 +397,8 @@
     ],
     "gradient": [
       "linear",
-      "radial"
+      "radial",
+      "mid"
     ],
     "blend": [
       "normal",

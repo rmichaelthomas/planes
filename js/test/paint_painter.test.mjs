@@ -452,7 +452,7 @@ test("draw protocol 1 as the first line is accepted and does not itself draw", (
 
 test("an unsupported version refuses the whole stream: nothing is drawn", () => {
   const ctx = fakeCtx();
-  const result = paint(ctx, ["draw protocol 3", "draw circle 10 10 5", "some prose"], DIMENSIONS);
+  const result = paint(ctx, ["draw protocol 4", "draw circle 10 10 5", "some prose"], DIMENSIONS);
   assert.equal(result.drawn, 0);
   assert.deepEqual(result.text, []);
   assert.equal(result.errors.length, 1);

@@ -140,6 +140,15 @@ export function markSink() {
     corner() {},
     dash() {},
     shadow() {},
+    // A BLURRED MARK'S RECORDED OUTLINE IS ITS GEOMETRIC OUTLINE, UNBLURRED
+    // (v3 §6.1). This is a decision, not an oversight: a blur spreads a
+    // cloud's edge over tens of pixels of near-transparent falloff, and
+    // recording that as the hit region would mean clicking a cloud required
+    // finding its faintest pixel while the solid middle of it belonged to
+    // whatever was behind. What a mark IS does not change because of how
+    // softly it was painted — the same reason `shadow` has never moved an
+    // outline either.
+    blur() {},
     blend() {},
     clip() {},
     unclip() {},

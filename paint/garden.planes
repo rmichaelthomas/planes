@@ -15,8 +15,13 @@
 # preceded this one spent 3,200 to 4,200 and took 400 to 600ms — which is why
 # that version had no play loop and could not have had one. Every count below
 # (34 stars, 6 clouds, 2 ridges, a five-deep tree, 12 plants, 24 blades of
-# grass, at most 50 raindrops) is chosen against that number. Measured across
-# all three days: 750 to 868 commands, 28 to 32ms a tick.
+# grass, at most 50 raindrops) is chosen against that number.
+#
+# Substituting `blur` for six `shadow 0 0 r` glows made the picture CHEAPER,
+# not dearer: a shadow makes canvas rasterise the mark twice, once blurred and
+# once crisp, and these marks only ever wanted the blurred one. Paint time
+# halved — 2.2-3.1ms to 1.0-1.3ms — and one tick end to end now costs 23 to
+# 30ms across the whole cycle where it cost 26 to 35.
 #
 # VARIATION WITHOUT RANDOMNESS. `spread of n` is an INTEGER hash: a quadratic
 # in n taken modulo a power of two, so the same n always gives the same number
@@ -35,11 +40,46 @@
 # garden-scene-spec.md; substituting this canvas's dimensions for the mockup's
 # own W/H/GY IS the adaptation.
 #
-# THE ONE THING THIS CANNOT DO. The mockup's clouds are softened with a CSS
-# `filter: blur()`, which softens a shape's OWN edge. The drawing protocol's
-# `shadow` blurs a COPY BEHIND a shape. There is no verb that softens a mark's
-# edge, so the clouds here read as hard shapes with a halo. Recorded for a
-# later protocol version rather than worked around.
+# SOFTNESS. The clouds, the sun's and moon's glow, the wet-ground sheen, the
+# open flowers and the fireflies are softened with `blur`, which softens a
+# mark's OWN edge. Every one of them used to be a `shadow 0 0 r` — a blurred
+# copy BEHIND the mark, which is a halo and not a soft edge — and every one of
+# them had to set and reset `alpha` around itself, because a shadow's opacity
+# comes from the `alpha` state and would otherwise have dimmed whatever was
+# drawn next. The alphas live in the marks' own fills now.
+#
+# THE RADII ARE THE MOCKUP'S, SCALED — AND THEY ARE NOT THE OLD SHADOW'S.
+# This is the trap the substitution sets. A `shadow 0 0 r` draws the mark
+# TWICE, once crisp and once blurred behind it, so its radius was tuned
+# against a hard shape wearing a halo. `blur` draws the mark ONCE, spread out,
+# so the same radius dissolves it — the clouds went from clouds to ghosts on
+# the first pass here, at a radius that had looked right for two builds. Every
+# one is now the mockup's own number scaled by 480/1720 = 0.2791: sun 52 ->
+# 14.5, moon 30 -> 8.4, wet sheen 20 -> 5.6, flower glow 10 -> 2.8, fireflies
+# 7 -> 2. The cloud and puff GEOMETRY was already scaled that way (puff
+# 58 -> 16.2, offset 46 -> 12.8); only the blur was not.
+#
+# THE CLOUDS ARE THE ONE EXCEPTION, AND IT IS A LOOKING DECISION, NOT A
+# DERIVED ONE. Scaled faithfully they came out at blur 4.5, lightness
+# 0.42 + light x 0.55 and alpha 0.30 + dark x 0.34 — every constant the
+# mockup's own, and the clouds still read as barely-there smudges on this
+# canvas. They are blur 3, lightness 0.78 + light x 0.20 and alpha
+# 0.70 + dark x 0.22 instead, which is a real departure from the reference
+# and is here because the picture is the thing being judged. A cloud has to
+# stay brighter than the sky behind it at every hour; at the mockup's own
+# numbers this one did not.
+#
+# Two alphas came back with them, dimmed for the same reason and no longer
+# needing to be: the sun's glow is the mockup's 0.30 + light x 0.35 again, and
+# the clouds' own alpha is the mockup's exactly, with no 0.95 multiplier —
+# that factor existed only so a SHADOW had an opacity.
+#
+# NOTHING IN THIS PROGRAM SETS A SHADOW ANY MORE. `shadow` was never once used
+# as a shadow here; all six uses were glows standing in for the verb this
+# version added. Cast shadows were measured and refused: a cast shadow that is
+# actually visible on this page's backing store costs 56 to 68 milliseconds of
+# paint on its own, which is the whole frame budget. benchmarks/density.md
+# carries the number and the distribution it came from.
 
 use draw
 use math
@@ -154,9 +194,9 @@ let grow = smaller of 1, (0.42 + day * 0.22) because "the garden is short at fir
 #
 # The mockup's palette is nine RGB keyframes at nine times of day, three
 # colours each. Translated once, here, into the only colour model this
-# protocol has. The gradient verb is two-stop, so the sky is two stacked
-# gradients: zenith to middle across the upper 55 percent, middle to horizon
-# below it.
+# protocol has, and drawn as ONE `gradient mid` — zenith at 0, the middle
+# colour at 0.55, the horizon at 1, exactly the three stops the mockup's own
+# `addColorStop` calls use.
 
 to sky-mix of p, p0, p1, l0, c0, h0, l1, c1, h1:
   let u = (p - p0) / (p1 - p0)
@@ -239,8 +279,8 @@ to sky-low of p:
 # The protocol has no verb to turn a shadow back off; blur 0 at offset 0,0 is
 # the only way, and is invisible behind an opaque mark. The same idiom
 # `dash of 0, 0` already is for dashing.
-to no-shadow:
-  shadow of 0, 0, 0, 0, 0, 0
+to no-blur:
+  blur of 0
 
 to no-stroke:
   stroke of 0, 0, 0, 0
@@ -262,19 +302,54 @@ to draw-star of i, total:
 # ---- sun and moon -----------------------------------------------------------
 #
 # Two marks each: a wide soft glow under `blend add`, then the crisp disc.
-# dx 0, dy 0 is a glow rather than a cast shadow.
+#
+# WHAT READS AS THE SUN IS THE GLOW, NOT THE DISC. The mockup's core disc is
+# radius 36 in a 1720-wide canvas and its glow is 110 — and the glow is drawn
+# ADDITIVELY in a near-white (255,214,140), so at full light it saturates to a
+# solid white circle three times the disc's size, with the disc invisible
+# inside it. That saturating circle IS the sun a reader sees.
+#
+# Two things were wrong and only one of them was a number.
+#
+# THE COLOUR. The glow was L 0.70, a deep orange that can never saturate
+# however much of it is added, so nothing clipped and only a small core
+# showed. Every colour here is the mockup's own now, converted once: glow
+# (255,214,140) is OKLCH 0.90 0.10 80, disc (255,244,214) is 0.97 0.04 85,
+# moon glow (196,214,255) is 0.88 0.06 266, moon disc (232,238,255) is
+# 0.95 0.02 269 — each round-trips exactly through js/paint/color.mjs's own
+# rgbHex.
+#
+# THE SIZE, and it is measured against what the mockup LOOKS like rather than
+# against the constant it is written with. Transcribing the mockup's own
+# radii (110 -> 30.7 glow, 36 -> 10 disc) gives a sun a third the size of the
+# one in the mockup, because in the mockup the visible sun is not the disc at
+# all: the glow clips to flat white across most of its 110 and the 36-radius
+# disc disappears inside it. The apparent disc measures ~111 in a 1720-wide
+# frame, which at this canvas's own 480/1720 = 0.2791 is 31 — so 31 is the
+# disc here, with the glow at 58 keeping the mockup's halo-to-body ratio.
+# Additive clipping is a property of the medium, and the honest way to match
+# a picture that depends on it is to match the picture.
+#
+# THE DISC IS DRAWN ADDITIVELY TOO, and that is the whole reason the two read
+# as one body. The mockup's `ctx.restore()` falls AFTER its core disc, so the
+# disc composites under `lighter` exactly as the glow does — it lands on
+# already-saturated white and disappears into it. Switching back to `normal`
+# before the disc, which is what this did, paints a small cream circle ON TOP
+# of the white glow: two circles, a big soft one with a distinct little one
+# inside, instead of one sun. The `blend of "normal"` now closes the pair
+# rather than splitting it.
 
 to sky-body of u, disc-r, glow-r, glow-blur, l, c, h, glow-a, disc-l, disc-c, disc-h:
   let body-x = u * canvas-width * 1.06 - canvas-width * 0.03
   let body-y = ground-y - (sine of (u * 180)) * ground-y * 0.78
   blend of "add"
-  shadow of 0, 0, glow-blur, l, c, h
+  blur of glow-blur
   fill of l, c, h, glow-a
   circle of body-x, body-y, glow-r
-  blend of "normal"
-  no-shadow
+  no-blur
   fill of disc-l, disc-c, disc-h, 0.98
   circle of body-x, body-y, disc-r
+  blend of "normal"
 
 # ---- clouds -----------------------------------------------------------------
 #
@@ -306,9 +381,9 @@ to draw-cloud of i, total:
     let cy = ground-y * 0.13 + (jitter of (i * 11 + 3)) * ground-y * 0.34
     let sc = 0.55 + (jitter of (i * 3 + 7)) * 0.9
     let dark = smaller of 1, (wet * 1.7)
-    let cloud-l = lerp of (0.42 + light * 0.55), 0.42, dark
-    shadow of 0, 0, 7, cloud-l, 0.02, 250
-    fill of cloud-l, 0.02, 250, (0.30 + dark * 0.34)
+    let cloud-l = lerp of (0.78 + light * 0.20), 0.64, dark because "a cloud is LIT -- it stays brighter than the sky behind it at every hour, which is what makes it read as a cloud rather than as a smudge of sky"
+    blur of 3
+    fill of cloud-l, 0.02, 250, (0.70 + dark * 0.22)
     cloud-puff of 0, cx, cy, sc
     draw-cloud of (i + 1), total
 
@@ -341,12 +416,14 @@ to draw-hill of layer, total:
 
 to draw-ground:
   let top-l = (0.28 - wet-k * 0.08) * (0.5 + light * 0.7)
-  gradient of "linear", 0, ground-y, 0, canvas-height, top-l, 0.05, 120, 1, 0.08, 0.03, 130, 1
+  gradient of "linear", 0, 0, ground-y, 0, canvas-height, top-l, 0.05, 120, 1, 0, 0, 0, 0, 0.08, 0.03, 130, 1
   rect of 0, ground-y, canvas-width, (canvas-height - ground-y), 0
   if wet-k > 0.1:
     blend of "add"
-    gradient of "linear", 0, ground-y, 0, (ground-y + 42), 0.75, 0.05, 230, (wet-k * 0.13), 0.75, 0.05, 230, 0
+    blur of 5.6
+    fill of 0.75, 0.05, 230, (wet-k * 0.13)
     rect of 0, ground-y, canvas-width, 42, 0
+    no-blur
     blend of "normal"
 
 # ---- the tree ---------------------------------------------------------------
@@ -454,10 +531,10 @@ to draw-plant of i, total:
     circle of p.tip-x, p.tip-y, (1.7 + p.g * 2.1)
     if light > 0.55:
       blend of "add"
-      shadow of 0, 0, 4, 0.70, 0.16, hue
+      blur of 2.8
       fill of 0.70, 0.16, hue, ((light - 0.55) * 0.34)
       circle of p.tip-x, p.tip-y, (8 + p.g * 6.4)
-      no-shadow
+      no-blur
       blend of "normal"
     draw-plant of (i + 1), total
 
@@ -527,10 +604,10 @@ to draw-firefly of i, total:
     let fy = ground-y - 24 - (noise of (i * 5.3 + tick * 0.11), (seed + 302)) * 120
     let blink-base = larger of 0, (sine of (mod of (tick * 16 + i * 53), 360))
     let blink = blink-base * blink-base * blink-base
-    shadow of 0, 0, 7, 0.90, 0.16, 130
+    blur of 2
     fill of 0.90, 0.16, 130, (blink * 0.5)
     circle of fx, fy, 4.4
-    no-shadow
+    no-blur
     fill of 0.96, 0.10, 130, (0.35 + blink * 0.6)
     circle of fx, fy, 1.1
     draw-firefly of (i + 1), total
@@ -553,43 +630,42 @@ to draw-grass of i, total:
 # ============================================================================
 # the picture
 
-show "draw protocol 2"
+show "draw protocol 3"
 clear
 
 let sky-a = sky-top of phase
 let sky-b = sky-middle of phase
 let sky-c = sky-low of phase
-let sky-split = whole of (ground-y * 0.55) because "a whole pixel row: at a fractional y the two stacked gradients each cover part of the same canvas row and are anti-aliased independently, which shows as a one-pixel seam even though both agree on the colour exactly at the boundary"
 
+# One gradient where there were two. The stacked pair agreed on the colour
+# exactly at the join and disagreed about the SLOPE across it, which is a
+# banding line the eye finds at dawn and dusk however carefully the colours
+# are matched; `sky-split` existed to round the join to a whole pixel row so
+# the two anti-aliased edges did not also seam. Neither problem survives a
+# third stop: there is no join.
 no-stroke
-gradient of "linear", 0, 0, 0, sky-split, sky-a.l, sky-a.c, sky-a.h, 1, sky-b.l, sky-b.c, sky-b.h, 1
-rect of 0, 0, canvas-width, sky-split, 0
-gradient of "linear", 0, sky-split, 0, ground-y, sky-b.l, sky-b.c, sky-b.h, 1, sky-c.l, sky-c.c, sky-c.h, 1
-rect of 0, sky-split, canvas-width, (ground-y - sky-split), 0
+gradient of "mid", 0.55, 0, 0, 0, ground-y, sky-a.l, sky-a.c, sky-a.h, 1, sky-b.l, sky-b.c, sky-b.h, 1, sky-c.l, sky-c.c, sky-c.h, 1
+rect of 0, 0, canvas-width, ground-y, 0
 
 if night >= 0.05:
   draw-star of 0, 34
 
 if phase >= 0.25 and phase < 0.75:
-  sky-body of ((phase - 0.25) * 2), 13, 30, 15, 0.7, 0.16, 68, (0.22 + light * 0.28), 0.97, 0.06, 88
+  sky-body of ((phase - 0.25) * 2), 31, 58, 26, 0.90, 0.10, 80, (0.30 + light * 0.35), 0.97, 0.04, 85
 else:
-  sky-body of ((mod of (phase + 0.25), 1) * 2), 9, 20, 10, 0.62, 0.07, 254, 0.3, 0.95, 0.02, 258
+  sky-body of ((mod of (phase + 0.25), 1) * 2), 21, 38, 17, 0.88, 0.06, 266, 0.3, 0.95, 0.02, 269
 
-alpha of 0.95
 draw-cloud of 0, 6
-alpha of 1
-no-shadow
+no-blur
 
 draw-hill of 0, 2
 
 draw-ground
-no-shadow
 
 tree-branch of (canvas-width * 0.15), ground-y, -90, 46, 6.2, 5, 1
 
 cap of "butt"
 draw-plant of 0, 12
-no-shadow
 
 let rain-count = smaller of 40, (whole of (wet * 130))
 if wet > 0.06:
@@ -604,20 +680,21 @@ else:
   blend of "add"
   draw-firefly of 0, 10
   blend of "normal"
-no-shadow
 
 stroke of (0.13 + light * 0.24), 0.07, 142, 0.9
 width of 1.3
 cap of "round"
 draw-grass of 0, 20
 
-# The mockup's own createRadialGradient takes a non-zero INNER radius, so its
-# centre stays clear before the darkening begins. This protocol's
-# `gradient radial` has no inner-radius argument at all — the transparent-to-
-# black transition runs the full radius instead, a softer vignette than the
-# mockup's and the closest this verb reaches.
+# The mockup's own two circles, both of them: concentric at (W/2, GY x 0.6),
+# the ramp starting at H x 0.28 and reaching black at H x 0.92. The inner
+# radius is what makes this a frame rather than a smudge — the middle of the
+# picture stays clear, and the darkening happens at the edges where a vignette
+# belongs. The outer radius comes back to the mockup's 0.92 with it: 0.8 was
+# chosen to keep a ramp that started at the centre from swallowing the scene,
+# and the two numbers were always a pair.
 no-stroke
-gradient of "radial", (canvas-width / 2), (ground-y * 0.6), (canvas-height * 0.8), 0, 0, 0, 0, 0, 0, 0, 0, (0.34 + night * 0.26)
+gradient of "radial", 0, (canvas-width / 2), (ground-y * 0.6), (canvas-height * 0.92), (canvas-height * 0.28), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, (0.34 + night * 0.26)
 rect of 0, 0, canvas-width, canvas-height, 0
 
 # ============================================================================

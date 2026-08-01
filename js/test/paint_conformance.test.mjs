@@ -106,17 +106,20 @@ const SAMPLE = {
   dash: "draw dash 6 3",
   clip: "draw clip",
   unclip: "draw unclip",
+  // v3 addition.
+  blur: "draw blur 4",
 };
 
 // A valid stream order: the path block is opened before it is drawn into and
 // closed before its enclosing push is popped, and `clip` is immediately
 // followed by the shape that defines it (`rect`) and then `unclip`. `shadow`
-// is last, right before `label` — every shape before it draws with no
-// shadow active, so this fixture never needs the offscreen single-cast path
-// (js/test/shadow_parity.test.mjs covers that on its own); `label` still
-// picks the shadow up (canvas's fillText respects ctx.shadowBlur natively,
-// and svg.mjs's label() checks the same shadowState svg.mjs's shapes do), so
-// the filter def this fixture asserts on is still genuinely referenced.
+// and `blur` are last, right before `label` — every shape before them draws
+// with neither active, so this fixture never needs the offscreen single-cast
+// path (js/test/shadow_parity.test.mjs and js/test/blur_parity.test.mjs cover
+// that on their own); `label` still picks both up (canvas's fillText respects
+// ctx.shadowBlur and ctx.filter natively, and svg.mjs's label() checks the
+// same state svg.mjs's shapes do), so the one filter def this fixture asserts
+// on is still genuinely referenced.
 // Asserted to be a permutation of VERBS, so it stays complete as the table
 // changes.
 const ORDER = [
@@ -128,11 +131,12 @@ const ORDER = [
   "circle", "ellipse", "arc", "triangle",
   "push", "translate", "rotate", "scale",
   "shape", "vertex", "curve", "close", "end",
-  "pop", "shadow", "label",
+  "pop", "blur", "shadow", "label",
 ];
 
-// v2, since six of these verbs do not exist in version 1.
-const ALL_VERBS_STREAM = ["draw protocol 2", ...ORDER.map((v) => SAMPLE[v])];
+// v3, since seven of these verbs do not exist in version 1 and one more does
+// not exist in version 2.
+const ALL_VERBS_STREAM = ["draw protocol 3", ...ORDER.map((v) => SAMPLE[v])];
 
 test("the all-verbs fixture covers exactly the verb table, no more and no less", () => {
   assert.deepEqual(Object.keys(SAMPLE).slice().sort(), VERBS.slice().sort());
@@ -250,7 +254,7 @@ test("the error battery reaches every tag either renderer can raise", () => {
 // ---- version refusal ---------------------------------------------------------
 
 test("both renderers refuse an unsupported version identically and emit nothing", () => {
-  for (const version of [3, 7, 99]) {
+  for (const version of [4, 7, 99]) {
     const lines = [`draw protocol ${version}`, "draw circle 10 10 5", "some prose", "draw rect 0 0 5 5"];
     const ctx = fakeCtx();
     const canvas = paint(ctx, lines, DIMENSIONS);

@@ -39,10 +39,12 @@ const REPO = path.resolve(__dirname, "..");
 
 const PROTOCOL_SRC_PATH = path.join(REPO, "js", "paint", "protocol.mjs");
 const STREAM_SRC_PATH = path.join(REPO, "js", "paint", "stream.mjs");
-// planes-drawing-protocol-v1.md stays in place, unmodified (v2 §10.1) — the
-// generator reads the v2 document, which is the v1 document plus its deltas,
-// so a verb v1 already had keeps the same group it always had.
-const SPEC_PATH = path.join(REPO, "planes-drawing-protocol-v2.md");
+// Every superseded specification stays in place, byte-identical, unmodified —
+// a record of what a renderer of that version implements, and not a draft.
+// The generator reads the CURRENT document, which carries every earlier
+// version's verbs in their own sections, so a verb v1 had keeps the group it
+// always had.
+const SPEC_PATH = path.join(REPO, "planes-drawing-protocol-v3.md");
 const PROTOCOL_JSON_PATH = path.join(REPO, "protocol", "protocol.json");
 const ERRORS_JSON_PATH = path.join(REPO, "protocol", "errors.json");
 
@@ -71,7 +73,7 @@ const DRAWING = Object.freeze({
   protocolRel: "js/paint/protocol.mjs",
   streamRel: "js/paint/stream.mjs",
   name: "planes-drawing",
-  version: 2,
+  version: 3,
   prefix: "draw",
   prefixNote:
     "Every command line begins with this word. A line that does not is prose and is never interpreted.",
@@ -437,7 +439,14 @@ async function buildProtocolJson(descriptor = DRAWING) {
 // overridable for the same reason: a test adding a verb to a stub module
 // supplies a matching stub group map rather than editing the real one.
 function protocolJsonFromModule(mod, src, { verbGroups = VERB_GROUPS, groups = GROUPS, descriptor = DRAWING } = {}) {
-  const { VERBS, parseCommand, OPTIONAL = {} } = mod;
+  const {
+    VERBS,
+    parseCommand,
+    OPTIONAL = {},
+    GRADIENT_KINDS = {},
+    GRADIENT_STOPS = {},
+    GRADIENT_OPTIONAL = {},
+  } = mod;
   if (!VERBS || !parseCommand) {
     throw new Error("protocol_gen.mjs: module no longer exports VERBS/parseCommand — update the generator");
   }
@@ -459,17 +468,38 @@ function protocolJsonFromModule(mod, src, { verbGroups = VERB_GROUPS, groups = G
       // second exception alongside label, for the same reason: never
       // reached through the generic numeric probe below, since probing it
       // with 64 numeric dummy tokens fails on the kind word, not on count.
+      //
+      // The variants are DERIVED from the module's own three tables, not
+      // restated here: a fourth kind word appears in the projection on the
+      // next run with no edit in this file, exactly as a new verb in ARITY
+      // does. Only the per-kind geometry NAMES are prose, and they are read
+      // from the module's own comments nowhere — they are the one hand-held
+      // string, and a wrong one cannot change what is validated.
+      const GEOM_NAMES = { linear: "x1 y1 x2 y2", radial: "x y r", mid: "p x1 y1 x2 y2" };
+      const stopNames = (n) =>
+        Array.from({ length: n }, (_, i) => {
+          const label = n === 3 && i === 1 ? "m" : i === 0 ? "1" : "2";
+          return `L${label} C${label} H${label} A${label}`;
+        }).join(" ");
+      const variants = {};
+      for (const kind of Object.keys(GRADIENT_KINDS)) {
+        const optional = GRADIENT_OPTIONAL[kind] || 0;
+        const required = GRADIENT_KINDS[kind] + GRADIENT_STOPS[kind] * 4;
+        const entry = {
+          arguments: Array(required + optional).fill("number"),
+          description: `${GEOM_NAMES[kind]}${optional ? " [r-inner]" : ""} ${stopNames(GRADIENT_STOPS[kind])}`,
+        };
+        if (optional) entry.optional = optional;
+        variants[kind] = entry;
+      }
       return {
         name,
         arity: 1,
         arguments: ["word"],
         variable_arity: true,
-        variants: {
-          linear: { arguments: Array(12).fill("number"), description: "x1 y1 x2 y2 L1 C1 H1 A1 L2 C2 H2 A2" },
-          radial: { arguments: Array(11).fill("number"), description: "x y r L1 C1 H1 A1 L2 C2 H2 A2" },
-        },
+        variants,
         group,
-        _words: ["linear", "radial"],
+        _words: Object.keys(GRADIENT_KINDS),
       };
     }
     const arity = probeArity(parseCommand, name, descriptor.prefix);

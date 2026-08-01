@@ -87,6 +87,9 @@ function svgSink({ width, height, background }) {
   let shadowState = null; // | { dx, dy, blur, L, C, H }
   let pendingClip = false;
 
+  // v3 state.
+  let blurRadius = 0;
+
   // ---- <defs> (v2 §4) ------------------------------------------------------
   //
   // A resource collection, content-keyed: two identical gradients (or
@@ -120,35 +123,90 @@ function svgSink({ width, height, background }) {
         ` x2="${fmt(x2)}" y2="${fmt(y2)}">${stopsMarkup}</linearGradient>`
       );
     }
-    const [x, y, r] = geomArgs;
+    // `fr` is SVG's own name for the inner radius canvas's two-circle
+    // createRadialGradient takes as its third argument (v3 §4.3) — the same
+    // ramp start, expressed natively on both sides. Omitted when 0, which is
+    // its default anyway, so a stream that never states one produces exactly
+    // the markup v2 produced.
+    const [x, y, r, rInner] = geomArgs;
+    const fr = rInner ? ` fr="${fmt(rInner)}"` : "";
     return (
       `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${fmt(x)}" cy="${fmt(y)}"` +
-      ` r="${fmt(r)}">${stopsMarkup}</radialGradient>`
+      ` r="${fmt(r)}"${fr}>${stopsMarkup}</radialGradient>`
     );
   }
 
-  // The shadow's own reference — recomputed (and deduplicated by defRef's
-  // own cache) each time it is needed, since the filter's flood-opacity
-  // carries the CURRENT `alpha` state (§6: "alpha comes from the current
-  // alpha state, not a seventh argument") and must track a later `alpha`
-  // change the same way canvas's persistent ctx.shadowColor does.
+  // The blur/shadow filter reference — ONE filter chain, never two, and
+  // recomputed (deduplicated by defRef's own cache) each time it is needed,
+  // since the shadow's flood-opacity carries the CURRENT `alpha` state (§6:
+  // "alpha comes from the current alpha state, not a seventh argument") and
+  // must track a later `alpha` change the same way canvas's persistent
+  // ctx.shadowColor does.
   //
-  // stdDeviation is set to the SAME numeric value as `blur` rather than a
-  // Gaussian-equivalent conversion (a common approximation is blur/2) —
-  // v2 §6.3's acceptance criterion is that the two renderers' shadow
-  // parameters match at scale 1, which this makes true by construction
-  // rather than by coincidence between two different blur models.
-  function shadowDefId() {
-    const { dx, dy, blur, L, C, H } = shadowState;
-    const key = `${dx},${dy},${blur},${L},${C},${H},${alphaVal}`;
-    return defRef(
-      "shadow",
-      key,
-      (id) =>
-        `<filter id="${id}" x="-50%" y="-50%" width="200%" height="200%">` +
-        `<feDropShadow dx="${fmt(dx)}" dy="${fmt(dy)}" stdDeviation="${fmt(blur)}"` +
-        ` flood-color="${rgbHex(L, C, H)}" flood-opacity="${fmt(alphaVal)}"/></filter>`,
-    );
+  // COMPOSITION ORDER (v3 §6.1, first pinned semantic): the mark is BLURRED,
+  // then the shadow is cast FROM THE BLURRED MARK. Canvas's drawing model
+  // gives that order natively — `ctx.filter` is applied to the source before
+  // the shadow is derived from it — and an SVG filter chain could produce
+  // either answer, so this one is built to match: feGaussianBlur on
+  // SourceGraphic, feDropShadow over its result.
+  //
+  // stdDeviation is set to the SAME numeric value as the protocol's radius
+  // rather than a Gaussian-equivalent conversion (a common approximation is
+  // radius/2) — v2 §6.3's acceptance criterion is that the two renderers'
+  // parameters match at scale 1, which this makes true by construction rather
+  // than by coincidence between two different blur models. `blur` uses the
+  // identical rule, so the two soften by the same number.
+  //
+  // FILTER REGION (v3 §6.1, second pinned semantic): stated explicitly, and
+  // widened past the -50%/200% a drop shadow alone needed. A blur spreads a
+  // mark roughly three standard deviations in every direction, and a region
+  // that cropped it would make the SVG disagree with the canvas at exactly
+  // the soft edge blur exists to draw. The region is also what makes "blur
+  // first, clip second" expressible: the filter runs in this box, and only
+  // the already-blurred result meets an enclosing <g clip-path>.
+  function effectDefId() {
+    const shadowKey = shadowState
+      ? `${shadowState.dx},${shadowState.dy},${shadowState.blur},${shadowState.L},${shadowState.C},${shadowState.H},${alphaVal}`
+      : "none";
+    const key = `${blurRadius}|${shadowKey}`;
+    return defRef("effect", key, (id) => {
+      const parts = [];
+      let source = "SourceGraphic";
+      if (blurRadius > 0) {
+        parts.push(`<feGaussianBlur in="SourceGraphic" stdDeviation="${fmt(blurRadius)}" result="blurred"/>`);
+        source = "blurred";
+      }
+      if (shadowState) {
+        const { dx, dy, blur, L, C, H } = shadowState;
+        // `in` is stated only when it is NOT the default: a shadow with no
+        // blur ahead of it emits exactly the element v2 emitted.
+        const inAttr = source === "SourceGraphic" ? "" : ` in="${source}"`;
+        parts.push(
+          `<feDropShadow${inAttr} dx="${fmt(dx)}" dy="${fmt(dy)}" stdDeviation="${fmt(blur)}"` +
+            ` flood-color="${rgbHex(L, C, H)}" flood-opacity="${fmt(alphaVal)}"/>`,
+        );
+      }
+      // USER UNITS, NOT A PERCENTAGE OF THE BOUNDING BOX — and that change
+      // is what makes blur expressible at all. The default region, and v2's
+      // -50%/200% shadow box, are proportions of the FILTERED ELEMENT's own
+      // size, so a firefly two pixels across blurred by seven would have its
+      // glow cropped at three pixels while a cloud a hundred across kept all
+      // of its. One def is shared by every mark that sets the same effect,
+      // so there is no per-mark bounding box to size against here anyway.
+      //
+      // The box is the canvas grown by one canvas in each direction: past any
+      // blur this protocol's numbers reach, and past any translate a program
+      // is likely to have in force (a `userSpaceOnUse` region is stated in
+      // the LOCAL user space, which an enclosing <g transform> moves). What
+      // falls outside the viewport is clipped by the viewport — which is
+      // exactly where canvas's own bitmap crops it too, so the two sinks
+      // agree at the edge as well as in the middle.
+      return (
+        `<filter id="${id}" filterUnits="userSpaceOnUse"` +
+        ` x="${fmt(-width)}" y="${fmt(-height)}" width="${fmt(width * 3)}" height="${fmt(height * 3)}">` +
+        `${parts.join("")}</filter>`
+      );
+    });
   }
 
   // The index of the stream line currently being walked, set by `at` below.
@@ -185,7 +243,9 @@ function svgSink({ width, height, background }) {
     const strokeOpacity = sa * alphaVal;
     let extra = "";
     if (dashOn !== 0 || dashOff !== 0) extra += ` stroke-dasharray="${fmt(dashOn)} ${fmt(dashOff)}"`;
-    if (shadowState) extra += ` filter="url(#${shadowDefId()})"`;
+    // One filter attribute, whether the effect is a blur, a shadow or both
+    // — v3 §6.1: "Both are one filter chain, not two."
+    if (shadowState || blurRadius > 0) extra += ` filter="url(#${effectDefId()})"`;
     if (blendWord === "add") extra += ` style="mix-blend-mode:plus-lighter"`;
     return (
       ` fill="${fillValue}" fill-opacity="${fmt(fillOpacity)}"` +
@@ -241,6 +301,7 @@ function svgSink({ width, height, background }) {
       alphaVal = defaults.alpha;
       blendWord = defaults.blend;
       shadowState = null;
+      blurRadius = defaults.blur;
       pendingClip = false;
       open = [];
       pathD = [];
@@ -286,6 +347,9 @@ function svgSink({ width, height, background }) {
     dash(on, off) {
       dashOn = on;
       dashOff = off;
+    },
+    blur(r) {
+      blurRadius = r;
     },
     clip() {
       pendingClip = true;
@@ -419,7 +483,7 @@ function svgSink({ width, height, background }) {
       const fillValue = fillPaint.kind === "gradient" ? `url(#${fillPaint.id})` : rgbHex(...fillPaint.lcha.slice(0, 3));
       const fillOpacity = (fillPaint.kind === "gradient" ? 1 : fillPaint.lcha[3]) * alphaVal;
       let extra = "";
-      if (shadowState) extra += ` filter="url(#${shadowDefId()})"`;
+      if (shadowState || blurRadius > 0) extra += ` filter="url(#${effectDefId()})"`;
       if (blendWord === "add") extra += ` style="mix-blend-mode:plus-lighter"`;
       emit(
         `<text x="${fmt(x)}" y="${fmt(y)}" font-family="${FONT_FAMILY}" font-size="${fmt(sizePx)}"` +

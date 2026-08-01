@@ -22,7 +22,7 @@ import tempfile
 
 from host import PythonHost
 from interp import Interpreter, PlanesError
-from test_builtin_guards import _js_message, _py_message
+from test_builtin_guards import _js, _js_message, _py, _py_message
 from test_interp_in_planes import _env_literal, _get_interp, _traced
 from test_interp_statements_in_planes import planes_execute
 
@@ -216,6 +216,63 @@ def test_orderings_ordering_clause_did_not_move():
         "\n  try: compare numbers with numbers, or text with text"), msg
     if NODE is not None:
         assert _js_message("show text of ([1] < [2])") == msg
+
+
+# ================= D. `whole of`'s clause says what `whole of` does
+#
+# The clause used to read "rounds a number toward zero", which describes
+# TRUNCATION and is not what this builtin does — `whole of 2.5` is 3 and
+# `whole of -3.7` is -4. Two builds reported it before one fixed it, and the
+# reason it survived that long is the gap this section closes: **nothing
+# compared the message against the behaviour.** Every other assertion in this
+# file pins a clause's TEXT, which a wrong-but-stable clause passes forever.
+#
+# So this asserts both halves and the relationship between them: the three
+# implementations agree on the words, and the words are true of the arithmetic
+# in the hosts that can run it.
+
+WHOLE_FIX = (
+    "whole of rounds a number to the nearest whole, half away from zero; "
+    "if this is text, convert it first with number of — a boolean, a list, "
+    "a record, or nothing has no path to becoming a number"
+)
+
+# Every case that distinguishes round-half-away-from-zero from truncation
+# toward zero, from rounding half-to-even, and from a floor.
+#
+#   input   this builtin   truncation   half-to-even   floor
+#    2.5         3              2            2           2
+#   -3.7        -4             -3           -4          -4
+#   -2.5        -3             -2           -2          -3
+#    2.4         2              2            2           2
+#   -0.5        -1              0            0          -1
+ROUNDING_CASES = [("2.5", "3"), ("-3.7", "-4"), ("-2.5", "-3"),
+                  ("2.4", "2"), ("-0.5", "-1")]
+
+
+def test_whole_ofs_clause_is_exact_in_all_three_implementations():
+    src = 'show text of (whole of "5")'
+    msg = _py_message(src)
+    assert msg.endswith(f"\n  try: {WHOLE_FIX}"), msg
+    if NODE is not None:
+        assert _js_message(src) == msg
+    e = _planes_eval_fails('whole of "5"')
+    assert e.tag == "not-a-number", e.tag
+    assert str(e).endswith(f"\n  try: {WHOLE_FIX}"), str(e)
+
+
+def test_whole_of_actually_rounds_half_away_from_zero():
+    """The half the text alone could never catch. If someone rewrites
+    `whole of` to truncate, the clause above still reads correctly and this
+    fails — which is the direction the original defect ran, in reverse."""
+    assert "nearest whole, half away from zero" in WHOLE_FIX
+    for value, expected in ROUNDING_CASES:
+        src = f"show text of (whole of {value})\n"
+        kind, tag, out = _py(src)
+        assert kind == "ok", f"whole of {value}: {kind} {tag}"
+        assert out == [expected], f"whole of {value} gave {out}, not [{expected!r}]"
+        if NODE is not None:
+            assert _js(src) == (kind, tag, out), f"whole of {value}: py {out} != js"
 
 
 if __name__ == "__main__":

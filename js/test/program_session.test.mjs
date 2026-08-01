@@ -52,7 +52,7 @@ test("load() fetches the source and runAt() runs it at a given tick with no erro
     const result = await session.runAt(30, 0);
     assert.equal(result.error, null);
     assert.ok(result.lines.length > 0);
-    assert.ok(result.lines[0].includes("draw protocol 2"));
+    assert.ok(result.lines[0].includes("draw protocol 3"));
   } finally {
     restoreWindow();
     restoreFetch();

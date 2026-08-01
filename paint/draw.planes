@@ -104,14 +104,36 @@ to clear:
 # the protocol's own parser does (§5.2) — Planes functions have fixed arity,
 # so `radial`'s callers pass all four geometry positions too, with the
 # fourth (`x2`) unused; a radial gradient only ever needed three.
-to gradient of kind, x1, y1, x2, y2, l1, c1, h1, a1, l2, c2, h2, a2:
+# ONE helper, three kind words, every argument carried ALWAYS — the same rule
+# `ellipse`/`rect` follow above, and for the same reason: `gradient-mid` and
+# `gradient-radial` would be two more helpers for a verb table that has one
+# `gradient`, and the correspondence a test can check mechanically is worth
+# more than the five zeros a `linear` call now passes.
+#
+# What each kind spends its slots on (v3 §6.6):
+#   linear   x1 y1 x2 y2      + stop 1 + stop 2          — `mid-at` and the
+#                                                          middle stop unused
+#   radial   x  y  r  r-inner + stop 1 + stop 2          — `y2` IS the inner
+#                                                          radius, and used to
+#                                                          be ignored entirely
+#   mid      x1 y1 x2 y2      + stop 1 + middle + stop 2 — at `mid-at`
+to gradient of kind, mid-at, x1, y1, x2, y2, l1, c1, h1, a1, lm, cm, hm, am, l2, c2, h2, a2:
   if kind == "radial":
-    show "draw gradient radial " + text of x1 + " " + text of y1 + " " + text of x2 + " " + text of l1 + " " + text of c1 + " " + text of h1 + " " + text of a1 + " " + text of l2 + " " + text of c2 + " " + text of h2 + " " + text of a2
+    show "draw gradient radial " + text of x1 + " " + text of y1 + " " + text of x2 + " " + text of y2 + " " + text of l1 + " " + text of c1 + " " + text of h1 + " " + text of a1 + " " + text of l2 + " " + text of c2 + " " + text of h2 + " " + text of a2
   else:
-    show "draw gradient linear " + text of x1 + " " + text of y1 + " " + text of x2 + " " + text of y2 + " " + text of l1 + " " + text of c1 + " " + text of h1 + " " + text of a1 + " " + text of l2 + " " + text of c2 + " " + text of h2 + " " + text of a2
+    if kind == "mid":
+      show "draw gradient mid " + text of mid-at + " " + text of x1 + " " + text of y1 + " " + text of x2 + " " + text of y2 + " " + text of l1 + " " + text of c1 + " " + text of h1 + " " + text of a1 + " " + text of lm + " " + text of cm + " " + text of hm + " " + text of am + " " + text of l2 + " " + text of c2 + " " + text of h2 + " " + text of a2
+    else:
+      show "draw gradient linear " + text of x1 + " " + text of y1 + " " + text of x2 + " " + text of y2 + " " + text of l1 + " " + text of c1 + " " + text of h1 + " " + text of a1 + " " + text of l2 + " " + text of c2 + " " + text of h2 + " " + text of a2
 
-to shadow of dx, dy, blur, l, c, h:
-  show "draw shadow " + text of dx + " " + text of dy + " " + text of blur + " " + text of l + " " + text of c + " " + text of h
+# `blur-radius`, not `blur`: v3 adds a `blur` VERB, so a parameter of that
+# name here would be shadowed by this file's own `blur` helper and every
+# `shadow` call would refuse with `wrong-arity`. The third instance of this
+# collision in this library (v2's `arc`/`end` was the first two), and the
+# reason the rule is worth stating: a parameter in draw.planes may not share
+# a name with any verb in the table.
+to shadow of dx, dy, blur-radius, l, c, h:
+  show "draw shadow " + text of dx + " " + text of dy + " " + text of blur-radius + " " + text of l + " " + text of c + " " + text of h
 
 to blend of mode:
   show "draw blend " + mode
@@ -127,3 +149,6 @@ to alpha of a:
 
 to dash of dash-on, dash-off:
   show "draw dash " + text of dash-on + " " + text of dash-off
+
+to blur of r:
+  show "draw blur " + text of r

@@ -22,17 +22,36 @@
 // diverge on the first one nobody did. The two renderers in this repo differ
 // only in what they do with a circle, not in what a circle *is*.
 
-import { parseCommand } from "./protocol.mjs";
+import { parseCommand, GRADIENT_GEOMETRY } from "./protocol.mjs";
 
-const SUPPORTED_VERSIONS = new Set([1, 2]);
+const SUPPORTED_VERSIONS = new Set([1, 2, 3]);
 
-// Verbs that do not exist in version 1 (planes-drawing-protocol-v2.md §10.2).
-// A stream that declares version 1, or declares nothing (§1.1's "absent is
-// version 1"), and uses one of these is an error, not a silent draw — unlike
-// the optional rotation argument on `ellipse`/`rect`, which widens an
-// EXISTING v1 verb's arity and is accepted regardless of declared version
-// (protocol.mjs's OPTIONAL map has no notion of stream version at all).
-const V2_ONLY_VERBS = new Set(["gradient", "shadow", "blend", "clip", "unclip", "alpha", "dash"]);
+// The highest version THIS COPY of the walk implements. Exported so a page can
+// answer a question it otherwise cannot: "is my renderer older than my
+// program?" A page cache-busts its `.planes` fetch and cannot cache-bust its
+// own `.mjs` graph — there is no build step — so after a version bump a
+// browser can hold a stale walk against a fresh program, and §1.1 then
+// correctly refuses the whole stream and draws nothing. Correct, and
+// indistinguishable from a broken page unless something says so.
+export const HIGHEST_VERSION = Math.max(...SUPPORTED_VERSIONS);
+
+// The version each verb first appeared in. A stream declaring less than a
+// verb's own version is an error, not a silent draw (planes-drawing-protocol-
+// v2.md §10.2, v3 §4.4) — unlike an OPTIONAL argument, which widens an
+// EXISTING verb's arity and is accepted regardless of declared version.
+// `ellipse`/`rect` rotation and `gradient radial`'s inner radius are both
+// that second kind: protocol.mjs's OPTIONAL map has no notion of stream
+// version at all, and v3 §1.1 lists the inner radius beside the rotations
+// for exactly that reason.
+const FIRST_VERSION = Object.freeze({
+  gradient: 2, shadow: 2, blend: 2, clip: 2, unclip: 2, alpha: 2, dash: 2,
+  blur: 3,
+});
+
+// A gradient KIND word can be newer than the `gradient` verb itself: `mid`
+// is v3's third stop, on a verb v2 already had. Gated the same way, and named
+// separately so the message can say which word rather than which verb.
+const KIND_FIRST_VERSION = Object.freeze({ mid: 3 });
 
 // The specification's §5 table, as one value. A sink resets to this at the
 // start of every stream; nothing persists between streams except what a
@@ -49,6 +68,8 @@ export const DEFAULTS = Object.freeze({
   blend: "normal",
   alpha: 1,
   dash: Object.freeze([0, 0]),
+  // v3 addition (planes-drawing-protocol-v3.md §5): no blur.
+  blur: 0,
 });
 
 // §5.1, normative: the shared walk computes a gradient's stops, so both
@@ -63,21 +84,43 @@ function hueArcDelta(h1, h2) {
   return d;
 }
 
-export function gradientStops(L1, C1, H1, A1, L2, C2, H2, A2) {
-  const dH = hueArcDelta(H1, H2);
-  const stops = [];
-  for (let i = 0; i < 16; i++) {
-    const t = i / 15;
-    const H = ((H1 + dH * t) % 360 + 360) % 360;
-    stops.push({
-      offset: t,
-      L: L1 + (L2 - L1) * t,
-      C: C1 + (C2 - C1) * t,
-      H,
-      A: A1 + (A2 - A1) * t,
+const SAMPLES_PER_SEGMENT = 16;
+
+// One segment between two whole OKLCH colours, sampled across the offset span
+// it occupies. `includeFirst` is false for every segment after the first, so
+// the shared colour is emitted once rather than as two stops at one offset.
+function segmentStops(c1, c2, from, to, includeFirst) {
+  const dH = hueArcDelta(c1[2], c2[2]);
+  const out = [];
+  for (let i = includeFirst ? 0 : 1; i < SAMPLES_PER_SEGMENT; i++) {
+    const t = i / (SAMPLES_PER_SEGMENT - 1);
+    out.push({
+      offset: from + (to - from) * t,
+      L: c1[0] + (c2[0] - c1[0]) * t,
+      C: c1[1] + (c2[1] - c1[1]) * t,
+      H: ((c1[2] + dH * t) % 360 + 360) % 360,
+      A: c1[3] + (c2[3] - c1[3]) * t,
     });
   }
-  return stops;
+  return out;
+}
+
+// v3 §6.6: any number of stops at any offsets, each SEGMENT interpolated by
+// v2's rule — L, C and A linear, hue on the shorter arc — and computed
+// independently of its neighbours. Two colours at [0, 1] is exactly what v2
+// did and produces exactly what it produced; three at [0, p, 1] is
+// `gradient mid`, which is why the hue of a `mid` sweeps the short way twice
+// rather than once across the whole ramp.
+export function gradientStopsFrom(colours, offsets) {
+  const out = [];
+  for (let s = 0; s + 1 < colours.length; s++) {
+    out.push(...segmentStops(colours[s], colours[s + 1], offsets[s], offsets[s + 1], s === 0));
+  }
+  return out;
+}
+
+export function gradientStops(L1, C1, H1, A1, L2, C2, H2, A2) {
+  return gradientStopsFrom([[L1, C1, H1, A1], [L2, C2, H2, A2]], [0, 1]);
 }
 
 // Not in the protocol — the protocol says nothing about typefaces, and it is
@@ -167,8 +210,8 @@ export function walk(lines, sink) {
               {
                 tag: "unsupported-version",
                 message:
-                  `this renderer implements protocol versions 1-2; the stream declared ` +
-                  `version ${requested} and is refused whole`,
+                  `this renderer implements protocol versions 1-${Math.max(...SUPPORTED_VERSIONS)}; ` +
+                  `the stream declared version ${requested} and is refused whole`,
               },
             ],
           };
@@ -178,12 +221,19 @@ export function walk(lines, sink) {
         continue;
       }
 
-      if (V2_ONLY_VERBS.has(cmd.verb) && declaredVersion < 2) {
+      const needed =
+        cmd.verb === "gradient" && KIND_FIRST_VERSION[cmd.args[0]]
+          ? KIND_FIRST_VERSION[cmd.args[0]]
+          : FIRST_VERSION[cmd.verb];
+      if (needed !== undefined && declaredVersion < needed) {
+        const named = cmd.verb === "gradient" && KIND_FIRST_VERSION[cmd.args[0]]
+          ? `gradient ${cmd.args[0]}`
+          : cmd.verb;
         errors.push({
           tag: "verb-not-in-version",
           message:
-            `"${cmd.verb}" is not part of protocol version ${declaredVersion} in "${line}" ` +
-            `— write draw protocol 2 to use it`,
+            `"${named}" is not part of protocol version ${declaredVersion} in "${line}" ` +
+            `— write draw protocol ${needed} to use it`,
         });
         sawDrawingCommand = true;
         continue;
@@ -317,13 +367,24 @@ export function walk(lines, sink) {
         case "clear":
           sink.clear();
           break;
+        // The whole of `mid` is decided HERE and nothing reaches a sink that
+        // has not already been resolved. `mid` IS a linear gradient — the
+        // same two points, the same fill — whose stop list happens to carry a
+        // third colour at a stated offset, so the stop position `p` is spent
+        // building the stops and the sink is handed the kind word `linear`
+        // with four geometry numbers, exactly as it has been since v2.
+        // Adding a third stop therefore cost the two renderers NOTHING: no
+        // branch, no new method, no chance of disagreeing about a sky.
         case "gradient": {
           const [kindWord, ...nums] = cmd.args;
-          const geomCount = kindWord === "linear" ? 4 : 3;
-          const geomArgs = nums.slice(0, geomCount);
-          const [L1, C1, H1, A1, L2, C2, H2, A2] = nums.slice(geomCount);
-          const stops = gradientStops(L1, C1, H1, A1, L2, C2, H2, A2);
-          sink.gradient(kindWord, geomArgs, stops);
+          const geomCount = GRADIENT_GEOMETRY[kindWord];
+          const flat = nums.slice(geomCount);
+          const colours = [];
+          for (let i = 0; i < flat.length; i += 4) colours.push(flat.slice(i, i + 4));
+          const isMid = kindWord === "mid";
+          const offsets = isMid ? [0, nums[0], 1] : [0, 1];
+          const geomArgs = isMid ? nums.slice(1, 5) : nums.slice(0, geomCount);
+          sink.gradient(isMid ? "linear" : kindWord, geomArgs, gradientStopsFrom(colours, offsets));
           break;
         }
         case "shadow":
@@ -337,6 +398,9 @@ export function walk(lines, sink) {
           break;
         case "dash":
           sink.dash(...cmd.args);
+          break;
+        case "blur":
+          sink.blur(cmd.args[0]);
           break;
         case "clip":
           sink.clip();
