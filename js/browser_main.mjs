@@ -271,7 +271,7 @@ export function surfaceReport(surface) {
 const PROBE_ARGUMENT = {
   count: "[1]", lower: '"A"', upper: '"a"', text: "1", whole: "1.5",
   ask: '"https://example.invalid"', read: '"x"', normalize: '"a"',
-  join: '["a"]', rest: "[1, 2]", sine: "0",
+  join: '["a"]', rest: "[1, 2]", sine: "0", number: '"1.5"', root: "9",
 };
 
 // Every builtin the loaded vocabulary declares that the loaded interpreter

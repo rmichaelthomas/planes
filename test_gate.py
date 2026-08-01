@@ -410,6 +410,53 @@ def test_every_servable_page_reaches_the_deploy():
             "scripts/assemble_site.sh does not copy:\n" + r.stdout + r.stderr)
 
 
+def workflow_body_without_comments(yml_text):
+    """`yml_text` with every full-line `#` comment removed -- pulled out to a
+    top-level function (rather than inlined in the test below) so
+    test_derived_claims.py can run the SAME logic against a fixture string
+    reconstructing instance 1's original content, instead of a second
+    hand-copy of the substring check that could itself drift from this one."""
+    return "\n".join(ln for ln in yml_text.splitlines()
+                     if not ln.lstrip().startswith("#"))
+
+
+def workflow_has_paths_filter(yml_text):
+    """True when `yml_text` (a pages.yml-shaped workflow) has a `paths:` key
+    anywhere outside a comment -- instance 1 of the derived-surface-audit
+    class (§5), extracted so both the real assertion below and
+    test_derived_claims.py's fixture reconstruction call one function."""
+    return "paths:" in workflow_body_without_comments(yml_text)
+
+
+def test_the_deploy_workflow_has_no_paths_filter():
+    """derived-surface-audit, instance 1. A `paths:` filter under `on: push:`
+    used to live in pages.yml, hand-maintained against the tree the assembly
+    actually copies -- and it drifted, omitting grammar/*.planes and
+    grammar/core.json, both of which meta.html fetches. A push touching only
+    those paths built and passed every gate step here and never deployed,
+    because the workflow never ran.
+
+    The remedy is not a corrected filter to watch for the next drift. It is
+    that the category does not exist: this repo pushes a handful of times a
+    day, and deploying on every push removes the failure mode outright
+    (test_gate.py's own retirement rule, one door up, made the same call
+    about verification scripts). If a `paths:` filter reappears here, it will
+    drift again -- nothing keeps a hand-maintained list in step with what
+    scripts/assemble_site.sh actually derives from the tree."""
+    wf = os.path.join(REPO, ".github", "workflows", "pages.yml")
+    if not os.path.exists(wf):
+        return
+    with open(wf, encoding="utf-8") as fh:
+        yml = fh.read()
+    assert not workflow_has_paths_filter(yml), (
+        "pages.yml has a `paths:` filter under `on: push:` -- a hand-"
+        "maintained list of trigger paths is how instance 1 of the derived-"
+        "surface-audit class drifted. Delete the filter; every push to main "
+        "should run the deploy workflow.")
+    body = workflow_body_without_comments(yml)
+    assert "on:" in body and "push:" in body, "pages.yml has no push trigger"
+
+
 def test_the_landing_page_links_to_the_pages_it_ships_with():
     """The deploy carried paint.html and garden.html while index.html linked
     to nothing but the repo, so a shipped page was unreachable by anyone who
