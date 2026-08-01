@@ -107,20 +107,31 @@ def test_the_same_program_runs_clean_with_the_flag_off():
     assert got["output"] == ["12"], got
 
 
-def test_when_and_why_are_refused_and_report_their_own_line():
-    """The two other excluded keywords whose nodes carry no `line` field. If the
-    parser's line stamp regressed, these would report an enclosing statement's
-    line and `approximateLine` would be true."""
-    for src, word, line in (
-            ("v = { kind: \"a\" }\n"
-             "when v is { kind: \"a\" }:\n"
-             "  show \"matched\"\n", "when", 2),
-            ("x = 1 + 1\nwhy x\n", "why", 2)):
-        got, _ = _run_source(src, "--core")
-        assert "core" in got, (word, got)
-        assert got["core"]["construct"] == word, got["core"]
-        assert got["core"]["line"] == line, (word, got["core"])
-        assert got["core"]["approximateLine"] is False, got["core"]
+def test_why_and_when_report_their_own_line_not_an_enclosing_one():
+    """`Why`, `Assign` and `When` AST nodes carry no `line` field — three of the
+    four keywords once excluded. The line rides in a parser-stamped WeakMap
+    instead, because giving those nodes a field would change the AST's SHAPE,
+    which grammar/parser.planes pins. If that stamp regressed, these would report
+    an enclosing statement's line and `approximateLine` would be true.
+
+    `why` is checked against the real core. `when` is core now, so it is checked
+    against a core that excludes it — which keeps the `When`-node half of the
+    stamp covered rather than letting it lapse the moment the keyword moved."""
+    got, _ = _run_source("x = 1 + 1\nwhy x\n", "--core")
+    assert "core" in got, got
+    assert got["core"]["construct"] == "why", got["core"]
+    assert got["core"]["line"] == 2, got["core"]
+    assert got["core"]["approximateLine"] is False, got["core"]
+
+    core = _crafted(drop_keywords=["when"])
+    got, _ = _run_source(
+        "v = { kind: \"a\" }\n"
+        "when v is { kind: \"a\" }:\n"
+        "  show \"matched\"\n", "--core", "--core-json", core)
+    assert "core" in got, got
+    assert got["core"]["construct"] == "when", got["core"]
+    assert got["core"]["line"] == 2, got["core"]
+    assert got["core"]["approximateLine"] is False, got["core"]
 
 
 def test_a_non_core_builtin_is_refused_by_name():
@@ -273,12 +284,30 @@ def test_the_only_approximate_keyword_is_places_and_it_is_core():
 
 # ===================================================== E — the graph, measured
 
-def test_the_declared_core_is_not_sufficient_and_lexer_planes_is_why():
-    """THE FINDING, pinned. Not an assertion that the run is clean — it is not —
-    but that it fails in exactly one place, for exactly one reason. If
-    lexer.planes is rewritten or `when` joins the core, this fails and says so."""
+def test_the_declared_core_is_sufficient_and_the_whole_graph_runs():
+    """THE CLAIM core.json MAKES, now with a checker behind it. `when` has joined
+    the core (reports/CORE_SUBSET.md §4a records why it was ever out), so a host
+    implementing only the declared port surface runs interp.planes and its whole
+    module graph. This assertion was inverted to get here — it read "expected a
+    refusal" for exactly one build."""
     got = _cli("meta", "run", "--core", "ordinary.planes")
-    assert "core" in got, f"expected a refusal; the core became sufficient? {got}"
+    assert isinstance(got, list), (
+        f"the declared core is no longer sufficient: {got.get('core')}")
+    assert got[0]["output"] == ["above threshold"], got
+
+
+def test_the_gap_that_was_found_stays_found_if_when_ever_leaves_again():
+    """THE REGRESSION GUARD FOR THE WHOLE FINDING — the reason fixing it does not
+    lose the evidence for it.
+
+    Exclude `when` from a crafted core and the old world returns exactly: the
+    restricted run refuses at grammar/lexer.planes:89, and the static and runtime
+    readings agree on all sixteen sites, same count, same lines, none dead. If
+    grammar/lexer.planes is ever rewritten to flat `if`, this fails — and that is
+    the correct moment to reconsider whether `when` is still core."""
+    core = _crafted(drop_keywords=["when"])
+    got = _cli("meta", "run", "--core", "--core-json", core, "ordinary.planes")
+    assert "core" in got, f"lexer.planes no longer needs `when`? {got}"
     c = got["core"]
     assert c["construct"] == "when", c
     assert c["category"] == "keyword", c
@@ -286,49 +315,53 @@ def test_the_declared_core_is_not_sufficient_and_lexer_planes_is_why():
     assert c["line"] == 89, c
     assert got["loaded"] is True, "interp.planes itself loaded; the graph is why"
 
-
-def test_every_static_when_site_in_lexer_planes_is_actually_reached():
-    """The static and runtime readings agree exactly — sixteen mentions, sixteen
-    reached, at the same sixteen lines. None of them is dead code, so no reading
-    of the finding survives in which the gap is theoretical."""
-    core_keywords, core_builtins, _ = core_check.load_core()
-    static = sorted(line for line, cat, val
-                    in core_check.violations(LEXER, core_keywords, core_builtins)
-                    if val == "when")
-    got = _cli("meta", "run", "--core-survey", "ordinary.planes")
-    reached = sorted(e["line"] for e in got["coreReached"]
+    with open(core, encoding="utf-8") as f:
+        doc = json.load(f)
+    static = sorted(line for line, _cat, val in core_check.violations(
+        LEXER, set(doc["keywords"]), set(doc["builtins"])) if val == "when")
+    survey = _cli("meta", "run", "--core-survey", "--core-json", core,
+                  "ordinary.planes")
+    reached = sorted(e["line"] for e in survey["coreReached"]
                      if e["construct"] == "when"
                      and e["file"].endswith("grammar/lexer.planes"))
     assert static == reached, (static, reached)
     assert len(static) == 16, static
 
 
-def test_no_other_module_in_the_graph_reaches_past_the_core():
-    """One file, one construct. A second offender appearing is a different
-    finding and this says so rather than absorbing it."""
+def test_nothing_anywhere_in_the_graph_reaches_past_the_core():
+    """The census over the real core, which must now be empty. An offender
+    reappearing is a new finding and this says so rather than absorbing it."""
     got = _cli("meta", "run", "--core-survey", "ordinary.planes")
-    files = {os.path.relpath(e["file"], REPO) for e in got["coreReached"]}
-    assert files == {LEXER}, files
-    words = {e["construct"] for e in got["coreReached"]}
-    assert words == {"when"}, words
+    assert got["coreReached"] == [], got["coreReached"]
 
 
-def test_core_check_py_follows_the_graph_and_finds_the_same_sixteen():
+def test_core_check_py_follows_the_graph_and_now_gates_on_it():
     """§5.2: the single-file derivation was demonstrably incomplete, so
-    core_check.py follows `use` the way analyse_file(follow=True) already did
-    for effect kinds. Reported, not gated — the exit code is unchanged."""
+    core_check.py follows `use` the way analyse_file(follow=True) already did for
+    effect kinds. It REPORTED for exactly one build — while the choice between
+    widening the core and rewriting the module was still open — and gates now
+    that the choice is made."""
     core_keywords, core_builtins, _ = core_check.load_core()
     graph = core_check.graph_violations(
         os.path.join("grammar", "interp.planes"), core_keywords, core_builtins)
-    assert len(graph) == 16, graph
-    assert {p for p, _, _, _ in graph} == {LEXER}, graph
-    assert {v for _, _, _, v in graph} == {"when"}, graph
+    assert graph == [], graph
     r = subprocess.run([sys.executable, "core_check.py"], cwd=REPO,
                        capture_output=True, text=True)
-    assert r.returncode == 0, (
-        "the graph block must not gate — closing it needs either a wider "
-        "core.json or a rewritten module, and this build forbids both")
-    assert "REPORTED, NOT GATED" in r.stdout
+    assert r.returncode == 0, r.stdout[-800:]
+    assert "REPORTED, NOT GATED" not in r.stdout, (
+        "the graph block still calls itself a report")
+
+
+def test_the_graph_block_gates_when_a_module_reaches_past_the_core():
+    """The gate has teeth, demonstrated rather than described: hand core_check.py
+    a crafted core without `when` and its exit code must be the sixteen sites —
+    exactly sixteen, since `_crafted` keeps the document self-consistent so the
+    drift guard contributes nothing of its own."""
+    core = _crafted(drop_keywords=["when"])
+    r = subprocess.run([sys.executable, "core_check.py", "--core", core],
+                       cwd=REPO, capture_output=True, text=True)
+    assert r.returncode == 16, (r.returncode, r.stdout[-600:])
+    assert "THIS FAILS THE GATE" in r.stdout
     assert LEXER in r.stdout
 
 
@@ -348,7 +381,13 @@ def test_core_check_py_follows_the_graph_and_finds_the_same_sixteen():
 # flag-off behaviour fails there.
 
 def _crafted(**edits):
-    """grammar/core.json with one edit, written where --core-json can read it."""
+    """grammar/core.json with one edit, written where --core-json can read it.
+
+    `size.keywords` is recomputed rather than carried over, so the crafted
+    document is INTERNALLY CONSISTENT — otherwise core_check.py's drift guard
+    fires on the stale count and every exit code from a crafted run is one
+    higher than the thing being measured. The two guards compose correctly;
+    a test should measure one of them at a time."""
     with open(os.path.join(REPO, "grammar", "core.json"), encoding="utf-8") as f:
         doc = json.load(f)
     for word in edits.get("add_keywords", []):
@@ -357,6 +396,7 @@ def _crafted(**edits):
     for word in edits.get("drop_keywords", []):
         doc["keywords"] = [k for k in doc["keywords"] if k != word]
         doc["excluded_keywords"][word] = "crafted, for the anti-vacuity check"
+    doc["size"]["keywords"] = f"{len(doc['keywords'])} of {len(KEYWORDS)}"
     d = tempfile.mkdtemp()
     p = os.path.join(d, "core.json")
     with open(p, "w", encoding="utf-8") as f:
@@ -421,10 +461,10 @@ def test_core_checks_graph_block_says_which_modules_conform():
     tell a clean graph from an unfollowed one."""
     r = subprocess.run([sys.executable, "core_check.py"], cwd=REPO,
                        capture_output=True, text=True)
-    for mod in ("grammar/parser.planes", "grammar/json.planes",
-                "grammar/vocabulary.planes"):
+    for mod in ("grammar/lexer.planes", "grammar/parser.planes",
+                "grammar/json.planes", "grammar/vocabulary.planes"):
         assert mod in r.stdout, mod
-    assert "of the 4 module(s)" in r.stdout, r.stdout[:400]
+    assert "all 4 module(s)" in r.stdout, r.stdout[:400]
 
 
 if __name__ == "__main__":

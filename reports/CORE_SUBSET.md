@@ -191,7 +191,48 @@ written. It stays in the core with that caveat attached; the first real
 `interp.planes` either uses it (confirmed) or threads fresh records throughout
 (and `with` leaves the core).
 
----
+### 4a. Added later — §1.1's `when` row held, and was briefly overruled
+
+*This section is an addendum, not a revision: nothing above it has been changed.*
+
+`with`'s prediction was discharged — `grammar/interp.planes:117` uses it, and
+`core_check.py` confirms it on every run. But a different §1 row turned out to
+need defending, and this is the record of it.
+
+**§1.1 lists `when subj is { … } / else` as core**, justified by
+`grammar/parser.planes`'s node dispatch and called *"the only substitute for the
+absent `isinstance`"*. `grammar/core.json` later **excluded** `when`, on the
+stated grounds that this claim was refuted — that dispatch is flat `if k == …`
+and `when` is never needed.
+
+The evidence for that exclusion was real but partial:
+
+| | `when` tokens |
+|---|---|
+| `grammar/parser.planes` when §1.1 was written (`135ecb4`) | **28** |
+| `grammar/parser.planes` by the time the exclusion was written | **0** — rewritten to flat `if` |
+| `grammar/interp.planes` | **0** — flat `if k == …`, exactly as claimed |
+| `grammar/lexer.planes` | **16**, and never rewritten |
+
+So `when`'s named justifying program had stopped using it, the interpreter never
+used it, and the exclusion looked airtight. It was airtight *about those two
+files*. `grammar/lexer.planes` — which §1.1 names one row above, as the
+justifying program for `if / else` — kept its sixteen, in `to step of state, c:`,
+the loop every character of every program passes through. Nothing could say so,
+because `core_check.py`'s `violations()` read a single file and the graph was
+never followed.
+
+A host implementing only the core as declared then **could not have run the
+interpreter the core was the port surface for.** Measured by running
+`interp.planes` on exactly such a host: it refused at `grammar/lexer.planes:89`,
+and all sixteen sites proved reachable at evaluation time on one ordinary corpus
+file. Widening the core by `when` and nothing else made the whole corpus run
+under restriction, byte-identical to the unrestricted run.
+
+`when` is back in the core, where §1.1 put it. The port surface is 29 keywords,
+not 28. The lesson is not that the exclusion was careless — it is that **a core
+derived from one file cannot be checked against one file**, and for three builds
+it was both.
 
 ## 5. Sketch of the core-conformance checker (sketch only — not built)
 
