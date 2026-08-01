@@ -55,9 +55,19 @@
 # so the same radius dissolves it — the clouds went from clouds to ghosts on
 # the first pass here, at a radius that had looked right for two builds. Every
 # one is now the mockup's own number scaled by 480/1720 = 0.2791: sun 52 ->
-# 14.5, moon 30 -> 8.4, clouds 16 -> 4.5, wet sheen 20 -> 5.6, flower glow
-# 10 -> 2.8, fireflies 7 -> 2. The cloud and puff GEOMETRY was already scaled
-# that way (puff 58 -> 16.2, offset 46 -> 12.8); only the blur was not.
+# 14.5, moon 30 -> 8.4, wet sheen 20 -> 5.6, flower glow 10 -> 2.8, fireflies
+# 7 -> 2. The cloud and puff GEOMETRY was already scaled that way (puff
+# 58 -> 16.2, offset 46 -> 12.8); only the blur was not.
+#
+# THE CLOUDS ARE THE ONE EXCEPTION, AND IT IS A LOOKING DECISION, NOT A
+# DERIVED ONE. Scaled faithfully they came out at blur 4.5, lightness
+# 0.42 + light x 0.55 and alpha 0.30 + dark x 0.34 — every constant the
+# mockup's own, and the clouds still read as barely-there smudges on this
+# canvas. They are blur 3, lightness 0.78 + light x 0.20 and alpha
+# 0.70 + dark x 0.22 instead, which is a real departure from the reference
+# and is here because the picture is the thing being judged. A cloud has to
+# stay brighter than the sky behind it at every hour; at the mockup's own
+# numbers this one did not.
 #
 # Two alphas came back with them, dimmed for the same reason and no longer
 # needing to be: the sun's glow is the mockup's 0.30 + light x 0.35 again, and
@@ -336,9 +346,9 @@ to draw-cloud of i, total:
     let cy = ground-y * 0.13 + (jitter of (i * 11 + 3)) * ground-y * 0.34
     let sc = 0.55 + (jitter of (i * 3 + 7)) * 0.9
     let dark = smaller of 1, (wet * 1.7)
-    let cloud-l = lerp of (0.42 + light * 0.55), 0.42, dark
-    blur of 4.5
-    fill of cloud-l, 0.02, 250, (0.30 + dark * 0.34)
+    let cloud-l = lerp of (0.78 + light * 0.20), 0.64, dark because "a cloud is LIT -- it stays brighter than the sky behind it at every hour, which is what makes it read as a cloud rather than as a smudge of sky"
+    blur of 3
+    fill of cloud-l, 0.02, 250, (0.70 + dark * 0.22)
     cloud-puff of 0, cx, cy, sc
     draw-cloud of (i + 1), total
 
