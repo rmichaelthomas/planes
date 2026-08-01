@@ -19,13 +19,25 @@ There is a second, sharper problem underneath it. `cp ./*.html _site/` deploys
 decided to publish it. It is at the repo root, and being at the root is what
 publishes a page.
 
-Nothing in the gate objects. `test_gate.py::test_every_servable_page_reaches_the_deploy`
-proves every authored page **ships**, and `scripts/check_pages_surface.py`
-proves every page's own references **resolve** — but nothing asserts that a
-served page can be **found**. A page can be authored, deployed, load perfectly,
-and be reachable only by typing its filename.
+**CORRECTED AFTER APPROVAL.** The first version of this section claimed that
+nothing asserts a served page can be found. That is false, and was corrected
+before any implementation began.
+`test_gate.py::test_the_landing_page_links_to_the_pages_it_ships_with` exists,
+is green, and asserts exactly that. `tutor-garden-mockup.html` is not
+unguarded — it is **deliberately exempt**, because `garden-page-spec.md` cites
+it as a reference implementation and `_reference_mockups()` reads that citation
+out of the spec's own preamble.
 
-That gap is what this build closes.
+The real defect is narrower, and more interesting than a missing rule:
+
+> **The exemption excuses a page from being FINDABLE but not from being
+> SERVED.** `cp ./*.html _site/` copies every root page regardless of any
+> exemption. So a page can be exempt-and-published, which is exactly the state
+> the live site is in.
+
+The three guards that exist cover *ships*, *loads*, and *is linked* — and the
+gap between them is that the third one has an escape hatch the first one does
+not honour.
 
 ## 2. The page set, and the invariant that falls out of it
 
@@ -115,18 +127,33 @@ least likely to be reloaded with a cleared cache.
 
 ## 5. The guard
 
-`test_gate.py`, immediately beside `test_every_servable_page_reaches_the_deploy`
-— same subject, same file. Two assertions, both hard gates:
+The rule is not written — it is **strengthened by deletion.**
 
-1. **Every root `*.html` except `index.html` appears as an `href` in
-   `index.html`.** Adding a page and forgetting to link it fails the build.
-2. **Every `.html` href in `index.html` resolves to a file that exists.** No
-   dead cards.
+`test_the_landing_page_links_to_the_pages_it_ships_with` already reads the root
+page set from the filesystem and asserts each one is linked from `index.html`.
+Its only weakness is `_reference_mockups()`: forty lines that parse
+`*-spec.md` preambles to decide which pages are exempt, carrying two recorded
+near-misses in its own comments — once a reworded preamble put `garden.html`
+inside the reference sentence and "silently exempted the very page the rule was
+written for", and once "the first version of this emptied itself out".
 
-The page set is read from the filesystem, never from a list in the test. A
-hardcoded list of files that all exist always passes — that is the precise
-failure mode `cp index.html paint.html _site/` had, and repeating its shape in
-the test that guards against it would be a poor joke.
+Once no mockup lives at the root, nothing needs exempting. So:
+
+1. **`_reference_mockups()` is deleted**, along with the `exempt` filter and the
+   `assert linked, "every page is exempt"` backstop that existed only because
+   exemptions could empty the list.
+2. The rule becomes absolute: **every root page except `index.html` must be
+   linked from `index.html`.** No exemptions, no spec-parsing, nothing that can
+   silently widen.
+3. **One assertion is added**: every `.html` href in `index.html` resolves to a
+   file that exists. The old rule caught unlinked pages; nothing caught a dead
+   card.
+
+Deleting a guard is normally the wrong direction. It is right here because the
+exemption is being replaced by something stronger — a page that is not at the
+root cannot be served at all, so it needs no excuse for not being linked. The
+mechanism moves from *parsing prose to decide who is excused* to *being in a
+different directory*.
 
 Together with what already exists:
 
@@ -134,7 +161,7 @@ Together with what already exists:
 |---|---|---|
 | deploy is derived from the tree | does it **ship**? | `test_gate.py` (exists) |
 | every reference resolves | does it **load**? | `check_pages_surface.py` (exists) |
-| every served page is linked | can it be **found**? | `test_gate.py` (**new**) |
+| every served page is linked | can it be **found**? | `test_gate.py` (exists — **loses its exemption**) |
 
 ## 6. Deliberately not doing
 
