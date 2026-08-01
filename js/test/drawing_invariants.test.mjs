@@ -171,7 +171,14 @@ test("the language's counts: 32 keywords, 13 builtins, 7 effect kinds", () => {
 
 const offOrigin = (u) => /^(https?:)?\/\//.test(u);
 
-for (const page of ["paint.html", "index.html", "garden.html"]) {
+// DERIVED, NOT LISTED. This was `["paint.html", "index.html", "garden.html"]`,
+// and a hardcoded set of pages that all exist always passes — so try.html was
+// added to the site and checked by nothing. Every root page is a served page
+// (the deploy is `cp ./*.html _site/`), so every root page is checked.
+const ROOT_PAGES = fs.readdirSync(new URL("../../", import.meta.url))
+  .filter((f) => f.endsWith(".html")).sort();
+
+for (const page of ROOT_PAGES) {
   test(`${page} loads nothing off-origin: no CDN, no npm package, no bundler`, () => {
     const html = read(page);
     // What counts is what the page FETCHES. A `src` always does. A `<link>`

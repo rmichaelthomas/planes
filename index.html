@@ -3,17 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Planes — running in a browser</title>
+    <title>Planes</title>
     <meta
       name="description"
-      content="A general-purpose programming language that shows its work: what a program can do to the outside world, and where every value came from. Run it and analyse it here, with no build step."
+      content="A programming language that shows its work — what a program can do to the outside world, and where every value came from. Three pages, no build step."
     />
     <link rel="canonical" href="https://github.com/rmichaelthomas/planes" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Planes — running in a browser" />
+    <meta property="og:title" content="Planes" />
     <meta
       property="og:description"
-      content="A general-purpose programming language that shows its work: what a program can do to the outside world, and where every value came from. Run it and analyse it here, with no build step."
+      content="A programming language that shows its work — what a program can do to the outside world, and where every value came from. Three pages, no build step."
     />
     <meta
       property="og:image"
@@ -23,125 +23,145 @@
     <meta property="og:image:height" content="640" />
     <meta property="og:url" content="https://github.com/rmichaelthomas/planes" />
     <meta name="twitter:card" content="summary_large_image" />
+    <!--
+      THIS PAGE CARRIES NO JAVASCRIPT, AND THAT IS A DECISION.
+
+      Every other page here imports js/*.mjs as ES modules, which a browser
+      may serve from cache while fetching its siblings fresh. That is not
+      hypothetical: a stale module graph rendered garden.html as an empty
+      canvas while every gate stayed green, and the page could only say so
+      because it was built to detect it.
+
+      The front door is the one page whose failure is total — it is the most
+      linked-to and the least likely to be reloaded with a cleared cache. A
+      page with no modules cannot fail that way, because it has nothing that
+      can go stale. It is plain HTML, and it opens from disk or from a server
+      with equal success.
+    -->
     <style>
-      :root { color-scheme: light dark; }
-      body {
-        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        max-width: 820px; margin: 2rem auto; padding: 0 1rem;
+      /* The identity tokens, shared verbatim with garden.html. One
+         appearance: paper. No dark-mode block — a front door that changes its
+         clothes with the viewer's OS is two designs neither of which was
+         drawn. */
+      :root {
+        --paper:#F7F2E9; --graphite:#211D19; --line:#D6C9B4; --clay:#A65A2E;
+        --ink-60:rgba(33,29,25,.62); --ink-40:rgba(33,29,25,.40);
+        --display:"Red Hat Display",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+        --mono:"Martian Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
       }
-      h1 { font-size: 1.4rem; margin-bottom: 0.2rem; }
-      p.sub { color: #666; margin-top: 0; }
-      textarea, pre {
-        font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-        width: 100%; box-sizing: border-box;
+
+      /* Self-hosted, from identity/fonts/ — the same two variable files
+         garden.html uses. A Google Fonts <link> would put a network
+         dependency on the one page that promises none. */
+      @font-face {
+        font-family:"Red Hat Display"; font-style:normal; font-weight:700 900;
+        font-display:swap; src:url("identity/fonts/red-hat-display.woff2") format("woff2");
       }
-      textarea {
-        min-height: 15rem; padding: 0.75rem; border: 1px solid #ccc;
-        border-radius: 6px; resize: vertical;
+      @font-face {
+        font-family:"Martian Mono"; font-style:normal; font-weight:400 500;
+        font-display:swap; src:url("identity/fonts/martian-mono.woff2") format("woff2");
       }
-      button {
-        margin: 0.75rem 0.4rem 0.75rem 0; padding: 0.5rem 1.1rem; font-size: 14px;
-        border: 0; border-radius: 6px; background: #2d6cdf; color: #fff; cursor: pointer;
+
+      *{box-sizing:border-box}
+      body{
+        margin:0; padding:48px 20px 64px; background:var(--paper); color:var(--graphite);
+        font-family:var(--mono); font-size:12.5px; line-height:1.55;
+        -webkit-font-smoothing:antialiased;
       }
-      button:hover { background: #245ac0; }
-      button.secondary { background: #4a8a5c; }
-      button.secondary:hover { background: #3c7049; }
-      .hint { color: #888; font-size: 12px; }
-      pre#output {
-        background: #f6f7f9; padding: 0.75rem; border-radius: 6px;
-        min-height: 3rem; overflow-x: auto; white-space: pre-wrap;
+      .wrap{max-width:820px; margin:0 auto}
+
+      .brand{display:flex; align-items:center; gap:13px; margin-bottom:26px}
+      .brand img{width:44px; height:44px; display:block; flex:0 0 44px}
+      h1{
+        font-family:var(--display); font-weight:900; font-size:34px; line-height:1;
+        letter-spacing:-.02em; margin:0;
       }
-      pre#output.error { color: #b00020; }
-      @media (prefers-color-scheme: dark) {
-        textarea { background: #1b1d22; border-color: #333; color: #e6e6e6; }
-        pre#output { background: #16181d; color: #e6e6e6; }
-        p.sub, .hint { color: #999; }
+      .tagline{margin:3px 0 0; font-size:12px; color:var(--ink-60)}
+
+      .pitch{margin:0 0 34px; font-size:13px; line-height:1.75; max-width:60ch}
+      .pitch b{font-weight:500}
+
+      .cards{display:grid; gap:12px; grid-template-columns:1fr}
+      @media (min-width:680px){ .cards{grid-template-columns:repeat(3,1fr)} }
+
+      .card{
+        display:block; padding:18px 17px 20px; border:1px solid var(--line);
+        background:transparent; color:inherit; text-decoration:none;
       }
-      footer { margin-top: 2rem; color: #888; font-size: 12px; }
-      code { background: rgba(128,128,128,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
-      nav.pages {
-        display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1.25rem 0 1.75rem;
+      .card:hover{border-color:var(--clay)}
+      .card:focus-visible{outline:2px solid var(--clay); outline-offset:2px}
+      .card .mark{font-size:17px; line-height:1; color:var(--clay)}
+      .card strong{
+        display:block; margin:11px 0 7px; font-family:var(--display);
+        font-weight:700; font-size:17px; letter-spacing:-.01em;
       }
-      nav.pages a {
-        flex: 1 1 15rem; padding: 0.7rem 0.9rem; border: 1px solid #d0d3d9;
-        border-radius: 8px; text-decoration: none; color: inherit;
+      .card span{display:block; font-size:11.5px; line-height:1.65; color:var(--ink-60)}
+
+      .foot{
+        margin-top:38px; padding-top:16px; border-top:1px solid var(--line);
+        font-size:10.5px; line-height:1.7; color:var(--ink-40);
       }
-      nav.pages a:hover { border-color: #2d6cdf; }
-      nav.pages strong { display: block; font-size: 0.95rem; }
-      nav.pages span { color: #666; font-size: 12px; }
-      @media (prefers-color-scheme: dark) {
-        nav.pages a { border-color: #333; }
-        nav.pages span { color: #999; }
-      }
+      .foot a{color:var(--clay); text-decoration:none}
+      .foot a:hover{text-decoration:underline}
     </style>
   </head>
   <body>
-    <h1>Planes, in JavaScript</h1>
-    <p class="sub">
-      A complete Planes implementation — lexer, parser, interpreter, and
-      <em>static effect analyser</em> — running in your browser, with no Python
-      and no build step. <strong>Run ▸</strong> executes the program;
-      <strong>Surface ⊚</strong> tells you what it <em>would</em> touch — which
-      boundaries, which destinations — without running a line of it.
-    </p>
+    <div class="wrap">
+      <div class="brand">
+        <img src="identity/planes-small-on-light.svg" alt="Planes" width="44" height="44" />
+        <div>
+          <h1>Planes</h1>
+          <p class="tagline">a language that shows its work</p>
+        </div>
+      </div>
 
-    <nav class="pages">
-      <a href="./paint.html"
-        ><strong>Planes draws ▲</strong
-        ><span>turtle, bloom, snake — one program, two renderers</span></a
-      >
-      <a href="./garden.html"
-        ><strong>The garden ❀</strong
-        ><span
-          >a scene that lives: weather, growth, sound — click any mark to ask
-          where it came from</span
-        ></a
-      >
-    </nav>
+      <p class="pitch">
+        Planes is a small programming language you can read aloud. It answers
+        two questions most languages cannot: <b>what would this program touch
+        in the outside world</b> — computed by reading it, never by running it
+        — and <b>where did this value come from</b>, for any value, all the way
+        back. It has two independent implementations, in Python and in
+        JavaScript, that are checked against each other on every change. Its
+        numbers are exact. Nothing below is compiled, bundled or transpiled:
+        these pages fetch the real source and run it.
+      </p>
 
-    <textarea id="source" spellcheck="false">
-# Planes runs here — and can tell you what a program would touch
-# without running it. Click "Run ▸" to execute; "Surface ⊚" to analyse.
+      <div class="cards">
+        <a class="card" href="./garden.html">
+          <div class="mark">❀</div>
+          <strong>the garden</strong>
+          <span
+            >A scene that lives — a day and night, weather, plants that grow,
+            and music in exact ratios. Click any mark and it tells you where it
+            came from.</span
+          >
+        </a>
+        <a class="card" href="./paint.html">
+          <div class="mark">▲</div>
+          <strong>paint</strong>
+          <span
+            >The same language, drawing: turtle, bloom and snake. One program,
+            two renderers — a canvas and an SVG file that agree.</span
+          >
+        </a>
+        <a class="card" href="./try.html">
+          <div class="mark">▸</div>
+          <strong>try it</strong>
+          <span
+            >Write Planes and run it here, with nothing installed. Then ask
+            what it would touch, without running a line of it.</span
+          >
+        </a>
+      </div>
 
-use file
-use http
-
-# A function that reaches the network — but nothing calls it at the top
-# level, so RUNNING this program performs no network send. The SURFACE
-# still sees it: a library that hides a network call behind a function is
-# exactly what the analyser refuses to call "pure".
-to fetch of url:
-  give ask url
-
-# What actually runs: exact arithmetic (no floating-point surprises),
-# a file write, and some output.
-price = 0.1 + 0.2
-show "0.1 + 0.2 = " + text of price
-
-readings = [23, 8, 41, 15, 4]
-write readings to "readings.json"
-show "wrote " + text of count of readings + " readings to readings.json"
-</textarea>
-
-    <div>
-      <button id="run">Run ▸</button>
-      <button id="surface" class="secondary">Surface ⊚</button>
-      <span class="hint">⌘/Ctrl + Enter to run · add Shift for the surface</span>
+      <p class="foot">
+        Source, specifications and the test gate:
+        <a href="https://github.com/rmichaelthomas/planes"
+          >github.com/rmichaelthomas/planes</a
+        >. These pages are static files — serve the folder with
+        <code>python3 -m http.server</code> and open it, or read them from the
+        repository. There is no build step anywhere in this project.
+      </p>
     </div>
-
-    <pre id="output">(no output yet)</pre>
-
-    <footer>
-      The surface is computed by <code>js/shapes.mjs</code> — the same analyser
-      as <code>shapes.py</code>, checked against it — and it never executes the
-      program. Opens directly in Safari or Firefox. Chrome blocks ES-module
-      loading over <code>file://</code> as a security policy — for Chrome, serve
-      the folder with <code>python3 -m http.server</code> and open
-      <code>http://localhost:8000/</code>. No bundler, no transpiler: the page
-      loads the real <code>js/*.mjs</code> modules and the real
-      <code>grammar/*.json</code> as JSON modules.
-    </footer>
-
-    <script type="module" src="./js/browser_main.mjs"></script>
   </body>
 </html>

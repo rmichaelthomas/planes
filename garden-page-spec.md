@@ -1,6 +1,6 @@
 # The Garden — Page Specification
 
-**For:** `garden.html`. **Reference implementations:** `tutor-garden-mockup.html` — why-card content and the note breakdown. Layout, palette and typography came from `the-living-garden.html`, a JavaScript mockup retired once this page existed; every value it carried is recorded below. Where this document and the surviving mockup disagree, the mockup wins — open it, and match it. This is the page-level twin of `garden-scene-spec.md`, and exists because that document's precedence rule was written about the program and the page went unspecified.
+**For:** `garden.html`. **Reference implementations:** `mockups/tutor-garden-mockup.html` — why-card content and the note breakdown. Layout, palette and typography came from `the-living-garden.html`, a JavaScript mockup retired once this page existed; every value it carried is recorded below. Where this document and the surviving mockup disagree, the mockup wins — open it, and match it. This is the page-level twin of `garden-scene-spec.md`, and exists because that document's precedence rule was written about the program and the page went unspecified.
 
 ## §3.0 What this page is, and is not
 
