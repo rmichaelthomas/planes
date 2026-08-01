@@ -1146,7 +1146,8 @@ class Interpreter:
                 raise PlanesError(
                     "not-a-number",
                     f"cannot take the whole part of {detail_value(arg.value)}",
-                    "whole of rounds a number toward zero; if this is text, "
+                    "whole of rounds a number to the nearest whole, half away from "
+                    "zero; if this is text, "
                     "convert it first with number of — a boolean, a list, "
                     "a record, or nothing has no path to becoming a number")
             n = Number.of(arg.value).round_to(0)

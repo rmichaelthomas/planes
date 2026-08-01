@@ -60,7 +60,7 @@ Some worked examples of the difference:
 | the error | a clause that restates | the clause that helps |
 |---|---|---|
 | `cannot count 5` | *count needs a collection* | `count takes a list, a record, or text — check which of those this value should be` |
-| `cannot take the whole part of "5"` | *whole of needs a number* | `whole of rounds a number toward zero; Planes has no text-to-number builtin, so a number has to arrive as one — from a literal, from arithmetic, or from a field of something read as JSON` |
+| `cannot take the whole part of "5"` | *whole of needs a number* | `whole of rounds a number to the nearest whole, half away from zero; if this is text, convert it first with number of — a boolean, a list, a record, or nothing has no path to becoming a number` |
 | `'add' takes 2 values, given 1` | *pass 2 values* | `it is declared \`to add of a, b\`, so call it as \`add of a, b\`` |
 | `field 'a' appears twice in this record` | *remove the duplicate* | `keep one of the two; to change a field's value later, build a new record from this one — \`r with a: value\`` |
 

@@ -1,7 +1,7 @@
 # The Garden — Scene Specification
 
 **For:** `paint/garden.planes`
-**Reference implementation:** `the-living-garden.html` (JavaScript mockup). Every number below is extracted from it. Where this document and the mockup disagree, the mockup wins — open it, and match it.
+**Reference implementation:** `the-living-garden.html` — a JavaScript mockup, retired once the page it specified existed. Every number below was extracted from it, which is why this document is now the authority rather than a transcription of one: the mockup is gone, and where it once won a disagreement, these numbers do.
 
 ---
 
@@ -227,7 +227,7 @@ A radial `gradient` centred at `(width / 2, groundY × 0.6)`, transparent at rad
 
 ## 15. Acceptance
 
-Open `the-living-garden.html` beside `garden.html` at the same day and compare.
+Open `garden.html` at the given day and compare against the numbers below. (This step once read "open the mockup beside it"; the mockup has been retired, so the specification is what the picture is checked against.)
 
 - [ ] Layer order matches §2 exactly.
 - [ ] At day 0.5 the sky is blue, the sun is high, flowers are open, bees are out.

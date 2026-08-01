@@ -1272,7 +1272,7 @@ to require-target-of of v, what, spelled:
 to builtin-whole of arg:
   if arg.kind == "number":
     give make-number-carrying of (whole of arg.value), arg.approx
-  fail { message: "cannot take the whole part of " + (detail-of-value of arg), fix: "whole of rounds a number toward zero; if this is text, convert it first with number of — a boolean, a list, a record, or nothing has no path to becoming a number" } as not-a-number
+  fail { message: "cannot take the whole part of " + (detail-of-value of arg), fix: "whole of rounds a number to the nearest whole, half away from zero; if this is text, convert it first with number of — a boolean, a list, a record, or nothing has no path to becoming a number" } as not-a-number
 
 # The twelfth builtin (A-Q19): text to an exact number, closing the round
 # trip `write` opened and nothing closed. Delegates to the host's own

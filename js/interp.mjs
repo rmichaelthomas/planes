@@ -909,7 +909,8 @@ export class Interpreter {
         throw new PlanesError(
           "not-a-number",
           `cannot take the whole part of ${detailValue(arg.value)}`,
-          "whole of rounds a number toward zero; if this is text, convert it first with " +
+          "whole of rounds a number to the nearest whole, half away from zero; " +
+            "if this is text, convert it first with " +
             "number of — a boolean, a list, a record, or nothing has no path to becoming a number",
         );
       }

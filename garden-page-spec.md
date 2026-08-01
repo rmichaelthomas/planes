@@ -1,6 +1,6 @@
 # The Garden — Page Specification
 
-**For:** `garden.html`. **Reference implementations:** `the-living-garden.html` (layout, palette, typography) and `tutor-garden-mockup.html` (why-card content and the note breakdown). Every value below is extracted from them. Where this document and the mockups disagree, the mockups win — open them, and match them. This is the page-level twin of `garden-scene-spec.md`, and exists because that document's precedence rule was written about the program and the page went unspecified.
+**For:** `garden.html`. **Reference implementations:** `tutor-garden-mockup.html` — why-card content and the note breakdown. Layout, palette and typography came from `the-living-garden.html`, a JavaScript mockup retired once this page existed; every value it carried is recorded below. Where this document and the surviving mockup disagree, the mockup wins — open it, and match it. This is the page-level twin of `garden-scene-spec.md`, and exists because that document's precedence rule was written about the program and the page went unspecified.
 
 ## §3.0 What this page is, and is not
 
@@ -8,7 +8,7 @@ This is the showcase of Planes: a living picture, a click that answers with a de
 
 ## §3.1 One appearance
 
-The page has exactly one appearance: paper. Delete `color-scheme: light dark` and the entire `@media (prefers-color-scheme: dark)` block. The identity tokens, verbatim from `the-living-garden.html`:
+The page has exactly one appearance: paper. Delete `color-scheme: light dark` and the entire `@media (prefers-color-scheme: dark)` block. The identity tokens, as transcribed from the retired mockup:
 
 ```css
 --paper:#F7F2E9; --graphite:#211D19; --line:#D6C9B4; --clay:#A65A2E;
@@ -64,7 +64,7 @@ The full command listing survives, collapsed: a `<details>` inside the panel lab
 
 ## §3.8 The why card — the centerpiece
 
-A floating card over the canvas at the click point (the `the-living-garden.html` treatment: paper background, 1px graphite border, 3px radius, shadow, max-width ~300px), with the **first mockup's content**, in this order:
+A floating card over the canvas at the click point (paper background, 1px graphite border, 3px radius, shadow, max-width ~300px), with the **first mockup's content**, in this order:
 
 1. **Heading** — Red Hat Display 700. If the trace exposes the enclosing definition's name for the clicked line (via `Function.file` / `call_sites` — read `js/paint/why.mjs` and the trace shape to check), the heading is the friendly form: *this plant · line 48*. If it does not, the heading stays the trimmed source line, as built. Implement whichever the data supports and state which in the PR; do not fabricate names the trace cannot justify.
 2. **The derivation steps** — the mockup's connected-dot treatment: each step a dot on a hairline, value bold, source in `--ink-60`, `because` clauses in `--teal` with the left border. The step whose value feeds both the picture and the note gets the clay dot (`step.shared`). The existing "one step further" expansion renders as an additional step, not a separate row style.
@@ -89,7 +89,7 @@ Compressed to the mockup's register — small `--ink-40` mono, max-width ~640px,
 
 ## §3.12 Acceptance
 
-Open `garden.html` beside `the-living-garden.html` and `tutor-garden-mockup.html`, same seed.
+Open `garden.html` beside `tutor-garden-mockup.html`, same seed.
 
 - [ ] Paper background, no dark mode in the file, no hex outside §3.1's list.
 - [ ] Red Hat Display / Martian Mono render with the network tab showing no request leaving localhost.
@@ -116,7 +116,7 @@ It is also the wrong default. At full granularity a click on the sky returns `re
 
 ### §3.13.1 What is clickable
 
-Six subjects, matching the set `the-living-garden.html`'s own `why()` answers: **the sun or moon, a flower, a bee, a firefly, the rain, the tree**. Nothing else — not the sky, the hills, the ground, the grass, the clouds, the stars, and not a plant's stem or leaves.
+Six subjects, matching the set the retired mockup's own `why()` answered: **the sun or moon, a flower, a bee, a firefly, the rain, the tree**. Nothing else — not the sky, the hills, the ground, the grass, the clouds, the stars, and not a plant's stem or leaves.
 
 A mark's subject is the enclosing `to <name>` of the line that drew it, read from the source. Within `draw-plant`, only the circles are the flower; the stem is not.
 
@@ -134,7 +134,7 @@ Dropped as too technical: the `one step further` expansion, and one row per raw 
 
 A flower's note plays on every click, not only on the 25 ticks in 300 where a bee happens to land. This requires **restating the program's rule** (`whole of (g * 5)` into the five just ratios, at octave 1) in the page, because a page cannot call a program's functions.
 
-The restatement is checked, not trusted: `js/test/garden_card.test.mjs` reads the table out of `garden.html` — there is no second copy — runs the real program across all 300 ticks, and asserts the page's rule reproduces the ratio and octave of every note the program actually emitted. It found a defect on its first run: **`whole of` rounds half away from zero, it does not truncate**, so a flower with `g` 0.708994 plays 5/3 where truncation says 3/2. (`interp.mjs`'s own error text for a bad `whole of` argument says "rounds a number toward zero", which is misleading; that file is outside this build's scope and the wording is reported, not changed.)
+The restatement is checked, not trusted: `js/test/garden_card.test.mjs` reads the table out of `garden.html` — there is no second copy — runs the real program across all 300 ticks, and asserts the page's rule reproduces the ratio and octave of every note the program actually emitted. It found a defect on its first run: **`whole of` rounds half away from zero, it does not truncate**, so a flower with `g` 0.708994 plays 5/3 where truncation says 3/2. (`interp.mjs`'s own error text for a bad `whole of` argument said "rounds a number toward zero", which is misleading; it was out of scope for that build and has since been corrected in all three implementations.)
 
 ### §3.13.4 The click itself
 

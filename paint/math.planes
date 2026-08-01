@@ -115,10 +115,10 @@ to tangent of d:
 #     x = 3.7   whole 4   -> -0.3  -> 0.7     x = 3.2   whole 3  -> 0.2
 #     x = -3.7  whole -4  ->  0.3               x = -3.2  whole -3 -> -0.2 -> 0.8
 #
-# (`whole of`'s own refusal message says it "rounds a number toward zero",
-# which is what truncation does and not what this builtin does. Reported, not
-# changed — the message lives in interp.py and its twin, and nothing in this
-# build has business editing either.)
+# (`whole of`'s refusal message used to say it "rounds a number toward zero",
+# which is what truncation does and not what this builtin does. Two builds
+# reported it and neither had business editing it; it now says "to the
+# nearest whole, half away from zero" in all three implementations.)
 #
 # Both stay EXACT for exact input: comparison, subtraction and `whole of` are
 # all exact, and none of them reaches the approximation `sine` introduces.

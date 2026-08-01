@@ -29,10 +29,11 @@
 # approximate, and the static effect surface says so without running it. The
 # integer hash underneath is exact.
 #
-# THE MOCKUP. the-living-garden.html is the reference. Its palette, its
-# counts, its placement formulas and its timing constants are transcribed
-# here; where a formula is written in terms of the mockup's own W/H/GY,
-# substituting this canvas's own dimensions IS the adaptation.
+# THE MOCKUP. A JavaScript mockup was the reference, and has been retired now
+# that this program and its page exist. Its palette, its counts, its placement
+# formulas and its timing constants are transcribed here and in
+# garden-scene-spec.md; substituting this canvas's dimensions for the mockup's
+# own W/H/GY IS the adaptation.
 #
 # THE ONE THING THIS CANNOT DO. The mockup's clouds are softened with a CSS
 # `filter: blur()`, which softens a shape's OWN edge. The drawing protocol's
@@ -672,9 +673,20 @@ to crossed of mark:
     give false
 
 # A bee reaching a flower plays that flower's note. The interval comes from
-# the same `plant-g` that set the plant's height, so the why chain for the
-# note and the why chain for the height converge on one node — which is the
-# whole reason the note is worth playing.
+# the same `plant-g` that set the plant's height, so the note and the height
+# are two readings of ONE NUMBER — which is the whole reason the note is
+# worth playing.
+#
+# THE NUMBER, NOT THE NODE. This comment used to claim the two why chains
+# "converge on one node". They do not: `sing-bee` CALLS `plant-g` again, and
+# a second call builds a second derivation — same value, different identity.
+# Measured when garden.html tried to follow the claim: the note's chain
+# reaches 228 nodes, ten are shared with any mark in the frame, and the most
+# specific of those is `bee-cycle`, a timing constant. `g` is not among them.
+# A value language cannot promise node identity across two calls and should
+# not have to; both chains answer "where did this number come from" with the
+# same arithmetic over the same inputs, and that is the convergence that is
+# true.
 to sing-bee of i, total:
   if i >= total:
     give nothing

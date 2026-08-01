@@ -21,7 +21,7 @@
       step: this is a static file server, nothing more.
     -->
     <style>
-      /* The identity tokens, verbatim from the-living-garden.html. One
+      /* The identity tokens, from the mockup this page replaced. One
          appearance: paper. No dark-mode block — a showcase that changes its
          clothes with the viewer's OS is two designs neither of which was
          drawn. */
@@ -92,12 +92,10 @@
 
       /* ---------- the canvas ---------- */
       .frame{position:relative}
-      /* #0B1026 is the-living-garden.html's own canvas background, taken
-         verbatim from the layout authority — the one hex here outside §3.1's
-         token list, and the standing rule is that where this page and that
-         mockup disagree on palette the mockup wins. It is the night sky the
-         scene opens on, and it is what the canvas shows for the one frame
-         before the program's own sky lands on top of it. */
+      /* #0B1026 was the layout mockup's own canvas background and is the one
+         hex here outside garden-page-spec.md §3.1's token list. It is the
+         night sky the scene opens on, and it is what the canvas shows for the
+         one frame before the program's own sky lands on top of it. */
       canvas{
         display:block; width:100%; height:auto; border:1px solid var(--line);
         border-radius:3px; background:#0B1026; cursor:pointer;
@@ -160,10 +158,23 @@
          be DISMISSED. A card with no way out is the defect the first build
          shipped: it covered the picture, every click through it opened
          another one, and the only escape was the tick stepper. */
+      /* It scrolls rather than overflowing. A full answer is taller than the
+         picture it answers about — five values, their `because` clauses, the
+         note and two badges — and a card that runs off the bottom of the
+         frame loses exactly the half a reader has not read yet. `max-height`
+         is set per-card from the frame it sits in; this is only the fallback
+         for a frame that has not been measured. */
       #garden-card{
         position:absolute; max-width:300px; background:var(--paper);
         border:1px solid var(--graphite); border-radius:3px; padding:12px 13px;
         box-shadow:0 8px 26px rgba(0,0,0,.28); z-index:5; font-size:11.5px;
+        max-height:100%; overflow-y:auto; overscroll-behavior:contain;
+      }
+      /* The heading stays put while the rest scrolls under it, so a scrolled
+         card never stops saying what it is about. */
+      #garden-card .head{
+        position:sticky; top:-12px; background:var(--paper);
+        padding:12px 0 6px; margin:-12px 0 0; z-index:1;
       }
       #garden-card .head{
         display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
@@ -719,8 +730,8 @@
       // are shared with ANY mark, and the most specific of those is
       // `bee-cycle` — a timing constant. `g` is not among them.
       //
-      // The reason is line 685: `let g = plant-g of (bee-target of i, leg)`
-      // CALLS plant-g again. A second call builds a second derivation with the
+      // The reason is `sing-bee`'s own `let g = plant-g of (bee-target of
+      // i, leg)`, which CALLS plant-g again. A second call builds a second derivation with the
       // same shape and the same value, not the same object. So what the bee
       // and the flower share is the NUMBER, arrived at twice — which is still
       // the whole point, and is what the card says, because it is what is
@@ -748,7 +759,7 @@
       // NOT EVERYTHING. The first build made every mark answerable, which
       // sounds generous and reads as noise: clicking the sky returned
       // `rect of 0, 0, canvas-width, sky-split, 0` and outlined the entire
-      // upper half of the picture. `the-living-garden.html` answers six
+      // upper half of the picture. The layout mockup answered exactly six
       // subjects and no more — the sun or moon, a flower, a bee, a firefly,
       // the rain, the tree — and that list is the right one, because those
       // are the things a reader can point at and name.
@@ -819,8 +830,8 @@
       // nothing to find, which is exactly what the first build did and why it
       // was silent.
       //
-      // The program's rule is four lines (`pentatonic-n`/`pentatonic-d` at
-      // 633 and 648, `k = whole of (g * 5)` at 686, octave 1 at 687), and it
+      // The program's rule is four lines — `pentatonic-n` and `pentatonic-d`,
+      // `k = whole of (g * 5)`, and octave 1 — all inside `sing-bee`, and it
       // is RESTATED here rather than re-derived, because a page cannot call
       // into a program's functions. A restatement that drifts is a page that
       // lies, so it does not go unchecked: js/test/garden_card.test.mjs runs
@@ -1098,11 +1109,14 @@
         cardEl.hidden = false;
         cardEl.style.left = `${Math.max(4, Math.min(rect.width - 306, x * scale + 12))}px`;
         cardEl.style.top = "0px";
-        // Measured once it has content and pulled back up to sit inside the
-        // frame, so a tall answer never runs off the bottom of the picture.
+        // Bounded to the picture, then placed inside it. The card is measured
+        // only after its content is in, because its height depends entirely
+        // on how much this particular mark had to say.
+        cardEl.style.maxHeight = `${Math.max(120, rect.height - 8)}px`;
         const wanted = y * scale - 8;
         const highest = Math.max(4, rect.height - cardEl.offsetHeight - 4);
         cardEl.style.top = `${Math.max(4, Math.min(wanted, highest))}px`;
+        cardEl.scrollTop = 0;
 
         // The source line is marked, and the SOURCE PANE is scrolled to it —
         // but the PAGE is not. `scrollIntoView` walks every scrollable

@@ -385,11 +385,19 @@ def _reference_mockups():
     point at which it stopped being a destination.
     """
     cited = set()
+    subjects = set()
     for name in os.listdir(REPO):
         if not name.endswith("-spec.md"):
             continue
         with open(os.path.join(REPO, name), encoding="utf-8") as fh:
             head = fh.read(2000)
+        # A page a spec is FOR is a product page and can never be a mockup, no
+        # matter what any sentence says about it. This is the belt to the
+        # sentence-scoping braces below: rewording a preamble once put
+        # `garden.html` inside the reference sentence and silently exempted the
+        # very page the rule was written for.
+        for m in re.finditer(r"\*\*For:\*\*\s*`([A-Za-z0-9._-]+\.html)`", head):
+            subjects.add(m.group(1))
         # ONLY the reference-implementations sentence. The preamble also says
         # "**For:** `garden.html`" and the body names `paint.html`, so a scan
         # of the whole head exempts the very pages the rule exists to protect
@@ -401,7 +409,7 @@ def _reference_mockups():
         end = sentence.find(". ")
         cited.update(re.findall(r"`([A-Za-z0-9._-]+\.html)`",
                                 sentence[:end] if end > 0 else sentence))
-    return cited
+    return cited - subjects
 
 
 def test_the_landing_page_links_to_the_pages_it_ships_with():
