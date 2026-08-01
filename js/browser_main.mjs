@@ -10,7 +10,8 @@
 
 import vocab from "../grammar/vocabulary.json" with { type: "json" };
 import amber from "../grammar/messages/amber.json" with { type: "json" };
-import { setVocabulary, setAmberTemplates } from "./grammar_data.mjs";
+import core from "../grammar/core.json" with { type: "json" };
+import { setVocabulary, setAmberTemplates, setCore } from "./grammar_data.mjs";
 import { Interpreter, PlanesError } from "./interp.mjs";
 import { PlanesSyntaxError } from "./lexer.mjs";
 import { BrowserHost } from "./host_browser.mjs";
@@ -32,6 +33,12 @@ import { BrowserModuleLoader } from "./module_loader_browser.mjs";
 // loader_node.mjs's fs reads.
 setVocabulary(vocab);
 setAmberTemplates(amber);
+// grammar/core.json travels with them, so the core-restricted mode
+// (js/core_restrict.mjs) is available in a browser and not only under Node.
+// Without this, `new Interpreter({ coreOnly: true })` refuses to arm rather than
+// guessing at a core it cannot read — which was the browser's situation until
+// this line, and is why the restricted mode had never run in a page.
+setCore(core);
 
 // Run a Planes program string and return { output, effects, error }. Pure of
 // the DOM, so it runs under Node too. `files`/`responses` seed the in-memory
@@ -117,6 +124,28 @@ export async function runProgramGraph(src, { base, files = {}, responses = {}, l
     else throw e;
     return { ...observed(itp, host), error };
   }
+}
+
+// Load a FILE-BACKED graph into an interpreter the caller keeps, and run its
+// top-level. The browser counterpart of js/run_file.mjs's runFile, and the piece
+// runProgramGraph above could not supply: that one's entry is a source STRING
+// with no location (hence the ENTRY sentinel), and it discards the interpreter
+// when it returns. A metacircular stage is the opposite on both counts — the
+// entry is a real location to fetch, and the whole point is to load it ONCE and
+// then call into it many times.
+//
+// Deliberately not a second resolver. `load_graph`, `check_collisions` and
+// `hoistAndRun` are modules.mjs's, the same three runProgramGraph calls, through
+// the same BrowserModuleLoader and its one-fetch-per-module cache. Two paths
+// that load the same graph are two paths that can answer differently, so there
+// is one.
+export async function loadGraphInto(itp, location, { base, loader = null } = {}) {
+  const ldr = loader ?? new BrowserModuleLoader({ base });
+  const key = ldr.key(location);
+  const graph = await load_graph(ldr, key);
+  check_collisions(graph, ldr);
+  hoistAndRun(itp, graph, key, ldr);
+  return ldr;
 }
 
 // The static effect surface of a program string, WITHOUT running it (A.5). The
