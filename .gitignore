@@ -22,3 +22,12 @@ config.json
 
 # CI runner logs, timings, and the leak record (scripts/run_suites.py).
 .ci-logs/
+
+# A local copy of a retired mockup, dropped in the repo root to view a page
+# beside it. `the-living-garden.html` was DELETED on purpose in #56 — it had
+# shipped, never deployed, and its retirement is what caught the guard that
+# exempted garden.html from the index rule. It came back in #58 because a
+# reference copy was sitting untracked in the working tree when a `git add -A`
+# ran, which is the whole reason this line exists: the file is a reference to
+# look at, never a file this repo carries.
+the-living-garden.html
