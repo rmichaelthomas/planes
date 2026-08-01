@@ -374,63 +374,58 @@ def test_every_servable_page_reaches_the_deploy():
     assert r.returncode == 0, r.stdout + r.stderr
 
 
-def _reference_mockups():
-    """The pages that exist to be COMPARED AGAINST, not visited.
-
-    Derived, not hardcoded: `garden-page-spec.md` names its reference
-    implementations in its own preamble, and a page is exempt from the
-    landing-page rule below exactly when a spec cites it that way. A new
-    product page cannot become exempt by being added -- someone would have to
-    write it into a spec as a reference implementation first, which is the
-    point at which it stopped being a destination.
-    """
-    cited = set()
-    subjects = set()
-    for name in os.listdir(REPO):
-        if not name.endswith("-spec.md"):
-            continue
-        with open(os.path.join(REPO, name), encoding="utf-8") as fh:
-            head = fh.read(2000)
-        # A page a spec is FOR is a product page and can never be a mockup, no
-        # matter what any sentence says about it. This is the belt to the
-        # sentence-scoping braces below: rewording a preamble once put
-        # `garden.html` inside the reference sentence and silently exempted the
-        # very page the rule was written for.
-        for m in re.finditer(r"\*\*For:\*\*\s*`([A-Za-z0-9._-]+\.html)`", head):
-            subjects.add(m.group(1))
-        # ONLY the reference-implementations sentence. The preamble also says
-        # "**For:** `garden.html`" and the body names `paint.html`, so a scan
-        # of the whole head exempts the very pages the rule exists to protect
-        # -- which is how the first version of this emptied itself out.
-        marker = head.find("Reference implementation")
-        if marker < 0:
-            continue
-        sentence = head[marker:]
-        end = sentence.find(". ")
-        cited.update(re.findall(r"`([A-Za-z0-9._-]+\.html)`",
-                                sentence[:end] if end > 0 else sentence))
-    return cited - subjects
-
-
 def test_the_landing_page_links_to_the_pages_it_ships_with():
     """The deploy carried paint.html and garden.html while index.html linked
     to nothing but the repo, so a shipped page was unreachable by anyone who
     did not already know its filename -- indistinguishable, from outside,
     from the page not being deployed at all.
 
-    Reference mockups are exempt because they are not destinations; every
-    other page the deploy carries has to be reachable from the front door."""
+    THIS RULE USED TO HAVE AN EXEMPTION, AND THE EXEMPTION IS WHAT SHIPPED A
+    MOCKUP. `_reference_mockups()` parsed every `*-spec.md` preamble to decide
+    which pages were excused, and its own comments recorded two near-misses: a
+    reworded preamble once put `garden.html` inside the reference sentence and
+    "silently exempted the very page the rule was written for", and an earlier
+    version "emptied itself out". It carried a belt (`**For:**` subjects can
+    never be mockups) and braces (only the reference sentence is scanned) and
+    was still one rewrite away from excusing the wrong page.
+
+    But the deeper fault was not that it might excuse too much. It is that an
+    exemption from being FINDABLE is not an exemption from being SERVED:
+    `cp ./*.html _site/` copies every root page whatever any spec says about
+    it. `tutor-garden-mockup.html` was therefore live on the public site,
+    linked from nothing, correctly exempt, and unreachable.
+
+    Mockups live in `mockups/` now, and being out of the root is what
+    un-publishes them -- the same structural move the deploy itself makes, and
+    nothing to keep in sync. So there is nothing left to excuse, and the rule
+    is absolute: every page the deploy carries is linked from the front door.
+
+    The second half is the check nobody had. The old rule caught a page with
+    no link; nothing caught a link with no page, so renaming a page would have
+    left a card pointing into space with the gate still green."""
+    pages = sorted(f for f in os.listdir(REPO) if f.endswith(".html"))
+    assert pages, "no page to link -- the rule has nothing to hold"
+
     idx = os.path.join(REPO, "index.html")
+    assert os.path.exists(idx), "there is no landing page"
     with open(idx, encoding="utf-8") as fh:
         html = fh.read()
-    exempt = _reference_mockups()
-    pages = sorted(f for f in os.listdir(REPO)
-                   if f.endswith(".html") and f != "index.html")
-    linked = [p for p in pages if p not in exempt]
-    assert linked, "every page is exempt -- the rule has been emptied out"
-    for page in linked:
+
+    for page in pages:
+        if page == "index.html":
+            continue
         assert f'href="./{page}"' in html, (
             f"{page} is deployed but index.html does not link to it")
+
+    # Every root page's own links, not only the hub's. try.html links back to
+    # the hub, and a rule that read index.html alone would not have noticed if
+    # that link were wrong.
+    for page in pages:
+        with open(os.path.join(REPO, page), encoding="utf-8") as fh:
+            body = fh.read()
+        for href in re.findall(r'href="\./([A-Za-z0-9._-]+\.html)"', body):
+            assert os.path.exists(os.path.join(REPO, href)), (
+                f"{page} links ./{href}, which does not exist")
 
 
 if __name__ == "__main__":
