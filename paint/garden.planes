@@ -48,6 +48,22 @@
 # comes from the `alpha` state and would otherwise have dimmed whatever was
 # drawn next. The alphas live in the marks' own fills now.
 #
+# THE RADII ARE THE MOCKUP'S, SCALED — AND THEY ARE NOT THE OLD SHADOW'S.
+# This is the trap the substitution sets. A `shadow 0 0 r` draws the mark
+# TWICE, once crisp and once blurred behind it, so its radius was tuned
+# against a hard shape wearing a halo. `blur` draws the mark ONCE, spread out,
+# so the same radius dissolves it — the clouds went from clouds to ghosts on
+# the first pass here, at a radius that had looked right for two builds. Every
+# one is now the mockup's own number scaled by 480/1720 = 0.2791: sun 52 ->
+# 14.5, moon 30 -> 8.4, clouds 16 -> 4.5, wet sheen 20 -> 5.6, flower glow
+# 10 -> 2.8, fireflies 7 -> 2. The cloud and puff GEOMETRY was already scaled
+# that way (puff 58 -> 16.2, offset 46 -> 12.8); only the blur was not.
+#
+# Two alphas came back with them, dimmed for the same reason and no longer
+# needing to be: the sun's glow is the mockup's 0.30 + light x 0.35 again, and
+# the clouds' own alpha is the mockup's exactly, with no 0.95 multiplier —
+# that factor existed only so a SHADOW had an opacity.
+#
 # NOTHING IN THIS PROGRAM SETS A SHADOW ANY MORE. `shadow` was never once used
 # as a shadow here; all six uses were glows standing in for the verb this
 # version added. Cast shadows were measured and refused: a cast shadow that is
@@ -321,8 +337,8 @@ to draw-cloud of i, total:
     let sc = 0.55 + (jitter of (i * 3 + 7)) * 0.9
     let dark = smaller of 1, (wet * 1.7)
     let cloud-l = lerp of (0.42 + light * 0.55), 0.42, dark
-    blur of 7
-    fill of cloud-l, 0.02, 250, ((0.30 + dark * 0.34) * 0.95)
+    blur of 4.5
+    fill of cloud-l, 0.02, 250, (0.30 + dark * 0.34)
     cloud-puff of 0, cx, cy, sc
     draw-cloud of (i + 1), total
 
@@ -359,7 +375,7 @@ to draw-ground:
   rect of 0, ground-y, canvas-width, (canvas-height - ground-y), 0
   if wet-k > 0.1:
     blend of "add"
-    blur of 6
+    blur of 5.6
     fill of 0.75, 0.05, 230, (wet-k * 0.13)
     rect of 0, ground-y, canvas-width, 42, 0
     no-blur
@@ -470,7 +486,7 @@ to draw-plant of i, total:
     circle of p.tip-x, p.tip-y, (1.7 + p.g * 2.1)
     if light > 0.55:
       blend of "add"
-      blur of 4
+      blur of 2.8
       fill of 0.70, 0.16, hue, ((light - 0.55) * 0.34)
       circle of p.tip-x, p.tip-y, (8 + p.g * 6.4)
       no-blur
@@ -543,7 +559,7 @@ to draw-firefly of i, total:
     let fy = ground-y - 24 - (noise of (i * 5.3 + tick * 0.11), (seed + 302)) * 120
     let blink-base = larger of 0, (sine of (mod of (tick * 16 + i * 53), 360))
     let blink = blink-base * blink-base * blink-base
-    blur of 7
+    blur of 2
     fill of 0.90, 0.16, 130, (blink * 0.5)
     circle of fx, fy, 4.4
     no-blur
@@ -590,9 +606,9 @@ if night >= 0.05:
   draw-star of 0, 34
 
 if phase >= 0.25 and phase < 0.75:
-  sky-body of ((phase - 0.25) * 2), 13, 30, 15, 0.7, 0.16, 68, (0.22 + light * 0.28), 0.97, 0.06, 88
+  sky-body of ((phase - 0.25) * 2), 13, 30, 14.5, 0.7, 0.16, 68, (0.30 + light * 0.35), 0.97, 0.06, 88
 else:
-  sky-body of ((mod of (phase + 0.25), 1) * 2), 9, 20, 10, 0.62, 0.07, 254, 0.3, 0.95, 0.02, 258
+  sky-body of ((mod of (phase + 0.25), 1) * 2), 9, 20, 8.4, 0.62, 0.07, 254, 0.3, 0.95, 0.02, 258
 
 draw-cloud of 0, 6
 no-blur
