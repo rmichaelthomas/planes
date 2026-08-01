@@ -101,3 +101,44 @@ Open `garden.html` beside `the-living-garden.html` and `tutor-garden-mockup.html
 - [ ] The full surface listing exists but is collapsed by default; expanded, it matches the pre-build listing.
 - [ ] Scrubbing to the same tick twice produces byte-identical PNGs at the new resolution.
 - [ ] `paint/garden.planes` and `paint.html` have empty diffs.
+
+---
+
+## §3.13 Revisions after the visual gate
+
+§3.0–§3.12 above are the build prompt's specification, verbatim. This section records what the first visual gate changed and why. Where the two disagree, this section is later and wins.
+
+### The granularity finding, written down
+
+**Per-mark granularity is available and it works.** The first build made every emitted mark answerable — 344 of them in a frame — and hit-testing, the trace lookup and the card all held up at that resolution. Clicking a single raindrop, one blade of grass or one branch segment returned a correct derivation. That capability is real and is worth keeping in mind for a future page that wants it.
+
+It is also the wrong default. At full granularity a click on the sky returns `rect of 0, 0, canvas-width, sky-split, 0` and the reader learns nothing they were asking about. **Granularity is a capability, not a target.**
+
+### §3.13.1 What is clickable
+
+Six subjects, matching the set `the-living-garden.html`'s own `why()` answers: **the sun or moon, a flower, a bee, a firefly, the rain, the tree**. Nothing else — not the sky, the hills, the ground, the grass, the clouds, the stars, and not a plant's stem or leaves.
+
+A mark's subject is the enclosing `to <name>` of the line that drew it, read from the source. Within `draw-plant`, only the circles are the flower; the stem is not.
+
+This also settles §3.8.1's heading question in the other direction. The heading is now the **subject** — *this flower* — because the enclosing definition is a fact about the program's text, not a name the page invented. The line number and definition stay underneath it.
+
+### §3.13.2 What the card says
+
+Rows are **named values**, not the drawing command's coordinates. `card().rows` gives one row per number in the emitted line, which reads `~186.931231836987 from .tip-x` — true, and useless to anyone not debugging the renderer.
+
+The names shown are the ones the author annotated with `because` — the program saying "this matters, and here is why" — plus `g`, which always keeps a slot on a flower, since its height and its note both come from it. At most four. The expression beside each name is the **program's own text** for that binding, and is shown only when unambiguous: a name bound in more than one definition, outside the one that drew the mark, gets its value and no expression rather than a confident wrong one.
+
+Dropped as too technical: the `one step further` expansion, and one row per raw coordinate.
+
+### §3.13.3 The flower's note
+
+A flower's note plays on every click, not only on the 25 ticks in 300 where a bee happens to land. This requires **restating the program's rule** (`whole of (g * 5)` into the five just ratios, at octave 1) in the page, because a page cannot call a program's functions.
+
+The restatement is checked, not trusted: `js/test/garden_card.test.mjs` reads the table out of `garden.html` — there is no second copy — runs the real program across all 300 ticks, and asserts the page's rule reproduces the ratio and octave of every note the program actually emitted. It found a defect on its first run: **`whole of` rounds half away from zero, it does not truncate**, so a flower with `g` 0.708994 plays 5/3 where truncation says 3/2. (`interp.mjs`'s own error text for a bad `whole of` argument says "rounds a number toward zero", which is misleading; that file is outside this build's scope and the wording is reported, not changed.)
+
+### §3.13.4 The click itself
+
+- **No page jump.** `scrollIntoView` walks every scrollable ancestor and threw the reader out of the picture; the source pane scrolls itself via `scrollTop`.
+- **No outlines on the canvas.** Amber outlines belong to hovering a *source line* — the map read backwards. A click marks the line and leaves the picture alone.
+- **Always dismissable.** A ✕ on the card, the Escape key, a click on empty sky, and a click anywhere off the picture. The card is no longer `pointer-events: none`; a card that cannot be closed is worse than one that cannot be clicked through.
+- **A click still pauses.** The card's numbers are the values at one tick, so a card over a running scene would be stale before it finished rendering.

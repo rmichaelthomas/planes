@@ -256,7 +256,7 @@ test("garden.html's play loop, hit testing and why panel come from shared module
   assert.match(html, /from ["']\.\/js\/sound\/stream\.mjs["']/);
 });
 
-test("sound fires while playing or on a click that landed on a note — never on a scrub, never on the export path", () => {
+test("sound fires while playing or on a click that landed on a flower — never on a scrub, never on the export path", () => {
   const html = read("garden.html");
   // The loop's call is guarded by all three of: this frame came from the
   // loop, sound is on, and a player exists.
@@ -273,9 +273,10 @@ test("sound fires while playing or on a click that landed on a note — never on
   assert.equal(playSites.length, 2, `expected the loop and the click, got ${playSites.length}`);
   assert.match(html, /function playOneNote\(note\)/, "the click's note goes through one named path");
   // The click path is reached only from the card, which is reached only from
-  // a hit — and it builds its own four-line stream rather than replaying the
-  // frame, so clicking cannot sound the whole tick.
-  assert.match(html, /if \(found\) playOneNote\(found\.note\);/);
+  // a hit on one of the six clickable subjects — and it builds its own
+  // four-line stream rather than replaying the frame, so clicking cannot
+  // sound the whole tick.
+  assert.match(html, /if \(note\) playOneNote\(note\);/);
   assert.match(html, /sound note \$\{note\.numerator\} \$\{note\.denominator\}/);
 
   // Neither the scrubber nor either exporter reaches a player.

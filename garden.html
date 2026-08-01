@@ -156,16 +156,27 @@
       }
 
       /* ---------- the why card ---------- */
+      /* pointer-events:auto, unlike the mockup's card, because this one can
+         be DISMISSED. A card with no way out is the defect the first build
+         shipped: it covered the picture, every click through it opened
+         another one, and the only escape was the tick stepper. */
       #garden-card{
         position:absolute; max-width:300px; background:var(--paper);
         border:1px solid var(--graphite); border-radius:3px; padding:12px 13px;
-        box-shadow:0 8px 26px rgba(0,0,0,.28); pointer-events:none; z-index:5;
-        font-size:11.5px;
+        box-shadow:0 8px 26px rgba(0,0,0,.28); z-index:5; font-size:11.5px;
+      }
+      #garden-card .head{
+        display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
       }
       #garden-card h4{
-        font-family:var(--display); font-weight:700; font-size:13.5px;
-        letter-spacing:-.01em; margin:0 0 3px; word-break:break-word;
+        font-family:var(--display); font-weight:700; font-size:14px;
+        letter-spacing:-.01em; margin:0 0 3px;
       }
+      #garden-card .close{
+        flex:0 0 auto; border:0; background:none; padding:0 0 0 6px; margin:-2px -2px 0 0;
+        font-size:15px; line-height:1; color:var(--ink-40); cursor:pointer;
+      }
+      #garden-card .close:hover{background:none; color:var(--graphite)}
       #garden-card .where{font-size:10px; color:var(--ink-40); margin-bottom:10px}
       .step{position:relative; padding:0 0 0 18px; margin-bottom:10px}
       .step::before{
@@ -372,7 +383,7 @@
       import { walk as walkDrawing } from "./js/paint/stream.mjs";
       import { markSink } from "./js/paint/marks.mjs";
       import { hitTest, marksForLine, outlineOf } from "./js/paint/hit.mjs";
-      import { card, expand } from "./js/paint/why.mjs";
+      import { card } from "./js/paint/why.mjs";
       import { createAudioPlayer } from "./js/sound/audio.mjs";
       import { schedule as soundSchedule, BASE_HZ } from "./js/sound/stream.mjs";
       import { staleModuleWarning } from "./js/browser_main.mjs";
@@ -527,11 +538,33 @@
         return found;
       }
 
-      function highlightSourceLine(sourceLine) {
-        litLine = sourceLine;
+      function markLineInSource(sourceLine) {
         for (const el of sourceViewEl.children) {
           el.classList.toggle("hl", Number(el.dataset.line) === sourceLine);
         }
+      }
+
+      // TWO DIFFERENT THINGS, AND THE FIRST BUILD RAN THEM TOGETHER.
+      //
+      // Hovering a source line asks "what did this line draw?", and the
+      // answer is an outline around every mark it made — that is the map read
+      // backwards, and it is the point of the source pane.
+      //
+      // Clicking a mark asks the opposite question, and does NOT want the
+      // answer drawn on the picture. The first build routed both through one
+      // function, so clicking anything painted amber outlines over the scene —
+      // and clicking the sky, whose one line covers half the canvas, drew a
+      // rule straight across it. A click marks the line; it does not deface
+      // the frame.
+      function highlightSourceLine(sourceLine) {
+        litLine = sourceLine;
+        markLineInSource(sourceLine);
+        repaintFrame();
+      }
+
+      function markSourceLine(sourceLine) {
+        litLine = -1;
+        markLineInSource(sourceLine);
         repaintFrame();
       }
 
@@ -676,6 +709,7 @@
       function hideCard() {
         cardEl.hidden = true;
         cardEl.textContent = "";
+        markSourceLine(-1);
       }
 
       // WHAT A MARK AND A NOTE ACTUALLY SHARE. `paint/garden.planes`'s own
@@ -709,26 +743,214 @@
 
       const SHARED_NAMES = new Set(["g"]);
 
-      // The note this mark shares a number with, if any — plus the number
-      // itself, so the card can name it.
-      function noteForMark(markNode) {
+      // ---- WHAT IS CLICKABLE ------------------------------------------------
+      //
+      // NOT EVERYTHING. The first build made every mark answerable, which
+      // sounds generous and reads as noise: clicking the sky returned
+      // `rect of 0, 0, canvas-width, sky-split, 0` and outlined the entire
+      // upper half of the picture. `the-living-garden.html` answers six
+      // subjects and no more — the sun or moon, a flower, a bee, a firefly,
+      // the rain, the tree — and that list is the right one, because those
+      // are the things a reader can point at and name.
+      //
+      // A mark's subject is read off the program's own structure: the
+      // enclosing `to <name>` of the line that drew it. That is a fact about
+      // the source, not a name this page invented — which is the distinction
+      // that kept the heading as a raw source line last build, and the
+      // distinction that lets it be "this flower" now.
+      const SUBJECTS = new Map([
+        ["plant-petal", "flower"],
+        ["draw-plant", "flower"],
+        ["tree-branch", "tree"],
+        ["draw-bee", "bee"],
+        ["draw-firefly", "firefly"],
+        ["draw-rain", "rain"],
+        ["sky-body", "sky-body"],
+      ]);
+
+      function definitionAt(sourceLine) {
+        for (let i = sourceLine - 1; i >= 0; i--) {
+          const m = /^to ([a-z][a-z0-9-]*)/.exec(sourceLines[i] ?? "");
+          if (m) return m[1];
+        }
+        return null;
+      }
+
+      function subjectOf(mark, sourceLine) {
+        const kind = SUBJECTS.get(definitionAt(sourceLine));
+        if (!kind) return null;
+        // `draw-plant` draws the stem AND the flower's two circles. Only the
+        // flower is the flower — Rob's rule, and the one that makes a click
+        // land where a reader was aiming. The leaves are `plant-leaf`, a
+        // different definition, and are not clickable at all.
+        if (kind === "flower" && mark.kind !== "circle" && mark.kind !== "ellipse") return null;
+        return kind;
+      }
+
+      function subjectTitle(kind, tick) {
+        if (kind !== "sky-body") {
+          return { flower: "this flower", tree: "the tree", bee: "this bee",
+                   firefly: "this firefly", rain: "the rain" }[kind];
+        }
+        // Which body is up is the same phase the clock reads, not a second
+        // opinion: day runs from a quarter past midnight to three quarters.
+        const phase = (tick % DAY_LENGTH) / DAY_LENGTH;
+        return phase >= 0.25 && phase < 0.75 ? "the sun" : "the moon";
+      }
+
+      // The marks a click may land on, and their indices in the real array.
+      function clickableMarks() {
+        const list = [];
+        const indices = [];
+        lastMarks.forEach((mark, i) => {
+          const entry = lastTrace[mark.line];
+          if (!entry || !subjectOf(mark, entry[1])) return;
+          list.push(mark);
+          indices.push(i);
+        });
+        return { list, indices };
+      }
+
+      // ---- THE FLOWER'S NOTE ------------------------------------------------
+      //
+      // `paint/garden.planes` emits a note only when a bee LANDS — 25 ticks
+      // out of 300. So "click a flower and hear it" cannot be answered by
+      // waiting for the program to play one; at nine ticks in ten there is
+      // nothing to find, which is exactly what the first build did and why it
+      // was silent.
+      //
+      // The program's rule is four lines (`pentatonic-n`/`pentatonic-d` at
+      // 633 and 648, `k = whole of (g * 5)` at 686, octave 1 at 687), and it
+      // is RESTATED here rather than re-derived, because a page cannot call
+      // into a program's functions. A restatement that drifts is a page that
+      // lies, so it does not go unchecked: js/test/garden_card.test.mjs runs
+      // every bee-landing tick in the scrubber's span and asserts this table
+      // reproduces the ratio the program actually emitted. If the scale ever
+      // changes, that suite goes red before anyone hears a wrong note.
+      // ONE COPY, READ BY THE TEST. The suite parses these two literals out
+      // of this file rather than keeping its own, so there is no second table
+      // to drift from the first.
+      const PENTATONIC = [[1, 1], [9, 8], [5, 4], [3, 2], [5, 3]];
+      const FLOWER_OCTAVE = 1;
+
+      function flowerNote(g) {
+        // `whole of` ROUNDS — half away from zero (js/planes_num.mjs's
+        // roundTo) — it does not truncate, whatever interp.mjs's own error
+        // prose for a bad argument says. `whole of 3.54` is 4, so a flower
+        // with g 0.708994 plays 5/3 and not 3/2. This suite caught that on
+        // its first run, which is the entire argument for having it.
+        const k = Math.max(0, Math.min(PENTATONIC.length - 1, Math.round(g * 5)));
+        const [numerator, denominator] = PENTATONIC[k];
+        return {
+          numerator, denominator, octave: FLOWER_OCTAVE, at: 0, lasts: 1.6,
+          wave: "sine", gain: 0.06,
+          frequency: BASE_HZ * Math.pow(2, FLOWER_OCTAVE) * (numerator / denominator),
+        };
+      }
+
+      // Did a bee actually play this flower's note on THIS tick? Rare (25
+      // ticks in 300) and worth saying when it happens, because then the
+      // number really was read twice in one frame.
+      function beePlayedThisTick(g) {
         const notes = soundSchedule(lastLines).notes;
-        if (!notes.length) return null;
-        const mine = namedValues(markNode, SHARED_NAMES);
-        if (!mine.size) return null;
+        if (!notes.length) return false;
         const soundIndices = [];
         lastLines.forEach((l, i) => {
           if (l.startsWith("sound note ")) soundIndices.push(i);
         });
         for (let i = 0; i < soundIndices.length && i < notes.length; i++) {
           const entry = lastTrace[soundIndices[i]];
-          if (!entry) continue;
-          const theirs = namedValues(entry[0], SHARED_NAMES);
-          for (const value of theirs.keys()) {
-            if (mine.has(value)) return { note: notes[i], shared: { name: "g", value } };
+          if (entry && namedValues(entry[0], SHARED_NAMES).has(g)) return true;
+        }
+        return false;
+      }
+
+      // ---- WHAT THE CARD SAYS -----------------------------------------------
+      //
+      // NAMES, NOT COORDINATES. `card().rows` is one row per number in the
+      // drawing command, which for `circle of p.tip-x, p.tip-y, (8 + p.g *
+      // 6.4)` reads "~186.931231836987 from .tip-x" — true, and useless to
+      // anyone who is not debugging the renderer. What a reader wants is the
+      // shape the original mockup had: a few NAMED values, each with the
+      // expression that produced it.
+      //
+      // Both halves are read, not invented. The names and their values come
+      // off the derivation graph, nearest first. The expression comes out of
+      // the PROGRAM'S OWN TEXT — the line that binds the name, inside the
+      // definition that drew the mark where there is one — so the card shows
+      // `(24 + g * 96) * grow`, which is what the author wrote, rather than
+      // `*`, which is all the derivation node's label carries.
+      // The tick and the seed end a chain; they are the origin row, not a step.
+      const INPUT_NAMES = new Set(["tick", "seed", "keys", "pointer", "state"]);
+
+      // A value a reader can read. `why.mjs`'s own valueText rounds for the
+      // same reason: `plant-x of i` is exact to fifty digits, and fifty
+      // digits in a card is not more truthful, it is unreadable.
+      function readable(value) {
+        if (value === null || value === undefined) return "nothing";
+        if (typeof value === "boolean") return value ? "true" : "false";
+        if (typeof value === "object" && typeof value.text === "function") {
+          const text = value.text();
+          const n = Number(text.replace(/^~/, ""));
+          if (Number.isFinite(n) && /\.\d{5,}/.test(text)) {
+            return `${text.startsWith("~") ? "~" : ""}${Math.round(n * 1000) / 1000}`;
+          }
+          return text;
+        }
+        if (typeof value === "number") {
+          return Number.isInteger(value) ? String(value) : String(Math.round(value * 1000) / 1000);
+        }
+        if (typeof value === "string") return value;
+        return null; // a record or a list is not a step a reader wants
+      }
+
+      function namedNodes(node) {
+        const found = [];
+        const queue = [node];
+        const walked = new Set();
+        while (queue.length) {
+          const current = queue.shift();
+          if (!current || walked.has(current)) continue;
+          walked.add(current);
+          if (current.kind === "name" && !INPUT_NAMES.has(current.label)) {
+            const text = readable(current.value);
+            if (text !== null && !found.some((f) => f.name === current.label)) {
+              found.push({ name: current.label, value: text });
+            }
+          }
+          for (const input of Array.isArray(current.inputs) ? current.inputs : []) {
+            queue.push(input);
           }
         }
-        return null;
+        return found;
+      }
+
+      // The right-hand side of the line that binds `name`.
+      //
+      // ONLY WHEN IT IS UNAMBIGUOUS. `y` is bound in `draw-rain` and again as
+      // a parameter elsewhere, and the first version of this took the first
+      // match in the file — so a flower's card explained its y with the
+      // RAIN's expression. A binding counts if it is inside the definition
+      // that drew the mark, or if the whole program binds that name exactly
+      // once. Otherwise the row shows the value and no expression, because a
+      // confident wrong answer is the one thing this page must never give.
+      function bindingOf(name, definition) {
+        const pattern = new RegExp(
+          `^\\s*(?:let\\s+)?${name.replace(/-/g, "\\-")}\\s*=\\s*(.+?)(?:\\s+because\\s.*)?$`,
+        );
+        const all = [];
+        let inScope = null;
+        let current = null;
+        for (const text of sourceLines) {
+          const def = /^to ([a-z][a-z0-9-]*)/.exec(text);
+          if (def) current = def[1];
+          const m = pattern.exec(text);
+          if (!m) continue;
+          all.push(m[1].trim());
+          if (inScope === null && current === definition) inScope = m[1].trim();
+        }
+        if (inScope) return inScope;
+        return all.length === 1 ? all[0] : null;
       }
 
       // One note, now, through the real player and the real stream walk — a
@@ -755,98 +977,118 @@
           : `from base (${BASE_HZ})${octave} × ${ratio}`;
       }
 
+      // How many named steps a card shows before it stops. Four is the
+      // original mockup's count, and the point at which a card stops reading
+      // like an answer and starts reading like a stack trace.
+      const MAX_STEPS = 4;
+
       function renderCard(index, x, y) {
         const mark = lastMarks[index];
         const entry = lastTrace[mark.line];
         if (!entry) return;
         const [node, sourceLine] = entry;
+        const kind = subjectOf(mark, sourceLine);
+        if (!kind) return;
+        const definition = definitionAt(sourceLine);
         const c = card(node, {
           annotations: lastAnnotations,
           line: sourceLine,
           sourceText: sourceLines[sourceLine - 1] ?? "",
         });
-        const deeper = expand(node, { annotations: lastAnnotations });
-        const found = noteForMark(node);
 
-        const step = (value, src, cls = "") =>
+        const step = (value, src, cls = "", because = "") =>
           `<div class="step ${cls}"><span class="dot"></span><div class="line">` +
-          `<span class="val">${esc(value)}</span> <span class="src">${src}</span></div></div>`;
+          `<span class="val">${esc(value)}</span> <span class="src">${src}</span>` +
+          (because ? `<span class="because">“${esc(because)}”</span>` : "") +
+          `</div></div>`;
 
-        const rows = c.rows.length
-          ? c.rows
-              .map((row) => step(row.value, `from ${esc(row.step ? row.step.label : "a value")}`))
-              .join("")
-          : step(c.value, `from ${esc(c.step ? c.step.label : "a value")}`);
-
-        // `because` outranks arithmetic — the author's sentence rides on the
-        // step it belongs to rather than becoming a row of its own.
-        const becauseHtml = c.because
-          .map(
-            (b) =>
-              `<div class="step"><span class="dot"></span><div class="line">` +
-              `<span class="val">${esc(b.name)}</span> <span class="src">${esc(b.value)}</span>` +
-              `<span class="because">“${esc(b.text)}”</span></div></div>`,
-          )
+        // WHICH NAMES EARN A ROW. Walking the chain nearest-first returns the
+        // drawing command's own locals — `r`, `x`, `y`, `p` — which is what
+        // the renderer needed and not what a reader asked. The names worth
+        // showing are the ones the AUTHOR marked worth showing: a `because`
+        // is the program saying "this value matters, and here is why". Those
+        // come first, then `g` (a flower's whole identity, and the number its
+        // note is picked from), then whatever else the chain names, up to the
+        // mockup's four.
+        const all = namedNodes(node).filter((n) => {
+          // A name bound to a bare literal explains nothing: `day-length 100
+          // from 100` is a row that costs a line and answers no question.
+          const binding = bindingOf(n.name, definition);
+          return binding !== n.value;
+        });
+        const g = all.find((n) => n.name === "g");
+        const annotated = all.filter((n) => lastAnnotations[n.name] !== undefined);
+        // `g` KEEPS ITS SLOT. It is the flower's whole identity — its height
+        // and its note both come from it, which is the one thing this card
+        // exists to show — and four annotated names would otherwise crowd it
+        // out of its own card.
+        const chosen = g ? [g] : [];
+        for (const candidate of [...annotated, ...all]) {
+          if (chosen.length >= MAX_STEPS) break;
+          if (!chosen.some((c) => c.name === candidate.name)) chosen.push(candidate);
+        }
+        // Nearest-first for reading, with `g` wherever the chain put it.
+        chosen.sort((a, b) => all.indexOf(a) - all.indexOf(b));
+        const rows = chosen
+          .map((n) => {
+            const binding = bindingOf(n.name, definition);
+            const shared = kind === "flower" && n.name === "g" ? "shared" : "";
+            return step(
+              `${n.name} ${n.value}`,
+              binding ? `from ${esc(binding)}` : "",
+              shared,
+              lastAnnotations[n.name] ?? "",
+            );
+          })
           .join("");
 
-        // The expansion is one more step, not a different kind of row.
-        const deeperHtml = deeper.length
-          ? step("one step further", esc(deeper.map((d) => d.value).join(", ")))
-          : "";
+        // A flower's note is a pure function of its own `g`, whether or not a
+        // bee happened to land on this tick.
+        const note = kind === "flower" && g ? flowerNote(Number(g.value)) : null;
+        const alsoPlayed = note ? beePlayedThisTick(g.value) : false;
 
-        const sharedHtml = found
-          ? step(
-              `${found.shared.name} ${found.shared.value}`,
-              "shaped this mark and the note below",
-              "shared",
-            )
-          : "";
-
-        const noteHtml = found
+        const noteHtml = note
           ? `<div class="divider"></div><div class="noteline">` +
-            `<span class="k">the note you just heard</span>` +
-            `<div class="line"><span class="val">${Math.round(found.note.frequency * 10) / 10} Hz</span> ` +
-            `<span class="src">${intervalText(found.note)}</span></div>` +
-            `<div class="badge-note">The same <b style="color:var(--clay)">${found.shared.name} ` +
-            `${esc(found.shared.value)}</b> chose this mark and that note. The program computes it ` +
-            `twice — <code>plant-g</code> is called again for the bee — so it is one number read ` +
-            `in two places, not one node shared between them.</div></div>`
+            `<span class="k">${alsoPlayed ? "the note you just heard" : "this flower's note"}</span>` +
+            `<div class="line"><span class="val">${Math.round(note.frequency * 10) / 10} Hz</span> ` +
+            `<span class="src">${intervalText(note)}</span></div>` +
+            `<div class="badge-note">The same <b style="color:var(--clay)">g ${esc(g.value)}</b> ` +
+            `set this flower's height and picked its note.` +
+            (alsoPlayed
+              ? " A bee reached it on this tick, so the program played it too."
+              : " A bee plays it when it lands — you can ask any time.") +
+            `</div></div>`
           : "";
 
         const badges =
           `<div class="divider"></div>` +
           (c.approximate
             ? `<span class="badge">approximate — the chain reaches <code>sine</code></span>` +
-              `<div class="badge-note">Approximate is not unpredictable. Every implementation ` +
-              `computes this sine bit-identically, so this exact garden grows on every machine.</div>`
+              `<div class="badge-note">Not unpredictable — every machine computes this sine identically.</div>`
             : `<span class="badge calm">exact — nothing in this chain approximates</span>` +
               `<div class="badge-note">Every value here is a rational held as a rational.</div>`) +
-          (found
+          (note
             ? `<div style="margin-top:10px"><span class="badge calm">` +
-              `${found.note.numerator}/${found.note.denominator} is exactly ` +
-              `${found.note.numerator}/${found.note.denominator}</span></div>` +
-              `<div class="badge-note">The intervals never drift. A ratio is held as a ratio, forever.</div>`
+              `${note.numerator}/${note.denominator} is exactly ` +
+              `${note.numerator}/${note.denominator}</span></div>` +
+              `<div class="badge-note">A ratio is held as a ratio, forever.</div>`
             : "");
 
-        // The title is the SOURCE LINE ITSELF, trimmed. The trace carries a
-        // derivation node and a line number and nothing else — no enclosing
-        // definition, no call site (interp.mjs's `trace_line` collapses the
-        // call stack to one number before the page ever sees it) — so "this
-        // plant" is a name this page would be inventing. The line that drew
-        // the mark is the thing the trace can actually justify.
-        const heading = (sourceLines[sourceLine - 1] ?? "").trim() || `line ${sourceLine}`;
+        // The heading names the THING, not the drawing command. The enclosing
+        // `to <name>` of the line that drew this mark is a fact about the
+        // source, which is what makes "this flower" a reading rather than an
+        // invention — the line number is still underneath it.
         cardEl.innerHTML =
-          `<h4>${esc(heading)}</h4>` +
-          `<div class="where">line ${sourceLine} of paint/garden.planes</div>` +
+          `<div class="head"><h4>${esc(subjectTitle(kind, scrubber.getTick()))}</h4>` +
+          `<button class="close" type="button" aria-label="close">✕</button></div>` +
+          `<div class="where">line ${sourceLine} · ${esc(definition)}</div>` +
           rows +
-          becauseHtml +
-          deeperHtml +
-          sharedHtml +
           `<div class="step origin"><span class="dot"></span><div class="line">` +
           `<span class="src">${esc(c.origin.text)}</span></div></div>` +
           noteHtml +
           badges +
           `<div class="closing">asking performed nothing — the effect surface above is unchanged</div>`;
+        cardEl.querySelector(".close").addEventListener("click", hideCard);
 
         // The card is positioned in CSS pixels, so the program coordinate is
         // scaled by the ratio of the element's laid-out width to the
@@ -856,39 +1098,58 @@
         cardEl.hidden = false;
         cardEl.style.left = `${Math.max(4, Math.min(rect.width - 306, x * scale + 12))}px`;
         cardEl.style.top = "0px";
-        // A full answer — five numbers, three `because` clauses, the shared
-        // node, the note and two badges — is taller than the picture it is
-        // answering about. Placed naively at the mark it runs off the bottom
-        // and the reader loses the half that matters. So it is measured once
-        // it has content and pulled back up to sit inside the frame; only a
-        // card taller than the whole canvas overflows, and then from the top,
-        // where the heading is.
+        // Measured once it has content and pulled back up to sit inside the
+        // frame, so a tall answer never runs off the bottom of the picture.
         const wanted = y * scale - 8;
         const highest = Math.max(4, rect.height - cardEl.offsetHeight - 4);
         cardEl.style.top = `${Math.max(4, Math.min(wanted, highest))}px`;
 
-        highlightSourceLine(sourceLine);
+        // The source line is marked, and the SOURCE PANE is scrolled to it —
+        // but the PAGE is not. `scrollIntoView` walks every scrollable
+        // ancestor, so a click on a flower jumped the whole document down to
+        // the listing and threw the reader out of the picture they were
+        // looking at. Setting scrollTop moves the one box that should move.
+        markSourceLine(sourceLine);
         const el = [...sourceViewEl.children].find((e) => Number(e.dataset.line) === sourceLine);
-        if (el) el.scrollIntoView({ block: "nearest" });
+        if (el) {
+          sourceViewEl.scrollTop =
+            el.offsetTop - sourceViewEl.offsetTop - sourceViewEl.clientHeight / 2;
+        }
 
-        if (found) playOneNote(found.note);
+        if (note) playOneNote(note);
       }
 
       canvas.addEventListener("click", (event) => {
-        // Clicking pauses, and answers about the frame on screen.
+        // Clicking pauses. The card describes ONE frame — its numbers are the
+        // values at this tick — so a card over a running scene would be stale
+        // before it finished rendering.
         if (loop.isRunning()) setPlaying(false);
         const rect = canvas.getBoundingClientRect();
         // PROGRAM coordinates, not backing-store pixels: the marks are in the
         // space `paint/garden.planes` drew in, and that is what hitTest reads.
         const x = ((event.clientX - rect.left) / rect.width) * DIMENSIONS.width;
         const y = ((event.clientY - rect.top) / rect.height) * DIMENSIONS.height;
-        const index = hitTest(lastMarks, x, y, { area: DIMENSIONS });
-        if (index < 0) {
+        // Only the six subjects are hit-tested, so a click that lands on the
+        // sky, the grass or a leaf reads as "nothing here" and closes the
+        // card instead of answering with a gradient's coordinates.
+        const { list, indices } = clickableMarks();
+        const found = hitTest(list, x, y, { area: DIMENSIONS });
+        if (found < 0) {
           hideCard();
-          highlightSourceLine(-1);
           return;
         }
-        renderCard(index, x, y);
+        renderCard(indices[found], x, y);
+      });
+
+      // Every ordinary way out: the ✕, the Escape key, a click on empty sky,
+      // and a click anywhere off the picture.
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") hideCard();
+      });
+      document.addEventListener("click", (event) => {
+        if (cardEl.hidden) return;
+        if (canvas.contains(event.target) || cardEl.contains(event.target)) return;
+        hideCard();
       });
 
       // Hovering a source line lights up every mark it drew — the same map,
