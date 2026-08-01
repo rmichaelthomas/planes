@@ -17,6 +17,7 @@ import {
 } from "./lexer.mjs";
 import { PlanesNumber } from "./planes_num.mjs";
 import { amberTemplates } from "./grammar_data.mjs";
+import { noteLine, recordingLines } from "./core_restrict.mjs";
 import {
   Num,
   Str,
@@ -230,7 +231,22 @@ export class Parser {
   }
 
   // ---- statements
+  //
+  // The one choke point every statement passes through, and therefore the one
+  // place the core-restricted mode's line stamp goes. `when`, `let` and `why` —
+  // three of the four keywords grammar/core.json excludes — land on nodes with no
+  // `line` field, and adding one would change the AST's SHAPE, which
+  // grammar/parser.planes pins. The stamp rides beside the tree instead
+  // (js/core_restrict.mjs's WeakMap) and is not taken at all unless a restricted
+  // interpreter armed it, so an ordinary parse pays one already-false boolean
+  // test per statement and stores nothing.
   parse_statement() {
+    if (!recordingLines()) return this.parse_statement_body();
+    const line = this.peek().line;
+    return noteLine(this.parse_statement_body(), line);
+  }
+
+  parse_statement_body() {
     if (this.accept("USE")) {
       const module = this.expect("NAME").value;
       const renames = [];
