@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Planes — running in a browser</title>
+    <title>Try Planes — run it in a browser</title>
     <meta
       name="description"
       content="A general-purpose programming language that shows its work: what a program can do to the outside world, and where every value came from. Run it and analyse it here, with no build step."
     />
     <link rel="canonical" href="https://github.com/rmichaelthomas/planes" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Planes — running in a browser" />
+    <meta property="og:title" content="Try Planes — run it in a browser" />
     <meta
       property="og:description"
       content="A general-purpose programming language that shows its work: what a program can do to the outside world, and where every value came from. Run it and analyse it here, with no build step."
@@ -59,24 +59,11 @@
       }
       footer { margin-top: 2rem; color: #888; font-size: 12px; }
       code { background: rgba(128,128,128,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
-      nav.pages {
-        display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1.25rem 0 1.75rem;
-      }
-      nav.pages a {
-        flex: 1 1 15rem; padding: 0.7rem 0.9rem; border: 1px solid #d0d3d9;
-        border-radius: 8px; text-decoration: none; color: inherit;
-      }
-      nav.pages a:hover { border-color: #2d6cdf; }
-      nav.pages strong { display: block; font-size: 0.95rem; }
-      nav.pages span { color: #666; font-size: 12px; }
-      @media (prefers-color-scheme: dark) {
-        nav.pages a { border-color: #333; }
-        nav.pages span { color: #999; }
-      }
     </style>
   </head>
   <body>
-    <h1>Planes, in JavaScript</h1>
+    <h1>Try Planes</h1>
+    <p class="sub"><a href="./index.html">← all of Planes</a></p>
     <p class="sub">
       A complete Planes implementation — lexer, parser, interpreter, and
       <em>static effect analyser</em> — running in your browser, with no Python
@@ -85,19 +72,6 @@
       boundaries, which destinations — without running a line of it.
     </p>
 
-    <nav class="pages">
-      <a href="./paint.html"
-        ><strong>Planes draws ▲</strong
-        ><span>turtle, bloom, snake — one program, two renderers</span></a
-      >
-      <a href="./garden.html"
-        ><strong>The garden ❀</strong
-        ><span
-          >a scene that lives: weather, growth, sound — click any mark to ask
-          where it came from</span
-        ></a
-      >
-    </nav>
 
     <textarea id="source" spellcheck="false">
 # Planes runs here — and can tell you what a program would touch
