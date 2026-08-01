@@ -9,61 +9,106 @@
       content="A Planes program runs, its show output paints a canvas or writes an SVG, and its computed effect surface is shown beside it — nothing added to the language. No build step, no server, no network."
     />
     <style>
-      :root { color-scheme: light dark; }
-      body {
-        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        max-width: 980px; margin: 2rem auto; padding: 0 1rem;
+      /* THE IDENTITY TOKENS, shared verbatim with every other page on this
+         site. One appearance: paper. No dark-mode block — a page that changes
+         its clothes with the viewer's OS is two designs neither of which was
+         drawn, and that is the rule this site follows; the
+         `prefers-color-scheme` block that used to live here is gone. */
+      :root {
+        --paper:#F7F2E9; --graphite:#211D19; --line:#D6C9B4; --clay:#A65A2E;
+        --ink-60:rgba(33,29,25,.62); --ink-40:rgba(33,29,25,.40);
+        --display:"Red Hat Display",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+        --mono:"Martian Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
       }
-      h1 { font-size: 1.4rem; margin-bottom: 0.2rem; }
-      p.sub { color: #666; margin-top: 0; }
-      textarea, pre {
-        font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-        width: 100%; box-sizing: border-box;
+      @font-face {
+        font-family:"Red Hat Display"; font-style:normal; font-weight:700 900;
+        font-display:swap; src:url("identity/fonts/red-hat-display.woff2") format("woff2");
       }
-      textarea {
-        min-height: 12rem; padding: 0.75rem; border: 1px solid #ccc;
-        border-radius: 6px; resize: vertical;
+      @font-face {
+        font-family:"Martian Mono"; font-style:normal; font-weight:400 500;
+        font-display:swap; src:url("identity/fonts/martian-mono.woff2") format("woff2");
       }
-      select {
-        font-size: 14px; padding: 0.4rem 0.6rem; border-radius: 6px;
-        border: 1px solid #ccc; background: #fff; margin: 0.75rem 0.4rem 0.75rem 0;
+
+      *{box-sizing:border-box}
+      body{
+        margin:0 auto; padding:34px 16px 56px; background:var(--paper);
+        color:var(--graphite); font-family:var(--mono); font-size:12.5px;
+        line-height:1.6; -webkit-font-smoothing:antialiased;
       }
-      button {
-        margin: 0.75rem 0.4rem 0.75rem 0; padding: 0.5rem 1.1rem; font-size: 14px;
-        border: 0; border-radius: 6px; background: #2d6cdf; color: #fff; cursor: pointer;
+      h1{
+        font-family:var(--display); font-weight:900; font-size:28px; line-height:1.05;
+        letter-spacing:-.02em; margin:0 0 5px;
       }
-      button:hover { background: #245ac0; }
-      button.secondary { background: #4a8a5c; }
-      button.secondary:hover { background: #3c7049; }
-      button.tertiary { background: #6b6b6b; }
-      button.tertiary:hover { background: #565656; }
-      button:disabled { background: #9aa7b8; cursor: not-allowed; }
-      .hint { color: #888; font-size: 12px; }
-      .columns { display: flex; gap: 1.25rem; flex-wrap: wrap; align-items: flex-start; }
-      .col-canvas { flex: 0 0 auto; }
-      .col-surface { flex: 1 1 260px; min-width: 260px; }
-      canvas {
-        display: block; background: #fff; border: 1px solid #ccc; border-radius: 6px;
-        max-width: 100%;
+      p.sub{margin:0 0 18px; font-size:11.5px; line-height:1.7; color:var(--ink-60)}
+      p.sub a{color:var(--clay)}
+      em{font-style:normal; font-weight:500; color:var(--graphite)}
+
+      textarea, select, pre{font-family:var(--mono)}
+      textarea{
+        width:100%; padding:11px 12px; font-size:11.5px; line-height:1.75;
+        border:1px solid var(--line); border-radius:3px; background:#fff;
+        color:var(--graphite); resize:vertical;
       }
-      pre#paint-surface {
-        background: #f6f7f9; padding: 0.75rem; border-radius: 6px;
-        min-height: 3rem; overflow-x: auto; white-space: pre-wrap;
-        max-height: 26rem; overflow-y: auto;
+      select{
+        font-family:var(--mono); font-size:11px; padding:7px 9px; border-radius:3px;
+        border:1px solid var(--line); background:#fff; color:var(--graphite);
+        margin:11px 6px 11px 0;
       }
-      pre#paint-output {
-        background: #f6f7f9; padding: 0.75rem; border-radius: 6px;
-        min-height: 2.5rem; overflow-x: auto; white-space: pre-wrap;
+
+      /* This site's control language: an outline, not a filled block. */
+      button{
+        font-family:var(--mono); font-size:11px; font-weight:500; padding:7px 13px;
+        margin:11px 6px 11px 0; border:1px solid var(--line); border-radius:3px;
+        background:transparent; color:var(--ink-60); cursor:pointer;
+        transition:background .12s, color .12s, border-color .12s;
       }
-      pre#paint-output.error { color: #b00020; }
-      @media (prefers-color-scheme: dark) {
-        textarea, select { background: #1b1d22; border-color: #333; color: #e6e6e6; }
-        pre#paint-surface, pre#paint-output { background: #16181d; color: #e6e6e6; }
-        canvas { background: #16181d; border-color: #333; }
-        p.sub, .hint { color: #999; }
+      button:hover{background:var(--line); color:var(--graphite)}
+      button.accent{border-color:var(--clay); color:var(--clay)}
+      button.accent:hover{background:var(--clay); border-color:var(--clay); color:var(--paper)}
+      button.tertiary{font-size:10.5px; padding:5px 9px}
+      button:disabled{color:var(--ink-40); border-color:var(--line); background:transparent; cursor:not-allowed}
+      button:disabled:hover{background:transparent; color:var(--ink-40)}
+      button:focus-visible, select:focus-visible, textarea:focus-visible{
+        outline:2px solid var(--clay); outline-offset:2px;
       }
-      footer { margin-top: 2rem; color: #888; font-size: 12px; }
-      code { background: rgba(128,128,128,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+
+      .hint{color:var(--ink-40); font-size:10.5px}
+      footer{
+        margin-top:30px; padding-top:14px; border-top:1px solid var(--line);
+        color:var(--ink-40); font-size:10.5px; line-height:1.75;
+      }
+      footer a{color:var(--clay)}
+      code{
+        font-family:var(--mono); font-size:.92em; background:rgba(33,29,25,.06);
+        padding:.1em .35em; border-radius:2px;
+      }
+
+      /* ---------- page-specific ---------- */
+      /* The one primary action on this page wears the accent; every
+         other control is the quiet outline. `.secondary` needs no rule
+         any more — quiet IS the default now. */
+      button#paint-run{border-color:var(--clay); color:var(--clay)}
+      button#paint-run:hover{background:var(--clay); border-color:var(--clay); color:var(--paper)}
+      body{max-width:980px}
+      textarea{min-height:12rem}
+      .columns{display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start}
+      .col-canvas{flex:0 0 auto}
+      .col-surface{flex:1 1 260px; min-width:260px}
+      /* The canvas stays WHITE. It is the drawing surface, not page chrome —
+         a program's own `background` decides what fills it, and tinting the
+         paper colour through it would change every picture. */
+      canvas{
+        display:block; background:#fff; border:1px solid var(--line);
+        border-radius:3px; max-width:100%;
+      }
+      pre#paint-surface, pre#paint-output{
+        margin:0; padding:11px 12px; font-size:11px; line-height:1.7;
+        white-space:pre-wrap; overflow-x:auto;
+        border:1px solid var(--line); border-radius:3px; background:#fff;
+      }
+      pre#paint-surface{min-height:3rem; max-height:26rem; overflow-y:auto}
+      pre#paint-output{min-height:2.5rem}
+      pre#paint-output.error{color:var(--clay)}
     </style>
   </head>
   <body>
@@ -71,13 +116,13 @@
     <p class="sub">
       A canvas runtime that adds nothing to the language: a program draws by
       emitting <code>show</code> lines carrying the versioned drawing
-      protocol — every line prefixed <code>draw</code>, thirty-three verbs,
+      protocol — every line prefixed <code>draw</code>, thirty-four verbs,
       OKLCH colour (see the footer) — usually through <code>use draw</code>'s
       helpers rather than assembled by hand, and the page paints them. Input
       crosses in as a value, not an effect; state crosses the tick boundary
       through <code>write state to "state.json"</code>, one direction. The
       effect surface beside the canvas is computed, not declared — the same
-      analyser <code>index.html</code> uses, now following <code>use</code>
+      analyser <code>try.html</code> uses, now following <code>use</code>
       across the module graph too — and it is never hidden.
     </p>
     <p class="sub">
@@ -138,10 +183,11 @@
     <pre id="paint-output">(no output yet)</pre>
 
     <footer>
-      Drawing Protocol v2 — thirty-three verbs, every line prefixed
+      Drawing Protocol v3 — thirty-four verbs, every line prefixed
       <code>draw</code>: colour and line (<code>stroke</code>,
       <code>fill</code>, <code>width</code>, <code>cap</code>,
-      <code>corner</code>, <code>alpha</code>, <code>dash</code>), shapes
+      <code>corner</code>, <code>alpha</code>, <code>dash</code>,
+      <code>blur</code>), shapes
       (<code>line</code>, <code>rect</code>, <code>circle</code>,
       <code>ellipse</code>, <code>arc</code>, <code>triangle</code> —
       <code>rect</code>/<code>ellipse</code> take an optional rotation),
