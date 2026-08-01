@@ -69,6 +69,11 @@ export const KEYWORDS_A_NODE_CAN_CARRY = {
 
 // `first N of L` is the one BinOp whose operator is spelled with two reserved
 // words. The comparison operators (<, ==, ...) are OP tokens and no keyword.
+// NOT A VOCABULARY TABLE (derived-surface-audit Check A): keyed by BinOp op
+// names, not by an intent to enumerate the keyword set -- `and`/`or`/`in`/
+// `first` are the only operators ever spelled with a keyword at all, so 4 of
+// 32 is not an omission here, it is the whole closed set this table was ever
+// going to have.
 const BINOP_KEYWORDS = {
   and: ["and"],
   or: ["or"],

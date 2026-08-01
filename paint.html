@@ -203,10 +203,15 @@
       A line not beginning with <code>draw</code> goes to the output pane as
       text, unconditionally; a line that does begin with <code>draw</code> is
       always a command, and a malformed one is reported as an error rather
-      than drawn. A stream declares its version — <code>draw protocol 1</code>
-      or <code>draw protocol 2</code>, or nothing (version 1) — and a version-2
-      verb used without declaring version 2 is refused rather than silently
-      drawn.
+      than drawn. A stream declares its version — <code>draw protocol 1</code>,
+      <code>draw protocol 2</code>, or <code>draw protocol 3</code>, or nothing
+      (version 1) — and a verb introduced in a later version, used without
+      declaring it, is refused rather than silently drawn. The one exception:
+      an optional argument that widens an existing verb's arity (the rotation
+      on <code>rect</code>/<code>ellipse</code>, the inner radius on
+      <code>gradient radial</code>) is accepted regardless of the declared
+      version — it adds no new verb, so there is nothing for a version to
+      gate.
       <br /><br />
       <strong>Two renderers.</strong> The canvas and the SVG exporter are
       sinks for one stream walk (<code>js/paint/stream.mjs</code>): the version
