@@ -5,12 +5,12 @@
     "js/paint/protocol.mjs",
     "js/paint/stream.mjs"
   ],
-  "count": 27,
+  "count": 29,
   "entries": [
     {
       "kind": "error",
       "tag": "wrong-arity",
-      "source": "js/paint/protocol.mjs:110",
+      "source": "js/paint/protocol.mjs:140",
       "raised_in": "parseProtocol",
       "template": "\"protocol\" takes exactly one argument (the version number) in \"{line}\", got {args.length}",
       "slots": [
@@ -23,7 +23,7 @@
     {
       "kind": "error",
       "tag": "bad-protocol-version",
-      "source": "js/paint/protocol.mjs:118",
+      "source": "js/paint/protocol.mjs:148",
       "raised_in": "parseProtocol",
       "template": "\"protocol\" takes a positive whole number version in \"{line}\", got \"{args[0]}\"",
       "slots": [
@@ -36,7 +36,7 @@
     {
       "kind": "error",
       "tag": "wrong-arity",
-      "source": "js/paint/protocol.mjs:131",
+      "source": "js/paint/protocol.mjs:161",
       "raised_in": "parseLabel",
       "template": "\"label\" takes two numbers and text to draw in \"{line}\"",
       "slots": [
@@ -48,7 +48,7 @@
     {
       "kind": "error",
       "tag": "bad-number",
-      "source": "js/paint/protocol.mjs:142",
+      "source": "js/paint/protocol.mjs:172",
       "raised_in": "parseLabel",
       "template": "\"{bad}\" is not a valid number in \"{line}\"",
       "slots": [
@@ -61,7 +61,7 @@
     {
       "kind": "error",
       "tag": "bad-word",
-      "source": "js/paint/protocol.mjs:161",
+      "source": "js/paint/protocol.mjs:197",
       "raised_in": "parseGradient",
       "template": "\"gradient\" takes one of {Object.keys(GRADIENT_KINDS).join(\", \")} in \"{line}\", got \"{kindWord ?? \"\"}\"",
       "slots": [
@@ -75,12 +75,12 @@
     {
       "kind": "error",
       "tag": "wrong-arity",
-      "source": "js/paint/protocol.mjs:170",
+      "source": "js/paint/protocol.mjs:209",
       "raised_in": "parseGradient",
-      "template": "\"gradient {kindWord}\" takes {expected} numeric arguments in \"{line}\", got {rest.length}",
+      "template": "\"gradient {kindWord}\" takes {range} numeric arguments in \"{line}\", got {rest.length}",
       "slots": [
         "kindWord",
-        "expected",
+        "range",
         "line",
         "rest.length"
       ],
@@ -90,7 +90,7 @@
     {
       "kind": "error",
       "tag": "bad-number",
-      "source": "js/paint/protocol.mjs:179",
+      "source": "js/paint/protocol.mjs:218",
       "raised_in": "parseGradient",
       "template": "\"{rest[badIndex]}\" is not a valid number in \"{line}\"",
       "slots": [
@@ -98,12 +98,39 @@
         "line"
       ],
       "fix": "use digits with an optional leading - and a decimal point, e.g. 12.5 (no exponent notation; a leading ~ is fine)",
-      "id": "protocol.bad-number.parseGradient"
+      "id": "protocol.bad-number.parseGradient-1"
+    },
+    {
+      "kind": "error",
+      "tag": "bad-number",
+      "source": "js/paint/protocol.mjs:232",
+      "raised_in": "parseGradient",
+      "template": "\"gradient radial\"'s inner radius {rInner} is not smaller than its radius {r} in \"{line}\"",
+      "slots": [
+        "rInner",
+        "r",
+        "line"
+      ],
+      "fix": "give an inner radius below the outer one, or omit it for 0 (the ramp then starts at the centre)",
+      "id": "protocol.bad-number.parseGradient-2"
+    },
+    {
+      "kind": "error",
+      "tag": "bad-number",
+      "source": "js/paint/protocol.mjs:242",
+      "raised_in": "parseGradient",
+      "template": "\"gradient mid\"'s stop position {p} is not between 0 and 1 in \"{line}\"",
+      "slots": [
+        "p",
+        "line"
+      ],
+      "fix": "use a position above 0 and below 1, e.g. 0.55 — the two ends are already stop 1 and stop 2",
+      "id": "protocol.bad-number.parseGradient-3"
     },
     {
       "kind": "error",
       "tag": "unknown-verb",
-      "source": "js/paint/protocol.mjs:197",
+      "source": "js/paint/protocol.mjs:261",
       "raised_in": "parseCommand",
       "template": "\"draw\" with no verb in \"{line}\"",
       "slots": [
@@ -115,7 +142,7 @@
     {
       "kind": "error",
       "tag": "unknown-verb",
-      "source": "js/paint/protocol.mjs:217",
+      "source": "js/paint/protocol.mjs:281",
       "raised_in": "parseCommand",
       "template": "unrecognised drawing verb \"{verb}\" in \"{line}\"",
       "slots": [
@@ -128,7 +155,7 @@
     {
       "kind": "error",
       "tag": "wrong-arity",
-      "source": "js/paint/protocol.mjs:229",
+      "source": "js/paint/protocol.mjs:293",
       "raised_in": "parseCommand",
       "template": "\"{verb}\" takes {arity} argument{arity === 1 ? \"\" : \"s\"} in \"{line}\", got {args.length}",
       "slots": [
@@ -144,7 +171,7 @@
     {
       "kind": "error",
       "tag": "wrong-arity",
-      "source": "js/paint/protocol.mjs:236",
+      "source": "js/paint/protocol.mjs:300",
       "raised_in": "parseCommand",
       "template": "\"{verb}\" takes {arity} to {maxArity} arguments in \"{line}\", got {args.length}",
       "slots": [
@@ -160,7 +187,7 @@
     {
       "kind": "error",
       "tag": "bad-word",
-      "source": "js/paint/protocol.mjs:246",
+      "source": "js/paint/protocol.mjs:310",
       "raised_in": "parseCommand",
       "template": "\"{verb}\" takes one of {[...WORDS[verb]].join(\", \")} in \"{line}\", got \"{word}\"",
       "slots": [
@@ -175,7 +202,7 @@
     {
       "kind": "error",
       "tag": "bad-number",
-      "source": "js/paint/protocol.mjs:258",
+      "source": "js/paint/protocol.mjs:322",
       "raised_in": "parseCommand",
       "template": "\"{args[badIndex]}\" is not a valid number in \"{line}\"",
       "slots": [
@@ -188,7 +215,7 @@
     {
       "kind": "error",
       "tag": "protocol-repeated",
-      "source": "js/paint/stream.mjs:146",
+      "source": "js/paint/stream.mjs:180",
       "raised_in": "walk",
       "template": "a second \"draw protocol\" declaration is not allowed in one stream",
       "slots": [],
@@ -197,7 +224,7 @@
     {
       "kind": "error",
       "tag": "protocol-late",
-      "source": "js/paint/stream.mjs:153",
+      "source": "js/paint/stream.mjs:187",
       "raised_in": "walk",
       "template": "\"draw protocol\" must appear before the first drawing command",
       "slots": [],
@@ -206,10 +233,11 @@
     {
       "kind": "error",
       "tag": "unsupported-version",
-      "source": "js/paint/stream.mjs:168",
+      "source": "js/paint/stream.mjs:202",
       "raised_in": "walk",
-      "template": "this renderer implements protocol versions 1-2; the stream declared version {requested} and is refused whole",
+      "template": "this renderer implements protocol versions 1-{Math.max(...SUPPORTED_VERSIONS)}; the stream declared version {requested} and is refused whole",
       "slots": [
+        "Math.max(...SUPPORTED_VERSIONS)",
         "requested"
       ],
       "id": "stream.unsupported-version.walk"
@@ -217,20 +245,21 @@
     {
       "kind": "error",
       "tag": "verb-not-in-version",
-      "source": "js/paint/stream.mjs:183",
+      "source": "js/paint/stream.mjs:224",
       "raised_in": "walk",
-      "template": "\"{cmd.verb}\" is not part of protocol version {declaredVersion} in \"{line}\" — write draw protocol 2 to use it",
+      "template": "\"{named}\" is not part of protocol version {declaredVersion} in \"{line}\" — write draw protocol {needed} to use it",
       "slots": [
-        "cmd.verb",
+        "named",
         "declaredVersion",
-        "line"
+        "line",
+        "needed"
       ],
       "id": "stream.verb-not-in-version.walk"
     },
     {
       "kind": "error",
       "tag": "path-already-open",
-      "source": "js/paint/stream.mjs:233",
+      "source": "js/paint/stream.mjs:274",
       "raised_in": "walk",
       "template": "a shape is already open",
       "slots": [],
@@ -239,7 +268,7 @@
     {
       "kind": "error",
       "tag": "path-not-open",
-      "source": "js/paint/stream.mjs:244",
+      "source": "js/paint/stream.mjs:285",
       "raised_in": "walk",
       "template": "vertex outside a shape ... end block",
       "slots": [],
@@ -248,7 +277,7 @@
     {
       "kind": "error",
       "tag": "path-not-open",
-      "source": "js/paint/stream.mjs:254",
+      "source": "js/paint/stream.mjs:295",
       "raised_in": "walk",
       "template": "curve outside a shape ... end block",
       "slots": [],
@@ -257,7 +286,7 @@
     {
       "kind": "error",
       "tag": "path-not-open",
-      "source": "js/paint/stream.mjs:264",
+      "source": "js/paint/stream.mjs:305",
       "raised_in": "walk",
       "template": "close outside a shape ... end block",
       "slots": [],
@@ -266,7 +295,7 @@
     {
       "kind": "error",
       "tag": "path-not-open",
-      "source": "js/paint/stream.mjs:273",
+      "source": "js/paint/stream.mjs:314",
       "raised_in": "walk",
       "template": "end without a preceding shape",
       "slots": [],
@@ -275,7 +304,7 @@
     {
       "kind": "error",
       "tag": "unmatched-pop",
-      "source": "js/paint/stream.mjs:288",
+      "source": "js/paint/stream.mjs:329",
       "raised_in": "walk",
       "template": "pop without a matching push",
       "slots": [],
@@ -284,7 +313,7 @@
     {
       "kind": "error",
       "tag": "unmatched-unclip",
-      "source": "js/paint/stream.mjs:347",
+      "source": "js/paint/stream.mjs:402",
       "raised_in": "walk",
       "template": "unclip without a matching clip",
       "slots": [],
@@ -293,7 +322,7 @@
     {
       "kind": "error",
       "tag": "path-unclosed",
-      "source": "js/paint/stream.mjs:361",
+      "source": "js/paint/stream.mjs:416",
       "raised_in": "walk",
       "template": "a shape was left open at the end of the stream",
       "slots": [],
@@ -302,7 +331,7 @@
     {
       "kind": "error",
       "tag": "unmatched-push",
-      "source": "js/paint/stream.mjs:364",
+      "source": "js/paint/stream.mjs:419",
       "raised_in": "walk",
       "template": "a push was left unmatched at the end of the stream",
       "slots": [],
@@ -311,7 +340,7 @@
     {
       "kind": "error",
       "tag": "clip-unclosed",
-      "source": "js/paint/stream.mjs:367",
+      "source": "js/paint/stream.mjs:422",
       "raised_in": "walk",
       "template": "a clip was left open at the end of the stream",
       "slots": [],
@@ -320,63 +349,65 @@
   ],
   "tags": {
     "wrong-arity": [
-      "js/paint/protocol.mjs:110",
-      "js/paint/protocol.mjs:131",
-      "js/paint/protocol.mjs:170",
-      "js/paint/protocol.mjs:229",
-      "js/paint/protocol.mjs:236"
+      "js/paint/protocol.mjs:140",
+      "js/paint/protocol.mjs:161",
+      "js/paint/protocol.mjs:209",
+      "js/paint/protocol.mjs:293",
+      "js/paint/protocol.mjs:300"
     ],
     "bad-protocol-version": [
-      "js/paint/protocol.mjs:118"
+      "js/paint/protocol.mjs:148"
     ],
     "bad-number": [
-      "js/paint/protocol.mjs:142",
-      "js/paint/protocol.mjs:179",
-      "js/paint/protocol.mjs:258"
+      "js/paint/protocol.mjs:172",
+      "js/paint/protocol.mjs:218",
+      "js/paint/protocol.mjs:232",
+      "js/paint/protocol.mjs:242",
+      "js/paint/protocol.mjs:322"
     ],
     "bad-word": [
-      "js/paint/protocol.mjs:161",
-      "js/paint/protocol.mjs:246"
+      "js/paint/protocol.mjs:197",
+      "js/paint/protocol.mjs:310"
     ],
     "unknown-verb": [
-      "js/paint/protocol.mjs:197",
-      "js/paint/protocol.mjs:217"
+      "js/paint/protocol.mjs:261",
+      "js/paint/protocol.mjs:281"
     ],
     "protocol-repeated": [
-      "js/paint/stream.mjs:146"
+      "js/paint/stream.mjs:180"
     ],
     "protocol-late": [
-      "js/paint/stream.mjs:153"
+      "js/paint/stream.mjs:187"
     ],
     "unsupported-version": [
-      "js/paint/stream.mjs:168"
+      "js/paint/stream.mjs:202"
     ],
     "verb-not-in-version": [
-      "js/paint/stream.mjs:183"
+      "js/paint/stream.mjs:224"
     ],
     "path-already-open": [
-      "js/paint/stream.mjs:233"
+      "js/paint/stream.mjs:274"
     ],
     "path-not-open": [
-      "js/paint/stream.mjs:244",
-      "js/paint/stream.mjs:254",
-      "js/paint/stream.mjs:264",
-      "js/paint/stream.mjs:273"
+      "js/paint/stream.mjs:285",
+      "js/paint/stream.mjs:295",
+      "js/paint/stream.mjs:305",
+      "js/paint/stream.mjs:314"
     ],
     "unmatched-pop": [
-      "js/paint/stream.mjs:288"
+      "js/paint/stream.mjs:329"
     ],
     "unmatched-unclip": [
-      "js/paint/stream.mjs:347"
+      "js/paint/stream.mjs:402"
     ],
     "path-unclosed": [
-      "js/paint/stream.mjs:361"
+      "js/paint/stream.mjs:416"
     ],
     "unmatched-push": [
-      "js/paint/stream.mjs:364"
+      "js/paint/stream.mjs:419"
     ],
     "clip-unclosed": [
-      "js/paint/stream.mjs:367"
+      "js/paint/stream.mjs:422"
     ]
   }
 }

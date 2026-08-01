@@ -14,9 +14,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseCommand, VERBS } from "../paint/protocol.mjs";
 
-test("VERBS is the frozen thirty-three-verb table, protocol excluded", () => {
-  assert.equal(VERBS.length, 33);
-  assert.equal(new Set(VERBS).size, 33, "no duplicates");
+test("VERBS is the frozen thirty-four-verb table, protocol excluded", () => {
+  assert.equal(VERBS.length, 34);
+  assert.equal(new Set(VERBS).size, 34, "no duplicates");
   assert.ok(!VERBS.includes("protocol"), "protocol is a stream directive, not a drawing verb");
   assert.ok(Object.isFrozen(VERBS));
   for (const retired of ["pen", "move", "dot", "box", "text", "join"]) {
@@ -27,6 +27,7 @@ test("VERBS is the frozen thirty-three-verb table, protocol excluded", () => {
   for (const added of ["gradient", "shadow", "blend", "clip", "unclip", "alpha", "dash"]) {
     assert.ok(VERBS.includes(added), `v2 adds ${added}`);
   }
+  assert.ok(VERBS.includes("blur"), "v3 adds blur");
 });
 
 // ---- every verb at correct arity -------------------------------------------
@@ -122,11 +123,23 @@ test("gradient linear takes 4 geometry numbers then 8 stop numbers", () => {
   });
 });
 
-test("gradient radial takes 3 geometry numbers then 8 stop numbers", () => {
+// v3 §4.3: the inner radius is an OPTIONAL fourth geometry number, and a
+// caller who omits it gets it back defaulted to 0 — in its place, between the
+// geometry and the stops, not padded onto the tail the way `ellipse`/`rect`
+// rotation is. A sink therefore always receives four geometry numbers.
+test("gradient radial takes 3 geometry numbers then 8 stop numbers, and the inner radius defaults to 0 in place", () => {
   assert.deepEqual(parseCommand("draw gradient radial 50 50 40 0.9 0.05 90 1 0.4 0.1 260 1"), {
     kind: "command",
     verb: "gradient",
-    args: ["radial", 50, 50, 40, 0.9, 0.05, 90, 1, 0.4, 0.1, 260, 1],
+    args: ["radial", 50, 50, 40, 0, 0.9, 0.05, 90, 1, 0.4, 0.1, 260, 1],
+  });
+});
+
+test("gradient radial accepts a stated inner radius as its twelfth number", () => {
+  assert.deepEqual(parseCommand("draw gradient radial 50 50 40 12 0.9 0.05 90 1 0.4 0.1 260 1"), {
+    kind: "command",
+    verb: "gradient",
+    args: ["radial", 50, 50, 40, 12, 0.9, 0.05, 90, 1, 0.4, 0.1, 260, 1],
   });
 });
 

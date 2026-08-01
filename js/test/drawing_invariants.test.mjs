@@ -60,13 +60,13 @@ test("paint/draw.planes defines exactly one helper per verb, and nothing else", 
   );
 });
 
-test("VERBS is the thirty-three of protocol versions 1-2, exactly", () => {
+test("VERBS is the thirty-four of protocol versions 1-3, exactly", () => {
   assert.deepEqual(VERBS.slice().sort(), [
-    "align", "alpha", "arc", "background", "blend", "cap", "circle", "clear",
-    "clip", "close", "corner", "curve", "dash", "ellipse", "end", "fill",
-    "gradient", "label", "line", "pop", "push", "rect", "rotate", "scale",
-    "shadow", "shape", "size", "stroke", "translate", "triangle", "unclip",
-    "vertex", "width",
+    "align", "alpha", "arc", "background", "blend", "blur", "cap", "circle",
+    "clear", "clip", "close", "corner", "curve", "dash", "ellipse", "end",
+    "fill", "gradient", "label", "line", "pop", "push", "rect", "rotate",
+    "scale", "shadow", "shape", "size", "stroke", "translate", "triangle",
+    "unclip", "vertex", "width",
   ]);
 });
 

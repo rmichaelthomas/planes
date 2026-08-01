@@ -581,32 +581,67 @@
 
       // ---- the frame --------------------------------------------------------
 
-      function drawHighlights() {
-        if (litLine < 0) return;
+      // THE SELECTION IS A DRAWING STREAM, NOT A CANVAS CALL.
+      //
+      // This used to reach past the protocol and stroke the canvas directly:
+      // `ctx.setTransform`, `ctx.strokeStyle`, a hand-walked outline. It drew
+      // the right thing and it was the one mark on this page that the format
+      // knew nothing about — so it never reached the SVG export and never
+      // appeared in the mark recorder.
+      //
+      // It is a second stream now, composed HERE and run through the same
+      // painter over the same context, and that is legitimate for the reason
+      // the protocol is a format at all: the page is a CONSUMER. What is not
+      // legitimate is moving it into `paint/garden.planes`, which is a pure
+      // function of `(tick, seed)` — feeding it a click index would break the
+      // determinism the PNG-hash gate exists to prove. The selection stays
+      // page state, and the program gains nothing and loses nothing.
+      //
+      // `dash` is drawn by no `.planes` program in the corpus and stays on
+      // `COVERAGE_ALLOWLIST` for exactly that reason. This is what a dashed
+      // line is for.
+      //
+      // Clay — the page's own identity colour, `#A65A2E` — is `0.549 0.116
+      // 48.5` in OKLCH, and that is not a guess: it round-trips exactly
+      // through js/paint/color.mjs's own `rgbHex`.
+      const SELECT_CLAY = "0.549 0.116 48.5";
+
+      // The commands, WITHOUT a `draw protocol` declaration: appended to the
+      // scene's own stream for the SVG export, a second declaration would be
+      // `protocol-repeated`. The standalone paint call below prepends one,
+      // because there it is a stream of its own.
+      function highlightStream() {
+        if (litLine < 0) return [];
         const indices = markIndicesForSourceLine(litLine);
-        if (!indices.length) return;
-        ctx.save();
-        // Program coordinates, same as the marks carry — the transform does
-        // the multiplying, so no outline point is ever scaled by hand.
-        ctx.setTransform(CANVAS_SCALE, 0, 0, CANVAS_SCALE, 0, 0);
-        ctx.strokeStyle = "#F59E0B";
-        ctx.lineWidth = 1.5;
+        if (!indices.length) return [];
+        const out = ["draw dash 7 7", "draw width 2",
+                     `draw stroke ${SELECT_CLAY} 1`, "draw fill 0 0 0 0"];
         for (const i of indices) {
           const pts = outlineOf(lastMarks[i]);
           if (pts.length < 2) continue;
-          ctx.beginPath();
-          ctx.moveTo(pts[0][0], pts[0][1]);
-          for (const [x, y] of pts.slice(1)) ctx.lineTo(x, y);
-          ctx.closePath();
-          ctx.stroke();
+          const xs = pts.map((p) => p[0]);
+          const ys = pts.map((p) => p[1]);
+          const x = Math.min(...xs);
+          const y = Math.min(...ys);
+          // A bounding box, not the outline itself: a dashed box is what a
+          // selection looks like, and tracing a 40-point petal in dashes
+          // reads as a texture rather than as a marker.
+          out.push(`draw rect ${x - 2} ${y - 2} ${Math.max(...xs) - x + 4} ${Math.max(...ys) - y + 4} 0`);
         }
-        ctx.restore();
+        if (out.length === 4) return [];
+        out.push("draw dash 0 0");
+        return out;
       }
 
       function repaintFrame() {
         if (!lastLines.length) return;
         const { text, errors } = paint(ctx, lastLines, DIMENSIONS);
-        drawHighlights();
+        const overlay = highlightStream();
+        // A stream of its own, over the same context. `paint` resets the
+        // sink's state and the transform, and draws no background unless the
+        // stream says to — so this lands on top of the scene rather than
+        // replacing it.
+        if (overlay.length) paint(ctx, ["draw protocol 3", ...overlay], DIMENSIONS);
         return { text, errors };
       }
 
@@ -1185,7 +1220,11 @@
           showOutput(["nothing has been drawn yet"], true);
           return;
         }
-        const { svg, errors } = toSvg(lastLines, DIMENSIONS);
+        // The selection goes into the file, because it is a stream and not a
+        // canvas call — a saved SVG of a frame with something selected
+        // carries `stroke-dasharray`, which the raw-canvas highlight this
+        // replaced never could.
+        const { svg, errors } = toSvg([...lastLines, ...highlightStream()], DIMENSIONS);
         if (errors.length) {
           showOutput(errors.map((e) => `✗ ${e.tag}: ${e.message}`), true);
           return;

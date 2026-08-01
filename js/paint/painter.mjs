@@ -50,8 +50,9 @@ function defaultOffscreenCanvas(w, h) {
     return c;
   }
   throw new Error(
-    "painter.mjs: a shadow needs an offscreen canvas to cast once, and this environment has neither " +
-      "OffscreenCanvas nor document.createElement — pass { offscreenCanvas } explicitly",
+    "painter.mjs: a shadow or a blur needs an offscreen canvas to be cast exactly once over a mark " +
+      "that is both filled and stroked, and this environment has neither OffscreenCanvas nor " +
+      "document.createElement — pass { offscreenCanvas } explicitly",
   );
 }
 
@@ -72,6 +73,7 @@ function canvasSink(ctx, { width, height, background, scale, offscreenCanvas }) 
   let alphaVal = 1;
   let blendWord = "normal";
   let shadowState = null; // | { dx, dy, blur, L, C, H }
+  let blurRadius = 0;
   let pendingClip = false;
   // Real ctx.save() depth this call has opened and not yet closed. Unlike
   // `transformStack` (a plain array scoped to this call, harmless if some
@@ -95,13 +97,21 @@ function canvasSink(ctx, { width, height, background, scale, offscreenCanvas }) 
       ? () => ctx.resetTransform()
       : () => ctx.setTransform(scale, 0, 0, scale, 0, 0);
 
+  // `background` and `clear` fill the WHOLE area, and a blur set at the time
+  // would soften the picture's own border against nothing — svg.mjs's
+  // `bgRect()` carries no filter attribute at all, so the filter is dropped
+  // here for the duration of the fill to keep the two sinks agreeing about
+  // what a background is.
   function fillWholeArea(colorString) {
     const savedTransform = ctx.getTransform();
     const savedFillStyle = ctx.fillStyle;
+    const savedFilter = "filter" in ctx ? ctx.filter : null;
+    if (savedFilter !== null) ctx.filter = "none";
     toIdentity();
     ctx.fillStyle = colorString;
     ctx.fillRect(0, 0, width, height);
     ctx.fillStyle = savedFillStyle;
+    if (savedFilter !== null) ctx.filter = savedFilter;
     ctx.setTransform(savedTransform);
   }
 
@@ -140,6 +150,21 @@ function canvasSink(ctx, { width, height, background, scale, offscreenCanvas }) 
     ctx.shadowOffsetY = dy * scale;
   }
 
+  // v3 §6.1. Like shadowBlur above, a filter length is NOT transform-relative
+  // — it is interpreted in the output bitmap's own pixel space — so `scale`
+  // above 1 has to be multiplied in explicitly, exactly as applyShadow does,
+  // or a supersampled PNG export would carry blurs two to four times too
+  // tight relative to the picture.
+  //
+  // `ctx.filter` is one of the most expensive properties in this API, so it
+  // is only ever assigned when the radius actually changes state, and "none"
+  // is written rather than "blur(0px)" — a zero-radius filter still puts the
+  // context on the filtered path.
+  function applyBlur(targetCtx = ctx) {
+    if (!("filter" in targetCtx)) return;
+    targetCtx.filter = blurRadius > 0 ? `blur(${blurRadius * scale}px)` : "none";
+  }
+
   function applyAllState() {
     ctx.strokeStyle = rgbaString(strokeLcha);
     applyFillStyle();
@@ -152,6 +177,7 @@ function canvasSink(ctx, { width, height, background, scale, offscreenCanvas }) 
     ctx.globalAlpha = alphaVal;
     ctx.globalCompositeOperation = blendWord === "add" ? "lighter" : "source-over";
     applyShadow();
+    applyBlur();
   }
 
   // ---- clip (§8.3) -------------------------------------------------------
@@ -209,12 +235,23 @@ function canvasSink(ctx, { width, height, background, scale, offscreenCanvas }) 
   // owns beginPath, clip, fill, stroke and the shadow single-cast decision
   // uniformly for every shape and for the path block, so none of that logic
   // is duplicated per verb.
+  // v3 §6.1, third pinned semantic: A MARK CASTS EXACTLY ONE BLUR, the same
+  // rule §6.6 states for `shadow` and for the same reason — canvas filters
+  // PER DRAWING OPERATION, so a shape that both fills and strokes would be
+  // blurred twice and composite darker along its own outline, where SVG's
+  // one filter chain over the rendered element blurs it once. The mechanism
+  // is the offscreen composite the shadow already used; blur just widens the
+  // condition that reaches for it.
+  function needsSingleCast() {
+    return (shadowState || blurRadius > 0) && fillVisible() && strokeVisible();
+  }
+
   function renderMark(buildGeometry) {
     ctx.beginPath();
     buildGeometry(ctx);
     maybeClip();
 
-    if (!shadowState || !fillVisible() || !strokeVisible()) {
+    if (!needsSingleCast()) {
       ctx.fill();
       ctx.stroke();
       return;
@@ -232,9 +269,14 @@ function canvasSink(ctx, { width, height, background, scale, offscreenCanvas }) 
     off.lineJoin = ctx.lineJoin;
     off.globalAlpha = alphaVal;
     applyDash(off);
-    // No shadow on `off` at all — it stays unset for the life of the
-    // context, so even though this mark fills AND strokes, `off` only ever
-    // receives one, un-shadowed rendering of it: no double shadow possible.
+    // No shadow AND NO FILTER on `off` at all — both stay unset for the life
+    // of the context, so even though this mark fills AND strokes, `off` only
+    // ever receives one un-shadowed, un-blurred rendering of it. The blur and
+    // the shadow are then applied once, below, to the composited mark — which
+    // is also what pins v3 §6.1's FIRST semantic: `ctx.filter` and
+    // `ctx.shadow*` set together on one drawImage means canvas blurs the
+    // source and casts the shadow FROM THE BLURRED RESULT, the order svg.mjs
+    // builds its feGaussianBlur -> feDropShadow chain to match.
     off.beginPath();
     buildGeometry(off);
     off.fill();
@@ -245,9 +287,9 @@ function canvasSink(ctx, { width, height, background, scale, offscreenCanvas }) 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     // globalAlpha back to 1: the mark's own alpha is already baked into what
     // was just drawn onto `off` (via off.globalAlpha above) — multiplying
-    // again here would dim it twice. Shadow and blend stay exactly as
-    // `applyShadow`/`blend` last set them on `ctx`, so both apply to this
-    // one compositing operation, which is the whole point.
+    // again here would dim it twice. Shadow, blur and blend stay exactly as
+    // `applyShadow`/`applyBlur`/`blend` last set them on `ctx`, so all three
+    // apply to this one compositing operation, which is the whole point.
     ctx.globalAlpha = 1;
     ctx.drawImage(offC, 0, 0);
     ctx.setTransform(savedTransform);
@@ -273,6 +315,7 @@ function canvasSink(ctx, { width, height, background, scale, offscreenCanvas }) 
       alphaVal = defaults.alpha;
       blendWord = defaults.blend;
       shadowState = null;
+      blurRadius = defaults.blur;
       pendingClip = false;
       pathOps = [];
       toIdentity();
@@ -307,10 +350,14 @@ function canvasSink(ctx, { width, height, background, scale, offscreenCanvas }) 
     // CanvasGradient, and every fill()/stroke() call just uses whatever it
     // currently holds.
     gradient(kindWord, geomArgs, stops) {
+      // `radial` carries four numbers now — x, y, r and the optional inner
+      // radius stream.mjs has already defaulted to 0 (v3 §4.3). Canvas's own
+      // two-circle form takes it directly; the hardcoded 0 that used to sit
+      // in this call WAS the missing argument.
       const grad =
         kindWord === "linear"
           ? ctx.createLinearGradient(...geomArgs)
-          : ctx.createRadialGradient(geomArgs[0], geomArgs[1], 0, geomArgs[0], geomArgs[1], geomArgs[2]);
+          : ctx.createRadialGradient(geomArgs[0], geomArgs[1], geomArgs[3], geomArgs[0], geomArgs[1], geomArgs[2]);
       for (const { offset, L, C, H, A } of stops) {
         grad.addColorStop(offset, rgbaString([L, C, H, A]));
       }
@@ -338,6 +385,10 @@ function canvasSink(ctx, { width, height, background, scale, offscreenCanvas }) 
       dashOn = on;
       dashOff = off;
       applyDash(ctx);
+    },
+    blur(r) {
+      blurRadius = r;
+      applyBlur();
     },
     clip() {
       ctx.save();

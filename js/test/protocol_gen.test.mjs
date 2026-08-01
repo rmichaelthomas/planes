@@ -74,11 +74,15 @@ test("every word_arguments set in protocol.json agrees with parseCommand's own b
   }
 });
 
-test("gradient's word_arguments entry (linear, radial) matches parseCommand's own kind check", () => {
+test("gradient's word_arguments entry (linear, radial, mid) matches parseCommand's own kind check", () => {
   const doc = readJson("protocol/protocol.json");
-  assert.deepEqual(doc.word_arguments.gradient, ["linear", "radial"]);
+  assert.deepEqual(doc.word_arguments.gradient, ["linear", "radial", "mid"]);
   const result = parseCommand("draw gradient conic 1 2 3 4 5 6 7 8 9 10 11 12");
   assert.equal(result.tag, "bad-word");
+  // Each kind's variant is DERIVED from the module's own tables, so the
+  // projection cannot drift from what parseGradient actually accepts.
+  assert.equal(doc.verbs.find((v) => v.name === "gradient").variants.mid.arguments.length, 17);
+  assert.equal(doc.verbs.find((v) => v.name === "gradient").variants.radial.optional, 1);
 });
 
 test("draw.planes has exactly one helper per verb, protocol excluded, no extras", () => {
@@ -101,8 +105,8 @@ test("groups: every verb has exactly one group, every group is non-empty", () =>
   }
 });
 
-test("groups and their verbs match planes-drawing-protocol-v2.md's §6.1-§6.6 tables directly", () => {
-  const specSrc = readFileSync(path.join(REPO, "planes-drawing-protocol-v2.md"), "utf-8");
+test("groups and their verbs match planes-drawing-protocol-v3.md's §6.1-§6.6 tables directly", () => {
+  const specSrc = readFileSync(path.join(REPO, "planes-drawing-protocol-v3.md"), "utf-8");
   const { groups, verbGroups } = extractSpecGroups(specSrc);
   assert.deepEqual(groups, GROUPS);
   assert.deepEqual(verbGroups, VERB_GROUPS);

@@ -18,7 +18,7 @@
 //   D  trace length equals output length for every corpus program
 //   E  the JS and Python traces agree in canonical form  (test_js_interp.py)
 //   F  a tilted leaf's matrix maps its tip where it should  (hit.test.mjs)
-//   G  `dash` and `clip` appear zero times in the garden's output
+//   G  `dash`, `clip`, `shadow` and `alpha` appear zero times in the garden
 //   H  nothing in grammar/ changed  (test_gate.py's own province, and here)
 //   I  both protocol projections regenerate identically  (protocol_gen.test.mjs)
 
@@ -283,15 +283,31 @@ test("D: the effect log is unchanged by the trace — asking still performs noth
   }
 });
 
-// ---- G: no dash, no clip ----------------------------------------------------
+// ---- G: no dash, no clip, and — since v3 — no shadow and no alpha ----------
+//
+// The list grew by two and the reason is worth keeping next to it. The garden
+// never once used `shadow` as a shadow: all six uses were `0 0 r` glows
+// standing in for a verb the protocol did not have, and each needed the
+// surrounding `alpha` set and reset only so its SHADOW had an opacity (§6.6
+// gives `shadow` no alpha of its own). v3's `blur` softens a mark's own edge,
+// which is what those six were reaching for, so both verbs left the program
+// together. `js/test/paint_examples.test.mjs`'s COVERAGE_ALLOWLIST carries
+// the same four-plus-two list and the same reasons; these two tests are what
+// stop one of them creeping back in unnoticed.
+//
+// Cast shadows WERE built and measured for the v3 build and refused on the
+// number: a cast shadow that is actually visible on this page's backing store
+// costs 56 to 68 milliseconds of paint on its own, which is the whole frame
+// budget (benchmarks/density.md). That is why `shadow` is on this list rather
+// than in the picture.
 
-test("G: `dash`, `clip` and `unclip` appear zero times in the garden's output, at every tick sampled", async () => {
+test("G: `dash`, `clip`, `unclip`, `shadow` and `alpha` appear zero times in the garden's output, at every tick sampled", async () => {
   const restore = installFsFetch();
   try {
     const loader = new BrowserModuleLoader({ base: gardenBase() });
     for (let tick = 0; tick < 300; tick += 13) {
       const { lines } = await frameAt(tick, { loader });
-      for (const forbidden of ["draw dash", "draw clip", "draw unclip"]) {
+      for (const forbidden of ["draw dash", "draw clip", "draw unclip", "draw shadow", "draw alpha"]) {
         const found = lines.filter((l) => l.startsWith(forbidden));
         assert.deepEqual(found, [], `tick ${tick} emitted ${forbidden}`);
       }
@@ -303,13 +319,30 @@ test("G: `dash`, `clip` and `unclip` appear zero times in the garden's output, a
 
 test("G: and the source never calls them either", () => {
   const src = gardenSrc();
-  for (const helper of [/\bdash of\b/, /\bclip\b(?! opens)/, /\bunclip\b/]) {
+  for (const helper of [/\bdash of\b/, /\bclip\b(?! opens)/, /\bunclip\b/,
+                        /\bshadow of\b/, /\balpha of\b/]) {
     const withoutComments = src
       .split("\n")
       .filter((l) => !l.trimStart().startsWith("#"))
       .join("\n");
     assert.doesNotMatch(withoutComments, helper, `garden.planes calls ${helper}`);
   }
+});
+
+// The other half of the same fact: the page DOES draw a dashed line, as a
+// stream it composes itself and runs through the same painter. That is what
+// keeps `dash` on the allowlist honest — the verb is not unreachable, it is
+// unreached BY A PROGRAM, and the distinction is the whole point of the map.
+test("G: garden.html draws the selection as a protocol stream, not as raw canvas calls", () => {
+  const page = fs.readFileSync(path.join(REPO, "garden.html"), "utf-8");
+  assert.match(page, /"draw dash 7 7"/, "the selection is a dashed protocol command");
+  assert.match(page, /draw rect \$\{/, "its box is a `rect` command, not a hand-walked outline");
+  // The raw-canvas highlight this replaced set strokeStyle to a hex colour
+  // and walked the outline by hand. Neither may come back: a mark the format
+  // does not know about cannot be exported or recorded.
+  assert.doesNotMatch(page, /ctx\.strokeStyle\s*=\s*"#/, "no raw hex stroking of highlights");
+  // And it reaches the SVG export, which the raw-canvas version never did.
+  assert.match(page, /toSvg\(\[\.\.\.lastLines, \.\.\.highlightStream\(\)\]/);
 });
 
 // ---- H: nothing in grammar/ changed -----------------------------------------

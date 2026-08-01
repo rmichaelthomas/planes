@@ -50,6 +50,12 @@ const ARITY = Object.freeze({
   unclip: 0,
   alpha: 1,
   dash: 2,
+  // v3 addition (planes-drawing-protocol-v3.md §6.1). One number, a blur
+  // radius in pixels; 0 is off. STATE, not a per-mark argument — `alpha`,
+  // `dash`, `shadow` and `blend` are all per-stream state applying until
+  // changed, and a per-mark blur would be the only modifier in this table
+  // that is not.
+  blur: 1,
 });
 
 // A verb's ADDITIONAL numeric arguments beyond its base ARITY, each
@@ -76,19 +82,43 @@ const WORDS = Object.freeze({
 // generic "N numbers, or one word" cases WORDS/ARITY already cover; it gets
 // its own parse function, parseGradient, below (the second verb after
 // `label` whose arity depends on its own content).
+// The word decides how many numbers MAY follow it. Three tables rather than
+// one arithmetic constant, so the stop count is derived rather than hardcoded
+// and a fourth kind word costs three entries and no new parsing.
 const GRADIENT_KINDS = Object.freeze({
-  linear: 4, // x1 y1 x2 y2, then 8 stop numbers
-  radial: 3, // x y r, then 8 stop numbers
+  linear: 4, // x1 y1 x2 y2
+  radial: 3, // x y r          (+ GRADIENT_OPTIONAL's inner radius)
+  mid: 5,    // p x1 y1 x2 y2  (v3 §6.6)
 });
 
-// The thirty-three drawing verbs, `protocol` excluded (specification §11 —
+// Whole OKLCH colours — four numbers each — after the geometry.
+const GRADIENT_STOPS = Object.freeze({ linear: 2, radial: 2, mid: 3 });
+
+// `gradient radial`'s optional inner radius (v3 §4.3): the radius at which
+// stop 1 sits, defaulting to 0, which is what `radial` has always meant. It
+// sits BETWEEN the geometry and the stops rather than at the end, so
+// parseGradient inserts the default in place rather than padding the tail the
+// way OPTIONAL does for `ellipse`/`rect`. Like those, it is an ARITY WIDENING
+// on an existing verb and carries no version gate at all (v3 §1.1).
+const GRADIENT_OPTIONAL = Object.freeze({ radial: 1 });
+
+// The geometry count a SINK receives, optional tail included — always fixed,
+// whatever the caller wrote.
+export const GRADIENT_GEOMETRY = Object.freeze(
+  Object.fromEntries(Object.keys(GRADIENT_KINDS).map((k) => [k, GRADIENT_KINDS[k] + (GRADIENT_OPTIONAL[k] || 0)])),
+);
+
+// The thirty-four drawing verbs, `protocol` excluded (specification §11 —
 // draw.planes wraps every verb in this table once and nothing else; a test
 // reads VERBS directly rather than carrying a second hardcoded list).
 export const VERBS = Object.freeze(Object.keys(ARITY));
 
 // Exported so scripts/protocol_gen.mjs can read a verb's optional tail
-// directly rather than re-deriving it from wrong-arity message text.
-export { OPTIONAL };
+// directly rather than re-deriving it from wrong-arity message text — and,
+// for `gradient`, so the projection's per-kind variants are DERIVED from the
+// same three tables parseGradient validates against rather than restated in
+// the generator, where they could drift.
+export { OPTIONAL, GRADIENT_KINDS, GRADIENT_STOPS, GRADIENT_OPTIONAL };
 
 function err(tag, headline, fix) {
   return { kind: "error", tag, message: fix ? `${headline}\n  try: ${fix}` : headline };
@@ -148,11 +178,17 @@ function parseLabel(line) {
   return { kind: "command", verb: "label", args: [x, y], text };
 }
 
-// gradient's kind word decides how many numbers follow it (§5.2): `linear`
-// takes 4 geometry numbers then 8 stop numbers, `radial` takes 3 then 8. Both
-// endpoints are OKLCH: L1 C1 H1 A1 L2 C2 H2 A2 — stream.mjs interpolates them
-// into sixteen stops (§5.1); this function only validates shape and reads
-// the raw numbers through.
+// gradient's kind word decides how many numbers MAY follow it (v3 §6.6):
+// `linear` takes 4 geometry numbers then two whole OKLCH stops, `radial` takes
+// 3 (or 4, with the optional inner radius) then two, `mid` takes 5 — a stop
+// position and 4 geometry numbers — then THREE. Every stop is L C H A;
+// stream.mjs interpolates them into sixteen (§5.1). This function only
+// validates shape and reads the raw numbers through.
+//
+// FIXED ARITY IS PRESERVED. `mid` is 17 numbers, always — not "as many as you
+// wrote". §6.3's refusal of variadic commands is untouched, and `mid` is the
+// proof rather than the exception: a third stop needed a new WORD, and a
+// fourth would need another.
 function parseGradient(line) {
   const afterVerb = line.replace(/^\s*draw\s+gradient\s*/, "");
   const tokens = afterVerb.trim().length ? afterVerb.trim().split(/\s+/) : [];
@@ -165,11 +201,14 @@ function parseGradient(line) {
     );
   }
   const rest = tokens.slice(1);
-  const expected = GRADIENT_KINDS[kindWord] + 8;
-  if (rest.length !== expected) {
+  const geom = GRADIENT_KINDS[kindWord];
+  const optional = GRADIENT_OPTIONAL[kindWord] || 0;
+  const expected = geom + GRADIENT_STOPS[kindWord] * 4;
+  if (rest.length < expected || rest.length > expected + optional) {
+    const range = optional ? `${expected} or ${expected + optional}` : `${expected}`;
     return err(
       "wrong-arity",
-      `"gradient ${kindWord}" takes ${expected} numeric arguments in "${line}", got ${rest.length}`,
+      `"gradient ${kindWord}" takes ${range} numeric arguments in "${line}", got ${rest.length}`,
       `write draw gradient ${kindWord} ${Array(expected).fill("N").join(" ")}`,
     );
   }
@@ -181,6 +220,31 @@ function parseGradient(line) {
       `"${rest[badIndex]}" is not a valid number in "${line}"`,
       `use digits with an optional leading - and a decimal point, e.g. 12.5 (no exponent notation; a leading ~ is fine)`,
     );
+  }
+  // The omitted inner radius, restored to its place — so a sink method always
+  // receives GRADIENT_GEOMETRY[kind] geometry numbers and never branches on
+  // how many were actually written.
+  if (optional && nums.length === expected) nums.splice(geom, 0, 0);
+
+  if (kindWord === "radial") {
+    const [, , r, rInner] = nums;
+    if (rInner >= r) {
+      return err(
+        "bad-number",
+        `"gradient radial"'s inner radius ${rInner} is not smaller than its radius ${r} in "${line}"`,
+        `give an inner radius below the outer one, or omit it for 0 (the ramp then starts at the centre)`,
+      );
+    }
+  }
+  if (kindWord === "mid") {
+    const p = nums[0];
+    if (!(p > 0 && p < 1)) {
+      return err(
+        "bad-number",
+        `"gradient mid"'s stop position ${p} is not between 0 and 1 in "${line}"`,
+        `use a position above 0 and below 1, e.g. 0.55 — the two ends are already stop 1 and stop 2`,
+      );
+    }
   }
   return { kind: "command", verb: "gradient", args: [kindWord, ...nums] };
 }

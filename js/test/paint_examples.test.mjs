@@ -158,10 +158,22 @@ async function collectCorpusStream() {
 // one of them directly, in both sinks, including the nesting rules and every
 // refusal — what is missing is a REAL PROGRAM that reaches for them, and this
 // map is the honest place to say so rather than the place to hide it.
+// A MAP OF WHAT NO PICTURE WANTS, not a list of what is broken. An entry here
+// is a verb both sinks implement and every unit test covers, that no program
+// in the corpus reaches for — which is a fact worth keeping visible, not a
+// gap to be closed by writing a program that exists to tick a box.
 const COVERAGE_ALLOWLIST = new Map([
-  ["clip", "no program in this corpus masks a region; the garden's masked region existed for this test and the scene rewrite removed it"],
+  ["clip", "no program in this corpus masks a region; the garden's masked region existed for this test and the scene rewrite removed it. A DECISION, not a wait: neither garden mockup masks anything and no picture in the corpus wants a mask"],
   ["unclip", "same as clip — it has nothing to release"],
-  ["dash", "no program in this corpus draws a dashed outline; the garden's dashes existed for this test and the scene rewrite removed them"],
+  ["dash", "no .planes program in this corpus draws a dashed outline — but garden.html does, as a page-composed overlay stream: its selection indicator is `draw dash 7 7` + `draw rect` run through the same painter over the same context. It stays listed here because the map is of what the CORPUS draws, and the page is a consumer of the format rather than a program in it. Moving the indicator into paint/garden.planes would mean feeding the program a click index, which would break the (tick, seed) purity the PNG-hash gate exists to prove"],
+  // v3 orphaned both of these, and the reason is the point rather than an
+  // oversight: the garden's six `shadow 0 0 r` glows and the `alpha` set/reset
+  // that gave them their opacity were both standing in for `blur`, which
+  // softens a mark's own edge. Given the verb they wanted, the picture stopped
+  // wanting these two. `shadow` is still a shadow and `alpha` is still a
+  // dimmer; no picture here casts one or needs the other.
+  ["shadow", "no program in this corpus casts a shadow. The garden's six uses were all `0 0 r` glows — never once an actual shadow — and v3's `blur` is what they were reaching for. Cast shadows were built and measured for this build and refused on the number (56-68ms of paint, the whole frame budget; benchmarks/density.md)"],
+  ["alpha", "no program in this corpus dims a mark with the multiplier. The garden's only use wrapped its clouds so their SHADOWS had an opacity — §6.6 gives `shadow` no alpha of its own — and with `blur` in place of the shadow the 0.95 lives in the cloud's own fill, which is where it belongs"],
 ]);
 
 test("every drawing verb is exercised somewhere in the corpus", async () => {

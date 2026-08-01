@@ -108,8 +108,8 @@ test("the optional rotation on ellipse/rect is NOT version-gated — works under
   assert.deepEqual(svg.errors, []);
 });
 
-test("an unsupported version (3) is still refused whole, same as before v2 existed", () => {
-  const { canvas, svg } = bothRender(["draw protocol 3", "draw circle 1 2 3"]);
+test("an unsupported version (4) is still refused whole, same as before v2 existed", () => {
+  const { canvas, svg } = bothRender(["draw protocol 4", "draw circle 1 2 3"]);
   assert.equal(canvas.errors[0].tag, "unsupported-version");
   assert.deepEqual(svg.errors, canvas.errors);
 });
@@ -177,7 +177,7 @@ test("blend add WITH a shadow active: canvas applies both at the compositing ste
   const { svg } = toSvg(lines, DIMENSIONS);
   const el = /<circle[^/]*\/>/.exec(svg)[0];
   assert.match(el, /mix-blend-mode:plus-lighter/);
-  assert.match(el, /filter="url\(#p-shadow-1\)"/);
+  assert.match(el, /filter="url\(#p-effect-1\)"/);
   // Both attributes on the SAME element — neither renderer had to choose
   // one effect over the other or split the mark into two elements.
 });
