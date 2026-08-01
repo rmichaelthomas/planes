@@ -38,7 +38,28 @@ const [, , sub, ...rawRest] = process.argv;
 // reasoning `runOne` is shared verbatim between `run` and `run-batch` for.
 const CORE_REFUSE = rawRest.includes("--core");
 const CORE_SURVEY = rawRest.includes("--core-survey");
-const rest = rawRest.filter((a) => a !== "--core" && a !== "--core-survey");
+// `--core-json PATH` runs the restriction against a DIFFERENT core document, so
+// the checker can be exercised end to end against a crafted core rather than
+// only against the one true file. core_check.py has carried `--core PATH` for
+// exactly this reason ("so the drift guard can be run end to end against a
+// crafted core.json, not only unit-tested"); this is that affordance on the
+// other side of the same claim.
+const coreJsonAt = rawRest.indexOf("--core-json");
+const CORE_JSON = coreJsonAt === -1 ? null : rawRest[coreJsonAt + 1];
+const rest = rawRest.filter(
+  (a, i) =>
+    a !== "--core" &&
+    a !== "--core-survey" &&
+    a !== "--core-json" &&
+    !(coreJsonAt !== -1 && i === coreJsonAt + 1),
+);
+
+// Called immediately after loadGrammar() everywhere the core is consulted.
+async function applyCoreOverride() {
+  if (CORE_JSON === null) return;
+  const { setCore } = await import("./grammar_data.mjs");
+  setCore(JSON.parse(fs.readFileSync(CORE_JSON, "utf-8")));
+}
 
 // The interpreter options the flags select — one object, so no call site can
 // arm half of it.
@@ -384,6 +405,7 @@ switch (sub) {
     // graph (use X -> sibling X.planes) via run_file.mjs, the port of
     // interp.py's run_file. Node-only.
     loadGrammar();
+    await applyCoreOverride();
     const cfg =
       rest[1] !== undefined && rest[1] !== "" ? JSON.parse(rest[1]) : {};
     const host = new TestHost({
@@ -653,6 +675,36 @@ switch (sub) {
     out(JSON.stringify(found.map((r) => [r.name, fingerprint(r)])));
     break;
   }
+  case "core-classify": {
+    // core-classify — what the JavaScript side reads out of grammar/core.json,
+    // and whether its node -> keyword map can see the whole vocabulary.
+    //
+    // Invariant 7 says core_check.py and this mode must classify the same
+    // construct the same way. That is only worth asserting if the two answers
+    // can be put side by side, so this emits one of them; test_js_core_restricted
+    // .py holds it against the other. It reports the LOADED core — no literal —
+    // so a divergence here would be a divergence in the file, not in a copy.
+    loadGrammar();
+    await applyCoreOverride();
+    const { core } = await import("./grammar_data.mjs");
+    const { coverageGaps, APPROXIMATE_KEYWORDS } = await import(
+      "./core_restrict.mjs"
+    );
+    const { keywords: kw } = await import("./lexer.mjs");
+    const doc = core();
+    const all = [...kw()].sort();
+    out(
+      JSON.stringify({
+        keywords: [...doc.keywords].sort(),
+        builtins: [...doc.builtins].sort(),
+        effectKindsAllCore: doc.effect_kinds_all_core === true,
+        allKeywords: all,
+        coverageGaps: coverageGaps(all),
+        approximate: Object.keys(APPROXIMATE_KEYWORDS).sort(),
+      }),
+    );
+    break;
+  }
   case "meta": {
     // meta <stage> <corpusfile...> — the metacircular conformance run (A.1):
     // load grammar/<stage>.planes into a JS Interpreter (a Planes
@@ -660,6 +712,7 @@ switch (sub) {
     // file with it. stage in {lex, parse, run}. One grammar load amortised over
     // all files. Emits a JSON array of per-file results (or {error: tag}).
     loadGrammar();
+    await applyCoreOverride();
     const { runFile } = await import("./run_file.mjs");
     const stage = rest[0];
     const files = rest.slice(1);

@@ -161,6 +161,71 @@ def drift(core, keywords, builtins, effect_kinds):
     return out
 
 
+# ================================================================ the module graph
+#
+# WHY THIS IS HERE, AND WHY IT DOES NOT GATE.
+#
+# `violations` tokenizes ONE FILE. The declared core was derived from
+# grammar/interp.planes alone, and interp.planes conforms -- but interp.planes is
+# not what a second host runs. It opens `use parser`, `use json`, `use file` and
+# `use http`, so the artifact is interp.planes PLUS ITS MODULE GRAPH:
+# parser.planes, json.planes, and lexer.planes and vocabulary.planes beneath them.
+# core.json's claim is about the graph; the check was about one file.
+#
+# The core-restricted JavaScript interpreter (js/core_restrict.mjs, this build)
+# ran interp.planes and its graph and refused at grammar/lexer.planes:89, on
+# `when` -- a keyword core.json EXCLUDES, with a reason ("dispatch is flat
+# `if k == ...` ... so `when` is NOT needed") that is true of interp.planes and
+# false of the graph interp.planes needs. All sixteen of lexer.planes's `when`
+# sites are reached at evaluation time on an ordinary corpus file; none is dead.
+# See core-sufficiency-report.md.
+#
+# So this block REPORTS and does not gate, and the reason is not squeamishness.
+# There are exactly two ways to make it green: rewrite grammar/lexer.planes, or
+# widen grammar/core.json. This build forbids both by invariant, precisely so the
+# finding cannot erase itself -- and the choice between them is a decision about
+# what the port surface IS, which belongs to whoever makes it, not to the checker
+# that found the gap. Reported in the shape ci.sh already has for a measurement
+# that is not a gate (errors_coverage, corpus_coverage, both `timed_soft`).
+#
+# When the gap closes -- `when` joins the core, or lexer.planes stops needing it
+# -- this block prints nothing, and that is the day to consider whether it should
+# start gating.
+
+def graph_of(path):
+    """Every file `path` reaches through `use`, in dependency order, itself last.
+    The same resolution `analyse_file(target, follow=True)` already uses for
+    effect kinds -- one half of this file's job followed the graph and the other
+    did not."""
+    from modules import load_graph
+    return [p for p, _ in load_graph(path)]
+
+
+def modules_reached(path):
+    """The graph minus the entry file: what `use` pulls in, repo-relative where
+    it can be, so a reader sees `grammar/lexer.planes` and not a home
+    directory."""
+    out = []
+    for p in graph_of(path):
+        if os.path.abspath(p) == os.path.abspath(path):
+            continue
+        out.append(os.path.relpath(p, REPO)
+                   if os.path.abspath(p).startswith(REPO) else p)
+    return out
+
+
+def graph_violations(path, core_keywords, core_builtins):
+    """(file, line, category, value) for every token outside the declared core,
+    across the modules `path` reaches rather than `path` alone. The entry file is
+    excluded because `violations` already gates on it -- this adds the half of
+    the artifact nothing was reading, it does not restate the half that was."""
+    out = []
+    for p in modules_reached(path):
+        for line, cat, val in violations(p, core_keywords, core_builtins):
+            out.append((p, line, cat, val))
+    return out
+
+
 def violations(path, core_keywords, core_builtins):
     """(line, category, value) for every token outside the declared core."""
     with open(path, encoding="utf-8") as f:
@@ -221,6 +286,34 @@ def main():
     else:
         print("\ninterp.planes conforms: no keyword or builtin outside the "
               "declared core.")
+
+    # --- The graph block. A REPORT, never a gate (see graph_of above): the
+    # entry file's own violations gate as they always have; a module it reaches
+    # through `use` is named and counted and does not change the exit code.
+    reached = modules_reached(target)
+    graph = graph_violations(target, core_keywords, core_builtins)
+    print()
+    if graph:
+        offenders = sorted({p for p, _, _, _ in graph})
+        print(f"{len(graph)} construct(s) outside the declared core in "
+              f"{len(offenders)} of the {len(reached)} module(s) {target} "
+              f"reaches through `use`:\n")
+        for p, line, cat, val in graph:
+            print(f"  {p}:{line}  uses non-core {cat} '{val}'")
+        clean = [p for p in reached if p not in offenders]
+        if clean:
+            print(f"\n  the other {len(clean)} conform: " + ", ".join(clean))
+        print("\n  REPORTED, NOT GATED. core.json's claim is about the artifact "
+              "a second host\n  runs, which is this graph and not the entry "
+              "file alone -- so this is a\n  real gap in the declared port "
+              "surface, and closing it means either\n  widening core.json or "
+              "rewriting the module. That is a decision about\n  what the port "
+              "surface IS, and not one a checker gets to make.")
+    elif reached:
+        print(f"all {len(reached)} module(s) {target} reaches through `use` "
+              "conform too:\n  " + ", ".join(reached))
+    else:
+        print(f"{target} reaches no modules through `use`.")
 
     # --- The drift block. Its own heading because it means something else:
     # not "the file under test uses too much" but "the declaration it is
