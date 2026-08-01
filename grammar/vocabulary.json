@@ -1,25 +1,44 @@
 {
   "format": 1,
   "language": "planes",
-
   "token_classes_note": "Order is load-bearing: FINGERPRINT must precede NUMBER (most fingerprints start with a digit, and NUMBER would otherwise split \"@3f9c2d\" into a number and a name at the first letter), and OP must follow NAME.",
   "token_classes": [
-    {"name": "COMMENT", "pattern": "#[^\\n]*",
-     "note": "a line comment, from # to end of line"},
-    {"name": "FINGERPRINT", "pattern": "@[0-9a-fA-F]{6}",
-     "note": "A rule fingerprint -- @ plus exactly six hex characters -- has to be its own token, ahead of NUMBER and NAME: most fingerprints start with a digit, and NUMBER would otherwise split \"@3f9c2d\" into a number and a name at the first letter."},
-    {"name": "NUMBER", "pattern": "\\d+(\\.\\d+)?",
-     "note": "an integer or decimal literal; parsed exactly, never as a float"},
-    {"name": "STRING", "pattern": "\"(?:\\\\.|[^\"\\\\])*\"",
-     "note": "a double-quoted string; four escape sequences are recognized inside it -- \\\" \\\\ \\n \\t -- resolved to their code point at token construction (lexer.py), no others; the regex here only finds the string's extent (an escaped quote does not close it, so a trailing backslash right before what looks like a closing quote leaves the string unterminated), it does not itself validate which two-character escape is legal"},
-    {"name": "NAME", "pattern": "[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*",
-     "note": "an identifier, hyphen-joined segments allowed (e.g. derives-from)"},
-    {"name": "OP", "pattern": "->|==|!=|<=|>=|[+\\-*/=<>().,;:\\[\\]{}@]",
-     "note": "`@` also appears in OP, as a fallback: a malformed fingerprint (wrong length, non-hex characters) then tokenizes as a lone '@' the parser can catch and name the fix for, rather than silently vanishing."},
-    {"name": "WS", "pattern": "[ \\t]+",
-     "note": "horizontal whitespace, discarded"}
+    {
+      "name": "COMMENT",
+      "pattern": "#[^\\n]*",
+      "note": "a line comment, from # to end of line"
+    },
+    {
+      "name": "FINGERPRINT",
+      "pattern": "@[0-9a-fA-F]{6}",
+      "note": "A rule fingerprint -- @ plus exactly six hex characters -- has to be its own token, ahead of NUMBER and NAME: most fingerprints start with a digit, and NUMBER would otherwise split \"@3f9c2d\" into a number and a name at the first letter."
+    },
+    {
+      "name": "NUMBER",
+      "pattern": "\\d+(\\.\\d+)?",
+      "note": "an integer or decimal literal; parsed exactly, never as a float"
+    },
+    {
+      "name": "STRING",
+      "pattern": "\"(?:\\\\.|[^\"\\\\])*\"",
+      "note": "a double-quoted string; four escape sequences are recognized inside it -- \\\" \\\\ \\n \\t -- resolved to their code point at token construction (lexer.py), no others; the regex here only finds the string's extent (an escaped quote does not close it, so a trailing backslash right before what looks like a closing quote leaves the string unterminated), it does not itself validate which two-character escape is legal"
+    },
+    {
+      "name": "NAME",
+      "pattern": "[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*",
+      "note": "an identifier, hyphen-joined segments allowed (e.g. derives-from)"
+    },
+    {
+      "name": "OP",
+      "pattern": "->|==|!=|<=|>=|[+\\-*/=<>().,;:\\[\\]{}@]",
+      "note": "`@` also appears in OP, as a fallback: a malformed fingerprint (wrong length, non-hex characters) then tokenizes as a lone '@' the parser can catch and name the fix for, rather than silently vanishing."
+    },
+    {
+      "name": "WS",
+      "pattern": "[ \\t]+",
+      "note": "horizontal whitespace, discarded"
+    }
   ],
-
   "keyword_categories": {
     "statement-shape": "the shape of a statement -- the parser must see these to know what kind of statement it is reading",
     "control-flow": "branching and iteration",
@@ -30,76 +49,258 @@
   },
   "keywords_note": "Reserved words are only those that carry structure: a word the parser must see to know the shape of a statement. Everything else that used to be a keyword -- count, text, lower, upper, whole, ask, read -- is now an ordinary builtin function, callable as `count of xs` exactly like a user's own `detail of id`, and shadowable by a user function of the same name. test_names.py enforces the ceiling: every word NOT in this set must work as a function name, and the ceiling itself (32) is argued word-by-word in that file's docstring.",
   "keywords": [
-    {"word": "to", "category": "statement-shape"},
-    {"word": "give", "category": "statement-shape"},
-    {"word": "let", "category": "statement-shape"},
-    {"word": "use", "category": "statement-shape"},
-    {"word": "show", "category": "statement-shape"},
-    {"word": "write", "category": "statement-shape"},
-    {"word": "why", "category": "statement-shape"},
-
-    {"word": "if", "category": "control-flow"},
-    {"word": "else", "category": "control-flow"},
-    {"word": "for", "category": "control-flow"},
-    {"word": "each", "category": "control-flow"},
-    {"word": "in", "category": "control-flow"},
-    {"word": "where", "category": "control-flow"},
-    {"word": "when", "category": "control-flow"},
-
-    {"word": "and", "category": "operators-and-connectives"},
-    {"word": "or", "category": "operators-and-connectives"},
-    {"word": "not", "category": "operators-and-connectives"},
-    {"word": "of", "category": "operators-and-connectives"},
-    {"word": "as", "category": "operators-and-connectives"},
-    {"word": "fail", "category": "operators-and-connectives"},
-    {"word": "with", "category": "operators-and-connectives"},
-    {"word": "plus", "category": "operators-and-connectives"},
-    {"word": "foreign", "category": "operators-and-connectives"},
-    {"word": "from", "category": "operators-and-connectives"},
-    {"word": "doing", "category": "operators-and-connectives"},
-
-    {"word": "true", "category": "literals"},
-    {"word": "false", "category": "literals"},
-    {"word": "nothing", "category": "literals"},
-
-    {"word": "first", "category": "distinctive-syntax"},
-    {"word": "round", "category": "distinctive-syntax"},
-    {"word": "places", "category": "distinctive-syntax"},
-
-    {"word": "rule", "category": "rule-plane"}
+    {
+      "word": "to",
+      "category": "statement-shape"
+    },
+    {
+      "word": "give",
+      "category": "statement-shape"
+    },
+    {
+      "word": "let",
+      "category": "statement-shape"
+    },
+    {
+      "word": "use",
+      "category": "statement-shape"
+    },
+    {
+      "word": "show",
+      "category": "statement-shape"
+    },
+    {
+      "word": "write",
+      "category": "statement-shape"
+    },
+    {
+      "word": "why",
+      "category": "statement-shape"
+    },
+    {
+      "word": "if",
+      "category": "control-flow"
+    },
+    {
+      "word": "else",
+      "category": "control-flow"
+    },
+    {
+      "word": "for",
+      "category": "control-flow"
+    },
+    {
+      "word": "each",
+      "category": "control-flow"
+    },
+    {
+      "word": "in",
+      "category": "control-flow"
+    },
+    {
+      "word": "where",
+      "category": "control-flow"
+    },
+    {
+      "word": "when",
+      "category": "control-flow"
+    },
+    {
+      "word": "and",
+      "category": "operators-and-connectives"
+    },
+    {
+      "word": "or",
+      "category": "operators-and-connectives"
+    },
+    {
+      "word": "not",
+      "category": "operators-and-connectives"
+    },
+    {
+      "word": "of",
+      "category": "operators-and-connectives"
+    },
+    {
+      "word": "as",
+      "category": "operators-and-connectives"
+    },
+    {
+      "word": "fail",
+      "category": "operators-and-connectives"
+    },
+    {
+      "word": "with",
+      "category": "operators-and-connectives"
+    },
+    {
+      "word": "plus",
+      "category": "operators-and-connectives"
+    },
+    {
+      "word": "foreign",
+      "category": "operators-and-connectives"
+    },
+    {
+      "word": "from",
+      "category": "operators-and-connectives"
+    },
+    {
+      "word": "doing",
+      "category": "operators-and-connectives"
+    },
+    {
+      "word": "true",
+      "category": "literals"
+    },
+    {
+      "word": "false",
+      "category": "literals"
+    },
+    {
+      "word": "nothing",
+      "category": "literals"
+    },
+    {
+      "word": "first",
+      "category": "distinctive-syntax"
+    },
+    {
+      "word": "round",
+      "category": "distinctive-syntax"
+    },
+    {
+      "word": "places",
+      "category": "distinctive-syntax"
+    },
+    {
+      "word": "rule",
+      "category": "rule-plane"
+    }
   ],
-
   "builtins_note": "Builtins are ordinary functions, not keywords. The parser only needs their names so a bare `count of xs` is read as a call rather than a variable; it does not need to know what they do. A user may define a function with the same name, and theirs is the one that runs (test_names.py's test_user_definition_shadows_a_builtin). Every builtin in this language is unary -- one argument, via `of` or juxtaposition -- so arity is 1 across the board.",
   "builtins": [
-    {"name": "count", "arity": 1, "note": "shadowable by a user function of the same name"},
-    {"name": "lower", "arity": 1, "note": "shadowable by a user function of the same name"},
-    {"name": "upper", "arity": 1, "note": "shadowable by a user function of the same name"},
-    {"name": "text", "arity": 1, "note": "shadowable by a user function of the same name"},
-    {"name": "whole", "arity": 1, "note": "shadowable by a user function of the same name"},
-    {"name": "ask", "arity": 1, "note": "shadowable by a user function of the same name"},
-    {"name": "read", "arity": 1, "note": "shadowable by a user function of the same name"},
-    {"name": "normalize", "arity": 1, "note": "shadowable by a user function of the same name; NFC form; never an effect kind"},
-    {"name": "join", "arity": 1, "note": "concatenates a list of text into one string, in order, in O(n); no separator argument (a separator is for-each's job); an empty list joins to the empty string; a non-text element is an error, never a silent coercion; shadowable by a user function of the same name; never an effect kind"},
-    {"name": "sine", "arity": 1, "note": "shadowable by a user function of the same name; takes DEGREES, consistent with the drawing protocol's `rotate` -- degrees are whole numbers and stay exact under this language's arithmetic, where radians would arrive already approximated; the only operation in the language that returns an approximate value, and it returns one for EVERY input including `sine of 0` -- the operation's true result being representable at one argument does not make the operation exact"},
-    {"name": "rest", "arity": 1, "note": "the list without its first element; lists only (for a text prefix use `first n of`); the rest of an empty list is an error, not a silent empty list; shadowable by a user function of the same name; never an effect kind"},
-    {"name": "number", "arity": 1, "note": "text to an exact number (A-Q19) -- an optional leading -, digits, and at most one .; no exponent notation, matching what a source NUMBER token can itself be; a ~-prefixed text (the language's own marker for a rounded display) is refused with its own reason rather than parsed into a different value; shadowable by a user function of the same name; never an effect kind"}
+    {
+      "name": "count",
+      "arity": 1,
+      "note": "shadowable by a user function of the same name"
+    },
+    {
+      "name": "lower",
+      "arity": 1,
+      "note": "shadowable by a user function of the same name"
+    },
+    {
+      "name": "upper",
+      "arity": 1,
+      "note": "shadowable by a user function of the same name"
+    },
+    {
+      "name": "text",
+      "arity": 1,
+      "note": "shadowable by a user function of the same name"
+    },
+    {
+      "name": "whole",
+      "arity": 1,
+      "note": "shadowable by a user function of the same name"
+    },
+    {
+      "name": "ask",
+      "arity": 1,
+      "note": "shadowable by a user function of the same name"
+    },
+    {
+      "name": "read",
+      "arity": 1,
+      "note": "shadowable by a user function of the same name"
+    },
+    {
+      "name": "normalize",
+      "arity": 1,
+      "note": "shadowable by a user function of the same name; NFC form; never an effect kind"
+    },
+    {
+      "name": "join",
+      "arity": 1,
+      "note": "concatenates a list of text into one string, in order, in O(n); no separator argument (a separator is for-each's job); an empty list joins to the empty string; a non-text element is an error, never a silent coercion; shadowable by a user function of the same name; never an effect kind"
+    },
+    {
+      "name": "sine",
+      "arity": 1,
+      "note": "shadowable by a user function of the same name; takes DEGREES, consistent with the drawing protocol's `rotate` -- degrees are whole numbers and stay exact under this language's arithmetic, where radians would arrive already approximated; the only operation in the language that returns an approximate value, and it returns one for EVERY input including `sine of 0` -- the operation's true result being representable at one argument does not make the operation exact"
+    },
+    {
+      "name": "rest",
+      "arity": 1,
+      "note": "the list without its first element; lists only (for a text prefix use `first n of`); the rest of an empty list is an error, not a silent empty list; shadowable by a user function of the same name; never an effect kind"
+    },
+    {
+      "name": "number",
+      "arity": 1,
+      "note": "text to an exact number (A-Q19) -- an optional leading -, digits, and at most one .; no exponent notation, matching what a source NUMBER token can itself be; a ~-prefixed text (the language's own marker for a rounded display) is refused with its own reason rather than parsed into a different value; shadowable by a user function of the same name; never an effect kind"
+    },
+    {
+      "name": "root",
+      "arity": 1,
+      "note": "square root (square-root-spec.md, closing §253) -- the first operation whose exactness is decided by its ARGUMENT rather than by itself: `root of 9` is exactly 3 and `root of 2` is approximate, because sqrt(n/d) of a reduced fraction is rational exactly when n and d are both perfect squares and the exact answer is then integer arithmetic. This is deliberately unlike `sine`, which approximates at EVERY argument because its algorithm has no exact path at any of them. A negative argument is refused, tagged not-a-number: this language has no imaginary number and inventing one for a single builtin is a larger decision. Shadowable by a user function of the same name; never an effect kind"
+    }
   ],
-
   "effect_kinds_note": "The closed vocabulary of effect kinds, grouped by boundary. Lives here, rather than in shapes.py where it originated, because the parser also needs it -- to validate a rule's effect kind at parse time -- and parser.py cannot import shapes.py (shapes.py imports parser.py; the reverse would be a cycle). Closed is the point: an open vocabulary cannot be searched or diffed across packages, and duplicating it in two files would let the two copies drift.",
   "effect_kinds": [
-    {"kind": "ask", "boundary": "network", "note": "request-with-response"},
-    {"kind": "read", "boundary": "file", "note": ""},
-    {"kind": "write", "boundary": "file", "note": ""},
-    {"kind": "show", "boundary": "console", "note": ""},
-    {"kind": "clock", "boundary": "ambient", "note": "the current time"},
-    {"kind": "random", "boundary": "ambient", "note": "entropy"},
-    {"kind": "env", "boundary": "ambient", "note": "environment variables, process arguments"}
+    {
+      "kind": "ask",
+      "boundary": "network",
+      "note": "request-with-response"
+    },
+    {
+      "kind": "read",
+      "boundary": "file",
+      "note": ""
+    },
+    {
+      "kind": "write",
+      "boundary": "file",
+      "note": ""
+    },
+    {
+      "kind": "show",
+      "boundary": "console",
+      "note": ""
+    },
+    {
+      "kind": "clock",
+      "boundary": "ambient",
+      "note": "the current time"
+    },
+    {
+      "kind": "random",
+      "boundary": "ambient",
+      "note": "entropy"
+    },
+    {
+      "kind": "env",
+      "boundary": "ambient",
+      "note": "environment variables, process arguments"
+    }
   ],
-
   "field_name_token_kinds_note": "Field names a record literal, with-clause, or when-pattern entry may use -- a field name is not a position where a keyword can be structural, since records nest arbitrarily (v2.0 section 35) and a field may be named `first`, `to`, or any other ordinary word that happens to double as a keyword elsewhere. NAME is included: a field may always be an ordinary, non-reserved word.",
-  "field_name_token_kinds": ["NAME", "SHOW", "WRITE", "FIRST", "ROUND", "TO", "IN",
-                             "WHERE", "FROM", "AS", "OF", "USE", "WHY", "GIVE"],
-
+  "field_name_token_kinds": [
+    "NAME",
+    "SHOW",
+    "WRITE",
+    "FIRST",
+    "ROUND",
+    "TO",
+    "IN",
+    "WHERE",
+    "FROM",
+    "AS",
+    "OF",
+    "USE",
+    "WHY",
+    "GIVE"
+  ],
   "positional_words_note": "Six words are load-bearing grammar, read positionally at exactly one site each, and deliberately kept OUT of `keywords` above to protect the reserved-word ceiling test_names.py enforces. This section is descriptive only -- the parser does not consult it; each word is still matched positionally in its own parse_* method, exactly as before. It exists because no other table in the repository records these words as grammar at all.",
   "positional_words": [
     {
@@ -145,14 +346,18 @@
       "note": "matched via `self.at(\"NAME\", \"derives-from\")`; positional like the others."
     }
   ],
-
   "value_properties_note": "Descriptive only -- no loader consults this section; it exists because no other table in the repository records these rules as data at all. Every value carries whether it is exact or approximate. The rules below are enforced in all three implementations and agreed by the three-way suite.",
   "value_properties": [
     {
       "property": "exactness",
-      "values": ["exact", "approximate"],
+      "values": [
+        "exact",
+        "approximate"
+      ],
       "default": "exact",
-      "introduced_by": ["sine"],
+      "introduced_by": [
+        "sine"
+      ],
       "rules": [
         {
           "rule": "entry",
@@ -177,7 +382,6 @@
       ]
     }
   ],
-
   "binding_semantics_note": "Descriptive only -- no loader consults this section. The parser needs `let` to read a statement's shape and nothing more, so the difference between `let` and bare assignment is recorded nowhere else in loadable form. It is the difference between accumulating across a loop and a write that never escapes it (reports/REPORT_VALUES.md, V-Q5; test_values.py's test_summing_a_list_in_a_loop_produces_the_sum and test_let_inside_a_loop_shadows_and_does_not_escape run both sides of it). The one shape named below as a hazard is no longer silent -- it is refused outright (the discarded-write build).",
   "binding_semantics": [
     {

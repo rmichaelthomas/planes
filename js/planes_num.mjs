@@ -481,3 +481,56 @@ export function sineDegrees(value) {
   const scaled = divRound(sign * s * RESULT_SCALE, WORKING_SCALE);
   return new PlanesNumber(new Fraction(scaled, RESULT_SCALE), SINE_APPROXIMATION);
 }
+
+// ---------------------------------------------------------------------------
+// SQUARE ROOT (square-root-spec.md). The thirteenth builtin, and the first
+// operation whose exactness is decided by its ARGUMENT rather than by itself.
+//
+// `sine` approximates at every argument because its algorithm does. Square
+// root is different in kind: whether the answer is rational is DECIDABLE, and
+// when it is, the exact answer is integer arithmetic.
+
+// Floor of the square root of a non-negative BigInt, exactly. Newton from a
+// DECIMAL-LENGTH estimate, not from n itself: starting at n costs one
+// iteration per bit. The loop ends on x*x <= n < (x+1)*(x+1), which is the
+// definition of the thing rather than a tolerance on it.
+export function isqrt(n) {
+  if (n < 0n) throw new RangeError("isqrt of a negative integer");
+  if (n < 2n) return n;
+  let x = 10n ** BigInt((String(n).length + 1) >> 1);
+  for (;;) {
+    const next = (x + n / x) / 2n;
+    if (next >= x) break;
+    x = next;
+  }
+  while (x * x > n) x -= 1n;
+  while ((x + 1n) * (x + 1n) <= n) x += 1n;
+  return x;
+}
+
+export const ROOT_APPROXIMATION = new Approximation(
+  "root",
+  "an exact integer square root where the argument is a perfect square, " +
+    `otherwise Newton's method on integers scaled by 10^${RESULT_PLACES}, ` +
+    `a result rounded to ${RESULT_PLACES} places, half away from zero`,
+);
+
+// `root of x` — exact when the true result is rational, approximate when it is
+// not. The caller owns the error vocabulary; this function's contract is
+// x >= 0. Because `q` is reduced, sqrt(n/d) is rational exactly when n and d
+// are BOTH perfect squares.
+export function rootOf(value) {
+  const n = value.q.n;
+  const d = value.q.d;
+  const rn = isqrt(n);
+  const rd = isqrt(d);
+  if (rn * rn === n && rd * rd === d) {
+    // Exact — and it keeps whatever the argument carried.
+    return new PlanesNumber(new Fraction(rn, rd), value.approx);
+  }
+  // Doubling before the floor and halving after is how a floor becomes a
+  // round-half-away with no division and no rounding mode for three
+  // implementations to read three ways.
+  const scaled = isqrt((4n * n * RESULT_SCALE * RESULT_SCALE) / d);
+  return new PlanesNumber(new Fraction((scaled + 1n) / 2n, RESULT_SCALE), ROOT_APPROXIMATION);
+}

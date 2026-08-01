@@ -4,7 +4,7 @@ to keywords:
   give ["to", "give", "let", "use", "show", "write", "why", "if", "else", "for", "each", "in", "where", "when", "and", "or", "not", "of", "as", "fail", "with", "plus", "foreign", "from", "doing", "true", "false", "nothing", "first", "round", "places", "rule"]
 
 to builtins:
-  give ["count", "lower", "upper", "text", "whole", "ask", "read", "normalize", "join", "sine", "rest", "number"]
+  give ["count", "lower", "upper", "text", "whole", "ask", "read", "normalize", "join", "sine", "rest", "number", "root"]
 
 # Longest-first -- a regex-free lexer must try -> == != <= >= before
 # falling back to a single character, exactly as vocabulary.json's

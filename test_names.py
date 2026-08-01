@@ -69,9 +69,9 @@ def test_every_builtin_name_works_inside_a_multiword_name():
     assert not failures, "\n  ".join(failures)
 
 
-def test_effective_reserved_surface_is_44():
+def test_effective_reserved_surface_is_45():
     """The effective reserved surface is 44: the 32 structural keywords plus
-    the 12 builtins, which spend from the same name budget (S3a A.4).
+    the 13 builtins, which spend from the same name budget (S3a A.4).
 
     A builtin name is not a keyword — `count`, `text`, `read` can each still
     NAME a function (`to count of x:` shadows the builtin, the names
@@ -99,8 +99,8 @@ def test_effective_reserved_surface_is_44():
     language cannot otherwise close at all, not a convenience for one that
     already has another way in."""
     assert len(KEYWORDS) == 32, f"keyword count is {len(KEYWORDS)}, expected 32"
-    assert len(BUILTIN_NAMES) == 12, f"builtin count is {len(BUILTIN_NAMES)}, expected 12"
-    assert len(KEYWORDS | BUILTIN_NAMES) == 44, "keywords and builtins must be disjoint at 44"
+    assert len(BUILTIN_NAMES) == 13, f"builtin count is {len(BUILTIN_NAMES)}, expected 13"
+    assert len(KEYWORDS | BUILTIN_NAMES) == 45, "keywords and builtins must be disjoint at 45"
     # the two sets are disjoint -- no word is both a keyword and a builtin
     assert not (KEYWORDS & BUILTIN_NAMES)
 
@@ -150,7 +150,7 @@ def test_a_function_may_still_be_named_after_a_builtin():
 def test_reserved_list_is_only_structural_words():
     """A word stays a KEYWORD only if the parser must see it to know the
     shape of a statement (builtins are reserved too, but as names, not as
-    structure -- see test_effective_reserved_surface_is_43).
+    structure -- see test_effective_reserved_surface_is_45).
 
     The ceiling is 32, and every rise is argued for in a report:
 

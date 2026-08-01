@@ -160,10 +160,10 @@ test("js/modules.mjs is pure: it imports nothing from node:", () => {
   assert.doesNotMatch(read("js/modules.mjs"), /from\s+"node:/);
 });
 
-test("the language's counts: 32 keywords, 12 builtins, 7 effect kinds", () => {
+test("the language's counts: 32 keywords, 13 builtins, 7 effect kinds", () => {
   const vocab = JSON.parse(read("grammar/vocabulary.json"));
   assert.equal(vocab.keywords.length, 32);
-  assert.equal(vocab.builtins.length, 12);
+  assert.equal(vocab.builtins.length, 13);
   assert.equal(vocab.effect_kinds.length, 7);
 });
 

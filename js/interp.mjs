@@ -8,7 +8,7 @@
 // agreement on the corpus (test_js_interp.py). interp.py is the specification.
 
 import { MemoryHost, TestHost, HostError, pyJsonDumps } from "./host.mjs";
-import { PlanesNumber, Inexact, NotANumber, numberFromText, sineDegrees } from "./planes_num.mjs";
+import { PlanesNumber, Inexact, NotANumber, numberFromText, rootOf, sineDegrees } from "./planes_num.mjs";
 import {
   escapeStringLiteral,
   codePoints,
@@ -968,6 +968,31 @@ export class Interpreter {
       }
       const n = sineDegrees(arg.value);
       return new Traced(n, new Deriv("op", "sine of", n, [arg.node]));
+    }
+    if (name === "root") {
+      // The thirteenth builtin (square-root-spec.md, closing §253), and the
+      // first whose exactness is decided by its ARGUMENT: `root of 9` is
+      // exactly 3, `root of 2` is not. Deliberately unlike `sine`, which
+      // approximates at every argument because its algorithm has no exact
+      // path at any of them.
+      if (!isNum(arg.value)) {
+        throw new PlanesError(
+          "not-a-number",
+          `cannot take the square root of ${detailValue(arg.value)}`,
+          "root takes a number — e.g. root of 9; if this is text, convert it first with number of",
+        );
+      }
+      if (PlanesNumber.of(arg.value).q.n < 0n) {
+        throw new PlanesError(
+          "not-a-number",
+          `cannot take the square root of ${fmt(arg.value)}`,
+          "root takes a number that is not negative — this language has no imaginary " +
+            "number, so a negative radicand has no value to return; test the sign before " +
+            "taking the root",
+        );
+      }
+      const n = rootOf(PlanesNumber.of(arg.value));
+      return new Traced(n, new Deriv("op", "root of", n, [arg.node]));
     }
     if (name === "text") {
       const v = fmt(arg.value);

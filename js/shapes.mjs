@@ -266,6 +266,28 @@ export class Surface {
     return this.approximate.length > 0;
   }
 
+  // "always" if any route reaches an operation that approximates at every
+  // argument, "sometimes" if every route ends at one that only sometimes
+  // does, and null when there is no route at all.
+  approximationStrength() {
+    let found = null;
+    for (const route of this.approximate) {
+      const strength = APPROXIMATION_SOURCES.get(route[route.length - 1]);
+      if (strength === "always") return "always";
+      if (strength === "sometimes") found = "sometimes";
+    }
+    return found;
+  }
+
+  // The one line the surface prints about numbers.
+  approximationSentence() {
+    if (this.approximationStrength() === "sometimes") {
+      return "numbers: may be approximate — this program reaches `root`, " +
+        "which is exact when its argument is a perfect square";
+    }
+    return "numbers: approximate — this program reaches `sine`";
+  }
+
   approximationRoutes() {
     return this.approximate.map((path) => path.join("  ->  "));
   }
@@ -334,7 +356,7 @@ export class Surface {
       if (this.producesApproximate()) {
         return (
           "pure — this program touches nothing outside itself\n" +
-          "numbers: approximate — this program reaches `sine`\n" +
+          this.approximationSentence() + "\n" +
           this.approximationRoutes().map((r) => `  ${r}`).join("\n")
         );
       }
@@ -358,7 +380,7 @@ export class Surface {
       }
     }
     if (this.producesApproximate()) {
-      lines.push("numbers: approximate — this program reaches `sine`");
+      lines.push(this.approximationSentence());
       for (const route of this.approximationRoutes()) lines.push(`  ${route}`);
     }
     if (this.unresolved.length) {
@@ -406,7 +428,14 @@ class Consts {
 // claim. The route is reported too: "yes" without "how" is the kind of answer
 // this analyser exists not to give.
 
-const APPROXIMATION_SOURCE = "sine";
+// TWO SOURCES, AND THEY DO NOT MEAN THE SAME THING. `sine` approximates at
+// EVERY argument, so reaching it promises approximate values. `root`
+// approximates only when its argument is not a perfect square
+// (square-root-spec.md §2), so reaching it promises nothing — `root of 9` is
+// exactly 3. The strength is carried alongside the source and the wording
+// follows it; flattening the two would be less informative, not more.
+const APPROXIMATION_SOURCES = new Map([["sine", "always"], ["root", "sometimes"]]);
+const APPROXIMATION_SOURCE = "sine";   // the always-source, where one is named
 
 // Every name a subtree calls or reads. Structure-generic rather than a case
 // per node kind: a node type added later cannot hide a call from this pass the
@@ -530,7 +559,11 @@ export class Analyser {
   // A user function named `sine` shadows the builtin (the names mandate), and
   // then nothing here is a source of approximation at all.
   approximationRoutes(prog) {
-    if (this.funcs.has(APPROXIMATION_SOURCE)) return [];
+    // A user function of the same name shadows the builtin (the names
+    // mandate), and then that name is not a source of approximation here.
+    const sources = [...APPROXIMATION_SOURCES.keys()]
+      .filter((n) => !this.funcs.has(n)).sort(pyStrCmp);
+    if (!sources.length) return [];
 
     const calls = new Map();
     for (const [name, fn] of this.funcs) {
@@ -541,13 +574,16 @@ export class Analyser {
       new Set(),
     );
 
-    // Breadth-first, so the route reported is the shortest one.
-    const routeFrom = (entry, seeds) => {
+    // Breadth-first, so the route reported is the shortest one — and ONE
+    // TARGET AT A TIME. A single walk stopping at whichever source it met
+    // first described a program by whichever came up in the queue, so a
+    // `sine` program could be announced with `root`'s much weaker sentence.
+    const routeFrom = (entry, seeds, target) => {
       const queue = [...seeds].sort(pyStrCmp).map((n) => [n, [entry, n]]);
       const seen = new Set(seeds);
       while (queue.length) {
         const [name, path] = queue.shift();
-        if (name === APPROXIMATION_SOURCE) return path;
+        if (name === target) return path;
         for (const nxt of [...(calls.get(name) ?? [])].sort(pyStrCmp)) {
           if (!seen.has(nxt)) {
             seen.add(nxt);
@@ -558,13 +594,19 @@ export class Analyser {
       return null;
     };
 
-    const found = [];
-    const top = routeFrom("(top level)", topCalls);
-    if (top !== null) found.push(top);
+    const routesFrom = (entry, seeds) => {
+      const out = [];
+      for (const target of sources) {
+        const r = routeFrom(entry, seeds, target);
+        if (r !== null) out.push(r);
+      }
+      return out;
+    };
+
+    const found = [...routesFrom("(top level)", topCalls)];
     for (const name of [...this.funcs.keys()].sort(pyStrCmp)) {
       if ((this.funcFile.get(name) ?? this.entryFile) !== this.entryFile) continue;
-      const r = routeFrom(name, calls.get(name));
-      if (r !== null) found.push(r);
+      found.push(...routesFrom(name, calls.get(name)));
     }
     return found;
   }

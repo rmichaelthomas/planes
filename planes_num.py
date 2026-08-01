@@ -496,3 +496,78 @@ SINE_APPROXIMATION = Approximation(
     f"{WORKING_PLACES} working decimal places, "
     f"a result rounded to {RESULT_PLACES}",
 )
+
+
+# ---------------------------------------------------------------------------
+# SQUARE ROOT (square-root-spec.md). The thirteenth builtin, and the first
+# operation whose exactness is decided by its ARGUMENT rather than by itself.
+#
+# `sine` approximates at every argument because its algorithm does — a
+# truncated series over a stated rational pi/180 has no exact path at any
+# input. Square root is different in kind: whether the answer is rational is
+# DECIDABLE, and when it is, the exact answer is integer arithmetic. Returning
+# "approximately 3" for `root of 9` would report a property of the
+# implementation's laziness, not of the number.
+
+
+def _isqrt(n):
+    """Floor of the square root of a non-negative integer, exactly.
+
+    Newton from a DECIMAL-LENGTH estimate, not from n itself: starting at n
+    costs one iteration per bit, where starting at 10^ceil(digits/2) costs a
+    handful. The loop ends on x*x <= n < (x+1)*(x+1), which is the definition
+    of the thing rather than a tolerance on it.
+
+    (Python has math.isqrt; it is not used, so that this function and its two
+    ports are one algorithm rather than one algorithm and two ports of a host
+    primitive that might round differently at the boundary.)
+    """
+    if n < 0:
+        raise ValueError("isqrt of a negative integer")
+    if n < 2:
+        return n
+    x = 10 ** ((len(str(n)) + 1) // 2)
+    while True:
+        nxt = (x + n // x) // 2
+        if nxt >= x:
+            break
+        x = nxt
+    while x * x > n:
+        x -= 1
+    while (x + 1) * (x + 1) <= n:
+        x += 1
+    return x
+
+
+def root_of(value):
+    """`root of x` — exact when the true result is rational, approximate when
+    it is not. Negative arguments are refused by the caller, which owns the
+    error vocabulary; this function's contract is x >= 0.
+
+    Because `q` is reduced, sqrt(n/d) is rational exactly when n and d are
+    BOTH perfect squares.
+    """
+    n, d = value.q.numerator, value.q.denominator
+    rn, rd = _isqrt(n), _isqrt(d)
+    if rn * rn == n and rd * rd == d:
+        # Exact — and it keeps whatever the argument carried. `root of (sine
+        # of 30)` is approximate even if the radicand were a perfect square:
+        # the input was already not the number it claimed to be.
+        return Number(Fraction(rn, rd), value.approx)
+
+    # Approximate. Doubling before the floor and halving after is how a floor
+    # becomes a round-half-away with no division and no rounding mode for
+    # three implementations to read three ways. isqrt(floor(x)) == floor(
+    # sqrt(x)) for every non-negative real x, so flooring the quotient first
+    # is not a second approximation.
+    scale = 10 ** RESULT_PLACES
+    scaled = _isqrt((4 * n * scale * scale) // d)
+    return Number(Fraction((scaled + 1) // 2, scale), ROOT_APPROXIMATION)
+
+
+ROOT_APPROXIMATION = Approximation(
+    "root",
+    f"an exact integer square root where the argument is a perfect square, "
+    f"otherwise Newton's method on integers scaled by 10^{RESULT_PLACES}, "
+    f"a result rounded to {RESULT_PLACES} places, half away from zero",
+)

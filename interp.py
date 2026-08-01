@@ -9,7 +9,7 @@ from typing import Any, Optional
 from host import HostError, PythonHost, TestHost
 from lexer import *
 from parser import BUILTIN_NAMES, find_discarded_writes, parse
-from planes_num import Inexact, NotANumber, Number, number_from_text, sine_degrees
+from planes_num import Inexact, NotANumber, Number, number_from_text, root_of, sine_degrees
 from planes_text import escape_string_literal
 
 
@@ -1199,6 +1199,28 @@ class Interpreter:
                     "number of")
             n = sine_degrees(arg.value)
             return Traced(n, Deriv("op", "sine of", n, [arg.node]))
+
+        if node.name == "root":
+            # The thirteenth builtin (square-root-spec.md, closing §253), and
+            # the first whose exactness is decided by its ARGUMENT: `root of 9`
+            # is exactly 3, `root of 2` is not. Deliberately unlike `sine`,
+            # which approximates at every argument because its algorithm has no
+            # exact path at any of them.
+            if not isinstance(arg.value, Number):
+                raise PlanesError(
+                    "not-a-number",
+                    f"cannot take the square root of {detail_value(arg.value)}",
+                    "root takes a number — e.g. root of 9; if this is text, "
+                    "convert it first with number of")
+            if arg.value.q < 0:
+                raise PlanesError(
+                    "not-a-number",
+                    f"cannot take the square root of {fmt(arg.value)}",
+                    "root takes a number that is not negative — this language "
+                    "has no imaginary number, so a negative radicand has no "
+                    "value to return; test the sign before taking the root")
+            n = root_of(arg.value)
+            return Traced(n, Deriv("op", "root of", n, [arg.node]))
 
         if node.name == "text":
             v = fmt(arg.value)

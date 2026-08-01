@@ -497,10 +497,11 @@ def test_sine_is_unary_and_the_builtin_count_moved_by_exactly_one():
     with open(os.path.join(REPO, "grammar", "vocabulary.json"), encoding="utf-8") as f:
         vocab = json.load(f)
     names = [b["name"] for b in vocab["builtins"]]
-    # 12 now (A-Q19 added `number`) — this asserts sine's own seam (unary,
-    # present exactly once, no keyword or effect kind added alongside it),
-    # not that the count is frozen at what sine itself left it at.
-    assert len(names) == 12, names
+    # 13 now (A-Q19 added `number`, §253 added `root`) — this asserts sine's
+    # own seam (unary, present exactly once, no keyword or effect kind added
+    # alongside it), not that the count is frozen at what sine itself left it
+    # at.
+    assert len(names) == 13, names
     assert names.count("sine") == 1
     entry = next(b for b in vocab["builtins"] if b["name"] == "sine")
     assert entry["arity"] == 1, "the unary-builtin invariant holds"
