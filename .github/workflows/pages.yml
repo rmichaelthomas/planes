@@ -5,10 +5,16 @@ name: Deploy Pages
 # root. The pages are otherwise ordinary root-relative fetches and imports:
 # they load js/browser_main.mjs and modules under js/paint/ and js/sound/, and
 # fetch sibling paint/*.planes; browser_main.mjs in turn imports
-# ../grammar/vocabulary.json and ../grammar/messages/amber.json. The build step
-# below reassembles exactly that sibling shape under _site/ — js/test/ and the
-# rest of grammar/ (the self-hosted .planes sources and its own tests) are not
-# part of what any page reaches, so they aren't shipped.
+# ../grammar/vocabulary.json, ../grammar/core.json and
+# ../grammar/messages/amber.json, and meta.html fetches the self-hosted
+# ../grammar/*.planes sources to run them. scripts/assemble_site.sh reassembles
+# exactly that sibling shape under _site/ — js/test/ is the only tree left
+# behind, being no page's dependency.
+#
+# THE ASSEMBLY IS A SCRIPT so the gate can run it too. Inline, the only place it
+# could be exercised was a runner, after merge: test_gate.py checked the surface
+# against the REPO, where every file exists by construction, so a missing copy
+# rule was invisible locally and fatal here.
 #
 # The copy is DERIVED from the tree, never an allowlist. An allowlist is how
 # garden.html shipped in #52 and 404'd on Pages for two builds while this
@@ -46,34 +52,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Assemble the servable surface
-        run: |
-          set -euo pipefail
-          mkdir -p _site/paint _site/grammar/messages
-
-          # Every root page, not a named few.
-          cp ./*.html _site/
-
-          # Every module directory under js/ except the test tree.
-          find js -name '*.mjs' -not -path 'js/test/*' -print0 \
-            | while IFS= read -r -d '' f; do
-                mkdir -p "_site/$(dirname "$f")"
-                cp "$f" "_site/$f"
-              done
-
-          cp paint/*.planes _site/paint/
-
-          # The identity assets a page consumes: the generated marks and the
-          # self-hosted typefaces. garden.html reaches both, the mark through
-          # <img src> and the fonts through @font-face url() — neither of
-          # which is an import, which is why the surface check had to learn to
-          # follow them. render_logo.py and the identity suites stay behind:
-          # they generate these files, they are not served with them.
-          mkdir -p _site/identity/fonts
-          cp identity/*.svg _site/identity/
-          cp identity/fonts/* _site/identity/fonts/
-
-          cp grammar/vocabulary.json _site/grammar/vocabulary.json
-          cp grammar/messages/amber.json _site/grammar/messages/amber.json
+        run: bash scripts/assemble_site.sh _site
 
       # `--source` is the load-bearing half: without it the check walks only
       # the pages that made it into _site, which is blind in exactly the way

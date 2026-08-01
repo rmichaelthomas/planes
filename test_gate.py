@@ -350,14 +350,32 @@ def test_every_servable_page_reaches_the_deploy():
         assert f"cp {page}" not in body and f" {page} _site" not in body, (
             f"pages.yml names {page} in the copy: an allowlist is how "
             f"garden.html went missing. Copy ./*.html instead.")
-    assert "cp ./*.html _site/" in body, (
-        "pages.yml must copy every root page, not a named few")
+    # The copy itself now lives in the assembly script; asserted against that
+    # below, so the rule cannot be evaded by moving the copy between the two.
+
+    # The assembly is a SCRIPT, so the gate can run the real thing rather than
+    # reading a `run:` block and hoping. Inline, the only place it could ever be
+    # exercised was a runner, after merge.
+    assembler = os.path.join(REPO, "scripts", "assemble_site.sh")
+    assert os.path.exists(assembler), "scripts/assemble_site.sh is missing"
+    assert "bash scripts/assemble_site.sh _site" in body, (
+        "pages.yml must call scripts/assemble_site.sh, so the gate and the "
+        "runner build the same tree from the same source")
 
     # js/ must be walked, not enumerated per-directory: `js/*.mjs` plus
     # `js/paint/*.mjs` is what left js/sound/ out of the deploy in #52.
-    assert "find js -name '*.mjs'" in body, (
-        "pages.yml must walk js/ so a new module directory ships with the "
+    with open(assembler, encoding="utf-8") as fh:
+        asm = "\n".join(ln for ln in fh.read().splitlines()
+                        if not ln.lstrip().startswith("#"))
+    assert "find js -name '*.mjs'" in asm, (
+        "the assembly must walk js/ so a new module directory ships with the "
         "page that imports it")
+    assert "cp ./*.html" in asm, (
+        "the assembly must copy every root page, not a named few")
+    for page in pages:
+        assert f"cp {page}" not in asm, (
+            f"the assembly names {page}: an allowlist is how garden.html "
+            f"went missing")
 
     # And the built tree is checked against what was authored. Without
     # --source the checker shares the allowlist's blind spot exactly: it
@@ -369,9 +387,27 @@ def test_every_servable_page_reaches_the_deploy():
         "pages.yml must run the surface check against _site WITH --source, "
         "or an omitted page passes unnoticed")
 
-    # The check is real here and now, not only on a runner.
-    r = _py("scripts/check_pages_surface.py", REPO, f"--source={REPO}")
-    assert r.returncode == 0, r.stdout + r.stderr
+    # THE CHECK IS REAL HERE AND NOW, AND AGAINST THE TREE THAT ACTUALLY SHIPS.
+    #
+    # This used to run the checker against the REPO with --source=REPO — the
+    # authored tree checking itself. Every reference resolves there by
+    # construction, so a file the assembly forgets to copy is invisible: the
+    # gate went green and Deploy Pages failed on the next push. meta.html
+    # shipped exactly that way, fetching grammar/*.planes and grammar/core.json
+    # that _site did not carry.
+    #
+    # Reading the workflow's text can only ever confirm the workflow says the
+    # right words. Assembling the tree and checking THAT is the thing the words
+    # were standing in for.
+    with tempfile.TemporaryDirectory() as tmp:
+        site = os.path.join(tmp, "_site")
+        built = subprocess.run(["bash", assembler, site], cwd=REPO,
+                               capture_output=True, text=True)
+        assert built.returncode == 0, built.stdout + built.stderr
+        r = _py("scripts/check_pages_surface.py", site, f"--source={REPO}")
+        assert r.returncode == 0, (
+            "the ASSEMBLED site does not resolve — a page reaches something "
+            "scripts/assemble_site.sh does not copy:\n" + r.stdout + r.stderr)
 
 
 def test_the_landing_page_links_to_the_pages_it_ships_with():
