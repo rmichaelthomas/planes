@@ -159,6 +159,53 @@
 
     <pre class="stale" id="stale" hidden></pre>
 
+    <!-- THE BOOT WATCHDOG, and why it is a classic script and not a module.
+
+         This page's logic is one inline module that imports two others. If ANY
+         of those imports fails, the whole script never evaluates: no listener
+         is attached, every button is inert, and the only trace is a console
+         error a reader has no reason to open. The page looks fine and does
+         nothing.
+
+         That is not hypothetical. `js/meta_browser.mjs` imports `loadGraphInto`
+         from `js/browser_main.mjs`, an export added in the same build as this
+         page — and a browser that had `browser_main.mjs` cached from try.html
+         or paint.html served the OLD copy, which does not have it. The module
+         died on the import, the page rendered, and pressing Run both did
+         nothing at all.
+
+         `staleModuleWarning()` exists for exactly this class and could not fire:
+         it lives inside the module that failed to load. A guard downstream of
+         the failure it guards against is not a guard. This one is upstream —
+         a classic script, so no import can stop it, holding a timer the module
+         clears once it has booted. -->
+    <script>
+      window.__metaBooted = false;
+      window.addEventListener("error", function (e) {
+        window.__metaBootError = String((e && e.message) || e);
+      });
+      setTimeout(function () {
+        if (window.__metaBooted) return;
+        var el = document.getElementById("stale");
+        el.textContent =
+          "This page did not start — its JavaScript failed to load, and the " +
+          "most likely reason is a stale module cache.\n\n" +
+          "These pages load about twenty-five ES modules with no versioning, " +
+          "because versioning them would need a build step and this repo does " +
+          "not have one. A browser is free to serve some from cache and fetch " +
+          "others, and this page imports a module that gained a new export in " +
+          "the same build that added the page — so a cached copy of it is " +
+          "missing the export and the whole script dies on the import.\n\n" +
+          "In Safari: Develop \u2192 Empty Caches, then reload — a plain " +
+          "reload keeps ES modules. In Chrome or Firefox: hold Shift and click " +
+          "reload.\n\n" +
+          (window.__metaBootError
+            ? "(the browser's own words: " + window.__metaBootError + ")"
+            : "(no error was captured; open the console for more)");
+        el.hidden = false;
+      }, 3000);
+    </script>
+
     <textarea id="source" spellcheck="false">
 # Small enough to run twice quickly; real enough not to be a toy.
 # Arithmetic that is exact, a function call, and output.
@@ -419,6 +466,10 @@ show "tax: " + text of (tax of total, 0.08)
         $("stale").hidden = false;
       }
 
+      // Tell the watchdog above the module got this far. Anything that stops
+      // the script before here leaves the flag false and the message fires.
+      window.__metaBooted = true;
+
       bothBtn.addEventListener("click", runBoth);
       ceilBtn.addEventListener("click", measureCeiling);
       stageSel.addEventListener("change", () => {
@@ -434,6 +485,12 @@ show "tax: " + text of (tax of total, 0.08)
       source.addEventListener("keydown", (e) => {
         if ((e.metaKey || e.ctrlKey) && e.key === "Enter") runBoth();
       });
+
+      // Run the sample on arrival, exactly as try.html does — unless there is
+      // worse news to show first. A page whose panes read "(not run yet)" until
+      // you find the button is indistinguishable, at a glance, from a page that
+      // is broken; every sibling page here answers on load, and so does this.
+      if (!stale) runBoth();
     </script>
   </body>
 </html>

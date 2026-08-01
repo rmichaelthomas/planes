@@ -386,3 +386,41 @@ test("STAGES names the file and entry function each stage is driven through", ()
   assert.equal(STAGES.parse.fn, "canonical-of-program-source");
   assert.equal(STAGES.lex.fn, "tokenize");
 });
+
+// ============================================================ the boot watchdog
+//
+// A DOM-level guard, so it is asserted as text rather than executed — but the
+// property that matters is STRUCTURAL and text can carry it: the watchdog must
+// not be inside a module, or it dies of the same import failure it reports.
+
+test("the boot watchdog is upstream of the module it guards", () => {
+  const html = fs.readFileSync(path.join(REPO, "meta.html"), "utf-8");
+  const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
+  const watchdog = scripts.find(([, , body]) => body.includes("__metaBooted"));
+  assert.ok(watchdog, "meta.html has no boot watchdog");
+
+  // The whole point. `staleModuleWarning()` could not fire for this failure
+  // because it lives inside the module that failed to load; a guard downstream
+  // of what it guards against is not a guard.
+  const [, attrs, body] = watchdog;
+  assert.ok(
+    !/type\s*=\s*["']module["']/.test(attrs),
+    "the watchdog is a module — an import failure kills it too, which is the " +
+      "exact defect it exists to report",
+  );
+  assert.ok(body.includes("setTimeout"), "the watchdog never arms a timer");
+  assert.match(body, /Empty Caches/, "the watchdog does not name the remedy");
+
+  // And the module clears it, or the warning fires on a healthy page.
+  const mod = scripts.find(([, a]) => /type\s*=\s*["']module["']/.test(a));
+  assert.ok(mod, "meta.html has no module script");
+  assert.ok(
+    mod[2].includes("window.__metaBooted = true"),
+    "the module never signals that it booted",
+  );
+  assert.ok(
+    mod[2].includes("if (!stale) runBoth()"),
+    "the page does not run on load — every sibling page answers on arrival, " +
+      "and panes reading '(not run yet)' look identical to a broken page",
+  );
+});
