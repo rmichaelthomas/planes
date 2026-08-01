@@ -13,8 +13,8 @@ Both came from the parser's generic `expect`. Both are fixed here, in both
 implementations, and each has a test below asserting the fix clause is present
 — and that the two implementations say it identically, byte for byte.
 
-The reserved-word one had a ready answer: the effective reserved surface is 42
-names, 32 keywords plus 11 builtins, and the builtin half already errored
+The reserved-word one had a ready answer: the effective reserved surface is 45
+names, 32 keywords plus 13 builtins, and the builtin half already errored
 naming the collision (`check_binding_name`). The keyword half now says the same
 thing in the same voice.
 
@@ -109,7 +109,7 @@ def test_a_reserved_word_where_a_name_is_wanted_names_the_fix():
 
 
 def test_the_keyword_message_matches_the_builtin_one_in_voice():
-    """The 42-name reserved surface, said the same way on both halves: a
+    """The 45-name reserved surface, said the same way on both halves: a
     builtin collision already named itself; the keyword half now does too,
     and each points at the other."""
     kw = _py_error(RESERVED_WORD_AS_NAME)

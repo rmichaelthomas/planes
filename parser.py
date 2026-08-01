@@ -120,8 +120,8 @@ class Parser:
         messages that had none:
 
         * a reserved word where a NAME was wanted gets its own message,
-          because that is never a punctuation slip — it is the 42-name
-          reserved surface (32 keywords + 11 builtins) being hit. The
+          because that is never a punctuation slip — it is the 45-name
+          reserved surface (32 keywords + 13 builtins) being hit. The
           builtin half already errored naming the collision
           (check_binding_name); this is the keyword half, in the same voice.
         * every other site may pass `fix=`, a clause naming what to write
@@ -162,8 +162,8 @@ class Parser:
         variable. `<name> of x` (and the other builtin forms) is a grammar
         shape, so a builtin name cannot also stand for a plain value — the
         collision grammar/parser.planes hit when it used `rest` as a local
-        (S2). Builtins spend from the same 42-name budget as keywords
-        (32 + 10); the error names the collision here rather than letting it
+        (S2). Builtins spend from the same 45-name budget as keywords
+        (32 + 13); the error names the collision here rather than letting it
         become a confusing downstream failure. A function definition is the
         one exception — `to count of x:` shadows the builtin deliberately
         (the names mandate) — so this guards binding positions only, never a

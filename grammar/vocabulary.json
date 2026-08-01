@@ -228,7 +228,7 @@
     {
       "name": "sine",
       "arity": 1,
-      "note": "shadowable by a user function of the same name; takes DEGREES, consistent with the drawing protocol's `rotate` -- degrees are whole numbers and stay exact under this language's arithmetic, where radians would arrive already approximated; the only operation in the language that returns an approximate value, and it returns one for EVERY input including `sine of 0` -- the operation's true result being representable at one argument does not make the operation exact"
+      "note": "shadowable by a user function of the same name; takes DEGREES, consistent with the drawing protocol's `rotate` -- degrees are whole numbers and stay exact under this language's arithmetic, where radians would arrive already approximated; it returns an approximate value for EVERY input including `sine of 0` -- the operation's true result being representable at one argument does not make the operation exact, which is what distinguishes it from `root`, the other operation in `value_properties.exactness.introduced_by`"
     },
     {
       "name": "rest",
@@ -356,7 +356,8 @@
       ],
       "default": "exact",
       "introduced_by": [
-        "sine"
+        "sine",
+        "root"
       ],
       "rules": [
         {
@@ -378,6 +379,10 @@
         {
           "rule": "static-derivability",
           "statement": "Whether a program produces approximate values is derivable without running it, by the same call-graph walk that computes the effect surface."
+        },
+        {
+          "rule": "approximation-is-per-argument",
+          "statement": "An operation in `introduced_by` may approximate at every argument or only at some. `sine` returns an approximate value for EVERY input, including `sine of 0`. `root of 9` is exactly 3 and `root of 2` is approximate. So exactness is a property of an operation APPLIED TO an argument, not of the operation alone, and reaching one of these operations is a promise of approximation only for the first kind."
         }
       ]
     }

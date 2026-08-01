@@ -70,7 +70,7 @@ def test_every_builtin_name_works_inside_a_multiword_name():
 
 
 def test_effective_reserved_surface_is_45():
-    """The effective reserved surface is 44: the 32 structural keywords plus
+    """The effective reserved surface is 45: the 32 structural keywords plus
     the 13 builtins, which spend from the same name budget (S3a A.4).
 
     A builtin name is not a keyword — `count`, `text`, `read` can each still
@@ -97,7 +97,13 @@ def test_effective_reserved_surface_is_45():
     vocabulary exists to avoid") is retracted for the same reason `chr of n`
     was declined and `whole` was not — this one closes a round trip the
     language cannot otherwise close at all, not a convenience for one that
-    already has another way in."""
+    already has another way in.
+
+    `root` takes it from 44 to 45 (square-root-spec.md, closing §253). The
+    third of these arguments, and the first whose builtin is exact at some
+    arguments and approximate at others — `root of 9` is exactly 3 — so what
+    it spends the name on is a property no existing operation could express.
+    """
     assert len(KEYWORDS) == 32, f"keyword count is {len(KEYWORDS)}, expected 32"
     assert len(BUILTIN_NAMES) == 13, f"builtin count is {len(BUILTIN_NAMES)}, expected 13"
     assert len(KEYWORDS | BUILTIN_NAMES) == 45, "keywords and builtins must be disjoint at 45"

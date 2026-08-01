@@ -1,5 +1,5 @@
 {
-  "note": "The core subset -- the port surface a second host must implement to run grammar/interp.planes. Declared here as a single source of truth (as grammar/vocabulary.json is for the full surface) and enforced by core_check.py, which fails when interp.planes uses any keyword or builtin outside it. Derived from evidence: every member is a construct interp.planes actually uses; every excluded construct is one it provably avoids. CORE_SUBSET.md is the prose derivation; this file is what the checker reads. Effect kinds are NOT listed as constraints -- all seven are core (an interpreter performs whatever it interprets, confirmed by shapes in Phase 5), so they are never flagged.",
+  "note": "The core subset -- the port surface a second host must implement to run grammar/interp.planes. Declared here as a single source of truth (as grammar/vocabulary.json is for the full surface) and enforced by core_check.py, which fails when interp.planes uses any keyword or builtin outside it. Derived from evidence: every member is a construct interp.planes actually uses; every excluded construct is one it provably avoids. CORE_SUBSET.md is the prose derivation; this file is what the checker reads. Effect kinds are NOT listed as constraints -- all seven are core (an interpreter performs whatever it interprets, confirmed by shapes in Phase 5), so they are never flagged. This file is HAND-EDITED and the language's vocabulary is not, so core_check.py also holds the two against each other: every name here must still exist in the vocabulary, and every keyword and builtin the vocabulary declares must appear either in the core lists or in the matching `excluded_` map with a reason. A builtin that is neither core nor explained is a violation -- which is what `root` was, silently, between its addition and this check.",
   "format": 1,
   "keywords": [
     "and", "as", "doing", "each", "else", "fail", "false", "first", "for",
@@ -18,10 +18,13 @@
     "when": "dispatch is flat `if k == ...` on the node kind (A.1/A.6), never `when subject is {...}` -- so `when` is NOT needed, refuting CORE_SUBSET.md's claim that it is the only substitute for the absent isinstance",
     "why": "provenance query is a tool, not a language the interpreter needs; the deriv slot stays nothing (A.6)"
   },
-  "excluded_builtins": {},
+  "excluded_builtins": {
+    "sine": "reimplemented, not called: interp.planes computes the Taylor series from exact parts and marks the result approximate itself, because showing that derivation was the point of adding it -- a `sine` delegated to the host would report a property the host happened to track rather than implement one",
+    "root": "reimplemented, not called, and for a second reason beyond `sine`'s: `root of 9` is exactly 3, so exactness here is decided by the ARGUMENT, and deciding it needs a number's numerator and denominator. interp.planes cannot look inside a number at all, so it RECOVERS them by continued-fraction expansion (square-root section) -- delegating would have left `root of (1 / 9)` approximate in the third implementation and exactly 1/3 in the other two"
+  },
   "size": {
     "keywords": "28 of 32",
-    "builtins": "11 of 12 -- interp.planes delegates every ordinary builtin to the host, `number` (A-Q19) among them; `sine` is the one exception, reimplemented from exact parts rather than called, because showing that derivation was the point of adding it",
+    "builtins": "11 of 13 -- interp.planes delegates every ordinary builtin to the host, `number` (A-Q19) among them; `sine` and `root` are the two exceptions, each reimplemented from exact parts rather than called, and each reason is in `excluded_builtins` where a loader can read it rather than here in prose",
     "effect_kinds": "7 of 7"
   }
 }

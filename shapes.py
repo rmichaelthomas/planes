@@ -94,8 +94,8 @@ class Surface:
     unresolved: list = field(default_factory=list)  # calls to unknown functions
     foreign: list = field(default_factory=list)     # effects of every foreign
                                                     # declaration, called or not
-    approximate: list = field(default_factory=list)  # routes from an entry
-                                                     # point to `sine`
+    approximate: list = field(default_factory=list)  # routes to `sine` or
+                                                     # `root` from an entry
 
     # ---- the declared surface
 
@@ -157,8 +157,8 @@ class Surface:
     # ---- the third question (checkpoint §232), answered for numerics
     #
     # Does this program produce APPROXIMATE values? Derivable without running
-    # it: does the call graph reach `sine`, which is the only operation in the
-    # language that introduces approximation. The analyser already walks the
+    # it: does the call graph reach `sine` or `root`, the two operations in the
+    # language that introduce approximation. The analyser already walks the
     # call graph for effects; this is the same walk answering a second
     # question, and it is reported beside the effect kinds rather than hidden.
 

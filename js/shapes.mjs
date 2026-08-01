@@ -260,8 +260,8 @@ export class Surface {
 
   // The third question (checkpoint §232), answered for numerics. Does this
   // program produce APPROXIMATE values? Derivable without running it: does the
-  // call graph reach `sine`, the only operation in the language that
-  // introduces approximation. Reported beside the effect kinds, never hidden.
+  // call graph reach `sine` or `root`, the two operations in the language that
+  // introduce approximation. Reported beside the effect kinds, never hidden.
   producesApproximate() {
     return this.approximate.length > 0;
   }

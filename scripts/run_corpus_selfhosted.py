@@ -4,10 +4,10 @@ the reference (C1, §6).
 
 `scripts/run_corpus_through_planes.py` measures a different thing: it drives
 whole programs through interp.planes in "real" mode and marks anything with a
-`use` line N/A, because module resolution is out of scope there. Twelve corpus
-programs use `file` and four use `http`, so that harness never sees the half of
-the corpus that touches the world — which is the half the host boundary is
-about.
+`use` line N/A, because module resolution is out of scope there. Thirteen
+corpus programs use `file` and four use `http`, so that harness never sees the
+half of the corpus that touches the world — which is the half the host boundary
+is about.
 
 This one runs the corpus in "inert" mode, where an effect is data: the
 configuration supplies the files, responses, clock, randoms, envs, and foreign

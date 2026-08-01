@@ -46,7 +46,7 @@ to render-bool of b:
 # ================================================================ number-literal text, parsed by hand
 #
 # Number.parse (planes_num.py) has no Planes-side equivalent, and none of
-# the 8 builtins converts text to a number -- `whole` truncates an
+# the 8 builtins converts text to a number -- `whole` rounds an
 # EXISTING number, it does not parse one. Rather than spend a 9th builtin
 # on this (declined on the same grounds `chr of n` was, REPORT_STRING_
 # ESCAPES.md's ruling: a magic conversion builtin reintroduces exactly
@@ -558,11 +558,11 @@ to peek-at of cursor, k:
 # shapes.py can still see which fields a program reads, which is the
 # soundness reason a name table is expressible this way and r[k] was not.
 
-# The 10 builtins, each arity 1 -- parser.py's
+# The 13 builtins, each arity 1 -- parser.py's
 # {b["name"]: b.get("arity", 1) for b in _VOCAB["builtins"]}, and every
 # builtin defaults to 1 (none declares another). `builtins` comes from
 # grammar/vocabulary.planes via `use vocabulary`, the same single source
-# of truth lexer.planes reads, so this never drifts from the locked 10.
+# of truth lexer.planes reads, so this never drifts from the locked 13.
 to builtin-entries:
   result = []
   for each b in builtins:

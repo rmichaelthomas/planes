@@ -57,9 +57,10 @@ let petal-turn = 36 because "ten petals thirty-six degrees apart close the circl
 #   and FLAT AT BOTH TURNS, which `pulse` below is not.
 #
 # It is also why this program's computed surface now says its numbers are
-# approximate: `sine` is the only operation in the language that introduces
-# approximation, and the analyser can see the route to it — wave, cosine,
-# sine — without running a single tick.
+# approximate: `sine` introduces approximation at every argument, and the
+# analyser can see the route to it — wave, cosine, sine — without running a
+# single tick. (`root` introduces it too, but only at some arguments, so a
+# route to `root` alone would say `may be approximate` instead.)
 #
 # The result is ROUNDED, for the same reason turtle rounds its coordinates: a
 # `sine` result carries a denominator of 10^30, and everything computed from
