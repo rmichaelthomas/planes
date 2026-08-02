@@ -25,14 +25,15 @@ def test_surface_checker_follows_cache_busted_modules_and_template_assets():
         }
 
 
-def test_pages_assembly_derives_the_asset_tree_and_asset_changes_trigger_it():
+def test_pages_assembly_derives_the_asset_tree_and_every_main_push_deploys_it():
     with open(os.path.join(REPO, "scripts", "assemble_site.sh"), encoding="utf-8") as fh:
         assembler = fh.read()
     with open(os.path.join(REPO, ".github", "workflows", "pages.yml"), encoding="utf-8") as fh:
         workflow = fh.read()
 
     assert "find assets -type f" in assembler
-    assert '- "assets/**"' in workflow
+    push_block = workflow.split("workflow_dispatch:", 1)[0]
+    assert "\n    paths:" not in push_block
 
 
 if __name__ == "__main__":

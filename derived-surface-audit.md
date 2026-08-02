@@ -20,10 +20,11 @@ Named dict/object literals whose keys overlap >=3 with grammar/vocabulary.json's
 
 Every root `*.html` page, and whether its prose names the highest protocol version its module graph implements.
 
-**0 finding(s), 5 site(s) examined.**
+**0 finding(s), 6 site(s) examined.**
 
 ### Sites examined
 
+- a-crossing.html -- does not document a protocol version in prose
 - garden.html -- does not document a protocol version in prose
 - index.html -- does not document a protocol version in prose
 - meta.html -- does not document a protocol version in prose
