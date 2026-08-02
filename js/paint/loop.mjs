@@ -62,13 +62,14 @@ export function planesLiteral(value) {
 // explicitly by whatever page is driving it, the same way a program that
 // cares about `tick` is driven by a loop or a scrubber rather than reading
 // this module's own idea of a sensible tick.
-export function composePrelude({ tick, keys, pointer, state, seed = 0 }) {
+export function composePrelude({ tick, keys, pointer, state, event = null, seed = 0 }) {
   return (
     [
       `let tick = ${planesLiteral(tick)}`,
       `let keys = ${planesLiteral(keys)}`,
       `let pointer = ${planesLiteral(pointer)}`,
       `let state = ${planesLiteral(state)}`,
+      `let event = ${planesLiteral(event)}`,
       `let seed = ${planesLiteral(seed)}`,
     ].join("\n") + "\n"
   );

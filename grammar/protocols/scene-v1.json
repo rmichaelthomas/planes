@@ -1,0 +1,32 @@
+{
+  "name": "Planes Scene Intent Protocol",
+  "version": 1,
+  "kind": "host-protocol",
+  "purpose": "Carries renderer-independent presentation intent from an authoritative Planes run to a visual and audio host.",
+  "ownership": {
+    "planes": ["semantic state", "available actions", "route and outcome", "desired camera", "asset identity", "cue identity", "audio intent"],
+    "host": ["asset loading", "interpolation", "composition", "shader performance", "audio synthesis", "input capture"],
+    "forbiddenHostDecisions": ["route choice", "Passage success", "Passage minutes", "action availability", "Statement of Revision"]
+  },
+  "coordinates": {
+    "space": "normalized",
+    "minimum": 0,
+    "maximum": 1,
+    "origin": "top-left"
+  },
+  "records": {
+    "scene protocol": { "critical": true, "fields": [{ "name": "version", "type": "integer", "value": 1 }] },
+    "scene camera": { "critical": true, "fields": [{ "name": "id", "type": "identifier" }, { "name": "x", "type": "normalized-number" }, { "name": "y", "type": "normalized-number" }, { "name": "zoom", "type": "positive-number" }] },
+    "scene environment": { "critical": true, "fields": [{ "name": "asset", "type": "identifier" }, { "name": "light", "type": "identifier" }, { "name": "weather", "type": "identifier" }] },
+    "scene subject": { "critical": false, "fields": [{ "name": "id", "type": "identifier" }, { "name": "asset", "type": "identifier" }, { "name": "x", "type": "normalized-number" }, { "name": "y", "type": "normalized-number" }, { "name": "scale", "type": "number" }, { "name": "visibility", "type": "identifier" }, { "name": "state", "type": "identifier" }] },
+    "scene route": { "critical": false, "fields": [{ "name": "id", "type": "identifier" }, { "name": "fromX", "type": "normalized-number" }, { "name": "fromY", "type": "normalized-number" }, { "name": "toX", "type": "normalized-number" }, { "name": "toY", "type": "normalized-number" }, { "name": "state", "type": "identifier" }, { "name": "progress", "type": "normalized-number" }] },
+    "scene signal": { "critical": false, "fields": [{ "name": "id", "type": "identifier" }, { "name": "x", "type": "normalized-number" }, { "name": "y", "type": "normalized-number" }, { "name": "tone", "type": "identifier" }, { "name": "state", "type": "identifier" }] },
+    "scene weather": { "critical": false, "fields": [{ "name": "kind", "type": "identifier" }, { "name": "intensity", "type": "number" }, { "name": "direction", "type": "identifier" }] },
+    "scene action": { "critical": false, "fields": [{ "name": "subject", "type": "identifier" }, { "name": "eventKind", "type": "identifier" }, { "name": "eventChoice", "type": "identifier" }, { "name": "hyphenatedLabel", "type": "identifier" }, { "name": "emphasis", "type": "identifier" }] },
+    "scene cue": { "critical": false, "fields": [{ "name": "id", "type": "identifier" }, { "name": "serial", "type": "number" }] },
+    "audio bed": { "critical": false, "fields": [{ "name": "id", "type": "identifier" }, { "name": "gain", "type": "number" }, { "name": "anchor", "type": "identifier" }] },
+    "audio cue": { "critical": false, "fields": [{ "name": "id", "type": "identifier" }, { "name": "gain", "type": "number" }, { "name": "anchor", "type": "identifier" }, { "name": "serial", "type": "number" }] }
+  },
+  "unknownRecords": "Unknown optional records produce a host warning and are ignored. Unknown protocol versions and malformed critical records stop scene application.",
+  "fallback": "If a named asset is unavailable, the host uses the canonical SVG silhouette for that subject. If WebGL is unavailable, the same semantic scene is rendered with SVG and CSS atmosphere."
+}

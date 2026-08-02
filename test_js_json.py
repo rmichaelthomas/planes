@@ -152,7 +152,11 @@ def test_the_planes_round_trip_matches_the_reference_byte_for_byte():
     print(f"    [json round trip: {checked} byte-identical to the reference, "
           f"{len(non_ascii)} equal-but-unescaped ({', '.join(non_ascii)}), "
           f"{len(refused)} refused ({', '.join(refused)})]")
-    assert checked >= 8, checked
+    # A clean checkout tracks ast_fixtures_baseline.json plus the generated
+    # fixtures above: seven byte-identical acceptances after the named astral
+    # and refusal cases. Developer workspaces may contribute more optional
+    # REPO_FILES, but the gate cannot require untracked local data.
+    assert checked >= 7, checked
     assert refused, "the refusal path was never exercised"
 
 

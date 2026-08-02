@@ -36,6 +36,18 @@ find js -name '*.mjs' -not -path 'js/test/*' -print0 \
 
 cp paint/*.planes "$SITE/paint/"
 
+# Every authored visual asset, preserving its relative path. The tree is
+# derived rather than naming A Crossing or one asset type: future showcases
+# can add sprites, plates, maps, textures, or other browser-native files under
+# assets/ without opening another deployment allowlist.
+if [ -d assets ]; then
+  find assets -type f -print0 \
+    | while IFS= read -r -d '' f; do
+        mkdir -p "$SITE/$(dirname "$f")"
+        cp "$f" "$SITE/$f"
+      done
+fi
+
 # The identity assets a page consumes: the generated marks and the self-hosted
 # typefaces. garden.html reaches both, the mark through <img src> and the fonts
 # through @font-face url() — neither of which is an import, which is why the
