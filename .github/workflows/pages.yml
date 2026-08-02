@@ -22,19 +22,17 @@ name: Deploy Pages
 # exist always succeeds, so a page missing from the list fails silently.
 # test_gate.py::test_every_servable_page_reaches_the_deploy holds the line.
 
+# No `paths:` filter. One used to live here, hand-maintained against the tree
+# above — and it drifted, omitting grammar/*.planes and grammar/core.json,
+# both of which the assembly copies because meta.html fetches them. A push
+# touching only those paths built and passed every gate step and never
+# deployed. The remedy is not a corrected list to watch for the next drift:
+# it is that deploying on every push to main removes the category. This repo
+# pushes a handful of times a day; the runner-minutes a filter would save are
+# not worth a second silent-omission class (derived-surface-audit, instance 1).
 on:
   push:
     branches: [main]
-    paths:
-      - "*.html"
-      - "assets/**"
-      - "js/**"
-      - "paint/**"
-      - "identity/*.svg"
-      - "identity/fonts/**"
-      - "grammar/vocabulary.json"
-      - "grammar/messages/amber.json"
-      - ".github/workflows/pages.yml"
   workflow_dispatch: {}
 
 permissions:

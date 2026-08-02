@@ -293,9 +293,11 @@ def main():
         print("\ninterp.planes conforms: no keyword or builtin outside the "
               "declared core.")
 
-    # --- The graph block. A REPORT, never a gate (see graph_of above): the
-    # entry file's own violations gate as they always have; a module it reaches
-    # through `use` is named and counted and does not change the exit code.
+    # --- The graph block. IT GATES (see graph_of above and #64's ruling): the
+    # entry file's own violations gate as they always have, and a module it
+    # reaches through `use` is named, counted, and added to sys.exit's count
+    # below exactly the same way -- a construct reached from inside a module
+    # is outside the port surface exactly as one in the entry file is.
     reached = modules_reached(target)
     graph = graph_violations(target, core_keywords, core_builtins)
     print()

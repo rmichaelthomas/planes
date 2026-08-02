@@ -187,6 +187,14 @@ timed core_check python3 core_check.py
 # port surface a second host must implement and is held to the same core.
 timed core_check_json python3 core_check.py grammar/json.planes
 
+echo "== check_derived_claims.py (a hand-written claim vs the machine-derived state it describes) =="
+# derived-surface-audit: grammar/README.md's D2 doctrine (hand-edited source,
+# generated projection, checked in CI) generalised past grammar/ -- four
+# instances found by reading, none by any check, until this one. A gate, not
+# a report: an unfixed instance of the class is exactly as much a build
+# break as core_check.py's drift guard is.
+timed check_derived_claims python3 scripts/check_derived_claims.py
+
 echo "== errors coverage (every catalogued error names its fix; a report) =="
 # C2: three states now — names a fix, deliberately names none, and should name
 # one and does not. The last is the only one that is a work list, and its
