@@ -64,7 +64,8 @@ def load_graph(path, _seen=None, _stack=None, _names=None):
                           f"module cycle: {cycle}",
                           "break the cycle by moving shared code to a third file")
 
-    src = open(path).read()
+    with open(path, encoding="utf-8") as source_file:
+        src = source_file.read()
     _stack.append(key)
     ordered = []
     for mod in uses_in(src):

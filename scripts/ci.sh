@@ -108,7 +108,7 @@ if [ -n "$MISSING" ]; then
   echo "  or activate it first:  source .venv/bin/activate" >&2
   if [ ! -d .venv ]; then
     echo "  (no ./.venv here either — create one: python3 -m venv .venv &&" >&2
-    echo "   .venv/bin/pip install ruff mypy)" >&2
+    echo "   .venv/bin/pip install$MISSING)" >&2
   fi
   exit 1
 fi

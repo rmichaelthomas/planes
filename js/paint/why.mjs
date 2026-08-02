@@ -30,7 +30,7 @@ const ORIGIN_KINDS = new Set(["literal", "effect"]);
 // A name whose derivation is the whole answer: the tick and the seed are what
 // the page put in, and a chain that reaches one has reached the edge of the
 // program.
-const INPUT_NAMES = new Set(["tick", "seed", "keys", "pointer", "state"]);
+const INPUT_NAMES = new Set(["tick", "seed", "keys", "pointer", "state", "event"]);
 
 function fmtNumber(v) {
   if (typeof v !== "number") return String(v);

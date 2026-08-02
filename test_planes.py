@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 
 from interp import Interpreter, PlanesError, origins, why_tree
 from parser import PlanesSyntaxError
@@ -28,6 +29,7 @@ def run(src, **kw):
 
 
 def interp(src, **kw):
+    kw.setdefault("fs", {})
     i = Interpreter(**kw)
     i.run(src)
     return i
@@ -501,8 +503,11 @@ def test_the_readme_states_the_real_catalogue_counts():
 
 def _cli(*args):
     import subprocess
-    r = subprocess.run([sys.executable, "planes.py", *args],
-                       capture_output=True, text=True)
+    isolated = [os.path.abspath(arg) if os.path.isfile(arg) else arg
+                for arg in args]
+    with tempfile.TemporaryDirectory() as d:
+        r = subprocess.run([sys.executable, os.path.abspath("planes.py"), *isolated],
+                           cwd=d, capture_output=True, text=True)
     return r
 
 

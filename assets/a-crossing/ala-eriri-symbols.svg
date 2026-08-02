@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <!-- Faithful extractions from the user-supplied Ala Eriri Factbook and encyclopedia renders. -->
+  <symbol id="ala-flag" viewBox="0 0 600 400">
+    <rect width="600" height="400" fill="#16224C"/>
+    <path d="M0 200H600" stroke="#F4EFE2" stroke-width="11"/>
+    <path d="M300 200C240 128 176 128 176 200s64 72 124 0c60-72 124-72 124 0s-64 72-124 0Z" fill="none" stroke="#F4EFE2" stroke-width="13" stroke-linecap="round"/>
+    <g fill="#E0A93B">
+      <circle cx="55" cy="200" r="13"/><circle cx="103" cy="200" r="13"/><circle cx="151" cy="200" r="13"/>
+      <circle cx="238" cy="200" r="15"/><circle cx="300" cy="200" r="17"/><circle cx="362" cy="200" r="15"/>
+      <circle cx="449" cy="200" r="13"/><circle cx="497" cy="200" r="13"/><circle cx="545" cy="200" r="13"/>
+    </g>
+  </symbol>
+
+  <symbol id="ala-seal" viewBox="0 0 300 300">
+    <circle cx="150" cy="140" r="96" fill="#16224C" stroke="#E0A93B" stroke-width="5"/>
+    <circle cx="150" cy="140" r="82" fill="none" stroke="#E0A93B" stroke-width="1.6"/>
+    <path d="M150 140c-28-34-58-34-58 0s30 34 58 0c28-34 58-34 58 0s-30 34-58 0Z" fill="none" stroke="#F4EFE2" stroke-width="7"/>
+    <g fill="#E0A93B"><circle cx="121" cy="140" r="6"/><circle cx="150" cy="140" r="7"/><circle cx="179" cy="140" r="6"/></g>
+    <text x="150" y="200" text-anchor="middle" font-family="Georgia,serif" font-size="15" fill="#E0A93B">1741</text>
+    <path d="M28 246q122-26 244 0v20q-122-26-244 0Z" fill="#E0A93B"/>
+    <text x="150" y="261" text-anchor="middle" font-family="Georgia,serif" font-size="17" fill="#16224C">ỤZỌ MGBAGỌ</text>
+  </symbol>
+
+  <symbol id="ala-map" viewBox="0 0 460 250">
+    <rect width="460" height="250" fill="#f2eee1"/>
+    <g stroke="#b9c8d4" stroke-width=".7" fill="none"><path d="M0 50h460M0 100h460M0 150h460M0 200h460M60 0v250M140 0v250M220 0v250M300 0v250M380 0v250"/></g>
+    <g stroke="#1b2a52" stroke-width="1.1" stroke-dasharray="3 3" fill="none" opacity=".55"><path d="m188 108-76-42m76 42 98-46m-98 46L86 140m102-32 120 22m-120-22-38 82m38-82 44 92m-44-92 150 82m-150-82L64 206"/></g>
+    <g fill="#cfd6c4" stroke="#1b2a52" stroke-width="1.3">
+      <path d="M158 92q26-30 62-20t40 42q4 32-24 46-32 14-60-2-28-18-18-66Z"/><path d="M96 52q20-16 36-2 14 14-2 28-20 12-34-2-10-12 0-24Z"/>
+      <path d="M270 46q22-12 34 5 10 17-10 26-22 10-31-7-7-14 7-24Z"/><path d="M70 128q19-12 31 5 9 17-10 24-19 7-26-10-5-11 5-19Z"/>
+      <path d="M292 116q24-14 36 5 9 17-12 26-22 8-29-9-5-13 5-22Z"/><path d="M134 178q19-12 31 5 9 17-10 24-19 7-26-10-5-12 5-19Z"/>
+      <path d="M216 188q19-12 31 5 9 17-10 24-19 7-26-10-5-12 5-19Z"/><path d="M322 178q17-10 27 5 7 14-9 20-17 6-23-8-4-10 5-17Z"/>
+      <path d="M50 194q14-9 23 4 7 12-8 18-15 5-20-7-4-8 5-15Z"/>
+    </g>
+    <circle cx="186" cy="112" r="3.4" fill="#1b2a52"/>
+    <g font-family="Arial Narrow,Arial,sans-serif" font-size="9.5" fill="#23201b">
+      <text x="172" y="128">ERIRI UKWU</text><text x="92" y="46">ANOMABU</text><text x="268" y="40">SABEL</text><text x="56" y="124">TADO</text><text x="292" y="110">BONNY</text><text x="126" y="174">VELA</text><text x="206" y="184">MARRONDE</text><text x="316" y="174">BANTÃ</text><text x="34" y="190">RESO</text><text x="192" y="106" font-size="8" fill="#1b2a52">Nkwo Eriri</text>
+    </g>
+    <g font-family="Arial Narrow,Arial,sans-serif" font-size="8" fill="#5f6b74"><text x="10" y="18">13°10′S</text><text x="404" y="18">18°20′W</text><text x="10" y="240">SOUTH ATLANTIC OCEAN</text><text x="352" y="228">0        60 km</text></g>
+    <path d="M352 234h92m-92-3v6m23-6v6m23-6v6m23-6v6m23-6v6" stroke="#5f6b74" stroke-width="1"/>
+  </symbol>
+
+  <symbol id="ala-landing-woodcut" viewBox="0 0 280 190">
+    <rect width="280" height="190" fill="#efe9dc"/><path d="M0 150q70-12 140 0t140-2v42H0Z" fill="#cdd6d8"/><path d="m0 118 60-22 44 22 46-34 56 34 74-18v52H0Z" fill="#8f9a8c"/><path d="m150 84 12-10 10 18Z" fill="#6f7a6d"/>
+    <g stroke="#3b3b34" fill="none" stroke-width="1.4"><path d="m196 150 18-32 18 32m-18-32v34m-34 0q34 8 70 0m-46-24h20"/></g>
+    <g fill="#3b3b34"><circle cx="72" cy="146" r="3"/><circle cx="86" cy="149" r="3"/><circle cx="100" cy="145" r="3"/><path d="M70 149h4v9h-4zm14 3h4v9h-4zm14-4h4v9h-4z"/></g>
+    <text x="140" y="180" text-anchor="middle" font-size="9" fill="#5a5a50" font-family="Georgia,serif">“Ọbịbịa”, woodcut, c. 1889</text>
+  </symbol>
+</svg>

@@ -32,8 +32,10 @@ import sys
 _SPECIFIER = re.compile(
     r"""(?:\bfrom\s*|\bimport\s*\(\s*)["']([^"'\n]+)["']""")
 
-# `<script type="module" src="./js/browser_main.mjs">` and `<link href=...>`.
+# HTML-shaped references can also live in JavaScript template strings when a
+# renderer owns the markup. A Crossing's scene compositor is one such module.
 _HTML_REF = re.compile(r"""\b(?:src|href)\s*=\s*["']([^"'\n]+)["']""")
+_SRCSET_REF = re.compile(r"""\bsrcset\s*=\s*["']([^"'\n]+)["']""")
 
 # The pages name their programs as plain sibling paths in JS object literals
 # (`file: "paint/garden.planes"`), so there is no import to follow -- match the
@@ -67,9 +69,10 @@ def _is_local(spec):
     """Relative or root-relative, i.e. something the root has to contain."""
     if spec.startswith(("http://", "https://", "//", "data:", "mailto:", "#")):
         return False
+    clean = spec.split("?", 1)[0].split("#", 1)[0]
     # A bare package specifier (`node:fs`, `lodash`) is not ours to resolve.
     # Everything a page actually loads from the served root is one of these.
-    return spec.endswith(_LOADABLE)
+    return clean.endswith(_LOADABLE)
 
 
 def _resolve(spec, from_path, root):
@@ -128,15 +131,23 @@ def check(root, source=None):
         if path.endswith((".mjs", ".js")):
             text = _COMMENTS.sub(" ", text)
 
-        refs = set(_SPECIFIER.findall(text)) | set(_PLANES_REF.findall(text))
-        refs |= set(_CSS_URL.findall(text))
-        if path.endswith(".html"):
-            refs |= set(_HTML_REF.findall(text))
+        module_refs = set(_SPECIFIER.findall(text)) | set(_PLANES_REF.findall(text))
+        document_refs = set(_CSS_URL.findall(text)) | set(_HTML_REF.findall(text))
+        for srcset in _SRCSET_REF.findall(text):
+            document_refs.update(candidate.strip().split()[0]
+                                 for candidate in srcset.split(",")
+                                 if candidate.strip())
 
-        for spec in sorted(refs):
+        # Imports and program fetches resolve from their module. Markup a
+        # renderer inserts into the DOM resolves from the document URL, even
+        # when the template string lives in a deeply nested .mjs file.
+        document_base = os.path.join(root, "__document__.html")
+        refs = {(spec, path) for spec in module_refs}
+        refs |= {(spec, document_base) for spec in document_refs}
+        for spec, base in sorted(refs):
             if not _is_local(spec):
                 continue
-            target = _resolve(spec, path, root)
+            target = _resolve(spec, base, root)
             if target is None:
                 continue
             # Stay inside the served root -- an escaping `../` is its own bug.

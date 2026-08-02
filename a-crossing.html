@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#133e51">
+  <link rel="icon" href="data:,">
+  <title>A Crossing — Ala Eriri</title>
+  <style>
+    @font-face{font-family:"Red Hat";src:url("./identity/fonts/red-hat-display.woff2") format("woff2");font-display:swap}
+    @font-face{font-family:"Martian";src:url("./identity/fonts/martian-mono.woff2") format("woff2");font-display:swap}
+    :root{--paper:#f3ead7;--paper-hi:#fff9e9;--ink:#1d292b;--indigo:#16224c;--ivory:#f4efe2;--gold:#e0a93b;--coral:#d9683f;--sea:#0d8197;--teal:#157d78;--ease:cubic-bezier(.16,1,.3,1);--display:"Red Hat",sans-serif;--mono:"Martian",monospace}
+    *{box-sizing:border-box}
+    html,body{width:100%;height:100%;overflow:hidden;background:#092f42}
+    body{margin:0;color:var(--ink);font-family:var(--display);text-rendering:optimizeLegibility}
+    button,input{font:inherit}
+    button{color:inherit}
+    button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:3px solid #fff4bc;outline-offset:4px}
+    .play-stage{position:relative;isolation:isolate;width:100%;min-height:100svh;overflow:hidden;background:#0a4356}
+    .stage-host{position:absolute;inset:0;overflow:hidden;background:linear-gradient(#8bd4dd,#0c7390)}
+    .passage-camera{position:absolute;inset:-4%;transform:translate(var(--camera-x,0),var(--camera-y,0)) scale(var(--camera-zoom,1));transform-origin:50% 56%;transition:transform 1.8s var(--ease),filter 1.2s ease;will-change:transform}
+    .passage-plate,.passage-plate img,.passage-color-grade,.passage-atmosphere,.passage-world{position:absolute;inset:0;width:100%;height:100%}
+    .passage-plate img{display:block;object-fit:cover;object-position:center 50%;user-select:none}
+    .passage-color-grade{z-index:1;pointer-events:none;background:radial-gradient(circle at 72% 16%,#ffe9a526 0 10%,transparent 36%),linear-gradient(180deg,transparent 46%,#005b791f 74%,#082d4a52 100%);mix-blend-mode:soft-light}
+    .passage-atmosphere{z-index:2;pointer-events:none;mix-blend-mode:overlay;opacity:.22}
+    .passage-world{z-index:3;overflow:visible}
+    .passage-world [data-subject]{cursor:pointer;pointer-events:all}
+    .subject-hit,.landing-hit path,.landing-hit ellipse,.hit-route{fill:transparent;stroke:transparent;stroke-width:40;pointer-events:all}
+    .route-shadow{fill:none;stroke:#183d58a3;stroke-width:13;filter:blur(5px)}
+    .route-cord{fill:none;stroke:var(--ivory);stroke-width:6;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1;filter:url(#cord-glow);transition:stroke-dashoffset 1.4s var(--ease)}
+    .route-layer[data-state="planning"] .route-cord{stroke-dashoffset:.86;opacity:.64;stroke-dasharray:.018 .022}
+    .route-layer[data-state="crossing"] .route-cord,.route-layer[data-state="arrived"] .route-cord{opacity:1}
+    .route-beads circle{fill:#8a6d35;stroke:#f8efcc;stroke-width:2;opacity:.28;transform-box:fill-box;transform-origin:center;transform:scale(.65);transition:opacity .35s,transform .5s var(--ease),fill .35s}
+    .route-beads circle.awake{fill:var(--gold);opacity:1;transform:scale(1);filter:url(#signal-glow)}
+    .hydrofoil{filter:drop-shadow(0 14px 10px #062e4055);transition:transform 1.05s linear;will-change:transform}
+    .foil-sprite{opacity:0;transition:opacity .35s}.foil-sprite.loaded{opacity:1}.foil-sprite.loaded~.foil-body{display:none}
+    .foil-body{transform-origin:0 20px;animation:foil-breathe 2.6s ease-in-out infinite}
+    .foil-wake path{fill:none;stroke:url(#wake-fade);stroke-width:7;stroke-linecap:round;opacity:0}
+    [data-phase="crossing"] .foil-wake path{opacity:.88;animation:wake 1.35s ease-out infinite}
+    [data-phase="crossing"] .foil-wake path:nth-child(2){animation-delay:.22s}[data-phase="crossing"] .foil-wake path:nth-child(3){animation-delay:.45s}
+    .radio-wave{fill:none;stroke:#f5e3a1;stroke-width:2.4;opacity:.12}.radio-mast[data-state="relayed"] .radio-wave{animation:radio 1.8s ease-out infinite}.radio-wave.two{animation-delay:.45s}
+    .signal-halo,.beacon-aura{fill:#f2bf51;opacity:.12;filter:url(#signal-glow);animation:signal 2.8s ease-in-out infinite}.beacon-disc{fill:#d9683f;stroke:#fff1c7;stroke-width:2.5;filter:url(#signal-glow)}.beacon-cross{stroke:#fff8de;stroke-width:2.5;stroke-linecap:round}
+    .petrels{animation:petrel-drift 8s ease-in-out infinite}
+    .wave-array{filter:drop-shadow(0 6px 5px #002f4766)}
+    .wave-array>path,.wave-array>g{opacity:.16;transition:opacity .25s}.wave-array:hover>path,.wave-array:hover>g,.wave-array:focus-visible>path,.wave-array:focus-visible>g{opacity:.72}
+    .selection-ring{display:none;pointer-events:none}.selection-ring.visible{display:block}.selection-ring circle{fill:none;stroke:#fff5c9;stroke-width:3}.selection-pulse{opacity:.8;animation:select-pulse 1.5s ease-out infinite}
+    .stage-fallback-note{position:absolute;right:18px;bottom:94px;z-index:7;padding:7px 10px;background:#132d38c9;color:#f4efe2;font:10px var(--mono)}
+    .stage-host.is-committing .route-cord{animation:cord-commit 2.1s var(--ease)}
+    .stage-host.is-committing .route-beads circle{animation:bead-wake .7s var(--ease) both}
+    .stage-host.is-committing .route-beads circle:nth-child(2){animation-delay:.12s}.stage-host.is-committing .route-beads circle:nth-child(3){animation-delay:.24s}.stage-host.is-committing .route-beads circle:nth-child(4){animation-delay:.36s}.stage-host.is-committing .route-beads circle:nth-child(5){animation-delay:.48s}.stage-host.is-committing .route-beads circle:nth-child(6){animation-delay:.60s}.stage-host.is-committing .route-beads circle:nth-child(7){animation-delay:.72s}.stage-host.is-committing .route-beads circle:nth-child(8){animation-delay:.84s}.stage-host.is-committing .route-beads circle:nth-child(9){animation-delay:.96s}
+    @keyframes foil-breathe{50%{transform:translateY(-5px) rotate(-.5deg)}}
+    @keyframes wake{0%{transform:translateX(40px);opacity:0}25%{opacity:.75}100%{transform:translateX(-46px) scaleX(1.28);opacity:0}}
+    @keyframes radio{0%{transform:scale(.5);opacity:.75}100%{transform:scale(1.6);opacity:0}}
+    @keyframes signal{50%{opacity:.34;transform:scale(1.12)}}
+    @keyframes petrel-drift{50%{transform:translate(20px,-8px)}}
+    @keyframes select-pulse{to{r:78;opacity:0}}
+    @keyframes cord-commit{0%{stroke-dashoffset:1}100%{stroke-dashoffset:0}}
+    @keyframes bead-wake{0%{opacity:.1;transform:scale(.3)}70%{opacity:1;transform:scale(1.25)}100%{opacity:1;transform:scale(1)}}
+
+    .world-title{position:absolute;z-index:10;left:clamp(18px,3vw,46px);top:clamp(18px,3vw,42px);display:flex;align-items:flex-start;gap:14px;color:#fff8e9;text-shadow:0 2px 18px #092c3a8c;transition:opacity .8s,transform .8s var(--ease)}
+    .world-home{display:block;flex:0 0 auto;border-radius:4px}
+    .world-title img{width:36px;height:36px;filter:drop-shadow(0 2px 8px #092c3a80)}
+    .world-title p{margin:0 0 3px;font:600 10px/1.2 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:#ffe2a4}
+    .world-title h1{margin:0;font:760 clamp(31px,4.4vw,70px)/.82 var(--display);letter-spacing:-.06em}
+    .world-title small{display:block;margin-top:9px;font:500 11px/1.2 var(--mono);letter-spacing:.06em}
+    .ready .world-title{opacity:.82;transform:scale(.72);transform-origin:top left}
+
+    .world-tools{position:absolute;z-index:11;top:clamp(15px,2vw,30px);right:clamp(14px,2vw,30px);display:flex;align-items:center;gap:8px}
+    .tool{width:46px;height:46px;border:1px solid #fff3d89e;background:#153946b8;color:#fff9e8;backdrop-filter:blur(10px);border-radius:50%;display:grid;place-items:center;cursor:pointer;box-shadow:0 8px 24px #062c3d38;transition:background .2s,transform .2s var(--ease)}
+    .tool:hover{background:#f7edd7;color:#1c3438;transform:translateY(-2px)}.tool[aria-pressed="true"]{background:#f0c358;color:#1b3340}
+    .tool svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+    .passage-hud{position:absolute;z-index:9;left:clamp(18px,3vw,46px);top:clamp(138px,18vh,184px);width:min(260px,calc(100vw - 36px));padding:15px 17px 16px;background:linear-gradient(145deg,#fff9e9ef,#eee0c7e8);border:1px solid #fff7e6;box-shadow:0 18px 42px #092f4040,inset 0 0 0 1px #806e4f28;clip-path:polygon(0 0,97% 0,100% 8%,100% 100%,3% 100%,0 92%);transition:transform .6s var(--ease),opacity .5s}
+    .hud-kicker{display:flex;justify-content:space-between;gap:12px;font:700 9px var(--mono);letter-spacing:.18em;text-transform:uppercase;color:#8b522e}
+    .passage-time{display:flex;align-items:baseline;gap:8px;margin-top:8px}.passage-time strong{font:780 44px/.86 var(--display);letter-spacing:-.05em}.passage-time span{font:600 12px var(--mono)}
+    .passage-need{margin:9px 0 0;padding-top:9px;border-top:1px solid #8e7c6250;font:560 13px/1.3 var(--display)}
+    .passage-status{display:block;margin-top:5px;font:500 9px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:#4b5e5d}
+
+    .choice-tray{position:absolute;z-index:12;left:50%;bottom:clamp(22px,4vh,46px);transform:translateX(-50%);width:min(780px,calc(100vw - 28px));display:grid;justify-items:center;gap:10px;pointer-events:none}
+    .prompt{margin:0;color:#fff9e9;text-shadow:0 2px 14px #052a3e;font:650 clamp(17px,2vw,25px) var(--display);letter-spacing:-.02em}
+    .need-chooser,.action-ribbon{display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;padding:8px;background:#142f38b8;border:1px solid #fff1cc85;box-shadow:0 16px 38px #0628375c;backdrop-filter:blur(14px);pointer-events:auto}
+    .need-chooser:empty,.action-ribbon:empty{display:none}
+    .world-action{min-height:44px;border:1px solid #f8ead1a8;background:#f5ead9;color:#1b3339;padding:10px 16px;cursor:pointer;font:650 12px var(--mono);transition:transform .18s var(--ease),background .18s,color .18s}
+    .world-action:hover,.world-action:focus-visible{background:#173f4b;color:#fff7e6;transform:translateY(-2px)}.world-action.primary{background:#e26c3d;color:#fffaf0;border-color:#f9c5a9}.world-action.primary:hover{background:#bb4f2c}
+
+    .selection-card{position:absolute;z-index:11;left:50%;bottom:132px;transform:translateX(-50%) translateY(12px);min-width:min(410px,calc(100vw - 34px));max-width:560px;padding:12px 14px;background:#f6ecdde8;border:1px solid #fff9eb;box-shadow:0 16px 42px #062a3c52;opacity:0;pointer-events:none;transition:opacity .24s,transform .3s var(--ease)}
+    .selection-card.visible{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
+    .selection-card .line{display:flex;justify-content:space-between;gap:18px;align-items:center}.selection-card strong{font:730 17px var(--display);text-transform:capitalize}.selection-card span{font:9px var(--mono);color:#625e52}.why-button{border:0;background:transparent;border-bottom:1px solid #6d654f;padding:4px 0;cursor:pointer;font:650 10px var(--mono)}
+
+    .truth-note{position:absolute;z-index:8;right:18px;bottom:14px;color:#f5ecd8c7;font:8px var(--mono);letter-spacing:.06em;text-shadow:0 1px 8px #062c3d;max-width:310px;text-align:right}
+    .loading-veil{position:absolute;inset:0;z-index:30;display:grid;place-items:center;background:#f3ead7;color:#1d292b;transition:opacity .8s var(--ease),visibility .8s}
+    .loading-veil[hidden]{display:grid;opacity:0;visibility:hidden}.loading-inner{text-align:center}.loading-inner img{width:54px}.loading-inner p{font:650 10px var(--mono);letter-spacing:.18em;text-transform:uppercase}.loading-line{width:170px;height:2px;background:#c8b797;overflow:hidden}.loading-line:after{content:"";display:block;width:60%;height:100%;background:#d9683f;animation:loading 1.2s ease-in-out infinite alternate}@keyframes loading{to{transform:translateX(68%)}}
+
+    .archive{width:min(1180px,calc(100vw - 28px));height:min(760px,calc(100svh - 28px));padding:0;border:1px solid #ab997a;background:#f3ead7;color:#202a2a;box-shadow:0 35px 100px #001c2e99}
+    .archive::backdrop{background:#062b3dd9;backdrop-filter:blur(9px)}
+    .archive-shell{height:100%;display:grid;grid-template-rows:auto 1fr;overflow:hidden;background:radial-gradient(circle at 90% 10%,#fff4c8 0 4%,transparent 24%),linear-gradient(135deg,#f8f0df,#eadbc1)}
+    .archive-head{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;padding:16px 18px;border-bottom:1px solid #bfae91}.archive-head h2{margin:0;font:760 28px var(--display);letter-spacing:-.035em}.archive-head small{font:9px var(--mono);letter-spacing:.13em;text-transform:uppercase;color:#8b522e}
+    .archive-tabs{display:flex;justify-content:center;gap:2px}.archive-tabs button,.archive-close{border:0;background:transparent;padding:8px 10px;cursor:pointer;font:600 10px var(--mono);text-transform:uppercase;letter-spacing:.08em}.archive-tabs button[aria-selected="true"]{background:#16224c;color:#f4efe2}.archive-close{font-size:20px}
+    .archive-body{position:relative;overflow:auto;padding:clamp(18px,3vw,38px)}.archive-view{display:none}.archive-view.active{display:block}.archive-view h3{margin:0 0 12px;font:760 clamp(25px,4vw,48px)/1 var(--display);letter-spacing:-.045em}.archive-view p{max-width:760px;font:450 16px/1.55 var(--display)}
+    .archive-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:28px}.archive-card{padding:18px;border:1px solid #b9a98f;background:#fff9ea9c}.archive-card h4{margin:0 0 8px;font:700 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:#8b522e}
+    .archive-map{width:100%;height:auto;background:#efe7d5;border:1px solid #b8a98d}.archive-code{margin:0;max-height:52vh;overflow:auto;padding:16px;background:#172c30;color:#f5ead5;font:10px/1.65 var(--mono);white-space:pre-wrap}.replay-list{font:10px/1.5 var(--mono)}
+
+    @media(max-width:760px){
+      .passage-world,.passage-plate img{width:var(--world-width,177.78svh);max-width:none;right:auto;transform:translateX(var(--mobile-pan,0));transition:transform 1.05s linear}.passage-plate img{object-position:center 50%}
+      .world-title{left:16px;top:18px;max-width:214px;gap:8px}.world-title img{width:30px;height:30px}.world-title h1{font-size:30px}.world-title small{display:none}.ready .world-title{transform:scale(.86)}
+      .world-tools{top:12px;right:10px;width:126px;justify-content:flex-end;flex-wrap:wrap;gap:4px}.tool{width:38px;height:38px}.tool svg{width:18px;height:18px}.passage-hud{left:14px;top:98px;width:205px;padding:12px}.passage-time strong{font-size:34px}
+      .choice-tray{bottom:max(14px,env(safe-area-inset-bottom));width:calc(100vw - 18px)}.prompt{font-size:17px}.need-chooser,.action-ribbon{width:100%;justify-content:flex-start;flex-wrap:nowrap;overflow-x:auto}.world-action{flex:0 0 auto}
+      .selection-card{bottom:116px}.truth-note{display:none}.archive{width:100vw;height:100svh;max-width:none;max-height:none;border:0}.archive-head{grid-template-columns:1fr auto;padding:12px}.archive-head>div:first-child{display:none}.archive-tabs{justify-content:flex-start;overflow-x:auto}.archive-grid{grid-template-columns:1fr}.passage-plate img{object-position:49% center}
+    }
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}.passage-camera{transform:none!important}.passage-atmosphere{display:none}.foil-body,.petrels{animation:none!important}}
+  </style>
+</head>
+<body>
+  <main class="play-stage" aria-label="A simulated Ala Eriri Passage crossing">
+    <div id="crossing-stage" class="stage-host" aria-label="Playable view from Reso across the Passage to Nkwo Eriri"></div>
+
+    <header class="world-title" aria-label="A Crossing">
+      <a class="world-home" href="./index.html" aria-label="Back to Planes showcases"><img src="./identity/planes-mark-on-dark.svg" alt="Planes"></a>
+      <div><p>Nine Landings · Ala Eriri</p><h1>A Crossing</h1><small>the cord does not cut</small></div>
+    </header>
+
+    <nav class="world-tools" aria-label="Crossing controls">
+      <button class="tool" id="pause-passage" aria-label="Pause passage" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+      <button class="tool" id="sound-passage" aria-label="Sound off" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 14h4l5 4V6L8 10H4Zm12-4q3 2 0 4m2-7q6 5 0 10"/></svg></button>
+      <button class="tool" id="roll-seed" aria-label="Roll a new Passage seed"><svg viewBox="0 0 24 24"><path d="M5 7h14v12H5zM8 7V4h8v3M8 11h.01M12 15h.01M16 11h.01"/></svg></button>
+      <button class="tool" id="replay-passage" aria-label="Replay this crossing"><svg viewBox="0 0 24 24"><path d="M5 8V4l-3 3 3 3V8a8 8 0 1 1-1 6"/></svg></button>
+      <button class="tool" id="open-archive" aria-label="Open the archive"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></button>
+    </nav>
+
+    <section id="passage-hud" class="passage-hud" aria-live="polite">
+      <div class="hud-kicker"><span>Passage</span><span id="hud-sea">sea —</span></div>
+      <div class="passage-time"><strong id="hud-minutes">—</strong><span>minutes</span></div>
+      <p class="passage-need" id="hud-need">Waiting for the condition.</p>
+      <span class="passage-status" id="hud-status">Preparing the crossing</span>
+      <label hidden>seed <input id="passage-seed" type="number" value="481027" aria-label="Passage seed"></label>
+    </section>
+
+    <section class="choice-tray" aria-label="Available Passage choices">
+      <p class="prompt" id="choice-prompt">Choose a crossing.</p>
+      <div id="need-chooser" class="need-chooser"></div>
+      <div id="action-ribbon" class="action-ribbon"></div>
+    </section>
+
+    <aside id="selection-card" class="selection-card" aria-live="polite">
+      <div class="line"><div><strong id="selection-title">Hydrofoil</strong><br><span id="selection-state">ready to inspect</span></div><button class="why-button" id="selection-why">Why?</button></div>
+    </aside>
+
+    <p class="truth-note">A local deterministic simulation. No real route, service, place, or person is changed.</p>
+
+    <div id="loading-veil" class="loading-veil"><div class="loading-inner"><img src="./identity/planes-mark-on-light.svg" alt=""><p>Setting the Passage</p><div class="loading-line"></div></div></div>
+
+    <dialog id="crossing-archive" class="archive" aria-labelledby="archive-title">
+      <div class="archive-shell">
+        <header class="archive-head"><div><small>Registry of Continuity</small><h2 id="archive-title">The crossing, held open</h2></div>
+          <nav class="archive-tabs" aria-label="Archive views">
+            <button data-tab="revision" aria-selected="true">Revision</button><button data-tab="atlas" aria-selected="false">Nine Landings</button><button data-tab="why" aria-selected="false">Why</button><button data-tab="source" aria-selected="false">Planes</button><button data-tab="surface" aria-selected="false">Surface</button>
+          </nav><button class="archive-close" id="close-archive" aria-label="Close the archive">×</button></header>
+        <div class="archive-body" id="archive-body">
+          <section class="archive-view active" data-view="revision"><small>Statement of Revision</small><h3 id="archive-revision-title">Horizon watch</h3><p id="archive-revision">The crossing is preparing.</p><div class="archive-grid"><div class="archive-card"><h4>What stands</h4><p id="archive-standing">The ninety-minute Passage standard remains the condition.</p></div><div class="archive-card"><h4>Run</h4><p id="archive-run">Seed 481027 · local simulation</p></div></div></section>
+          <section class="archive-view" data-view="atlas"><h3>Nine Landings</h3><div class="archive-grid"><div class="archive-card"><svg class="archive-map" viewBox="0 0 460 250" aria-label="Canonical map of Ala Eriri"><use href="./assets/a-crossing/ala-eriri-symbols.svg#ala-map"/></svg></div><div class="archive-card"><h4>Voyage replay</h4><ol id="archive-replay" class="replay-list"><li>Horizon watch</li></ol></div></div></section>
+          <section class="archive-view" data-view="why"><h3 id="archive-why-title">Select something in the world</h3><div id="archive-why"><p>Every active object can lead back to the Planes value and source line that placed it here.</p></div></section>
+          <section class="archive-view" data-view="source"><h3>The directing Planes</h3><div id="archive-source-slot"><p>Source loads only when requested.</p></div></section>
+          <section class="archive-view" data-view="surface"><h3>Computed effect surface</h3><div id="archive-surface-slot"><p>Static analysis loads only when requested.</p></div></section>
+        </div>
+      </div>
+    </dialog>
+  </main>
+
+  <script type="module">
+    import { stepGraph, createSceneLoop } from "./js/paint/loop.mjs";
+    import { BrowserModuleLoader } from "./js/module_loader_browser.mjs";
+    import { parseSceneIntent } from "./js/scene/ir.mjs";
+    import { createCrossingStage } from "./js/scene/a_crossing_stage.mjs?v=director-5";
+    import { createCrossingAudio } from "./js/scene/a_crossing_audio.mjs";
+    import { createCrossingArchive } from "./js/scene/a_crossing_archive.mjs?v=director-2";
+    import { actionSurfaceSignature } from "./js/scene/a_crossing_controls.mjs";
+    import { renderSurface } from "./js/paint/surface_pane.mjs";
+    import { replayCrossing, subjectsFromResult } from "./js/paint/a_crossing.mjs?v=director-2";
+
+    const $ = (id) => document.getElementById(id);
+    const escapeText = (value) => String(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+    const sourceUrl = new URL("./paint/a_crossing.planes", location.href);
+    const source = await fetch(sourceUrl, { cache: "no-store" }).then((response) => {
+      if (!response.ok) throw new Error("A Crossing could not load its Planes source.");
+      return response.text();
+    });
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const stage = createCrossingStage({ root: $("crossing-stage"), reducedMotion, webgl: true });
+    const audio = createCrossingAudio();
+    const archive = createCrossingArchive({
+      root: $("crossing-archive"),
+      loadSource: async () => source,
+      loadSurface: async () => {
+        const slot = $("archive-surface-slot");
+        slot.innerHTML = "<p>Analysing the Planes program graph…</p>";
+        await renderSurface(slot, source, { loader: new BrowserModuleLoader({ base: sourceUrl.href, cacheBust: Date.now() }) });
+        return "rendered";
+      },
+      restoreFocus: () => $("open-archive").focus(),
+    });
+    let loader = new BrowserModuleLoader({ base: sourceUrl.href, cacheBust: Date.now() });
+    let state = null;
+    let tick = 0;
+    let lastResult = null;
+    let lastIntent = null;
+    let selected = null;
+    let provenanceSubjects = [];
+    let eventLog = [];
+    let runSerial = 0;
+    let soundOn = false;
+    const actionSurfaces = { need: null, crossing: null };
+    const metrics = { semantic: [], parse: [], apply: [], events: [], environment: { userAgent: navigator.userAgent, viewport: [innerWidth, innerHeight], devicePixelRatio } };
+    window.__crossingMetrics = metrics;
+
+    const currentSeed = () => Number($("passage-seed").value) || 481027;
+    const labelOf = (id) => id.replaceAll("-", " ");
+
+    function actionButton(action) {
+      return `<button class="world-action ${action.emphasis === "primary" ? "primary" : ""}" data-kind="${escapeText(action.kind)}" data-choice="${escapeText(action.choice)}" data-subject="${escapeText(action.subject)}">${escapeText(action.label)}</button>`;
+    }
+
+    function renderActions(intent) {
+      const needActions = intent.actions.filter(({ kind }) => kind === "need");
+      const crossingActions = intent.actions.filter(({ kind }) => kind !== "need");
+      const nextNeedSurface = actionSurfaceSignature(needActions);
+      const nextCrossingSurface = actionSurfaceSignature(crossingActions);
+      if (nextNeedSurface !== actionSurfaces.need) {
+        $("need-chooser").innerHTML = needActions.map(actionButton).join("");
+        actionSurfaces.need = nextNeedSurface;
+      }
+      if (nextCrossingSurface !== actionSurfaces.crossing) {
+        $("action-ribbon").innerHTML = crossingActions.map(actionButton).join("");
+        actionSurfaces.crossing = nextCrossingSurface;
+      }
+      $("choice-prompt").textContent = state.phase === "choosing" ? "Who needs to cross today?" : state.phase === "planning" ? "The Passage is listening." : state.phase === "crossing" ? "The cord has taken the water." : state.phase === "arrived" ? "Nkwo Eriri receives the crossing." : "The landing holds its decision.";
+    }
+
+    function renderHud() {
+      $("hud-minutes").textContent = state.minutes || "held";
+      $("hud-sea").textContent = `sea ${state.sea}`;
+      $("hud-need").textContent = `${state.need} · Reso to Nkwo Eriri`;
+      $("hud-status").textContent = labelOf(state.status.replace("crossing-", ""));
+    }
+
+    function publishMetrics() {
+      metrics.stage = stage.metrics();
+      metrics.audio = audio.diagnostics();
+      metrics.last = { tick, seed: currentSeed(), phase: state?.phase, outputLines: lastResult?.lines.length };
+      document.documentElement.dataset.crossingMetrics = JSON.stringify(metrics);
+    }
+
+    function updateResult(result) {
+      const parseStart = performance.now();
+      const intent = parseSceneIntent(result.lines);
+      metrics.parse.push(performance.now() - parseStart);
+      lastResult = result;
+      lastIntent = intent;
+      state = result.state;
+      provenanceSubjects = subjectsFromResult(result);
+      const applyStart = performance.now();
+      stage.apply(intent, state);
+      metrics.apply.push(performance.now() - applyStart);
+      audio.apply(intent.audio);
+      renderHud();
+      renderActions(intent);
+      if (selected) stage.select(selected);
+      archive.update({ result, subjects: provenanceSubjects, events: eventLog, seed: currentSeed(), selected });
+      publishMetrics();
+    }
+
+    async function run(event = null) {
+      const serial = ++runSerial;
+      const started = performance.now();
+      const result = await stepGraph(source, { tick, seed: currentSeed(), state, event, keys: [], pointer: { x: 0, y: 0, down: false } }, { loader, base: sourceUrl.href });
+      const elapsed = performance.now() - started;
+      if (serial !== runSerial) return;
+      metrics.semantic.push(elapsed);
+      if (result.error) {
+        $("choice-prompt").textContent = `${result.error.tag}: ${result.error.message}`;
+        loop.stop(); stage.pause();
+        return;
+      }
+      updateResult(result);
+    }
+
+    const loop = createSceneLoop({ run: () => run(), getTick: () => tick, setTick: (value) => { tick = value; }, span: 100000, ticksPerSecond: 8, getSpeed: () => 1, onError: (error) => { $("choice-prompt").textContent = error.message; } });
+
+    async function send(event) {
+      eventLog.push({ ...event });
+      metrics.events.push({ tick, ...event });
+      await run(event);
+    }
+
+    document.querySelector(".choice-tray").addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-kind]");
+      if (!button) return;
+      await send({ kind: button.dataset.kind, choice: button.dataset.choice });
+    });
+
+    $("crossing-stage").addEventListener("crossing-select", async (event) => {
+      selected = event.detail.subject;
+      $("selection-title").textContent = labelOf(selected);
+      const subject = lastIntent?.subjects.find(({ id }) => id === selected);
+      $("selection-state").textContent = subject ? labelOf(subject.state) : "inspectable";
+      $("selection-card").classList.add("visible");
+      await send({ kind: "select", subject: selected });
+    });
+
+    $("pause-passage").addEventListener("click", () => {
+      const paused = loop.isRunning();
+      if (paused) { loop.stop(); stage.pause(); } else { loop.start(); stage.resume(); }
+      $("pause-passage").setAttribute("aria-pressed", String(paused));
+      $("pause-passage").setAttribute("aria-label", paused ? "Resume passage" : "Pause passage");
+    });
+
+    $("sound-passage").addEventListener("click", async () => {
+      soundOn = !soundOn;
+      if (soundOn) await audio.unlock();
+      audio.setMuted(!soundOn);
+      $("sound-passage").setAttribute("aria-pressed", String(soundOn));
+      $("sound-passage").setAttribute("aria-label", soundOn ? "Sound on" : "Sound off");
+    });
+
+    async function reset({ keepEvents = false } = {}) {
+      loop.stop(); stage.pause();
+      state = null; tick = 0; selected = null; runSerial += 1;
+      $("selection-card").classList.remove("visible");
+      if (!keepEvents) eventLog = [];
+      loader = new BrowserModuleLoader({ base: sourceUrl.href, cacheBust: Date.now() });
+      await run(); loop.start(); stage.resume();
+    }
+
+    $("roll-seed").addEventListener("click", async () => {
+      const entropy = new Uint32Array(1); crypto.getRandomValues(entropy);
+      $("passage-seed").value = String(100000 + entropy[0] % 900000);
+      await reset();
+    });
+
+    $("replay-passage").addEventListener("click", async () => {
+      const saved = eventLog.map((event) => ({ ...event }));
+      await reset({ keepEvents: true });
+      const result = await replayCrossing({ source, loader, base: sourceUrl.href, seed: currentSeed(), events: saved, tick: 0 });
+      if (!result.error) updateResult(result);
+    });
+
+    $("open-archive").addEventListener("click", () => archive.open("revision"));
+    $("selection-why").addEventListener("click", () => archive.open("why", selected));
+
+    await run();
+    $("loading-veil").hidden = true;
+    document.body.classList.add("ready");
+    loop.start();
+  </script>
+</body>
+</html>

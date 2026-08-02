@@ -27,6 +27,7 @@ on:
     branches: [main]
     paths:
       - "*.html"
+      - "assets/**"
       - "js/**"
       - "paint/**"
       - "identity/*.svg"

@@ -1,0 +1,321 @@
+# paint/a_crossing.planes — one simulated Ala Eriri Passage crossing.
+
+use draw
+use sound
+use file
+use math
+
+to no-stroke:
+  stroke of 0, 0, 0, 0
+
+to no-blur:
+  blur of 0
+
+to wave-lines of i, total, lift:
+  if i < total:
+    let yy = 360 + i * 17 + (sine of (tick * 5 + i * 29)) * (2 + lift)
+    stroke of (0.77 + i * 0.006), 0.07, (205 + i * 2), (0.20 + i * 0.018)
+    width of (1 + mod of i, 3)
+    shape
+    vertex of 0, yy
+    curve of 150, (yy - 10), 250, (yy + 12), 390, yy
+    curve of 540, (yy - 12), 690, (yy + 10), 960, (yy - 2)
+    end
+    wave-lines of (i + 1), total, lift
+
+to terrace-lines of i, total, x, y, span:
+  if i < total:
+    stroke of (0.72 + i * 0.018), 0.08, 92, 0.75
+    width of 2
+    line of (x - span + i * 7), (y + i * 17), (x + span - i * 5), (y + i * 17)
+    terrace-lines of (i + 1), total, x, y, span
+
+to market-canopies of i, total:
+  if i < total:
+    let hue = 28 + (mod of (i * 47 + seed), 5) * 48
+    fill of 0.70, 0.17, hue, 0.98
+    rect of (92 + i * 28), (323 + (mod of i, 2) * 4), 24, 11, 2
+    market-canopies of (i + 1), total
+
+to fog-catchers of i, total:
+  if i < total:
+    stroke of 0.88, 0.025, 205, 0.85
+    width of 1.4
+    line of (720 + i * 22), 250, (720 + i * 22), (286 + (mod of i, 2) * 8)
+    line of (714 + i * 22), 258, (726 + i * 22), 258
+    line of (714 + i * 22), 267, (726 + i * 22), 267
+    fog-catchers of (i + 1), total
+
+to petrels of i, total:
+  if i < total:
+    let bx = 250 + i * 73 + (sine of (tick * 4 + i * 71)) * 9
+    let by = 100 + (mod of (i * 37), 76) + (sine of (tick * 7 + i * 41)) * 5
+    stroke of 0.25, 0.025, 245, 0.72
+    width of 1.6
+    arc of (bx - 5), by, 7, 205, 342
+    arc of (bx + 7), by, 7, 198, 335
+    petrels of (i + 1), total
+
+to route-beads of i, total:
+  if i < total:
+    let bx = 230 + i * 54
+    let by = 349 - i * 7 + (sine of (tick * 4 + i * 25)) * 2
+    fill of 0.96, 0.035, 88, (0.45 + i * 0.025)
+    circle of bx, by, (2 + (mod of i, 2))
+    route-beads of (i + 1), total
+
+let sea-state = 2 + mod of seed, 3 because "the fixed seed gives this Passage a repeatable Atlantic swell"
+let available-power = 72 - sea-state * 4 because "wave reserve is held back before propulsion and care loads are assigned"
+let safe-route = "reso-nkwo" because "the demonstration follows the standard Passage from Reso to Nkwo Eriri"
+let passage-minutes = 48 + sea-state * 3 because "swell adds three simulated minutes per sea-state step"
+let meets-passage = passage-minutes <= 90 because "the simulated Passage standard is ninety minutes"
+let decision = "horizon-watch" because "the initial view invites inspection before departure"
+let revision = "horizon watch opened a repeatable local crossing" because "every revision names what changed in this simulation"
+
+if event is nothing:
+  if state is nothing:
+    let next = { status: "crossing-ready", minutes: passage-minutes, route: safe-route, selected: "hydrofoil", sea: sea-state, power: available-power, radio: "clear", need: "care", phase: "choosing", progress: 0, started: 0, cue: "horizon-open", serial: 0, actions: "needs", revision: revision }
+  else:
+    if state.phase == "crossing":
+      let voyage-progress = (tick - state.started) / 160
+      if voyage-progress >= 1:
+        let next = { status: "crossing-arrived", minutes: state.minutes, route: state.route, selected: "nkwo-eriri", sea: state.sea, power: state.power, radio: "arrived", need: state.need, phase: "arrived", progress: 1, started: state.started, cue: "crossing-arrival", serial: state.serial + 1, actions: "arrived", revision: "the simulated Passage reached Nkwo Eriri within ninety minutes" }
+      else:
+        let next = { status: "crossing-active", minutes: state.minutes, route: state.route, selected: state.selected, sea: state.sea, power: state.power, radio: state.radio, need: state.need, phase: "crossing", progress: voyage-progress, started: state.started, cue: "crossing-underway", serial: state.serial, actions: "crossing", revision: state.revision }
+    else:
+      let next = state
+else:
+  when event is { kind: "select", subject }:
+    let next = { status: state.status, minutes: state.minutes, route: state.route, selected: subject, sea: state.sea, power: state.power, radio: state.radio, need: state.need, phase: state.phase, progress: state.progress, started: state.started, cue: state.cue, serial: state.serial, actions: state.actions, revision: "the inspection focus changed; the crossing itself did not" }
+  else:
+    when event is { kind: "need", choice: "care" }:
+      let next = { status: "crossing-ready", minutes: passage-minutes, route: state.route, selected: "clinic-beacon", sea: state.sea, power: state.power, radio: state.radio, need: "care", phase: "planning", progress: 0, started: tick, cue: "need-chosen", serial: state.serial + 1, actions: "planning", revision: "primary care became the condition this simulated Passage must preserve" }
+    else:
+      when event is { kind: "need", choice: "education" }:
+        let next = { status: "crossing-ready", minutes: (passage-minutes + 6), route: state.route, selected: "radio-mast", sea: state.sea, power: state.power, radio: state.radio, need: "education", phase: "planning", progress: 0, started: tick, cue: "need-chosen", serial: state.serial + 1, actions: "planning", revision: "secondary education became the condition this simulated Passage must preserve" }
+      else:
+        when event is { kind: "need", choice: "work" }:
+          let next = { status: "crossing-ready", minutes: (passage-minutes + 3), route: state.route, selected: "market", sea: state.sea, power: state.power, radio: state.radio, need: "work", phase: "planning", progress: 0, started: tick, cue: "need-chosen", serial: state.serial + 1, actions: "planning", revision: "employment became the condition this simulated Passage must preserve" }
+        else:
+          when event is { kind: "power", choice: "clinic" }:
+            let next = { status: "crossing-delayed", minutes: 84, route: state.route, selected: "clinic-beacon", sea: state.sea, power: 44, radio: state.radio, need: state.need, phase: "planning", progress: state.progress, started: state.started, cue: "clinic-protected", serial: state.serial + 1, actions: "planning", revision: "clinic reserve was protected; the crossing slowed and remained within the Passage standard" }
+          else:
+            when event is { kind: "radio", choice: "relay" }:
+              let next = { status: state.status, minutes: state.minutes, route: state.route, selected: "radio-mast", sea: state.sea, power: state.power, radio: "relayed", need: state.need, phase: state.phase, progress: state.progress, started: state.started, cue: "radio-relay", serial: state.serial + 1, actions: state.actions, revision: "Nkwo Eriri relayed the landing signal across the channel" }
+            else:
+              when event is { kind: "route", choice: "shelter" }:
+                let next = { status: "crossing-delayed", minutes: 96, route: "reso-nkwo", selected: "reso-landing", sea: state.sea, power: state.power, radio: state.radio, need: state.need, phase: "planning", progress: 0, started: state.started, cue: "crossing-hold", serial: state.serial + 1, actions: "planning", revision: "shelter was selected during simulated swell; this run no longer meets the ninety-minute standard" }
+              else:
+                when event is { kind: "route", choice: "reserve" }:
+                  let next = { status: "crossing-refused", minutes: 0, route: "reso-nkwo", selected: "wave-array", sea: state.sea, power: state.power, radio: state.radio, need: state.need, phase: "refused", progress: 0, started: state.started, cue: "crossing-refused", serial: state.serial + 1, actions: "refused", revision: "the landing retained its power reserve and refused departure" }
+                else:
+                  when event is { kind: "route", choice: "depart" }:
+                    let next = { status: "crossing-active", minutes: state.minutes, route: "reso-nkwo", selected: "hydrofoil", sea: state.sea, power: (state.power - 18), radio: state.radio, need: state.need, phase: "crossing", progress: 0, started: tick, cue: "crossing-commit", serial: state.serial + 1, actions: "crossing", revision: "the simulated hydrofoil committed to the Reso to Nkwo Eriri Passage" }
+                  else:
+                    let next = state
+
+show "crossing " + next.status + " " + text of next.minutes
+show "atlas eriri-ukwu 500 172 landing"
+show "atlas anomabu 278 82 landing"
+show "atlas sabel 690 72 landing"
+show "atlas tado 220 210 landing"
+show "atlas bonny 724 195 landing"
+show "atlas vela 360 310 landing"
+show "atlas marronde 506 326 landing"
+show "atlas banta 742 306 landing"
+show "atlas reso 142 324 landing"
+show "atlas nkwo-eriri 500 172 capital"
+show "atlas route-cord 468 329 passage"
+show "decision " + next.revision
+
+# Scene Intent Protocol: Planes directs; the host composes and interpolates.
+let camera-x = 0.42
+let camera-y = 0.54
+let camera-zoom = 1
+if next.phase == "crossing":
+  camera-x = 0.42 + next.progress * 0.16
+  camera-zoom = 1.08
+else:
+  if next.phase == "arrived":
+    camera-x = 0.61
+    camera-zoom = 1.12
+let boat-scene-x = 0.16 + next.progress * 0.65 because "Planes advances the hydrofoil along the Passage cord"
+let boat-scene-y = 0.72 - next.progress * 0.13 because "Planes carries the crossing toward Nkwo Eriri"
+show "scene protocol 1"
+show "scene camera horizon " + text of camera-x + " " + text of camera-y + " " + text of camera-zoom
+show "scene environment bright-passage afternoon rolu-grandi-" + text of next.sea
+show "scene subject reso-landing reso-landing 0.08 0.60 1 visible " + next.phase
+show "scene subject nkwo-eriri nkwo-eriri 0.86 0.46 1 visible " + next.phase
+show "scene subject hydrofoil hydrofoil-main " + text of boat-scene-x + " " + text of boat-scene-y + " 1 visible " + next.phase
+show "scene subject market market 0.12 0.67 1 visible " + next.phase
+show "scene subject kordas kordas 0.08 0.49 1 visible " + next.phase
+show "scene subject fog-capture fog-capture 0.75 0.41 1 visible " + next.phase
+show "scene subject radio-mast radio-mast 0.85 0.30 1 visible " + next.radio
+show "scene subject clinic-beacon clinic-beacon 0.91 0.46 1 visible " + next.need
+show "scene subject wave-array wave-array 0.78 0.72 1 visible " + next.phase
+show "scene subject petrels petrels 0.52 0.20 1 visible " + next.phase
+show "scene route reso-nkwo 0.12 0.73 0.84 0.57 " + next.phase + " " + text of next.progress
+show "scene signal clinic-beacon 0.91 0.46 warm available"
+show "scene signal radio-mast 0.85 0.30 indigo " + next.radio
+show "scene weather swell " + text of next.sea + " southwest"
+if next.phase == "choosing" or next.phase == "planning":
+  show "scene action passage need care Care primary"
+  show "scene action passage need education Education quiet"
+  show "scene action passage need work Work quiet"
+if next.phase == "planning":
+  show "scene action hydrofoil route depart Launch-crossing primary"
+  show "scene action reso-landing route shelter Wait-for-shelter quiet"
+  show "scene action wave-array route reserve Hold-wave-reserve quiet"
+  show "scene action clinic-beacon power clinic Protect-clinic-power quiet"
+  show "scene action radio-mast radio relay Relay-landing-signal quiet"
+show "scene cue " + next.cue + " " + text of next.serial
+show "audio bed channel-day 0.18 center"
+if next.cue == "crossing-commit":
+  show "audio cue drum-depart 0.16 hydrofoil " + text of next.serial
+else:
+  if next.cue == "crossing-arrival":
+    show "audio cue bell-double 0.15 nkwo-eriri " + text of next.serial
+  else:
+    if next.cue == "radio-relay":
+      show "audio cue radio-click 0.10 radio-mast " + text of next.serial
+show "draw protocol 3"
+clear
+no-stroke
+
+# sky and sunbreak
+gradient of "mid", 0.58, 0, 0, 0, 350, 0.82, 0.09, 220, 1, 0.92, 0.08, 190, 1, 0.96, 0.05, 102, 1
+rect of 0, 0, 960, 350, 0
+fill of 0.91, 0.15, 82, 0.28
+blur of 18
+circle of 760, 90, 72
+no-blur
+fill of 0.93, 0.16, 82, 0.98
+circle of 760, 90, 38
+
+# sea body and moving surface
+no-blur
+gradient of "mid", 0.48, 0, 310, 0, 640, 0.61, 0.13, 205, 1, 0.48, 0.16, 220, 1, 0.33, 0.12, 235, 1
+rect of 0, 310, 960, 330, 0
+let swell-lift = 2 + (mod of seed, 5)
+show "subject weather"
+wave-lines of 0, 15, swell-lift
+
+# Reso, close and inhabited
+show "subject reso-landing"
+fill of 0.28, 0.10, 145, 1
+shape
+vertex of 0, 195
+curve of 65, 160, 118, 174, 170, 226
+curve of 205, 260, 221, 298, 238, 352
+vertex of 0, 374
+close
+end
+fill of 0.43, 0.14, 132, 1
+shape
+vertex of 0, 240
+curve of 78, 214, 132, 235, 208, 330
+vertex of 0, 350
+close
+end
+show "subject kordas"
+terrace-lines of 0, 6, 103, 225, 88
+show "subject market"
+market-canopies of 0, 5
+fill of 0.78, 0.07, 46, 1
+rect of 72, 337, 168, 15, 1
+fill of 0.92, 0.03, 77, 1
+rect of 45, 287, 18, 34, 2
+rect of 68, 276, 22, 45, 2
+rect of 95, 291, 20, 30, 2
+rect of 120, 270, 26, 51, 2
+
+# Nkwo Eriri across the channel
+show "subject nkwo-eriri"
+fill of 0.25, 0.11, 153, 1
+shape
+vertex of 672, 281
+curve of 730, 198, 821, 176, 960, 214
+vertex of 960, 370
+curve of 865, 345, 778, 328, 672, 346
+close
+end
+fill of 0.39, 0.16, 138, 0.92
+shape
+vertex of 718, 284
+curve of 784, 224, 850, 220, 960, 242
+vertex of 960, 339
+curve of 870, 326, 794, 314, 718, 326
+close
+end
+
+# contemporary fog, radio, wave and care infrastructure
+show "subject fog-capture"
+fog-catchers of 0, 7
+show "subject radio-mast"
+stroke of 0.95, 0.04, 72, 1
+width of 2.4
+line of 850, 207, 850, 273
+line of 840, 233, 860, 233
+arc of 850, 226, 19, 205, 335
+arc of 850, 226, 30, 210, 330
+show "subject clinic-beacon"
+fill of 0.89, 0.14, 62, 0.33
+blur of 9
+circle of 902, 276, 16
+no-blur
+fill of 0.94, 0.15, 62, 1
+circle of 902, 276, 5
+show "subject wave-array"
+stroke of 0.82, 0.08, 190, 0.9
+width of 3
+arc of 757, 361, 14, 180, 360
+arc of 791, 366, 14, 180, 360
+arc of 825, 360, 14, 180, 360
+
+# route cord, beads, and electric hydrofoil
+show "subject route-cord"
+stroke of 0.97, 0.035, 88, 0.96
+width of 3.5
+cap of "round"
+shape
+vertex of 190, 354
+curve of 382, 317, 579, 310, 764, 298
+end
+route-beads of 0, 10
+
+let boat-x = 232 + next.progress * 514 + (sine of (tick * 3 + mod of seed, 90)) * 4 because "Planes owns voyage progress while tick adds a small replayable lift"
+if next.status == "crossing-arrived":
+  boat-x = 746
+else:
+  if next.status == "crossing-refused":
+    boat-x = 232
+  else:
+    if next.status == "crossing-delayed":
+      boat-x = 372 + (sine of (tick * 2)) * 12
+show "subject hydrofoil"
+push
+translate of boat-x, 321
+rotate of -4
+fill of 0.98, 0.015, 88, 1
+shape
+vertex of -55, 4
+curve of -34, 18, 31, 20, 62, 2
+vertex of 42, -9
+vertex of -35, -10
+close
+end
+fill of 0.67, 0.14, 28, 1
+rect of -20, -20, 42, 10, 4
+fill of 0.28, 0.06, 215, 0.9
+rect of -13, -18, 28, 6, 2
+stroke of 0.96, 0.04, 88, 0.9
+width of 2
+line of -37, 18, -45, 28
+line of 34, 18, 42, 28
+pop
+
+# air life and warm signal rhythm
+show "subject petrels"
+petrels of 0, 6
+show "sound protocol 1"
+write next to "state.json"

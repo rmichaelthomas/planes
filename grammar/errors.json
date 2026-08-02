@@ -956,7 +956,7 @@
       "kind": "error",
       "class": "ModuleError",
       "tag": null,
-      "source": "modules.py:218",
+      "source": "modules.py:219",
       "raised_in": "check_collisions",
       "template": null,
       "slots": [],
@@ -1777,7 +1777,7 @@
       "modules.py:63"
     ],
     "modules.moduleerror-site.check_collisions": [
-      "modules.py:218"
+      "modules.py:219"
     ],
     "parser.planessyntaxerror-site.expect-1": [
       "parser.py:136"

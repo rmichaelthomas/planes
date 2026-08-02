@@ -13,13 +13,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { missingModuleError } from "./modules.mjs";
 
-export function createNodeModuleLoader() {
+export function createNodeModuleLoader({ base = null } = {}) {
   return {
     locate(name, fromLocation) {
-      const base = fromLocation
+      const directory = fromLocation
         ? path.dirname(path.resolve(fromLocation))
-        : process.cwd();
-      const candidate = path.join(base, `${name}.planes`);
+        : base
+          ? path.dirname(path.resolve(base))
+          : process.cwd();
+      const candidate = path.join(directory, `${name}.planes`);
       if (fs.existsSync(candidate)) return candidate;
       throw missingModuleError(name);
     },
