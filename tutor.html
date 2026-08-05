@@ -224,10 +224,13 @@
 start
 sky of "just before dark"
 ground of "wet grass"
+
 moon of 240, 90
 star of 100, 60
-flower of 120, 90
 firefly of 300, 200
+
+let spot = 90 because "the corner gets the sun after noon, so it grows tallest"
+flower of 120, spot
 </textarea>
           </div>
           <div class="editor-bar">
@@ -358,15 +361,66 @@ firefly of 300, 200
         return { lineHeight: parseFloat(cs.lineHeight) || 20, paddingTop: parseFloat(cs.paddingTop) || 0 };
       }
 
+      // A throwaway canvas used only to measure the textarea's own monospace
+      // character width — see charCapacity below.
+      const measureCtx = document.createElement("canvas").getContext("2d");
+
+      // How many characters fit on one on-screen row of the textarea right
+      // now — the same quantity the browser's own word-wrap is working
+      // from, read off the live layout rather than assumed, so a narrower
+      // window keeps this correct without a resize handler of its own (the
+      // next click or scroll recomputes it).
+      function charCapacity() {
+        const cs = getComputedStyle(source);
+        const contentWidth =
+          source.clientWidth - parseFloat(cs.paddingLeft || "0") - parseFloat(cs.paddingRight || "0");
+        measureCtx.font = cs.font;
+        const charWidth = measureCtx.measureText("M").width || 1; // monospace: every glyph this wide
+        return Math.max(1, Math.floor(contentWidth / charWidth));
+      }
+
+      // How many on-screen ROWS a logical source line occupies once the
+      // textarea wraps it — needed because a source line number counts
+      // LOGICAL lines (what the interpreter reports) while the highlight has
+      // to land on a VISUAL row. Simulates the textarea's own greedy
+      // word-wrap — break only at a space, never mid-word — against the
+      // row's character capacity; both are exact for a monospace font, so
+      // this lands on the real wrap point rather than approximating it.
+      // Without this, a `because` sentence long enough to wrap (routine — a
+      // real explanation rarely fits in one row) put the highlight on the
+      // wrong row for every line after it, found live against the starter
+      // program's own first `because` line.
+      function rowsForLine(text, capacity) {
+        if (capacity <= 0 || text.length === 0) return 1;
+        let rows = 1;
+        let col = 0;
+        for (const word of text.split(" ")) {
+          const piece = col === 0 ? word : ` ${word}`;
+          if (col > 0 && col + piece.length > capacity) {
+            rows += 1;
+            col = word.length;
+          } else {
+            col += piece.length;
+          }
+        }
+        return rows;
+      }
+
       function positionHighlight() {
         if (litLine < 0) {
           highlightEl.style.display = "none";
           return;
         }
         const { lineHeight, paddingTop } = lineMetrics();
+        const capacity = charCapacity();
+        let visualRow = 0;
+        for (let i = 0; i < litLine - 1; i++) {
+          visualRow += rowsForLine(lastSourceLines[i] ?? "", capacity);
+        }
+        const ownRows = rowsForLine(lastSourceLines[litLine - 1] ?? "", capacity);
         highlightEl.style.display = "block";
-        highlightEl.style.height = `${lineHeight}px`;
-        highlightEl.style.top = `${paddingTop + (litLine - 1) * lineHeight - source.scrollTop}px`;
+        highlightEl.style.height = `${lineHeight * ownRows}px`;
+        highlightEl.style.top = `${paddingTop + visualRow * lineHeight - source.scrollTop}px`;
       }
 
       function highlightLine(n) {
@@ -518,6 +572,18 @@ firefly of 300, 200
         return null;
       }
 
+      // The name called on the source line itself — route 2 of the heading
+      // precedence in renderCard, for a line with no enclosing `to`. Same
+      // multi-word handling as FUNC_HEADER; the `let`-exclusion keeps an
+      // assignment line (never a call, never a mark) from heading a card
+      // with the name it binds.
+      const CALL_HEADER = /^(?!let\b)((?:(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)(?:\s+(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)*)\s*(?:of\b|$)/;
+
+      function callAt(sourceLine) {
+        const m = CALL_HEADER.exec(lastSourceLines[sourceLine - 1] ?? "");
+        return m ? m[1] : null;
+      }
+
       // A name a reader can read — why.mjs's own valueText rounds a long
       // decimal for the same reason.
       function readable(value) {
@@ -635,9 +701,15 @@ firefly of 300, 200
         // fact about the CHILD'S OWN program, since scene.planes helpers
         // report their line as the entry-file call site (interp.py's
         // trace_line), never a line inside scene.planes itself. Otherwise
-        // the source line number, never an invented name.
-        const heading = definition ?? `line ${sourceLine}`;
-        const whereHtml = definition ? `<div class="where">line ${sourceLine}</div>` : "";
+        // the name called on the source line itself, so a click on a mark
+        // with no enclosing `to` still reads as what was drawn — "moon",
+        // not "line 7". Otherwise the source line number, never an
+        // invented name. The line number itself is never lost: it stays
+        // under the heading whenever the heading names something.
+        const called = definition ? null : callAt(sourceLine);
+        const named = definition ?? called;
+        const heading = named ?? `line ${sourceLine}`;
+        const whereHtml = named ? `<div class="where">line ${sourceLine}</div>` : "";
 
         cardEl.innerHTML =
           `<div class="head"><h4>${esc(heading)}</h4>` +

@@ -46,11 +46,33 @@ const STARTER_PROGRAM = `use scene
 start
 sky of "just before dark"
 ground of "wet grass"
+
 moon of 240, 90
 star of 100, 60
-flower of 120, 90
 firefly of 300, 200
+
+let spot = 90 because "the corner gets the sun after noon, so it grows tallest"
+flower of 120, spot
 `;
+
+const TUTOR_HTML = path.join(REPO, "tutor.html");
+const pageSrc = () => fs.readFileSync(TUTOR_HTML, "utf-8");
+
+// The actual regex literal declared in tutor.html, reconstructed from its
+// own source text rather than hand-copied — the same discipline
+// js/test/garden_card.test.mjs uses for garden.html's PENTATONIC table, so
+// this suite drifts with the page instead of silently diverging from it.
+function extractRegex(html, constName) {
+  const marker = `const ${constName} = `;
+  const start = html.indexOf(marker);
+  assert.ok(start >= 0, `tutor.html no longer declares ${constName} where this suite reads it`);
+  const lineEnd = html.indexOf("\n", start);
+  const line = html.slice(start + marker.length, lineEnd).trim();
+  assert.ok(line.endsWith(";"), `${constName}'s declaration is not a single semicolon-terminated line`);
+  const literal = line.slice(0, -1);
+  const lastSlash = literal.lastIndexOf("/");
+  return new RegExp(literal.slice(1, lastSlash), literal.slice(lastSlash + 1));
+}
 
 // ---- B: the starter program runs clean under both implementations,
 //         identically ------------------------------------------------------
@@ -129,4 +151,60 @@ test("C: a because-annotated binding survives into result.annotations and into t
   } finally {
     restore();
   }
+});
+
+test("C: the shipped starter program's own `because` reaches the flower head's derivation", async () => {
+  const restore = installFsFetch();
+  try {
+    const r = await runProgramGraph(STARTER_PROGRAM, { base: SCENE_BASE });
+    assert.equal(r.error, null, r.error && r.error.message);
+
+    assert.equal(r.annotations.spot, "the corner gets the sun after noon, so it grows tallest");
+
+    const sink = markSink();
+    const { errors } = walk(r.output, sink);
+    assert.deepEqual(errors, []);
+    const headMark = sink.marks.find((m) => m.kind === "circle" && m.geometry.r === 9);
+    assert.ok(headMark, "the flower's head circle was not found among the starter program's marks");
+    const entry = r.trace[headMark.line];
+    assert.ok(entry, "the flower head's stream line has no trace entry");
+    const [node] = entry;
+
+    function reachesName(n, label, seen = new Set()) {
+      if (!n || seen.has(n)) return false;
+      seen.add(n);
+      if (n.kind === "name" && n.label === label) return true;
+      return (Array.isArray(n.inputs) ? n.inputs : []).some((i) => reachesName(i, label, seen));
+    }
+    assert.ok(reachesName(node, "spot"), "the flower head's derivation never reaches the annotated name 'spot'");
+  } finally {
+    restore();
+  }
+});
+
+// ---- heading precedence: the enclosing `to`, else the call on the line,
+//      else the line number — checked as a pure function ------------------
+
+test("heading: CALL_HEADER names a call site and stops at the assignment boundary", () => {
+  const CALL_HEADER = extractRegex(pageSrc(), "CALL_HEADER");
+
+  const named = (line) => {
+    const m = CALL_HEADER.exec(line);
+    return m ? m[1] : null;
+  };
+
+  assert.equal(named("moon of 240, 90"), "moon");
+  assert.equal(named("flower of 120, spot"), "flower");
+  assert.equal(named("start"), "start");
+  assert.equal(named('let spot = 90 because "the corner gets the sun after noon"'), null);
+  assert.equal(named("spot = 90"), null);
+  assert.equal(named("big flower of 1, 2"), "big flower");
+});
+
+// ---- the shipped textarea and this suite's STARTER_PROGRAM never drift ----
+
+test("the starter program in tutor.html's textarea is byte-identical to this suite's STARTER_PROGRAM", () => {
+  const html = pageSrc();
+  const shipped = html.split('<textarea id="source" spellcheck="false">')[1].split("</textarea>")[0];
+  assert.equal(shipped, STARTER_PROGRAM, "tutor.html's starter program has drifted from the text this suite tests");
 });
