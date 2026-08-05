@@ -1,11 +1,40 @@
 # paint/scene.planes — the vocabulary a child is given in week 1 (checkpoint
-# v26.0 §383-407). This is a TEACHING vocabulary: one wrapper per idea and
-# nothing else, the same discipline paint/draw.planes follows over the
-# protocol itself. Every drawing command below goes through a draw.planes
-# helper — this file defines no protocol surface of its own. Its OKLCH
-# numbers (`fill`/`stroke`/`background`'s l, c, h, a) are the only colour
-# literals a child's own program ever has to look at; her program only ever
-# writes phrases like "wet grass" and coordinates like `120, 90`.
+# v26.0 §383-407, checkpoint v27.0 §413-416). This is a TEACHING vocabulary:
+# one wrapper per idea and nothing else, the same discipline paint/draw.planes
+# follows over the protocol itself. Every drawing command below goes through a
+# draw.planes helper — this file defines no protocol surface of its own.
+#
+# v27.0's RENDER CEILING (§413): the child's one-line call stays exactly as
+# simple as before — `sun of 240, 70` is still two numbers — but the helper
+# behind it now spends the FULL draw.planes palette: gradients, shadows,
+# blur, curved paths. The richness lives in here, never in what she types.
+#
+# THE ONE BOUNDARY (§414, checked by js/test/scene_rich.test.mjs's exactness
+# control test): nothing below calls `sine` or `root`, or anything that
+# reaches them. A hexagonal ring of six petals needs the sine and cosine of
+# 60-degree steps, and those are baked in as DECIMAL LITERALS (`6.928` for
+# 8 * sin(60°)) rather than computed by the builtin — a literal is an exact
+# rational by construction (grammar/vocabulary.json's NUMBER token), where
+# calling `sine` would flip this program's effect surface from exact to
+# approximate and break week 5's honest-garden lesson. Six fixed angles
+# needed six fixed numbers, not a trig call.
+#
+# THE SUBJECT-ATTRIBUTION RULE (§415) needs no code here at all. Every helper
+# below draws only by calling further scene.planes/draw.planes functions —
+# never anything the entry program calls on its own — so interp.py/interp.mjs's
+# own `trace_line` (every `show` inside a `use`d module reports the innermost
+# call site actually WRITTEN in the entry file) already collapses a rich
+# helper's many marks onto the ONE line the child wrote, and tutor.html's
+# existing call-name heading reads that line's name straight off it. A second,
+# hand-maintained subject map (garden.html's `subjectOf`) is not needed here
+# because scene.planes is always `use`d, never the entry file itself.
+#
+# Its OKLCH numbers (`fill`/`stroke`/`background`/`gradient`'s l, c, h, a) are
+# the only colour literals a child's own program ever has to look at; her
+# program only ever writes phrases like "wet grass" and coordinates like
+# `120, 90`. The sky/ground phrase lists below are the same list
+# js/scene_vocab.mjs exports for the read-only key (checkpoint v27.0 §421) —
+# js/test/scene_rich.test.mjs asserts the two agree, phrase for phrase.
 
 use draw
 
@@ -20,65 +49,164 @@ use draw
 to horizon:
   give 264
 
+# The protocol has no verb to turn a shadow or a blur back off (paint/
+# garden.planes's own §"shadow lifecycle" names the same gap) — a shadow or
+# blur set for one mark keeps applying to every mark drawn after it until
+# something changes it again. These two private resets exist so a helper that
+# wants a glow or a lift on ONE mark can hand the state back afterward,
+# instead of leaking a blurred, shadowed sun onto the ground drawn beneath it.
+to no-shadow:
+  shadow of 0, 0, 0, 0, 0, 0
+
+to no-blur:
+  blur of 0
+
 to start:
   show "draw protocol 3"
   clear
+  # No `stroke of` call below ever sets one back to opaque black, so every
+  # filled shape in this file — sun, moon, flower petals, a bee's body — would
+  # otherwise carry the DEFAULT stroke (draw.planes's own table: black, width
+  # 1) as an uninvited outline. Set once, globally, for the whole stream.
+  stroke of 0, 0, 0, 0
 
 to sky of feeling:
   if feeling == "early morning":
-    background of 0.82, 0.05, 40
+    gradient of "linear", 0, 0, 0, 0, horizon, 0.80, 0.07, 235, 1, 0, 0, 0, 0, 0.82, 0.05, 40, 1
   else:
     if feeling == "middle of the afternoon":
-      background of 0.75, 0.12, 230
+      gradient of "linear", 0, 0, 0, 0, horizon, 0.55, 0.18, 235, 1, 0, 0, 0, 0, 0.75, 0.12, 230, 1
     else:
       if feeling == "just before dark":
-        background of 0.45, 0.14, 300
+        gradient of "linear", 0, 0, 0, 0, horizon, 0.25, 0.13, 285, 1, 0, 0, 0, 0, 0.45, 0.14, 300, 1
       else:
         if feeling == "the middle of the night":
-          background of 0.15, 0.05, 260
+          gradient of "linear", 0, 0, 0, 0, horizon, 0.08, 0.03, 265, 1, 0, 0, 0, 0, 0.15, 0.05, 260, 1
         else:
           fail "\"" + feeling + "\" isn't a sky this program knows — try one of: early morning, middle of the afternoon, just before dark, the middle of the night" as unknown-sky-feeling
+  rect of 0, 0, 480, horizon, 0
 
 to ground of feeling:
   if feeling == "wet grass":
-    fill of 0.40, 0.13, 145, 1
+    gradient of "linear", 0, 0, horizon, 0, 360, 0.58, 0.12, 145, 1, 0, 0, 0, 0, 0.40, 0.13, 145, 1
   else:
     if feeling == "dry grass":
-      fill of 0.62, 0.09, 95, 1
+      gradient of "linear", 0, 0, horizon, 0, 360, 0.75, 0.08, 95, 1, 0, 0, 0, 0, 0.62, 0.09, 95, 1
     else:
       if feeling == "dirt":
-        fill of 0.40, 0.08, 55, 1
+        gradient of "linear", 0, 0, horizon, 0, 360, 0.55, 0.09, 55, 1, 0, 0, 0, 0, 0.40, 0.08, 55, 1
       else:
         fail "\"" + feeling + "\" isn't a ground this program knows — try one of: wet grass, dry grass, dirt" as unknown-ground-feeling
-  rect of 0, horizon, 480, 96, 0
+  rect of 0, horizon, 480, (360 - horizon), 0
+
+# A raw-number sky, for a child's OWN `to <her words>:` sky (checkpoint
+# v27.0 §420/§424, week 4): she names the function, and tutor.html's colour
+# picker writes only the three numbers into a `custom-sky of l, c, h` line
+# inside it — the authorship boundary the checkpoint locks. Unlike `sky`,
+# this takes no phrase and refuses nothing: any OKLCH triple is a colour.
+to custom-sky of l, c, h:
+  fill of l, c, h, 1
+  rect of 0, 0, 480, horizon, 0
 
 to sun of x, y:
-  fill of 0.95, 0.10, 85, 1
-  circle of x, y, 26
+  fill of 0.97, 0.14, 95, 0.55
+  blur of 14
+  circle of x, y, 46
+  no-blur
+  shadow of 0, 3, 6, 0.70, 0.14, 70
+  gradient of "radial", 0, x, y, 27, 0, 0.99, 0.05, 95, 1, 0, 0, 0, 0, 0.86, 0.17, 68, 1
+  circle of x, y, 27
+  no-shadow
 
 to moon of x, y:
-  fill of 0.93, 0.02, 250, 1
+  fill of 0.90, 0.03, 250, 0.5
+  blur of 12
+  circle of x, y, 36
+  no-blur
+  shadow of 0, 2, 5, 0.30, 0.04, 260
+  gradient of "radial", 0, x, y, 20, 0, 0.97, 0.01, 250, 1, 0, 0, 0, 0, 0.80, 0.03, 245, 1
   circle of x, y, 20
+  no-shadow
+  fill of 0.72, 0.02, 245, 0.7
+  circle of (x + 6), (y - 4), 3.4
+  circle of (x - 5), (y + 5), 2.6
 
 to star of x, y:
-  fill of 0.97, 0.04, 250, 1
-  circle of x, y, 3
+  fill of 0.85, 0.18, 95, 0.5
+  blur of 3
+  circle of x, y, 5
+  no-blur
+  fill of 0.99, 0.05, 95, 1
+  circle of x, y, 2
+
+# One petal, at its own centre, rotated to point outward. A private helper
+# so `flower` states six short calls rather than repeating an eighteen-
+# argument `gradient of` six times over.
+to petal of cx, cy, turn:
+  gradient of "radial", 0, cx, cy, 7, 0, 0.92, 0.16, 24, 1, 0, 0, 0, 0, 0.72, 0.19, 20, 1
+  ellipse of cx, cy, 7, 4.2, turn
 
 to flower of x, tall:
-  stroke of 0.45, 0.12, 145, 1
-  width of 2
-  line of x, horizon, x, (horizon - tall)
-  fill of 0.75, 0.15, 25, 1
-  circle of x, (horizon - tall), 9
+  let stem-top = (horizon - tall)
+  let stem-mid = ((horizon + stem-top) / 2)
+  fill of 0.42, 0.12, 145, 1
+  shape
+  vertex of (x - 1.6), horizon
+  curve of (x - 3.4), stem-mid, (x - 1.2), (stem-top + 6), x, stem-top
+  curve of (x + 1.2), (stem-top + 6), (x + 3.4), stem-mid, (x + 1.6), horizon
+  close
+  end
+  fill of 0.48, 0.14, 140, 1
+  shape
+  vertex of x, stem-mid
+  curve of (x + 10), (stem-mid - 6), (x + 13), (stem-mid + 2), (x + 6), (stem-mid + 7)
+  curve of (x + 3), (stem-mid + 5), (x + 1), (stem-mid + 3), x, stem-mid
+  close
+  end
+  shadow of 0, 2, 4, 0.32, 0.10, 25
+  # Six petals in a ring, radius 8, at 60-degree steps — the ring's own
+  # (dx, dy) offsets baked in as literals (see the file header's note on why).
+  petal of (x + 8), stem-top, 0
+  petal of (x + 4), (stem-top - 6.928), 60
+  petal of (x - 4), (stem-top - 6.928), 120
+  petal of (x - 8), stem-top, 180
+  petal of (x - 4), (stem-top + 6.928), 240
+  petal of (x + 4), (stem-top + 6.928), 300
+  no-shadow
+  gradient of "radial", 0, x, stem-top, 5, 0, 1, 0.02, 95, 1, 0, 0, 0, 0, 0.82, 0.16, 70, 1
+  circle of x, stem-top, 5
 
 to bee of x, y:
-  fill of 0.75, 0.15, 85, 1
-  circle of x, y, 5
-  stroke of 0.35, 0.08, 70, 1
-  width of 1.5
-  line of (x - 3), (y - 1), (x + 3), (y - 1)
-  line of (x - 3), (y + 1), (x + 3), (y + 1)
+  shadow of 0, 1, 2, 0.30, 0.08, 70
+  gradient of "radial", 0, x, y, 6, 0, 0.85, 0.16, 90, 1, 0, 0, 0, 0, 0.68, 0.17, 80, 1
+  ellipse of x, y, 6, 4.4, 0
+  no-shadow
+  fill of 0.25, 0.05, 60, 1
+  rect of (x - 4), (y - 4.6), 2.2, 9.2, 0
+  rect of (x + 1.8), (y - 4.6), 2.2, 9.2, 0
+  fill of 1, 0.02, 220, 0.5
+  ellipse of (x - 3), (y - 4), 4.2, 3, -18
+  ellipse of (x + 3), (y - 4), 4.2, 3, 18
 
 to firefly of x, y:
-  fill of 0.85, 0.18, 95, 1
-  circle of x, y, 2
+  fill of 0.90, 0.16, 100, 0.45
+  blur of 6
+  circle of x, y, 7
+  no-blur
+  gradient of "radial", 0, x, y, 2.6, 0, 1, 0.06, 100, 1, 0, 0, 0, 0, 0.85, 0.20, 95, 1
+  circle of x, y, 2.6
+
+# Paired helpers (checkpoint v27.0 §416): symmetry is the helper's doing, so
+# a later week can change the shared height or move just one flower — the
+# child still writes one line. Offsets match mockup v7's own placement.
+to two-flowers of x, tall:
+  flower of (x - 26), tall
+  flower of (x + 26), tall
+
+to two-bees of x, y:
+  bee of (x - 22), (y - 6)
+  bee of (x + 22), (y + 8)
+
+to two-fireflies of x, y:
+  firefly of (x - 22), (y - 6)
+  firefly of (x + 22), (y + 8)
