@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>tutor — the page a child grows</title>
+    <title>the gardener — till your own garden</title>
     <meta
       name="description"
-      content="A kid-first Planes editor: type a few lines, watch a rich garden grow, click it to ask where a number came from. paint/scene.planes is the starter vocabulary; the picture is the hero. No build step — this page runs the real .planes source."
+      content="A hands-on Planes editor: till your own garden line by line, watch it grow, and click any part to ask where it came from. paint/scene.planes is the starter vocabulary; the picture is the hero. No build step — this page runs the real .planes source."
     />
     <!--
       SERVING THIS PAGE. This page fetches paint/scene.planes and
@@ -21,14 +21,16 @@
       this is a static file server, nothing more.
 
       THIS IS THE v27.0 REDESIGN (checkpoint "the page a child grows",
-      build prompt planes_build_prompt_tutor_redesign.md). The engine
-      underneath — runProgramGraph/analyseProgramGraph, the mark walk,
-      hitTest, the card builder in js/paint/why.mjs — is UNCHANGED from
-      #71-73; what changed is this shell (hero-first layout, structured
-      ghost-text authoring, a read-only generated vocabulary key, the
-      reflection card's because-first/because-invite redesign, week-aware
-      progressive disclosure, and a week-5 capstone + certificate) and the
-      richer paint/scene.planes it points at.
+      build prompt planes_build_prompt_tutor_redesign.md — shipped here as
+      "the gardener", generalized for a general audience rather than a
+      child specifically). The engine underneath —
+      runProgramGraph/analyseProgramGraph, the mark walk, hitTest, the card
+      builder in js/paint/why.mjs — is UNCHANGED from #71-73; what changed
+      is this shell (hero-first layout, structured ghost-text authoring, a
+      read-only generated vocabulary key, the reflection card's
+      because-first/because-invite redesign, week-aware progressive
+      disclosure, and a week-5 capstone + certificate) and the richer
+      paint/scene.planes it points at.
     -->
     <style>
       /* The identity tokens, shared verbatim with garden.html and every
@@ -258,7 +260,23 @@
       .cert .actions button{font-family:var(--display); font-weight:700; font-size:13px; border:1px solid var(--line); background:#fff; border-radius:9px; padding:9px 16px; cursor:pointer}
       .cert .actions button.primary{background:var(--clay); color:#fff; border-color:var(--clay)}
       .cert .x{position:absolute; top:14px; right:16px; border:0; background:none; font-size:18px; color:var(--ink-40); cursor:pointer; z-index:2}
-      @media print{ body > *:not(.scrim){display:none} .scrim{position:static; background:none; display:block!important} .cert{box-shadow:none} }
+      /* Printing the certificate. Three defects a real print showed
+         (not caught on screen, since screen rendering never suppresses
+         either): (1) Chrome/Safari drop CSS background colours, gradients
+         and SVG fills by default when printing — `print-color-adjust`
+         forces them through, on every element, since the mark's four
+         polygons, the rainbow band and the four chips are all colour. (2)
+         `.cert .x`/`.cert .actions` (the ✕ and the two buttons) are inside
+         `.scrim`, so hiding everything OUTSIDE it left them printing too.
+         (3) `.scrim`'s on-screen flex-centering is lost once it goes
+         static, so the cert has to centre itself. */
+      @media print{
+        *{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important}
+        body > *:not(.scrim){display:none !important}
+        .scrim{position:static !important; background:none !important; padding:0 !important; display:block !important}
+        .cert{box-shadow:none !important; margin:0 auto !important; width:100% !important; max-width:680px !important; page-break-inside:avoid}
+        .cert .x, .cert .actions{display:none !important}
+      }
 
       footer{margin-top:24px; font-family:var(--mono); font-size:10px; color:var(--ink-40); line-height:1.7; max-width:700px}
       @media (max-width:620px){.weeks button{padding:6px 8px; font-size:11px}.weeks button small{display:none}}
@@ -410,13 +428,13 @@
           <p class="did">grew a garden in <b>Planes</b>, wrote the reasons it looks the way it does, and can tell you where every part came from.</p>
           <div class="learned">
             <span class="chip" style="background:var(--blue)">wrote a program</span>
-            <span class="chip" style="background:var(--amber)">named her numbers</span>
+            <span class="chip" style="background:var(--amber)">named the numbers</span>
             <span class="chip" style="background:var(--teal)">said why</span>
-            <span class="chip" style="background:var(--violet)">made it hers</span>
+            <span class="chip" style="background:var(--violet)">made it their own</span>
           </div>
           <div class="foot">
             <div class="sig"><div class="word2">planes<span class="dot">.</span></div><small>draw something, then ask it why</small></div>
-            <div class="seedstamp">her garden<b id="cert-seed">——————</b></div>
+            <div class="seedstamp">this garden<b id="cert-seed">——————</b></div>
           </div>
         </div>
         <div class="actions"><button class="primary" id="cert-print" type="button">Print it ⤓</button><button id="cert-close2" type="button">Back to my garden</button></div>
@@ -741,7 +759,7 @@
         showOops(null);
         const result = await runProgramGraph(src, { base: BASE, loader });
         if (result.error) {
-          showOops(kidError(result.error));
+          showOops(friendlyError(result.error));
           return;
         }
         lastLines = result.output;
@@ -764,7 +782,7 @@
       // A typo must not blank her work (§4.2): the last good picture stays
       // on screen, and the ribbon speaks in the language the key already
       // uses rather than the raw tag.
-      function kidError(error) {
+      function friendlyError(error) {
         // scene.planes's own message already names the fix ("try one of:
         // <phrases>"); stripping the raw tag prefix and pointing at the
         // key instead of repeating the list keeps the key as the teacher,
