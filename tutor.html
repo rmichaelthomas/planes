@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tutor — the page a child types into</title>
+    <meta
+      name="description"
+      content="Type a few lines of Planes, see a picture, click the picture and ask where a number came from. paint/scene.planes is the starter vocabulary; the editor is the source pane. No build step — this page runs the real .planes source."
+    />
+    <!--
+      SERVING THIS PAGE. This page fetches paint/scene.planes and
+      paint/draw.planes and imports js/*.mjs as ES modules — both requests,
+      from a file:// origin, are opaque-origin and refused by the browser
+      (this is not Chrome-specific; it applies wherever this page is opened
+      from disk). Serve the repo root and load this page over http:
+
+        cd <repo> && python3 -m http.server 8000
+
+      then open http://localhost:8000/tutor.html. No install, no build step:
+      this is a static file server, nothing more.
+    -->
+    <style>
+      /* The identity tokens, shared verbatim with garden.html and every
+         other page on this site. One appearance: paper. No dark-mode block
+         — a page that changes its clothes with the viewer's OS is two
+         designs neither of which was drawn. */
+      :root {
+        --paper:#F7F2E9; --graphite:#211D19; --line:#D6C9B4; --clay:#A65A2E;
+        --slate:#4A5B68; --amber:#F59E0B; --blue:#3B82F6; --teal:#14B8A6; --violet:#8B5CF6;
+        --ink-60:rgba(33,29,25,.62); --ink-40:rgba(33,29,25,.40);
+        --display:"Red Hat Display",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+        --mono:"Martian Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+      }
+      @font-face {
+        font-family:"Red Hat Display"; font-style:normal; font-weight:700 900;
+        font-display:swap; src:url("identity/fonts/red-hat-display.woff2") format("woff2");
+      }
+      @font-face {
+        font-family:"Martian Mono"; font-style:normal; font-weight:400 500;
+        font-display:swap; src:url("identity/fonts/martian-mono.woff2") format("woff2");
+      }
+
+      *{box-sizing:border-box}
+      body{
+        margin:0; padding:18px 14px 48px; background:var(--paper); color:var(--graphite);
+        font-family:var(--mono); font-size:12px; line-height:1.55; -webkit-font-smoothing:antialiased;
+      }
+      .wrap{max-width:1100px;margin:0 auto}
+
+      header{
+        display:flex; justify-content:space-between; align-items:flex-end; gap:14px;
+        flex-wrap:wrap; border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:16px;
+      }
+      .brand{display:flex; align-items:center; gap:13px}
+      .brand img{width:44px; height:44px; display:block; flex:0 0 44px}
+      h1{font-family:var(--display); font-weight:900; font-size:25px; letter-spacing:-.02em; margin:0}
+      .sub{font-size:10.5px; color:var(--ink-60); margin-top:2px}
+      .sub a{color:var(--clay)}
+
+      button{
+        font-family:var(--mono); font-size:11px; font-weight:500; padding:7px 13px;
+        border:1px solid var(--line); border-radius:3px; background:transparent;
+        color:var(--ink-60); cursor:pointer;
+        transition:background .12s, color .12s, border-color .12s;
+      }
+      button:hover{background:var(--line); color:var(--graphite)}
+      button.accent{border-color:var(--clay); color:var(--clay)}
+      button.accent:hover{background:var(--clay); border-color:var(--clay); color:var(--paper)}
+      button.quiet{font-size:10.5px; padding:5px 9px}
+      button:focus-visible{outline:2px solid var(--clay); outline-offset:2px}
+      .hint{font-size:10.5px; color:var(--ink-40)}
+
+      /* ---------- the two columns ---------- */
+      .cols{display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start; margin-bottom:8px}
+      @media (max-width:860px){ .cols{grid-template-columns:1fr} }
+
+      .editor-col{display:flex; flex-direction:column}
+      .editor-wrap{position:relative}
+      textarea{
+        width:100%; min-height:22rem; padding:11px 12px; font-family:var(--mono);
+        font-size:11.5px; line-height:20px; border:1px solid var(--line); border-radius:3px;
+        background:#fff; color:var(--graphite); resize:vertical; display:block;
+      }
+      textarea:focus-visible{outline:2px solid var(--clay); outline-offset:1px}
+      /* Aligned to the textarea's own line-height/padding (set in JS from the
+         computed style, so a CSS edit here can never drift the two apart). A
+         click marks the line; it never redraws the picture, so this is the
+         one visual trace of a question. It has no width dependency on the
+         textarea's HEIGHT, so a manual resize-handle drag never misaligns
+         it — only a scroll needs a reposition, handled in JS. */
+      #line-highlight{
+        position:absolute; left:1px; right:1px; background:rgba(245,158,11,.24);
+        pointer-events:none; display:none; border-radius:2px;
+      }
+      .editor-bar{display:flex; align-items:center; gap:10px; margin-top:10px}
+
+      /* ---------- the canvas ---------- */
+      .frame{position:relative}
+      canvas{
+        display:block; width:100%; height:auto; border:1px solid var(--line);
+        border-radius:3px; background:#fff; cursor:pointer;
+      }
+      .canvas-foot{display:flex; gap:8px; margin-top:10px}
+
+      /* ---------- the why card ---------- */
+      #card{
+        position:absolute; max-width:300px; background:var(--paper);
+        border:1px solid var(--graphite); border-radius:3px; padding:12px 13px;
+        box-shadow:0 8px 26px rgba(0,0,0,.28); z-index:5; font-size:11.5px;
+        max-height:100%; overflow-y:auto; overscroll-behavior:contain;
+      }
+      #card .head{
+        position:sticky; top:-12px; background:var(--paper);
+        padding:12px 0 6px; margin:-12px 0 0; z-index:1;
+        display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
+      }
+      #card h4{
+        font-family:var(--display); font-weight:700; font-size:14px;
+        letter-spacing:-.01em; margin:0 0 3px;
+      }
+      #card .close{
+        flex:0 0 auto; border:0; background:none; padding:0 0 0 6px; margin:-2px -2px 0 0;
+        font-size:15px; line-height:1; color:var(--ink-40); cursor:pointer;
+      }
+      #card .close:hover{background:none; color:var(--graphite)}
+      #card .where{font-size:10px; color:var(--ink-40); margin-bottom:10px}
+      .step{position:relative; padding:0 0 0 18px; margin-bottom:10px}
+      .step::before{
+        content:""; position:absolute; left:4px; top:7px; bottom:-10px; width:1px; background:var(--line);
+      }
+      .step:last-of-type::before{display:none}
+      .step .dot{
+        position:absolute; left:0; top:4px; width:9px; height:9px; border-radius:50%;
+        border:1.5px solid var(--graphite); background:var(--paper);
+      }
+      .step .line{font-size:11.5px; line-height:1.5}
+      .step .val{font-weight:600}
+      .step .src{color:var(--ink-60)}
+      /* The because clause comes FIRST in a row (before the value/arithmetic
+         it explains) — the card's most important line, and a child's own
+         sentence outranks the numbers underneath it. */
+      .step .because{
+        display:block; margin-bottom:5px; font-size:10.5px; line-height:1.6;
+        color:var(--teal); border-left:2px solid var(--teal); padding-left:8px;
+      }
+      .step.origin .dot{border-color:var(--slate); background:var(--slate)}
+      .divider{height:1px; background:var(--line); margin:13px 0}
+      .badge{
+        display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:500;
+        padding:4px 9px; border-radius:2px; border:1px solid var(--clay); color:var(--clay);
+      }
+      .badge.calm{border-color:var(--slate); color:var(--slate)}
+      .badge-note{font-size:10px; color:var(--ink-60); margin-top:6px; line-height:1.6}
+      .closing{font-size:10px; color:var(--ink-40); margin-top:11px; line-height:1.6}
+
+      /* ---------- the surface ---------- */
+      .surface{
+        margin-top:6px; border:1px solid var(--line); border-radius:3px;
+        background:rgba(255,255,255,.55); padding:12px 14px;
+      }
+      .eyebrow{
+        font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+        color:var(--ink-40); margin-bottom:7px;
+      }
+      .surface pre{margin:0; font-family:var(--mono); font-size:11px; line-height:1.7; white-space:pre-wrap}
+      .sfc-pure{color:var(--teal); font-weight:600}
+      .sfc-approx{color:var(--clay); font-weight:600}
+      .sfc-dim{color:var(--ink-40)}
+      .surface details{margin-top:10px}
+      .surface summary{
+        cursor:pointer; font-size:10.5px; color:var(--ink-60); list-style:none;
+        padding-top:9px; border-top:1px solid var(--line);
+      }
+      .surface summary::-webkit-details-marker{display:none}
+      .surface summary::before{content:"▸ "; color:var(--ink-40)}
+      .surface details[open] summary::before{content:"▾ "}
+      .surface details pre{
+        margin-top:9px; max-height:22rem; overflow:auto; color:var(--ink-60);
+        white-space:pre-wrap;
+      }
+
+      /* ---------- output ---------- */
+      .output{margin-top:14px}
+      #output{
+        margin:0; padding:10px 12px; border:1px solid var(--line); border-radius:3px;
+        background:rgba(255,255,255,.5); font-family:var(--mono); font-size:10.5px;
+        line-height:1.7; min-height:2.2rem; overflow-x:auto; white-space:pre-wrap;
+        color:var(--ink-60);
+      }
+      #output.error{
+        color:color-mix(in oklab, var(--clay) 78%, var(--graphite));
+        border-color:rgba(166,90,46,.5); background:rgba(166,90,46,.06);
+      }
+
+      footer{
+        margin-top:26px; padding-top:14px; border-top:1px solid var(--line);
+        font-size:10.5px; color:var(--ink-40); line-height:1.75; max-width:680px;
+      }
+      footer p{margin:0 0 7px}
+      footer code{font-family:var(--mono); color:var(--ink-60)}
+      @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="brand">
+          <img src="identity/planes-small-on-light.svg" alt="Planes" width="44" height="44" />
+          <div>
+            <h1>tutor</h1>
+            <div class="sub">type a few lines, see a picture, click it to ask where a number came from</div>
+          </div>
+        </div>
+        <div class="sub"><a href="./index.html">← all of Planes</a></div>
+      </header>
+
+      <div class="cols">
+        <div class="editor-col">
+          <div class="editor-wrap">
+            <div id="line-highlight"></div>
+            <textarea id="source" spellcheck="false">use scene
+
+start
+sky of "just before dark"
+ground of "wet grass"
+moon of 240, 90
+star of 100, 60
+flower of 120, 90
+firefly of 300, 200
+</textarea>
+          </div>
+          <div class="editor-bar">
+            <button id="run" class="accent">Run ▸</button>
+            <span class="hint">⌘/Ctrl + Enter to run</span>
+          </div>
+        </div>
+
+        <div class="canvas-col">
+          <div class="frame">
+            <canvas
+              id="canvas"
+              width="1440"
+              height="1080"
+              role="img"
+              aria-label="the picture this program draws"
+            ></canvas>
+            <div id="card" hidden></div>
+          </div>
+          <div class="canvas-foot">
+            <button id="save-svg" class="quiet">Save SVG ⤓</button>
+            <button id="save-png" class="quiet">Save PNG ⤓</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="surface">
+        <div class="eyebrow">effect surface — computed, not run</div>
+        <pre id="surface-summary">(loading…)</pre>
+        <details>
+          <summary>show the full surface</summary>
+          <pre id="surface">(loading…)</pre>
+        </details>
+      </div>
+
+      <div class="output">
+        <pre id="output">(no output yet)</pre>
+      </div>
+
+      <footer>
+        <p>
+          Serving: this page fetches <code>paint/scene.planes</code> and
+          <code>paint/draw.planes</code> and imports <code>js/*.mjs</code> as ES
+          modules, so it needs a static server (<code>python3 -m http.server 8000</code>)
+          and no network beyond it.
+        </p>
+        <p>
+          <strong>The editor is the source pane.</strong> There is no second,
+          read-only listing of the program — clicking a mark on the picture
+          marks the line in the textarea above that drew it.
+          <strong>Asking performs nothing:</strong> a question reads the
+          derivation the last Run already produced, and the effect surface
+          above is computed without running a line.
+        </p>
+        <p>
+          <strong>Saving.</strong> SVG and PNG capture the picture on screen,
+          from the last successful Run — never a fresh run.
+        </p>
+      </footer>
+    </div>
+
+    <script type="module">
+      import { runProgramGraph, staleModuleWarning, staleRendererWarning } from "./js/browser_main.mjs";
+      import { paint } from "./js/paint/painter.mjs";
+      import { toSvg } from "./js/paint/svg.mjs";
+      import { downloadSvg, downloadPng } from "./js/paint/export.mjs";
+      import { walk as walkDrawing, HIGHEST_VERSION } from "./js/paint/stream.mjs";
+      import { markSink } from "./js/paint/marks.mjs";
+      import { hitTest } from "./js/paint/hit.mjs";
+      import { card } from "./js/paint/why.mjs";
+      import { renderSurface } from "./js/paint/surface_pane.mjs";
+      import { BrowserModuleLoader } from "./js/module_loader_browser.mjs";
+
+      // `use scene` and `use draw` resolve relative to this base — the
+      // paint/ directory this page lives beside (checkpoint v26.0 §383's
+      // scope correction: runProgramGraph takes a source STRING and a base,
+      // so paint/program_session.mjs's file-path-only session is not needed
+      // here at all).
+      const BASE = new URL("paint/", location.href).href;
+      const LOAD_TOKEN = String(Date.now());
+      const loader = new BrowserModuleLoader({ base: BASE, cacheBust: LOAD_TOKEN });
+
+      // THE BACKING STORE IS THREE TIMES THE PROGRAM'S COORDINATE SPACE — the
+      // same mechanism garden.html and paint.html's PNG export both use.
+      // Marks, hit-testing and the line highlight all stay in PROGRAM
+      // coordinates; only the rasteriser knows about the multiplier.
+      const CANVAS_SCALE = 3;
+      const DIMENSIONS = { width: 480, height: 360, background: "#ffffff", scale: CANVAS_SCALE };
+
+      const $ = (id) => document.getElementById(id);
+      const source = $("source");
+      const runBtn = $("run");
+      const canvas = $("canvas");
+      const cardEl = $("card");
+      const outputEl = $("output");
+      const surfaceEl = $("surface");
+      const surfaceSummaryEl = $("surface-summary");
+      const highlightEl = $("line-highlight");
+      const ctx = canvas.getContext("2d");
+
+      // Everything the frame on screen was made of. Every card, export and
+      // highlight reads THIS, never a fresh run (invariant 4) — which is
+      // what makes "asking performed nothing" true.
+      let lastLines = [];
+      let lastTrace = [];
+      let lastAnnotations = {};
+      let lastMarks = [];
+      let lastSourceLines = [];
+      let litLine = -1;
+
+      const esc = (s) =>
+        String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+      function showOutput(lines, isError) {
+        outputEl.textContent = lines.length ? lines.join("\n") : "(no output)";
+        outputEl.classList.toggle("error", Boolean(isError));
+      }
+
+      // ---- the editor's own line highlight (the source pane) -----------------
+      //
+      // A CHILD'S TYPO MUST NOT BLANK HER PICTURE (S8): repainting only ever
+      // happens from lastLines, on a SUCCESSFUL run — an error just writes to
+      // the output pane. Positioning depends only on line-height/padding
+      // (fixed) and scrollTop (live), never on the textarea's own HEIGHT, so
+      // a manual resize-handle drag never misaligns it (§5.3's requirement).
+      function lineMetrics() {
+        const cs = getComputedStyle(source);
+        return { lineHeight: parseFloat(cs.lineHeight) || 20, paddingTop: parseFloat(cs.paddingTop) || 0 };
+      }
+
+      function positionHighlight() {
+        if (litLine < 0) {
+          highlightEl.style.display = "none";
+          return;
+        }
+        const { lineHeight, paddingTop } = lineMetrics();
+        highlightEl.style.display = "block";
+        highlightEl.style.height = `${lineHeight}px`;
+        highlightEl.style.top = `${paddingTop + (litLine - 1) * lineHeight - source.scrollTop}px`;
+      }
+
+      function highlightLine(n) {
+        litLine = n;
+        positionHighlight();
+      }
+
+      function hideHighlight() {
+        litLine = -1;
+        positionHighlight();
+      }
+
+      source.addEventListener("scroll", positionHighlight);
+
+      // ---- running -------------------------------------------------------
+
+      async function updateSurface() {
+        // Recomputed from the CURRENT editor text on every Run (§6.1) — a
+        // program that never ran (a syntax error) still gets an honest
+        // surface pane, via renderSurface's own error handling.
+        const { surface } = await renderSurface(surfaceEl, source.value, { loader });
+        renderSurfaceSummary(surface);
+      }
+
+      // garden.html's own renderSurfaceSummary, read off js/shapes.mjs's real
+      // methods (isPure/boundaries/targets/producesApproximate/
+      // approximationRoutes) rather than an asserted claim.
+      function renderSurfaceSummary(surface) {
+        if (!surface) return;
+        const lines = [];
+        if (surface.isPure()) {
+          lines.push(`<span class="sfc-pure">pure — this program touches nothing outside itself</span>`);
+        } else {
+          const boundaries = surface.boundaries();
+          const targets = surface.targets();
+          const onlyProtocols =
+            targets.length > 0 && targets.every((t) => t.startsWith("draw ") || t.startsWith("sound "));
+          lines.push(
+            `<span class="sfc-pure">${esc(boundaries.join(", "))} — the only boundary it touches` +
+              (onlyProtocols
+                ? `, and every one of the ${targets.length} things it writes there is the picture`
+                : "") +
+              `</span>`,
+          );
+        }
+        if (surface.producesApproximate()) {
+          lines.push(`<span class="sfc-approx">numbers: approximate — this program reaches an approximating builtin</span>`);
+          const routes = surface.approximationRoutes();
+          const longest = routes.reduce((a, b) => (b.length > a.length ? b : a), routes[0] ?? "");
+          if (longest) {
+            lines.push(
+              `<span class="sfc-dim">  ${esc(longest)}` +
+                (routes.length > 1 ? `   (the longest of ${routes.length} routes)` : "") +
+                `</span>`,
+            );
+          }
+        } else {
+          lines.push(`<span class="sfc-pure">numbers: exact throughout</span>`);
+        }
+        surfaceSummaryEl.innerHTML = lines.join("\n");
+      }
+
+      async function run() {
+        hideCard();
+        const src = source.value;
+        const result = await runProgramGraph(src, { base: BASE, loader });
+        if (result.error) {
+          // `result.error.message` already carries the tag (browser_main.mjs
+          // builds it from PlanesError's own `.message`, which is
+          // `"tag: detail"` — unlike stream.mjs's protocol errors below,
+          // whose `.message` is bare). Re-prepending the tag here would
+          // print it twice, which is exactly the message a nonsense sky
+          // phrase produces if this is not guarded against — and getting
+          // this message right matters more than any pixel on the page
+          // (§3.3.1).
+          showOutput([`✗ ${result.error.message}`], true);
+          await updateSurface();
+          return;
+        }
+        lastLines = result.output;
+        lastTrace = result.trace ?? [];
+        lastAnnotations = result.annotations ?? {};
+        lastSourceLines = src.split("\n");
+
+        const recorder = markSink();
+        walkDrawing(lastLines, recorder);
+        lastMarks = recorder.marks.slice();
+
+        const { drawn, text, errors } = paint(ctx, lastLines, DIMENSIONS);
+        if (errors.length) {
+          const stale = staleRendererWarning(errors, HIGHEST_VERSION);
+          if (stale) {
+            showOutput(stale.split("\n"), true);
+          } else {
+            showOutput([...text, ...errors.map((e) => `✗ ${e.tag}: ${e.message}`)], true);
+          }
+          await updateSurface();
+          return;
+        }
+        void drawn;
+        showOutput(text, false);
+        await updateSurface();
+      }
+
+      function repaintFrame() {
+        if (!lastLines.length) return;
+        paint(ctx, lastLines, DIMENSIONS);
+      }
+
+      runBtn.addEventListener("click", () => { run(); });
+      source.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();
+      });
+
+      // ---- click the picture, ask why ----------------------------------------
+
+      // The right-hand side of the line that binds `name` — only when it is
+      // unambiguous: inside the enclosing definition, or the program's only
+      // binding of that name. garden.html's own bindingOf (why.mjs card §5.2).
+      function bindingOf(name, definition) {
+        const pattern = new RegExp(
+          `^\\s*(?:let\\s+)?${name.replace(/[-.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=\\s*(.+?)(?:\\s+because\\s.*)?$`,
+        );
+        const all = [];
+        let inScope = null;
+        let current = null;
+        for (const text of lastSourceLines) {
+          const def = FUNC_HEADER.exec(text);
+          if (def) current = def[1];
+          const m = pattern.exec(text);
+          if (!m) continue;
+          all.push(m[1].trim());
+          if (inScope === null && current === definition) inScope = m[1].trim();
+        }
+        if (inScope) return inScope;
+        return all.length === 1 ? all[0] : null;
+      }
+
+      // The enclosing `to <name>` of a source line — a multi-word name is
+      // several NAME tokens (checkpoint v26.0 §405), so the capture stops at
+      // the first `of` or `:` rather than swallowing the parameter list too.
+      const FUNC_HEADER = /^to\s+((?:(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)(?:\s+(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)*)\s*(?:of\b|:)/;
+
+      function definitionAt(sourceLine) {
+        for (let i = sourceLine - 1; i >= 0; i--) {
+          const m = FUNC_HEADER.exec(lastSourceLines[i] ?? "");
+          if (m) return m[1];
+        }
+        return null;
+      }
+
+      // A name a reader can read — why.mjs's own valueText rounds a long
+      // decimal for the same reason.
+      function readable(value) {
+        if (value === null || value === undefined) return "nothing";
+        if (typeof value === "boolean") return value ? "true" : "false";
+        if (typeof value === "object" && typeof value.text === "function") {
+          const text = value.text();
+          const n = Number(text.replace(/^~/, ""));
+          if (Number.isFinite(n) && /\.\d{5,}/.test(text)) {
+            return `${text.startsWith("~") ? "~" : ""}${Math.round(n * 1000) / 1000}`;
+          }
+          return text;
+        }
+        if (typeof value === "number") {
+          return Number.isInteger(value) ? String(value) : String(Math.round(value * 1000) / 1000);
+        }
+        if (typeof value === "string") return value;
+        return null; // a record or a list is not a step a reader wants
+      }
+
+      const INPUT_NAMES = new Set(["tick", "seed", "keys", "pointer", "state"]);
+
+      function namedNodes(node) {
+        const found = [];
+        const queue = [node];
+        const walked = new Set();
+        while (queue.length) {
+          const current = queue.shift();
+          if (!current || walked.has(current)) continue;
+          walked.add(current);
+          if (current.kind === "name" && !INPUT_NAMES.has(current.label)) {
+            const text = readable(current.value);
+            if (text !== null && !found.some((f) => f.name === current.label)) {
+              found.push({ name: current.label, value: text });
+            }
+          }
+          for (const input of Array.isArray(current.inputs) ? current.inputs : []) {
+            queue.push(input);
+          }
+        }
+        return found;
+      }
+
+      const MAX_STEPS = 4;
+
+      function hideCard() {
+        cardEl.hidden = true;
+        cardEl.textContent = "";
+        hideHighlight();
+      }
+
+      function renderCard(index, x, y) {
+        const mark = lastMarks[index];
+        const entry = lastTrace[mark.line];
+        if (!entry) return;
+        const [node, sourceLine] = entry;
+        const definition = definitionAt(sourceLine);
+        const c = card(node, {
+          annotations: lastAnnotations,
+          line: sourceLine,
+          sourceText: lastSourceLines[sourceLine - 1] ?? "",
+        });
+
+        // Up to four named values, nearest first — annotated ones (a
+        // `because` the author wrote) come first so a MAX_STEPS cut never
+        // crowds out the sentence that matters most.
+        const all = namedNodes(node).filter((n) => {
+          // An ANNOTATED name is never dropped, even when its own binding is
+          // a bare literal — the sentence is the point of showing it (found
+          // live: `let reach = 90 because "..."` was being filtered out here
+          // before this guard, since "90" bound to "90" looked redundant on
+          // the number alone, silently dropping the one row §5.2 calls the
+          // card's most important).
+          if (lastAnnotations[n.name] !== undefined) return true;
+          const binding = bindingOf(n.name, definition);
+          return binding !== n.value; // a name bound to a bare literal explains nothing
+        });
+        const annotated = all.filter((n) => lastAnnotations[n.name] !== undefined);
+        const chosen = [];
+        for (const candidate of [...annotated, ...all]) {
+          if (chosen.length >= MAX_STEPS) break;
+          if (!chosen.some((ch) => ch.name === candidate.name)) chosen.push(candidate);
+        }
+        chosen.sort((a, b) => all.indexOf(a) - all.indexOf(b));
+
+        const rowsHtml = chosen
+          .map((n) => {
+            const binding = bindingOf(n.name, definition);
+            const because = lastAnnotations[n.name] ?? "";
+            return (
+              `<div class="step"><span class="dot"></span><div class="line">` +
+              (because ? `<span class="because">"${esc(because)}"</span>` : "") +
+              `<span class="val">${esc(n.name)} ${esc(n.value)}</span>` +
+              (binding ? ` <span class="src">from ${esc(binding)}</span>` : "") +
+              `</div></div>`
+            );
+          })
+          .join("");
+
+        const originHtml =
+          `<div class="step origin"><span class="dot"></span><div class="line">` +
+          `<span class="src">${esc(c.origin.text)}</span></div></div>`;
+
+        const badgesHtml =
+          `<div class="divider"></div>` +
+          (c.approximate
+            ? `<span class="badge">approximate — the chain reaches an approximating builtin</span>` +
+              `<div class="badge-note">Not unpredictable — every machine computes this identically.</div>`
+            : `<span class="badge calm">exact — nothing in this chain approximates</span>` +
+              `<div class="badge-note">Every value here is a rational held as a rational.</div>`);
+
+        const closingHtml = `<div class="closing">asking performed nothing — the effect surface above is unchanged</div>`;
+
+        // The heading names the enclosing function when there is one — a
+        // fact about the CHILD'S OWN program, since scene.planes helpers
+        // report their line as the entry-file call site (interp.py's
+        // trace_line), never a line inside scene.planes itself. Otherwise
+        // the source line number, never an invented name.
+        const heading = definition ?? `line ${sourceLine}`;
+        const whereHtml = definition ? `<div class="where">line ${sourceLine}</div>` : "";
+
+        cardEl.innerHTML =
+          `<div class="head"><h4>${esc(heading)}</h4>` +
+          `<button class="close" type="button" aria-label="close">✕</button></div>` +
+          whereHtml +
+          rowsHtml +
+          originHtml +
+          badgesHtml +
+          closingHtml;
+        cardEl.querySelector(".close").addEventListener("click", hideCard);
+
+        // Positioned in CSS pixels, scaled by the ratio of the element's
+        // laid-out width to the program's own width — never the backing
+        // store's.
+        const rect = canvas.getBoundingClientRect();
+        const scale = rect.width / DIMENSIONS.width;
+        cardEl.hidden = false;
+        cardEl.style.left = `${Math.max(4, Math.min(rect.width - 306, x * scale + 12))}px`;
+        cardEl.style.top = "0px";
+        cardEl.style.maxHeight = `${Math.max(120, rect.height - 8)}px`;
+        const wanted = y * scale - 8;
+        const highest = Math.max(4, rect.height - cardEl.offsetHeight - 4);
+        cardEl.style.top = `${Math.max(4, Math.min(wanted, highest))}px`;
+        cardEl.scrollTop = 0;
+
+        highlightLine(sourceLine);
+      }
+
+      canvas.addEventListener("click", (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * DIMENSIONS.width;
+        const y = ((event.clientY - rect.top) / rect.height) * DIMENSIONS.height;
+        // ALL marks are hit-tested — no subject filter (§5.1): in a
+        // twelve-line program every mark is answerable.
+        const found = hitTest(lastMarks, x, y, { area: DIMENSIONS });
+        if (found < 0) {
+          hideCard();
+          return;
+        }
+        renderCard(found, x, y);
+      });
+
+      // Every ordinary way out: the ✕ (bound per-card above), Escape, a
+      // click on empty canvas (the found < 0 branch above), and a click
+      // anywhere off the picture.
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") hideCard();
+      });
+      document.addEventListener("click", (event) => {
+        if (cardEl.hidden) return;
+        if (canvas.contains(event.target) || cardEl.contains(event.target)) return;
+        hideCard();
+      });
+
+      // ---- exports ------------------------------------------------------
+
+      $("save-svg").addEventListener("click", () => {
+        if (!lastLines.length) {
+          showOutput(["nothing has been drawn yet"], true);
+          return;
+        }
+        const { svg, errors } = toSvg(lastLines, DIMENSIONS);
+        if (errors.length) {
+          showOutput(errors.map((e) => `✗ ${e.tag}: ${e.message}`), true);
+          return;
+        }
+        downloadSvg(svg, "tutor");
+      });
+
+      $("save-png").addEventListener("click", () => {
+        if (!lastLines.length) {
+          showOutput(["nothing has been drawn yet"], true);
+          return;
+        }
+        downloadPng(canvas, lastLines, DIMENSIONS, "tutor");
+        canvas.width = DIMENSIONS.width * CANVAS_SCALE;
+        canvas.height = DIMENSIONS.height * CANVAS_SCALE;
+        repaintFrame();
+      });
+
+      // ---- boot -----------------------------------------------------------
+
+      const stale = staleModuleWarning();
+      if (stale) {
+        showOutput(stale.split("\n"), true);
+      } else {
+        run();
+      }
+    </script>
+  </body>
+</html>

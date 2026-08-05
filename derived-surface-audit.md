@@ -20,7 +20,7 @@ Named dict/object literals whose keys overlap >=3 with grammar/vocabulary.json's
 
 Every root `*.html` page, and whether its prose names the highest protocol version its module graph implements.
 
-**0 finding(s), 6 site(s) examined.**
+**0 finding(s), 7 site(s) examined.**
 
 ### Sites examined
 
@@ -30,6 +30,7 @@ Every root `*.html` page, and whether its prose names the highest protocol versi
 - meta.html -- does not document a protocol version in prose
 - paint.html -- draw protocol: names version(s) [1, 2, 3], implements 3 -- clean
 - try.html -- does not document a protocol version in prose
+- tutor.html -- does not document a protocol version in prose
 
 ## Check C -- a comment asserting gate behaviour must match the exit path
 
