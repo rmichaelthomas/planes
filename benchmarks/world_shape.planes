@@ -1,0 +1,79 @@
+# benchmarks/world_shape.planes — the primitive in the shape Horizon will
+# actually produce (build prompt §5). A pure Planes program, no effects
+# beyond `show`, structured as the Horizon design doc §8 describes: S
+# subjects, each a record of its seven orthogonal facets (identity,
+# situation, relation, behavior, expression, affordance, lineage — §8.1-8.7),
+# each facet a record of a small fixed set of fields. The world advances by
+# one simulated tick S = 64 times over T = 32 ticks: each tick updates every
+# subject's situation-facet position and behaviour-facet state, producing a
+# new world record, and appends one event record to the world's event list —
+# the committed-event log Horizon §13.2 describes.
+#
+# Every per-tick update goes through `with` (record update, v5.0 §72) and
+# `plus` (list append, v5.0 §72) exactly as the language provides them today
+# — no persistent data structure, no structural sharing. This file is the
+# canonical S=64 instance; scripts/measure_update_cost.py/.mjs generate the
+# same shape at S in {16, 64, 256} for the sweep reported in
+# reports/REPORT_UPDATE_COST.md. Its control twin,
+# benchmarks/world_shape_flat.planes, computes the identical arithmetic with
+# scalar rebinding instead of record updates and must produce byte-identical
+# `show` output — the correctness anchor test_update_cost.py enforces before
+# any timing figure is trusted.
+
+to make-subject of i:
+  give {
+    identity: { id: i, kind: "subject", canonical: true, version: 1 },
+    situation: { place: "passage", x: i, y: 0, active: true },
+    relation: { contains: [], connects-to: [], near: [], belongs-to: "world" },
+    behavior: { pattern: "patrol", state: "idle", ticks-in-state: 0, deterministic: true },
+    expression: { asset: "subject-mesh", layer: 1, animation: "idle", material: "default" },
+    affordance: { actions: [], preconditions: [], authority: "system", fallback: "none" },
+    lineage: { source: "world-shape-benchmark", author: "system", agreement: "none", immutable: false }
+  }
+
+# Behaviour plane, §8.4: a deterministic transition with no ambient clock or
+# random read — a pure function of the current state.
+to toggle-state of s:
+  if s == "active":
+    give "idle"
+  else:
+    give "active"
+
+# One subject's tick advance: two `with` updates on 4-field facet records
+# (situation, behavior — rung 3's shape, two fields written in one
+# RecordUpdate), folded into one `with` update on the 7-field subject record.
+to advance-subject of subj, tick-num:
+  let situation = subj.situation
+  let new-situation = situation with x: situation.x + 1, y: situation.y + 1
+  let behavior = subj.behavior
+  let new-behavior = behavior with state: (toggle-state of behavior.state), ticks-in-state: behavior.ticks-in-state + 1
+  give subj with situation: new-situation, behavior: new-behavior
+
+# One world tick: rebuild every subject (a `for each` comprehension, not a
+# `with`/`plus` — this is the "remainder" cost, not the copy cost), append
+# one committed event to the growing event log via `plus` (the load-bearing
+# arm — the event log only ever grows over a session, §4.2), then fold both
+# into the 3-field world record with one `with` update.
+to advance-world of world, tick-num:
+  let new-subjects = for each subj in world.subjects: advance-subject of subj, tick-num
+  let evt = { sequence: tick-num, kind: "tick-advance", subject-count: count of new-subjects }
+  let new-events = world.events plus evt
+  give world with subjects: new-subjects, events: new-events, tick: tick-num
+
+let subject-count = 64 because "S — the subject count this canonical instance measures; the sweep script generates the same shape at S in 16, 64, 256"
+let subject-ids = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63]
+let ticks = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
+
+let initial-subjects = for each i in subject-ids: make-subject of i
+let initial-world = { subjects: initial-subjects, events: [], tick: 0 }
+
+current-world = initial-world
+for each t in ticks:
+  current-world = advance-world of current-world, t
+
+show "FINAL-TICK=" + text of current-world.tick
+show "SUBJECT-COUNT=" + text of subject-count
+show "EVENTS-LENGTH=" + text of (count of current-world.events)
+show "FACET-FIELD-COUNT=4"
+show "SUBJECT-FIELD-COUNT=7"
+show "WORLD-FIELD-COUNT=3"

@@ -1,0 +1,57 @@
+# benchmarks/world_shape_flat.planes — the control twin of
+# benchmarks/world_shape.planes (build prompt §5). Same subject count,
+# same tick count, same arithmetic, same `show` output — computed with
+# SCALAR REBINDING instead of record updates: no `with`, no `plus`, anywhere
+# in this file. Where the library arm folds seven facets into one record and
+# copies the whole record on every `with`, this arm carries each subject's
+# situation/behaviour fields as three PARALLEL LISTS (xs, ys, states) rebuilt
+# each tick by a `for each` comprehension (ListLit, not RecordUpdate), and
+# counts committed events with a plain incrementing number instead of
+# growing a list with `plus`.
+#
+# test_update_cost.py asserts this file's `show` output is byte-identical to
+# world_shape.planes's, over the whole tick range, before any timing figure
+# in reports/REPORT_UPDATE_COST.md is trusted — the correctness anchor and
+# this twin's own staleness detector (§5): if world_shape.planes changes
+# without a matching update here, the assertion breaks loudly instead of the
+# report quietly comparing two different pictures.
+
+to toggle-state of s:
+  if s == "active":
+    give "idle"
+  else:
+    give "active"
+
+# The library arm's advance-subject, with situation.x/situation.y/behavior.state
+# flattened to three independent scalars per subject — same two arithmetic
+# updates, no record and no `with`.
+to advance-x of x:
+  give x + 1
+
+to advance-y of y:
+  give y + 1
+
+let subject-count = 64 because "S — matches world_shape.planes's canonical instance"
+let subject-ids = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63]
+let ticks = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
+
+let initial-xs = for each i in subject-ids: i
+let initial-ys = for each i in subject-ids: 0
+
+xs = initial-xs
+ys = initial-ys
+event-count = 0
+final-tick = 0
+
+for each t in ticks:
+  xs = for each x in xs: advance-x of x
+  ys = for each y in ys: advance-y of y
+  event-count = event-count + 1
+  final-tick = t
+
+show "FINAL-TICK=" + text of final-tick
+show "SUBJECT-COUNT=" + text of subject-count
+show "EVENTS-LENGTH=" + text of event-count
+show "FACET-FIELD-COUNT=4"
+show "SUBJECT-FIELD-COUNT=7"
+show "WORLD-FIELD-COUNT=3"
