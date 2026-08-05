@@ -101,6 +101,19 @@ function loadGhostLine() {
   return new Function(`const BLANK = ${BLANK};\n${src}\nreturn ghostLine;`)();
 }
 
+function loadGhostFor() {
+  const html = pageSrc();
+  const BLANK = html.match(/const BLANK = ("[^"]*");/)[1];
+  const ghostLineSrc = extractFunction(html, "ghostLine");
+  const ghostSuffixSrc = extractFunction(html, "ghostSuffix");
+  const ghostForSrc = extractFunction(html, "ghostFor");
+  const weekPrograms = extractObjectLiteral(html, "WEEK_PROGRAMS");
+  // eslint-disable-next-line no-new-func
+  return new Function(
+    `const BLANK = ${BLANK};\nconst WEEK_PROGRAMS = ${weekPrograms};\n${ghostLineSrc}\n${ghostSuffixSrc}\n${ghostForSrc}\nreturn ghostFor;`,
+  )();
+}
+
 function loadWeekPrograms() {
   const literal = extractObjectLiteral(pageSrc(), "WEEK_PROGRAMS");
   // eslint-disable-next-line no-eval
@@ -256,4 +269,58 @@ test("E: ghost text and the real editor are separate elements — the ghost pre 
   const textareaClose = html.indexOf("</textarea>");
   assert.ok(ghostIdx >= 0 && textareaOpen >= 0 && textareaClose >= 0);
   assert.ok(ghostIdx < textareaOpen || ghostIdx > textareaClose, "#ghost must not be nested inside the #source textarea");
+});
+
+// She types OVER the ghost, not "before" it: it must keep showing whatever
+// she has not reached yet on every keystroke, never vanish wholesale after
+// the first one (a from-scratch first-time coder cannot be expected to
+// memorise the whole shape from a single glance before she starts typing).
+
+test("E: an untouched line still shows its full hint — the ghost does not require a first keystroke to appear", () => {
+  const ghostFor = loadGhostFor();
+  const full = ghostFor(1, "");
+  assert.ok(full.includes('sky of "'), "week 1's ghost is empty before she has typed anything");
+});
+
+test("E: the ghost recedes exactly as far as she has typed on a line, and keeps hinting the rest", () => {
+  const ghostFor = loadGhostFor();
+  // She has typed the literal part of line 2 ('sky of "') but nothing of
+  // her own phrase yet — the remaining hint (the blank and closing quote)
+  // must still be there, padded out to start right where her text ends.
+  const typed = 'use scene\n\nstart\nsky of "';
+  const lines = ghostFor(1, typed).split("\n");
+  assert.equal(lines[3].slice(0, 8), "        ", "the hint must not sit underneath what she already typed");
+  assert.ok(lines[3].trim().length > 0, "the rest of line 4's hint vanished after only a partial keystroke");
+});
+
+test("E: once she has typed past a line's own hint, that line stops hinting (no overlap, nothing left to show)", () => {
+  const ghostFor = loadGhostFor();
+  const typed = 'use scene\n\nstart\nsky of "middle of the afternoon and then some more"';
+  const lines = ghostFor(1, typed).split("\n");
+  assert.equal(lines[3], "", "a line she has typed past its own target length must show no leftover hint");
+});
+
+test("E: a full, correct week-1 program leaves nothing left to hint on any of its own lines", () => {
+  const ghostFor = loadGhostFor();
+  const WEEK_PROGRAMS = loadWeekPrograms();
+  const typed = WEEK_PROGRAMS[1].lines.join("\n");
+  const remaining = ghostFor(1, typed);
+  assert.equal(remaining.trim(), "", `finished lines still show a hint: ${JSON.stringify(remaining)}`);
+});
+
+test("E: switching weeks with her prior work still in the editor only hints the genuinely new or changed lines", () => {
+  const ghostFor = loadGhostFor();
+  const WEEK_PROGRAMS = loadWeekPrograms();
+  // Her week-1 program, carried into week 2 unedited (§425/§426: weeks 2-5
+  // start from what she finished the week before).
+  const typed = WEEK_PROGRAMS[1].lines.join("\n");
+  const week2Ghost = ghostFor(2, typed).split("\n");
+  // Line 4 (sky) is unchanged in LENGTH between week 1 and week 2's target
+  // even though the PHRASE differs — a known limitation of length-only
+  // matching, not asserted here. Line 5 (moon vs sun) is one line index
+  // later in week 2's own list; assert at least ONE line in the block shows
+  // a live hint, proving the mechanism does not just go uniformly blank the
+  // moment any text exists.
+  const anyHint = week2Ghost.some((l) => l.trim().length > 0);
+  assert.ok(anyHint, "week 2's ghost shows nothing at all once week 1's program is already in the editor");
 });

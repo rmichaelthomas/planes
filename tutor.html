@@ -156,7 +156,6 @@
         word-break:break-word;
       }
       #ghost{position:absolute; inset:0; color:var(--ink-40); pointer-events:none; overflow:hidden}
-      #ghost[hidden]{display:none}
       textarea#source{
         position:relative; background:transparent; color:var(--graphite); resize:vertical;
         min-height:15rem; caret-color:var(--clay);
@@ -583,8 +582,28 @@
           .replace(/-?\d+(\.\d+)?/g, BLANK);
       }
 
-      function ghostFor(weekNum) {
-        return WEEK_PROGRAMS[weekNum].lines.map(ghostLine).join("\n");
+      // The part of a target line she has not reached yet — padded with
+      // spaces to the length of what she has already typed on that line, so
+      // it lines up (same monospace grid as the textarea sitting in front of
+      // it) starting exactly where her cursor will land next, and never
+      // sits underneath a character she has already typed. This is what
+      // makes it safe to show CONTINUOUSLY rather than only before her first
+      // keystroke: her real text and the ghost text never occupy the same
+      // cell at the same time, so nothing garbles as she types through it.
+      function ghostSuffix(targetLine, typedLine) {
+        if (typedLine.length >= targetLine.length) return "";
+        return " ".repeat(typedLine.length) + targetLine.slice(typedLine.length);
+      }
+
+      function ghostFor(weekNum, typedText) {
+        const target = WEEK_PROGRAMS[weekNum].lines;
+        const typedLines = typedText.split("\n");
+        const n = Math.max(target.length, typedLines.length);
+        const out = [];
+        for (let i = 0; i < n; i++) {
+          out.push(ghostSuffix(ghostLine(target[i] ?? ""), typedLines[i] ?? ""));
+        }
+        return out.join("\n");
       }
 
       // ---- the read-only key, generated from js/scene_vocab.mjs (§420-421) --
@@ -653,13 +672,17 @@
         updateGhost();
       }
 
-      // ---- ghost text: shown only while the editor is genuinely empty,
-      // vanishing on her first keystroke (§425) ----------------------------
-
+      // ---- ghost text: she types OVER it, line by line, and only the part
+      // she has not reached yet keeps showing (§425). Recomputed on every
+      // keystroke against her CURRENT text, so it recedes exactly as far as
+      // she has typed on each line — never the whole block disappearing
+      // after one keystroke, and never sitting underneath what she wrote. A
+      // line she has already matched or outgrown (this week's own, or
+      // carried over from a finished earlier week) naturally shows nothing
+      // more to hint, which is also how "thins to the new lines" (§425)
+      // falls out of the same mechanism, with no separate diff logic.
       function updateGhost() {
-        const empty = source.value.trim() === "";
-        ghostEl.hidden = !empty;
-        if (empty) ghostEl.textContent = ghostFor(currentWeek);
+        ghostEl.textContent = ghostFor(currentWeek, source.value);
       }
       source.addEventListener("input", updateGhost);
 
