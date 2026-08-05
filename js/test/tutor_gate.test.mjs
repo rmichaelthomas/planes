@@ -44,14 +44,13 @@ function installFsFetch() {
 const STARTER_PROGRAM = `use scene
 
 start
-sky of "just before dark"
+sky of "middle of the afternoon"
 ground of "wet grass"
 
-moon of 240, 90
-star of 100, 60
-firefly of 300, 200
+sun of 240, 70
+bee of 300, 150
 
-let spot = 90 because "the corner gets the sun after noon, so it grows tallest"
+let spot = 90 because "it's the tallest in the yard"
 flower of 120, spot
 `;
 
@@ -108,7 +107,7 @@ test("B: the starter program's marks are all hit-testable at their own centre (r
     const sink = markSink();
     const { errors } = walk(r.output, sink);
     assert.deepEqual(errors, []);
-    assert.ok(sink.marks.length >= 6, `expected at least 6 marks (moon/star/flower stem/flower head/firefly + ground), found ${sink.marks.length}`);
+    assert.ok(sink.marks.length >= 7, `expected at least 7 marks (ground + sun + bee body/2 stripes + flower stem/head), found ${sink.marks.length}`);
   } finally {
     restore();
   }
@@ -159,7 +158,7 @@ test("C: the shipped starter program's own `because` reaches the flower head's d
     const r = await runProgramGraph(STARTER_PROGRAM, { base: SCENE_BASE });
     assert.equal(r.error, null, r.error && r.error.message);
 
-    assert.equal(r.annotations.spot, "the corner gets the sun after noon, so it grows tallest");
+    assert.equal(r.annotations.spot, "it's the tallest in the yard");
 
     const sink = markSink();
     const { errors } = walk(r.output, sink);
