@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>tutor — the page a child types into</title>
+    <title>tutor — the page a child grows</title>
     <meta
       name="description"
-      content="Type a few lines of Planes, see a picture, click the picture and ask where a number came from. paint/scene.planes is the starter vocabulary; the editor is the source pane. No build step — this page runs the real .planes source."
+      content="A kid-first Planes editor: type a few lines, watch a rich garden grow, click it to ask where a number came from. paint/scene.planes is the starter vocabulary; the picture is the hero. No build step — this page runs the real .planes source."
     />
     <!--
       SERVING THIS PAGE. This page fetches paint/scene.planes and
@@ -19,6 +19,16 @@
 
       then open http://localhost:8000/tutor.html. No install, no build step:
       this is a static file server, nothing more.
+
+      THIS IS THE v27.0 REDESIGN (checkpoint "the page a child grows",
+      build prompt planes_build_prompt_tutor_redesign.md). The engine
+      underneath — runProgramGraph/analyseProgramGraph, the mark walk,
+      hitTest, the card builder in js/paint/why.mjs — is UNCHANGED from
+      #71-73; what changed is this shell (hero-first layout, structured
+      ghost-text authoring, a read-only generated vocabulary key, the
+      reflection card's because-first/because-invite redesign, week-aware
+      progressive disclosure, and a week-5 capstone + certificate) and the
+      richer paint/scene.planes it points at.
     -->
     <style>
       /* The identity tokens, shared verbatim with garden.html and every
@@ -29,6 +39,7 @@
         --paper:#F7F2E9; --graphite:#211D19; --line:#D6C9B4; --clay:#A65A2E;
         --slate:#4A5B68; --amber:#F59E0B; --blue:#3B82F6; --teal:#14B8A6; --violet:#8B5CF6;
         --ink-60:rgba(33,29,25,.62); --ink-40:rgba(33,29,25,.40);
+        --shadow-sm:0 1px 2px rgba(33,29,25,.04), 0 2px 8px rgba(33,29,25,.05);
         --display:"Red Hat Display",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
         --mono:"Martian Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
       }
@@ -42,353 +53,730 @@
       }
 
       *{box-sizing:border-box}
+      html,body{margin:0}
       body{
-        margin:0; padding:18px 14px 48px; background:var(--paper); color:var(--graphite);
-        font-family:var(--mono); font-size:12px; line-height:1.55; -webkit-font-smoothing:antialiased;
+        background:var(--paper); color:var(--graphite); font-family:var(--display);
+        font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
+        padding:16px 16px 44px;
       }
-      .wrap{max-width:1100px;margin:0 auto}
+      .wrap{max-width:980px; margin:0 auto}
 
-      header{
-        display:flex; justify-content:space-between; align-items:flex-end; gap:14px;
-        flex-wrap:wrap; border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:16px;
+      header{display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:16px}
+      .brand{display:flex; align-items:center; gap:11px}
+      .brand img{width:38px; height:38px; display:block; flex:0 0 38px}
+      .brand h1{font-weight:900; font-size:20px; letter-spacing:-.02em; margin:0; line-height:1}
+      .brand .tag{font-family:var(--mono); font-size:10px; color:var(--ink-60); margin-top:3px}
+      .brand .tag a{color:var(--clay)}
+      .weeks{display:flex; gap:4px; background:#fff; border:1px solid var(--line); border-radius:10px; padding:4px}
+      .weeks button{
+        font-family:var(--display); font-weight:700; font-size:12px; border:0; background:none;
+        color:var(--ink-60); padding:6px 11px; border-radius:7px; cursor:pointer; line-height:1.1;
       }
-      .brand{display:flex; align-items:center; gap:13px}
-      .brand img{width:44px; height:44px; display:block; flex:0 0 44px}
-      h1{font-family:var(--display); font-weight:900; font-size:25px; letter-spacing:-.02em; margin:0}
-      .sub{font-size:10.5px; color:var(--ink-60); margin-top:2px}
-      .sub a{color:var(--clay)}
+      .weeks button small{display:block; font-weight:500; font-size:9px; color:var(--ink-40); margin-top:1px}
+      .weeks button[aria-pressed="true"]{background:var(--graphite); color:var(--paper)}
+      .weeks button[aria-pressed="true"] small{color:rgba(247,242,233,.7)}
+      .weeks button:focus-visible{outline:2px solid var(--clay); outline-offset:2px}
 
-      button{
-        font-family:var(--mono); font-size:11px; font-weight:500; padding:7px 13px;
-        border:1px solid var(--line); border-radius:3px; background:transparent;
-        color:var(--ink-60); cursor:pointer;
-        transition:background .12s, color .12s, border-color .12s;
+      .lesson{
+        background:color-mix(in oklab, var(--amber) 16%, var(--paper));
+        border:1px solid color-mix(in oklab, var(--amber) 40%, var(--line));
+        border-radius:12px; padding:13px 16px; margin-bottom:14px;
+        display:flex; gap:12px; align-items:flex-start;
       }
-      button:hover{background:var(--line); color:var(--graphite)}
-      button.accent{border-color:var(--clay); color:var(--clay)}
-      button.accent:hover{background:var(--clay); border-color:var(--clay); color:var(--paper)}
-      button.quiet{font-size:10.5px; padding:5px 9px}
-      button:focus-visible{outline:2px solid var(--clay); outline-offset:2px}
-      .hint{font-size:10.5px; color:var(--ink-40)}
+      .lesson .n{
+        flex:0 0 auto; width:26px; height:26px; border-radius:50%; background:var(--clay);
+        color:#fff; font-weight:900; font-size:13px; display:flex; align-items:center; justify-content:center;
+      }
+      .lesson .say{font-size:14.5px; line-height:1.5}
 
-      /* ---------- the two columns ---------- */
-      .cols{display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start; margin-bottom:8px}
-      @media (max-width:860px){ .cols{grid-template-columns:1fr} }
+      /* ---------- the hero: the picture, first and large ---------- */
+      .hero{position:relative}
+      .stage{
+        position:relative; border:1px solid var(--line); border-radius:16px; overflow:hidden;
+        aspect-ratio:4/3; background:#0B1026; box-shadow:var(--shadow-sm);
+      }
+      canvas{display:block; width:100%; height:100%; cursor:pointer}
+      .canvas-foot{display:flex; gap:8px; margin-top:10px}
+      .canvas-foot button{
+        font-family:var(--mono); font-size:10.5px; font-weight:500; padding:6px 11px;
+        border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink-60); cursor:pointer;
+      }
+      .canvas-foot button:hover{background:var(--line); color:var(--graphite)}
+      .canvas-foot button.primary{border-color:var(--clay); color:var(--clay)}
+      .canvas-foot button.primary:hover{background:var(--clay); color:#fff}
 
-      .editor-col{display:flex; flex-direction:column}
+      /* ---------- the reflection card ---------- */
+      #card{
+        position:absolute; width:270px; max-width:calc(100% - 20px); background:var(--paper);
+        border:1px solid var(--graphite); border-radius:12px; box-shadow:0 14px 34px rgba(0,0,0,.34);
+        padding:15px 15px 14px; z-index:6; max-height:calc(100% - 16px); overflow-y:auto;
+        overscroll-behavior:contain;
+      }
+      #card[hidden]{display:none}
+      #card .close{position:absolute; top:10px; right:11px; border:0; background:none; font-size:15px; color:var(--ink-40); cursor:pointer}
+      #card .close:hover{color:var(--graphite)}
+      #card .q{font-weight:800; font-size:15px; margin:0 18px 11px 0; line-height:1.3}
+      #card .q .thing{color:var(--clay)}
+      #card .voice{
+        font-size:14.5px; line-height:1.5; color:var(--graphite); border-left:3px solid var(--teal);
+        padding:2px 0 2px 11px; margin:0 0 12px;
+      }
+      #card .invite{border-left:3px dashed var(--clay); padding:4px 0 4px 11px; margin:0 0 12px}
+      #card .invite .big{font-weight:800; font-size:13.5px; color:var(--clay); margin-bottom:3px}
+      #card .invite .how{font-size:12px; color:var(--ink-60); line-height:1.5}
+      #card .invite .how code{
+        font-family:var(--mono); font-size:11px; background:color-mix(in oklab, var(--clay) 12%, #fff);
+        padding:1px 5px; border-radius:4px; color:var(--clay);
+      }
+      #card .nums{font-family:var(--mono); font-size:12px; line-height:1.7; color:var(--ink-60); margin:0}
+      #card .nums .row{display:flex; gap:8px; align-items:baseline}
+      #card .nums .k{color:var(--graphite); font-weight:700; min-width:74px}
+      #card .fromline{
+        margin-top:11px; padding-top:10px; border-top:1px solid var(--line);
+        font-family:var(--mono); font-size:11px; color:var(--slate);
+      }
+      #card .fromline b{color:var(--clay); font-weight:600}
+      #card .exactness{font-size:10.5px; color:var(--ink-40); margin-top:8px; line-height:1.5}
+
+      /* ---------- the editor: ghost text behind a real textarea ---------- */
+      .work{margin-top:14px}
+      .editor-shell{background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:var(--shadow-sm)}
+      .editor-top{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 14px; border-bottom:1px solid var(--line)}
+      .editor-top .label{font-weight:700; font-size:13px}
+      .editor-top .run{
+        font-family:var(--display); font-weight:800; font-size:14px; border:0; border-radius:9px;
+        background:var(--clay); color:#fff; padding:8px 18px; cursor:pointer;
+      }
+      .editor-top .run:hover{background:color-mix(in oklab, var(--clay) 85%, black)}
+      .editor-top .run:focus-visible{outline:2px solid var(--graphite); outline-offset:2px}
       .editor-wrap{position:relative}
-      textarea{
-        width:100%; min-height:22rem; padding:11px 12px; font-family:var(--mono);
-        font-size:11.5px; line-height:20px; border:1px solid var(--line); border-radius:3px;
-        background:#fff; color:var(--graphite); resize:vertical; display:block;
+      .code-surface{
+        display:block; width:100%; margin:0; padding:12px 14px; border:0;
+        font-family:var(--mono); font-size:13.5px; line-height:26px; white-space:pre-wrap;
+        word-break:break-word;
       }
-      textarea:focus-visible{outline:2px solid var(--clay); outline-offset:1px}
-      /* Aligned to the textarea's own line-height/padding (set in JS from the
-         computed style, so a CSS edit here can never drift the two apart). A
-         click marks the line; it never redraws the picture, so this is the
-         one visual trace of a question. It has no width dependency on the
-         textarea's HEIGHT, so a manual resize-handle drag never misaligns
-         it — only a scroll needs a reposition, handled in JS. */
+      #ghost{position:absolute; inset:0; color:var(--ink-40); pointer-events:none; overflow:hidden}
+      #ghost[hidden]{display:none}
+      textarea#source{
+        position:relative; background:transparent; color:var(--graphite); resize:vertical;
+        min-height:15rem; caret-color:var(--clay);
+      }
+      textarea#source:focus-visible{outline:2px solid var(--clay); outline-offset:-1px}
       #line-highlight{
         position:absolute; left:1px; right:1px; background:rgba(245,158,11,.24);
         pointer-events:none; display:none; border-radius:2px;
       }
-      .editor-bar{display:flex; align-items:center; gap:10px; margin-top:10px}
+      .oops{display:flex; align-items:flex-start; gap:9px; padding:10px 14px; border-top:1px solid rgba(166,90,46,.3); background:rgba(166,90,46,.08); font-size:13px; color:color-mix(in oklab,var(--clay) 80%,var(--graphite))}
+      .oops[hidden]{display:none}
+      .oops .i{flex:0 0 auto; font-weight:900}
 
-      /* ---------- the canvas ---------- */
-      .frame{position:relative}
-      canvas{
-        display:block; width:100%; height:auto; border:1px solid var(--line);
-        border-radius:3px; background:#fff; cursor:pointer;
-      }
-      .canvas-foot{display:flex; gap:8px; margin-top:10px}
+      /* ---------- the read-only key: a quiet strip under the editor ---------- */
+      .key{background:color-mix(in oklab, var(--slate) 5%, #fff); border:1px solid var(--line); border-radius:14px; padding:14px 16px 15px; margin-top:12px}
+      .key[hidden]{display:none}
+      .key-head{display:flex; align-items:baseline; gap:10px; margin-bottom:12px; flex-wrap:wrap}
+      .key-head h3{font-weight:800; font-size:13px; margin:0; letter-spacing:.02em}
+      .key-head .subtitle{font-size:11.5px; color:var(--ink-60); margin:0}
+      .key-cols{display:grid; grid-template-columns:repeat(4, 1fr); gap:18px}
+      @media (max-width:760px){.key-cols{grid-template-columns:repeat(2,1fr); gap:14px}}
+      @media (max-width:420px){.key-cols{grid-template-columns:1fr}}
+      .key .grp{min-width:0}
+      .key .grp .lbl{font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-40); margin-bottom:7px}
+      .word{display:flex; align-items:baseline; gap:7px; padding:3px 0}
+      .word .w{font-family:var(--mono); font-weight:700; font-size:12.5px; color:var(--clay); white-space:nowrap}
+      .word .shape{font-family:var(--mono); font-size:10.5px; color:var(--ink-40); white-space:nowrap}
+      .choices{display:flex; flex-direction:column; gap:3px; margin:5px 0 2px 2px}
+      .choice{font-family:var(--mono); font-size:11px; color:var(--slate); display:flex; align-items:center; gap:7px; line-height:1.3}
+      .choice .sw{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
+      .choice .q{color:var(--ink-40)}
+      .key .mini{font-size:11px; color:var(--ink-60); line-height:1.5; margin:13px 0 0; padding-top:11px; border-top:1px solid var(--line)}
 
-      /* ---------- the why card ---------- */
-      #card{
-        position:absolute; max-width:300px; background:var(--paper);
-        border:1px solid var(--graphite); border-radius:3px; padding:12px 13px;
-        box-shadow:0 8px 26px rgba(0,0,0,.28); z-index:5; font-size:11.5px;
-        max-height:100%; overflow-y:auto; overscroll-behavior:contain;
+      /* ---------- week 4: unlabeled colour swatches ---------- */
+      .swatches{margin-top:12px; border:1px solid var(--line); border-radius:14px; padding:14px 16px; background:#fff}
+      .swatches[hidden]{display:none}
+      .swatches h3{font-weight:800; font-size:13px; margin:0 0 4px}
+      .swatches p{font-size:11.5px; color:var(--ink-60); margin:0 0 10px; line-height:1.5}
+      .swatch-row{display:flex; gap:10px; flex-wrap:wrap}
+      .swatch{
+        width:34px; height:34px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px var(--line);
+        cursor:pointer; padding:0;
       }
-      #card .head{
-        position:sticky; top:-12px; background:var(--paper);
-        padding:12px 0 6px; margin:-12px 0 0; z-index:1;
-        display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
-      }
-      #card h4{
-        font-family:var(--display); font-weight:700; font-size:14px;
-        letter-spacing:-.01em; margin:0 0 3px;
-      }
-      #card .close{
-        flex:0 0 auto; border:0; background:none; padding:0 0 0 6px; margin:-2px -2px 0 0;
-        font-size:15px; line-height:1; color:var(--ink-40); cursor:pointer;
-      }
-      #card .close:hover{background:none; color:var(--graphite)}
-      #card .where{font-size:10px; color:var(--ink-40); margin-bottom:10px}
-      .step{position:relative; padding:0 0 0 18px; margin-bottom:10px}
-      .step::before{
-        content:""; position:absolute; left:4px; top:7px; bottom:-10px; width:1px; background:var(--line);
-      }
-      .step:last-of-type::before{display:none}
-      .step .dot{
-        position:absolute; left:0; top:4px; width:9px; height:9px; border-radius:50%;
-        border:1.5px solid var(--graphite); background:var(--paper);
-      }
-      .step .line{font-size:11.5px; line-height:1.5}
-      .step .val{font-weight:600}
-      .step .src{color:var(--ink-60)}
-      /* The because clause comes FIRST in a row (before the value/arithmetic
-         it explains) — the card's most important line, and a child's own
-         sentence outranks the numbers underneath it. */
-      .step .because{
-        display:block; margin-bottom:5px; font-size:10.5px; line-height:1.6;
-        color:var(--teal); border-left:2px solid var(--teal); padding-left:8px;
-      }
-      .step.origin .dot{border-color:var(--slate); background:var(--slate)}
-      .divider{height:1px; background:var(--line); margin:13px 0}
-      .badge{
-        display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:500;
-        padding:4px 9px; border-radius:2px; border:1px solid var(--clay); color:var(--clay);
-      }
-      .badge.calm{border-color:var(--slate); color:var(--slate)}
-      .badge-note{font-size:10px; color:var(--ink-60); margin-top:6px; line-height:1.6}
-      .closing{font-size:10px; color:var(--ink-40); margin-top:11px; line-height:1.6}
+      .swatch:hover{box-shadow:0 0 0 2px var(--clay)}
+      .swatch:focus-visible{outline:2px solid var(--graphite); outline-offset:2px}
 
-      /* ---------- the surface ---------- */
-      .surface{
-        margin-top:6px; border:1px solid var(--line); border-radius:3px;
-        background:rgba(255,255,255,.55); padding:12px 14px;
+      /* ---------- week 5 capstone + certificate ---------- */
+      .capstone{margin-top:16px}
+      .capstone[hidden]{display:none}
+      .capgrid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+      @media (max-width:640px){.capgrid{grid-template-columns:1fr}}
+      .capcard{background:#fff; border:1px solid var(--line); border-radius:14px; padding:15px 16px}
+      .capcard.wide{grid-column:1/-1}
+      .capcard h3{font-weight:800; font-size:15px; margin:0 0 7px; display:flex; align-items:center; gap:8px}
+      .capcard h3 .ic{width:22px; height:22px; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; font-size:13px; color:#fff}
+      .capcard p{font-size:13px; color:var(--ink-60); margin:0 0 8px; line-height:1.55}
+      .capcard .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:4px}
+      .capcard button, .capcard label.filebtn{
+        font-family:var(--display); font-weight:700; font-size:12.5px; border:1px solid var(--line);
+        background:#fff; color:var(--graphite); border-radius:9px; padding:8px 13px; cursor:pointer; display:inline-block;
       }
-      .eyebrow{
-        font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
-        color:var(--ink-40); margin-bottom:7px;
+      .capcard button.primary{background:var(--clay); color:#fff; border-color:var(--clay)}
+      .seedbox{
+        font-family:var(--mono); font-weight:700; font-size:16px; letter-spacing:.1em; color:var(--clay);
+        background:color-mix(in oklab,var(--clay) 8%,#fff); border:1px dashed color-mix(in oklab,var(--clay) 40%,var(--line));
+        border-radius:9px; padding:7px 11px; display:inline-block;
       }
-      .surface pre{margin:0; font-family:var(--mono); font-size:11px; line-height:1.7; white-space:pre-wrap}
-      .sfc-pure{color:var(--teal); font-weight:600}
-      .sfc-approx{color:var(--clay); font-weight:600}
-      .sfc-dim{color:var(--ink-40)}
-      .surface details{margin-top:10px}
-      .surface summary{
-        cursor:pointer; font-size:10.5px; color:var(--ink-60); list-style:none;
-        padding-top:9px; border-top:1px solid var(--line);
+      .try{font-family:var(--mono); font-size:11.5px; color:var(--slate); line-height:1.9}
+      .try code{background:color-mix(in oklab,var(--teal) 12%,#fff); padding:1px 5px; border-radius:4px; color:color-mix(in oklab,var(--teal) 70%,var(--graphite))}
+      .cert-open{margin-top:12px; text-align:center}
+      .cert-open button{
+        font-family:var(--display); font-weight:800; font-size:15px; border:0; border-radius:12px; padding:13px 26px;
+        cursor:pointer; color:#fff; background:linear-gradient(100deg,var(--amber),var(--blue) 40%,var(--teal) 70%,var(--violet));
       }
-      .surface summary::-webkit-details-marker{display:none}
-      .surface summary::before{content:"▸ "; color:var(--ink-40)}
-      .surface details[open] summary::before{content:"▾ "}
-      .surface details pre{
-        margin-top:9px; max-height:22rem; overflow:auto; color:var(--ink-60);
-        white-space:pre-wrap;
+      .namein{
+        font-family:var(--display); font-size:13px; padding:7px 10px; border:1px solid var(--line); border-radius:8px;
+        background:#fff; color:var(--graphite);
       }
 
-      /* ---------- output ---------- */
-      .output{margin-top:14px}
-      #output{
-        margin:0; padding:10px 12px; border:1px solid var(--line); border-radius:3px;
-        background:rgba(255,255,255,.5); font-family:var(--mono); font-size:10.5px;
-        line-height:1.7; min-height:2.2rem; overflow-x:auto; white-space:pre-wrap;
-        color:var(--ink-60);
-      }
-      #output.error{
-        color:color-mix(in oklab, var(--clay) 78%, var(--graphite));
-        border-color:rgba(166,90,46,.5); background:rgba(166,90,46,.06);
-      }
+      .scrim{position:fixed; inset:0; background:rgba(20,17,14,.55); display:none; align-items:center; justify-content:center; padding:20px; z-index:20}
+      .scrim.show{display:flex}
+      .cert{width:min(680px,100%); background:var(--paper); border-radius:16px; overflow:hidden; position:relative; box-shadow:0 30px 80px rgba(0,0,0,.4)}
+      .cert .band{height:12px; background:linear-gradient(90deg,var(--amber) 0 25%,var(--blue) 25% 50%,var(--teal) 50% 75%,var(--violet) 75% 100%)}
+      .cert .body{padding:34px 40px 30px; text-align:center}
+      .cert .planes-mark{width:76px; height:76px; margin:0 auto 14px}
+      .cert h2{font-family:var(--display); font-weight:900; font-size:15px; letter-spacing:.18em; text-transform:uppercase; color:var(--ink-60); margin:0 0 6px}
+      .cert .name{font-family:var(--display); font-weight:900; font-size:32px; letter-spacing:-.02em; margin:2px 0 4px; color:var(--graphite)}
+      .cert .name-rule{width:180px; height:2px; background:var(--clay); margin:6px auto 16px; border-radius:2px}
+      .cert .did{font-size:14.5px; color:var(--graphite); max-width:44ch; margin:0 auto 18px; line-height:1.55}
+      .cert .learned{display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin:0 0 20px}
+      .cert .chip{font-family:var(--display); font-weight:700; font-size:12px; padding:6px 12px; border-radius:20px; color:#fff}
+      .cert .foot{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-top:22px}
+      .cert .foot .sig{text-align:left}
+      .cert .foot .sig .word2{font-family:var(--display); font-weight:900; font-size:20px; letter-spacing:-.01em}
+      .cert .foot .sig .word2 .dot{color:var(--clay)}
+      .cert .foot .sig small{color:var(--ink-40); font-size:10px; font-family:var(--mono); display:block}
+      .cert .foot .seedstamp{text-align:right; font-family:var(--mono); font-size:11px; color:var(--slate)}
+      .cert .foot .seedstamp b{display:block; font-size:16px; color:var(--clay); letter-spacing:.1em}
+      .cert .actions{display:flex; gap:9px; justify-content:center; padding:0 40px 26px}
+      .cert .actions button{font-family:var(--display); font-weight:700; font-size:13px; border:1px solid var(--line); background:#fff; border-radius:9px; padding:9px 16px; cursor:pointer}
+      .cert .actions button.primary{background:var(--clay); color:#fff; border-color:var(--clay)}
+      .cert .x{position:absolute; top:14px; right:16px; border:0; background:none; font-size:18px; color:var(--ink-40); cursor:pointer; z-index:2}
+      @media print{ body > *:not(.scrim){display:none} .scrim{position:static; background:none; display:block!important} .cert{box-shadow:none} }
 
-      footer{
-        margin-top:26px; padding-top:14px; border-top:1px solid var(--line);
-        font-size:10.5px; color:var(--ink-40); line-height:1.75; max-width:680px;
-      }
-      footer p{margin:0 0 7px}
-      footer code{font-family:var(--mono); color:var(--ink-60)}
-      @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+      footer{margin-top:24px; font-family:var(--mono); font-size:10px; color:var(--ink-40); line-height:1.7; max-width:700px}
+      @media (max-width:620px){.weeks button{padding:6px 8px; font-size:11px}.weeks button small{display:none}}
     </style>
   </head>
   <body>
     <div class="wrap">
       <header>
         <div class="brand">
-          <img src="identity/planes-small-on-light.svg" alt="Planes" width="44" height="44" />
+          <img src="identity/planes-small-on-light.svg" alt="Planes" width="38" height="38" />
           <div>
-            <h1>tutor</h1>
-            <div class="sub">type a few lines, see a picture, click it to ask where a number came from</div>
+            <h1>Planes</h1>
+            <div class="tag">draw something, then ask it where it came from · <a href="./index.html">all of Planes</a></div>
           </div>
         </div>
-        <div class="sub"><a href="./index.html">← all of Planes</a></div>
+        <div class="weeks" id="weeks" role="group" aria-label="week">
+          <button type="button" data-week="1">1<small>draw</small></button>
+          <button type="button" data-week="2">2<small>day → night</small></button>
+          <button type="button" data-week="3">3<small>your words</small></button>
+          <button type="button" data-week="4">4<small>your colors</small></button>
+          <button type="button" data-week="5">5<small>keep it</small></button>
+        </div>
       </header>
 
-      <div class="cols">
-        <div class="editor-col">
+      <div class="lesson"><div class="n" id="lesson-n">1</div><div class="say" id="lesson-say"></div></div>
+
+      <div class="hero">
+        <div class="stage">
+          <canvas id="canvas" width="1440" height="1080" role="img" aria-label="the picture this program draws"></canvas>
+          <div id="card" hidden></div>
+        </div>
+        <div class="canvas-foot">
+          <button id="save-svg" type="button">Save SVG ⤓</button>
+          <button id="save-png" type="button">Save PNG ⤓</button>
+        </div>
+      </div>
+
+      <div class="work">
+        <div class="editor-shell">
+          <div class="editor-top"><span class="label">your program</span><button class="run" id="run" type="button">Run ▸</button></div>
           <div class="editor-wrap">
             <div id="line-highlight"></div>
-            <textarea id="source" spellcheck="false">use scene
-
-start
-sky of "middle of the afternoon"
-ground of "wet grass"
-
-sun of 240, 70
-bee of 300, 150
-
-let spot = 90 because "it's the tallest in the yard"
-flower of 120, spot
-</textarea>
+            <pre id="ghost" class="code-surface" aria-hidden="true"></pre>
+            <textarea id="source" class="code-surface" spellcheck="false" aria-label="your program"></textarea>
           </div>
-          <div class="editor-bar">
-            <button id="run" class="accent">Run ▸</button>
-            <span class="hint">⌘/Ctrl + Enter to run</span>
-          </div>
+          <div class="oops" id="oops" hidden><span class="i">!</span><span id="oops-text"></span></div>
         </div>
 
-        <div class="canvas-col">
-          <div class="frame">
-            <canvas
-              id="canvas"
-              width="1440"
-              height="1080"
-              role="img"
-              aria-label="the picture this program draws"
-            ></canvas>
-            <div id="card" hidden></div>
+        <aside class="key" id="key">
+          <div class="key-head">
+            <h3>words you can use</h3>
+            <p class="subtitle">Type these into your program — the key just shows how they're spelled.</p>
           </div>
-          <div class="canvas-foot">
-            <button id="save-svg" class="quiet">Save SVG ⤓</button>
-            <button id="save-png" class="quiet">Save PNG ⤓</button>
+          <div class="key-cols">
+            <div class="grp">
+              <div class="lbl">things you can place</div>
+              <div id="key-placeables"></div>
+            </div>
+            <div class="grp">
+              <div class="lbl">skies — sky of "…"</div>
+              <div class="choices" id="key-sky"></div>
+            </div>
+            <div class="grp">
+              <div class="lbl">grounds — ground of "…"</div>
+              <div class="choices" id="key-ground"></div>
+            </div>
+            <div class="grp">
+              <div class="lbl">name it &amp; say why</div>
+              <div id="key-naming"></div>
+              <p class="mini" id="key-note" style="margin-top:9px; padding-top:0; border:0"></p>
+            </div>
           </div>
+        </aside>
+
+        <div class="swatches" id="swatches" hidden>
+          <h3>your colors</h3>
+          <p>First name your sky with <code>to your words here:</code> on its own lines. Then tap a color — it writes the numbers for you, in a <code>custom-sky of</code> line right where your cursor is.</p>
+          <div class="swatch-row" id="swatch-row"></div>
         </div>
       </div>
 
-      <div class="surface">
-        <div class="eyebrow">effect surface — computed, not run</div>
-        <pre id="surface-summary">(loading…)</pre>
-        <details>
-          <summary>show the full surface</summary>
-          <pre id="surface">(loading…)</pre>
-        </details>
-      </div>
-
-      <div class="output">
-        <pre id="output">(no output yet)</pre>
+      <div class="capstone" id="capstone" hidden>
+        <div class="capgrid">
+          <div class="capcard">
+            <h3><span class="ic" style="background:var(--teal)">✓</span> your garden is honest</h3>
+            <p id="honest-text">Your garden can't secretly do anything.</p>
+            <p style="color:var(--slate)">Most apps on your phone can't say that. Yours can.</p>
+          </div>
+          <div class="capcard">
+            <h3><span class="ic" style="background:var(--violet)">↗</span> share your garden</h3>
+            <p>Your garden is a tiny file plus your seed. Give a friend the file, and the <b>exact same</b> garden grows on their computer.</p>
+            <div class="row">
+              <span class="seedbox" id="seedbox">——————</span>
+              <button class="primary" id="save-garden" type="button">Save my garden file ▣</button>
+            </div>
+            <div class="row">
+              <label class="filebtn" for="open-garden">Open my saved garden ▤</label>
+              <input id="open-garden" type="file" accept=".planes,text/plain" style="display:none" />
+            </div>
+            <p style="margin-top:9px; font-size:12px">Your teacher can call out these seeds at the front of the room — everyone's garden, one by one.</p>
+          </div>
+          <div class="capcard wide">
+            <h3><span class="ic" style="background:var(--amber)">✦</span> keep growing it</h3>
+            <p>Take your drive home. Open your garden on any computer and try:</p>
+            <div class="try">
+              <code>two-flowers of 380, spot</code> — another pair, way over on the right<br />
+              <code>sky of "just before dark"</code> — a different time of day<br />
+              make a <b>new sky</b> in your own words, like you did in week 4
+            </div>
+            <p style="margin-top:10px">What you did this week is real programming. The same ideas — naming things, saying why, building from small pieces — work in every language there is.</p>
+          </div>
+        </div>
+        <div class="cert-open">
+          <input class="namein" id="child-name" type="text" placeholder="your name, for the certificate" />
+          <button id="open-cert" type="button">See my Planes certificate ✦</button>
+        </div>
       </div>
 
       <footer>
         <p>
-          Serving: this page fetches <code>paint/scene.planes</code> and
-          <code>paint/draw.planes</code> and imports <code>js/*.mjs</code> as ES
-          modules, so it needs a static server (<code>python3 -m http.server 8000</code>)
-          and no network beyond it.
+          Serving: this page fetches <code>paint/scene.planes</code> and <code>paint/draw.planes</code> and
+          imports <code>js/*.mjs</code> as ES modules, so it needs a static server
+          (<code>python3 -m http.server 8000</code>) and no network beyond it.
         </p>
         <p>
-          <strong>The editor is the source pane.</strong> There is no second,
-          read-only listing of the program — clicking a mark on the picture
-          marks the line in the textarea above that drew it.
-          <strong>Asking performs nothing:</strong> a question reads the
-          derivation the last Run already produced, and the effect surface
-          above is computed without running a line.
-        </p>
-        <p>
-          <strong>Saving.</strong> SVG and PNG capture the picture on screen,
-          from the last successful Run — never a fresh run.
+          <strong>The editor is the source pane.</strong> Clicking a mark on the picture marks the line in the
+          box above that drew it. <strong>Asking performs nothing:</strong> a question reads the last successful
+          Run — it never runs your program again.
         </p>
       </footer>
     </div>
 
+    <div class="scrim" id="scrim">
+      <div class="cert" role="dialog" aria-label="certificate">
+        <button class="x" id="cert-x" type="button" aria-label="close">✕</button>
+        <div class="band"></div>
+        <div class="body">
+          <div class="planes-mark">
+            <svg viewBox="-100 -100 200 200" width="76" height="76" aria-hidden="true">
+              <polygon points="-82.68,-7.76 19.09,-33.63 82.68,7.76 -19.09,33.63" fill="#F59E0B" fill-opacity="0.26" stroke="#F59E0B" stroke-opacity="0.9" stroke-width="2.4"/>
+              <polygon points="-50.88,67.74 50.88,41.88 50.88,-67.74 -50.88,-41.88" fill="#3B82F6" fill-opacity="0.26" stroke="#3B82F6" stroke-opacity="0.9" stroke-width="2.4"/>
+              <polygon points="-31.8,34.12 31.8,75.51 31.8,-34.12 -31.8,-75.51" fill="#14B8A6" fill-opacity="0.26" stroke="#14B8A6" stroke-opacity="0.9" stroke-width="2.4"/>
+              <polygon points="-47.25,65.36 -20.25,17.81 47.25,-65.36 20.25,-17.81" fill="#8B5CF6" fill-opacity="0.26" stroke="#8B5CF6" stroke-opacity="0.9" stroke-width="2.4"/>
+            </svg>
+          </div>
+          <h2>Certificate of Growing</h2>
+          <div class="name" id="cert-name">a Planes gardener</div>
+          <div class="name-rule"></div>
+          <p class="did">grew a garden in <b>Planes</b>, wrote the reasons it looks the way it does, and can tell you where every part came from.</p>
+          <div class="learned">
+            <span class="chip" style="background:var(--blue)">wrote a program</span>
+            <span class="chip" style="background:var(--amber)">named her numbers</span>
+            <span class="chip" style="background:var(--teal)">said why</span>
+            <span class="chip" style="background:var(--violet)">made it hers</span>
+          </div>
+          <div class="foot">
+            <div class="sig"><div class="word2">planes<span class="dot">.</span></div><small>draw something, then ask it why</small></div>
+            <div class="seedstamp">her garden<b id="cert-seed">——————</b></div>
+          </div>
+        </div>
+        <div class="actions"><button class="primary" id="cert-print" type="button">Print it ⤓</button><button id="cert-close2" type="button">Back to my garden</button></div>
+      </div>
+    </div>
+
     <script type="module">
-      import { runProgramGraph, staleModuleWarning, staleRendererWarning } from "./js/browser_main.mjs";
+      import { runProgramGraph, analyseProgramGraph, staleModuleWarning, staleRendererWarning } from "./js/browser_main.mjs";
       import { paint } from "./js/paint/painter.mjs";
       import { toSvg } from "./js/paint/svg.mjs";
-      import { downloadSvg, downloadPng } from "./js/paint/export.mjs";
+      import { downloadSvg, downloadPng, downloadBlob, exportFilename } from "./js/paint/export.mjs";
       import { walk as walkDrawing, HIGHEST_VERSION } from "./js/paint/stream.mjs";
       import { markSink } from "./js/paint/marks.mjs";
       import { hitTest } from "./js/paint/hit.mjs";
       import { card } from "./js/paint/why.mjs";
-      import { renderSurface } from "./js/paint/surface_pane.mjs";
       import { BrowserModuleLoader } from "./js/module_loader_browser.mjs";
+      import { rgbHex } from "./js/paint/color.mjs";
+      import {
+        PLACEABLES, SKY_PHRASES, GROUND_PHRASES, NAMING_WORDS, COORDINATE_NOTE,
+      } from "./js/scene_vocab.mjs";
 
       // `use scene` and `use draw` resolve relative to this base — the
-      // paint/ directory this page lives beside (checkpoint v26.0 §383's
-      // scope correction: runProgramGraph takes a source STRING and a base,
-      // so paint/program_session.mjs's file-path-only session is not needed
-      // here at all).
+      // paint/ directory this page lives beside.
       const BASE = new URL("paint/", location.href).href;
       const LOAD_TOKEN = String(Date.now());
       const loader = new BrowserModuleLoader({ base: BASE, cacheBust: LOAD_TOKEN });
 
       // THE BACKING STORE IS THREE TIMES THE PROGRAM'S COORDINATE SPACE — the
       // same mechanism garden.html and paint.html's PNG export both use.
-      // Marks, hit-testing and the line highlight all stay in PROGRAM
-      // coordinates; only the rasteriser knows about the multiplier.
       const CANVAS_SCALE = 3;
       const DIMENSIONS = { width: 480, height: 360, background: "#ffffff", scale: CANVAS_SCALE };
 
       const $ = (id) => document.getElementById(id);
       const source = $("source");
+      const ghostEl = $("ghost");
       const runBtn = $("run");
       const canvas = $("canvas");
       const cardEl = $("card");
-      const outputEl = $("output");
-      const surfaceEl = $("surface");
-      const surfaceSummaryEl = $("surface-summary");
+      const oopsEl = $("oops");
+      const oopsTextEl = $("oops-text");
       const highlightEl = $("line-highlight");
+      const lessonNEl = $("lesson-n");
+      const lessonSayEl = $("lesson-say");
+      const keyEl = $("key");
+      const swatchesEl = $("swatches");
+      const capstoneEl = $("capstone");
       const ctx = canvas.getContext("2d");
 
-      // Everything the frame on screen was made of. Every card, export and
-      // highlight reads THIS, never a fresh run (invariant 4) — which is
-      // what makes "asking performed nothing" true.
+      // Everything the frame on screen was made of. Every card and highlight
+      // reads THIS, never a fresh run — what makes "asking performed
+      // nothing" true.
       let lastLines = [];
       let lastTrace = [];
       let lastAnnotations = {};
       let lastMarks = [];
       let lastSourceLines = [];
       let litLine = -1;
+      let currentWeek = 1;
+      let seedTicket = null; // decorative save ticket, §7.2/§9 — never fed back into the program
 
-      const esc = (s) =>
-        String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-      function showOutput(lines, isError) {
-        outputEl.textContent = lines.length ? lines.join("\n") : "(no output)";
-        outputEl.classList.toggle("error", Boolean(isError));
+      // ---- week 1-5 content: the target program each week teaches, plus its
+      // structured ghost (§425). ONE object drives both — the ghost is built
+      // from `lines`, never a second hand-kept copy. ----------------------
+
+      const BLANK = "…";
+
+      const WEEK_PROGRAMS = {
+        1: {
+          lesson: "Type these lines, then press <b>Run</b>. The key below shows every word you can use and how it's spelled.",
+          lines: [
+            "use scene",
+            "",
+            "start",
+            'sky of "middle of the afternoon"',
+            'ground of "wet grass"',
+            "",
+            "sun of 240, 70",
+            "two-bees of 300, 150",
+            "",
+            'let spot = 90 because "it\'s the tallest in the yard"',
+            "two-flowers of 120, spot",
+          ],
+        },
+        2: {
+          lesson: 'Change the sky to <b>"the middle of the night"</b>, then swap <b>sun</b> → <b>moon</b> and <b>two-bees</b> → <b>two-fireflies</b>.',
+          lines: [
+            "use scene",
+            "",
+            "start",
+            'sky of "the middle of the night"',
+            'ground of "wet grass"',
+            "",
+            "moon of 240, 70",
+            "two-fireflies of 300, 150",
+            "",
+            'let spot = 90 because "it\'s the tallest in the yard"',
+            "two-flowers of 120, spot",
+          ],
+        },
+        3: {
+          lesson: "Add a second pair of flowers with its own <b>let</b> and <b>because</b>. Then try moving just one.",
+          lines: [
+            "use scene",
+            "",
+            "start",
+            'sky of "middle of the afternoon"',
+            'ground of "wet grass"',
+            "sun of 240, 70",
+            "",
+            'let spot = 90 because "it\'s the tallest in the yard"',
+            "two-flowers of 120, spot",
+            'let shady = 44 because "these never get past the fence shadow"',
+            "two-flowers of 300, shady",
+          ],
+        },
+        4: {
+          lesson: "Name your own sky with <b>to your words here:</b>, then tap a color in the panel below to fill in its numbers.",
+          lines: [
+            "use scene",
+            "",
+            "to your sky name here:",
+            "  custom-sky of 0.78, 0.14, 55",
+            "",
+            "start",
+            "your sky name here",
+            'ground of "wet grass"',
+            "",
+            "sun of 240, 70",
+            "",
+            'let spot = 90 because "it\'s the tallest in the yard"',
+            "two-flowers of 120, spot",
+          ],
+        },
+        5: {
+          lesson: "Your garden is done. See what it can do, share it, and get your certificate.",
+          lines: [
+            "use scene",
+            "",
+            "start",
+            'sky of "middle of the afternoon"',
+            'ground of "wet grass"',
+            "",
+            "sun of 240, 70",
+            "two-bees of 300, 150",
+            "",
+            'let spot = 90 because "it\'s the tallest in the yard"',
+            "two-flowers of 120, spot",
+          ],
+        },
+      };
+
+      // A ghost line replaces every number and every quoted phrase with a
+      // blank — the word itself (`sky of`, `let`, `because`) stays, since
+      // that is the spelling she is meant to read off the key and type
+      // herself. A `to <name>:` header (week 4's own sky name) has neither
+      // a number nor a quote to blank, so it is shown whole, as an example
+      // of the shape rather than a fill-in-the-blank.
+      function ghostLine(line) {
+        return line
+          .replace(/"[^"]*"/g, `"${BLANK}"`)
+          .replace(/-?\d+(\.\d+)?/g, BLANK);
       }
 
-      // ---- the editor's own line highlight (the source pane) -----------------
-      //
-      // A CHILD'S TYPO MUST NOT BLANK HER PICTURE (S8): repainting only ever
-      // happens from lastLines, on a SUCCESSFUL run — an error just writes to
-      // the output pane. Positioning depends only on line-height/padding
-      // (fixed) and scrollTop (live), never on the textarea's own HEIGHT, so
-      // a manual resize-handle drag never misaligns it (§5.3's requirement).
+      function ghostFor(weekNum) {
+        return WEEK_PROGRAMS[weekNum].lines.map(ghostLine).join("\n");
+      }
+
+      // ---- the read-only key, generated from js/scene_vocab.mjs (§420-421) --
+
+      function renderKey() {
+        const placeablesEl = $("key-placeables");
+        placeablesEl.innerHTML = PLACEABLES.map(
+          (p) => `<div class="word"><span class="w">${esc(p.name)}</span><span class="shape">${esc(p.shape.join(", "))}</span></div>`,
+        ).join("");
+
+        const skyEl = $("key-sky");
+        skyEl.innerHTML = SKY_PHRASES.map(
+          (s) => `<div class="choice"><span class="sw" style="background:${esc(s.color)}"></span><span class="q">"</span>${esc(s.phrase)}<span class="q">"</span></div>`,
+        ).join("");
+
+        const groundEl = $("key-ground");
+        groundEl.innerHTML = GROUND_PHRASES.map(
+          (g) => `<div class="choice"><span class="sw" style="background:${esc(g.color)}"></span><span class="q">"</span>${esc(g.phrase)}<span class="q">"</span></div>`,
+        ).join("");
+
+        const namingEl = $("key-naming");
+        namingEl.innerHTML = NAMING_WORDS.map(
+          (n) => `<div class="word"><span class="w">${esc(n.name)}</span><span class="shape">${esc(n.shape.join(" "))}</span></div>`,
+        ).join("");
+
+        $("key-note").textContent = COORDINATE_NOTE;
+      }
+
+      // ---- week 4: unlabeled colour swatches, real OKLCH -> hex -----------
+
+      const SWATCHES = [
+        [0.55, 0.20, 25],
+        [0.78, 0.14, 55],
+        [0.62, 0.16, 140],
+        [0.55, 0.14, 220],
+        [0.45, 0.16, 300],
+        [0.70, 0.10, 350],
+      ];
+
+      function renderSwatches() {
+        const row = $("swatch-row");
+        row.innerHTML = "";
+        for (const [l, c, h] of SWATCHES) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "swatch";
+          btn.style.background = rgbHex(l, c, h);
+          btn.setAttribute("aria-label", "a color for your sky");
+          btn.addEventListener("click", () => insertAtCursor(`custom-sky of ${l}, ${c}, ${h}\n`));
+          row.appendChild(btn);
+        }
+      }
+
+      // The picker writes NUMBERS, never her words (§420/§424's authorship
+      // boundary): this inserts one literal line at wherever her cursor
+      // already is, and nothing else in her program is touched.
+      function insertAtCursor(text) {
+        const start = source.selectionStart;
+        const end = source.selectionEnd;
+        const before = source.value.slice(0, start);
+        const after = source.value.slice(end);
+        source.value = `${before}${text}${after}`;
+        const caret = start + text.length;
+        source.setSelectionRange(caret, caret);
+        source.focus();
+        updateGhost();
+      }
+
+      // ---- ghost text: shown only while the editor is genuinely empty,
+      // vanishing on her first keystroke (§425) ----------------------------
+
+      function updateGhost() {
+        const empty = source.value.trim() === "";
+        ghostEl.hidden = !empty;
+        if (empty) ghostEl.textContent = ghostFor(currentWeek);
+      }
+      source.addEventListener("input", updateGhost);
+
+      // ---- week-aware progressive disclosure (§423) -----------------------
+
+      function clampWeek(n) {
+        return Math.min(5, Math.max(1, Number.isFinite(n) ? Math.trunc(n) : 1));
+      }
+
+      function setWeek(n, { pushUrl = true } = {}) {
+        currentWeek = clampWeek(n);
+        for (const btn of document.querySelectorAll("#weeks button")) {
+          btn.setAttribute("aria-pressed", String(Number(btn.dataset.week) === currentWeek));
+        }
+        lessonNEl.textContent = String(currentWeek);
+        lessonSayEl.innerHTML = WEEK_PROGRAMS[currentWeek].lesson;
+        keyEl.hidden = currentWeek === 5;
+        swatchesEl.hidden = currentWeek < 4;
+        capstoneEl.hidden = currentWeek !== 5;
+        if (pushUrl) {
+          const url = new URL(location.href);
+          url.searchParams.set("week", String(currentWeek));
+          history.replaceState(null, "", url);
+        }
+        updateGhost();
+      }
+
+      $("weeks").addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (btn) setWeek(Number(btn.dataset.week));
+      });
+
+      // ---- running ---------------------------------------------------------
+
+      function showOops(text) {
+        if (!text) {
+          oopsEl.hidden = true;
+          oopsTextEl.textContent = "";
+          return;
+        }
+        oopsEl.hidden = false;
+        oopsTextEl.textContent = text;
+      }
+
+      async function run() {
+        hideCard();
+        const src = source.value;
+        // GHOST TEXT IS UN-RUNNABLE (§425): an editor with nothing typed
+        // into it yet must not be sent to the engine at all — not "runs and
+        // draws nothing," not "throws a parser error naming line 1" —
+        // nothing happens beyond a gentle nudge.
+        if (src.trim() === "") {
+          showOops("Type something in your program, then press Run.");
+          return;
+        }
+        showOops(null);
+        const result = await runProgramGraph(src, { base: BASE, loader });
+        if (result.error) {
+          showOops(kidError(result.error));
+          return;
+        }
+        lastLines = result.output;
+        lastTrace = result.trace ?? [];
+        lastAnnotations = result.annotations ?? {};
+        lastSourceLines = src.split("\n");
+
+        const recorder = markSink();
+        walkDrawing(lastLines, recorder);
+        lastMarks = recorder.marks.slice();
+
+        const { errors } = paint(ctx, lastLines, DIMENSIONS);
+        if (errors.length) {
+          const stale = staleRendererWarning(errors, HIGHEST_VERSION);
+          showOops(stale || `something in this program's drawing didn't match what the renderer expected: ${errors.map((e) => e.message).join("; ")}`);
+          return;
+        }
+      }
+
+      // A typo must not blank her work (§4.2): the last good picture stays
+      // on screen, and the ribbon speaks in the language the key already
+      // uses rather than the raw tag.
+      function kidError(error) {
+        // scene.planes's own message already names the fix ("try one of:
+        // <phrases>"); stripping the raw tag prefix and pointing at the
+        // key instead of repeating the list keeps the key as the teacher,
+        // not the error (§6.3), without saying "try one of" twice.
+        if (error.tag === "unknown-sky-feeling" || error.tag === "unknown-ground-feeling") {
+          const said = error.message.replace(/^[a-z-]+:\s*/, "").split(" — try one of:")[0];
+          return `${said} — try one of the skies or grounds shown in the key below.`;
+        }
+        return error.message.replace(/^[a-z-]+:\s*/, "");
+      }
+
+      function repaintFrame() {
+        if (!lastLines.length) return;
+        paint(ctx, lastLines, DIMENSIONS);
+      }
+
+      runBtn.addEventListener("click", () => { run(); });
+      source.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();
+      });
+
+      // ---- the editor's own line highlight ---------------------------------
+
       function lineMetrics() {
         const cs = getComputedStyle(source);
-        return { lineHeight: parseFloat(cs.lineHeight) || 20, paddingTop: parseFloat(cs.paddingTop) || 0 };
+        return { lineHeight: parseFloat(cs.lineHeight) || 26, paddingTop: parseFloat(cs.paddingTop) || 0 };
       }
-
-      // A throwaway canvas used only to measure the textarea's own monospace
-      // character width — see charCapacity below.
       const measureCtx = document.createElement("canvas").getContext("2d");
-
-      // How many characters fit on one on-screen row of the textarea right
-      // now — the same quantity the browser's own word-wrap is working
-      // from, read off the live layout rather than assumed, so a narrower
-      // window keeps this correct without a resize handler of its own (the
-      // next click or scroll recomputes it).
       function charCapacity() {
         const cs = getComputedStyle(source);
-        const contentWidth =
-          source.clientWidth - parseFloat(cs.paddingLeft || "0") - parseFloat(cs.paddingRight || "0");
+        const contentWidth = source.clientWidth - parseFloat(cs.paddingLeft || "0") - parseFloat(cs.paddingRight || "0");
         measureCtx.font = cs.font;
-        const charWidth = measureCtx.measureText("M").width || 1; // monospace: every glyph this wide
+        const charWidth = measureCtx.measureText("M").width || 1;
         return Math.max(1, Math.floor(contentWidth / charWidth));
       }
-
-      // How many on-screen ROWS a logical source line occupies once the
-      // textarea wraps it — needed because a source line number counts
-      // LOGICAL lines (what the interpreter reports) while the highlight has
-      // to land on a VISUAL row. Simulates the textarea's own greedy
-      // word-wrap — break only at a space, never mid-word — against the
-      // row's character capacity; both are exact for a monospace font, so
-      // this lands on the real wrap point rather than approximating it.
-      // Without this, a `because` sentence long enough to wrap (routine — a
-      // real explanation rarely fits in one row) put the highlight on the
-      // wrong row for every line after it, found live against the starter
-      // program's own first `because` line.
       function rowsForLine(text, capacity) {
         if (capacity <= 0 || text.length === 0) return 1;
         let rows = 1;
@@ -404,7 +792,6 @@ flower of 120, spot
         }
         return rows;
       }
-
       function positionHighlight() {
         if (litLine < 0) {
           highlightEl.style.display = "none";
@@ -413,132 +800,36 @@ flower of 120, spot
         const { lineHeight, paddingTop } = lineMetrics();
         const capacity = charCapacity();
         let visualRow = 0;
-        for (let i = 0; i < litLine - 1; i++) {
-          visualRow += rowsForLine(lastSourceLines[i] ?? "", capacity);
-        }
+        for (let i = 0; i < litLine - 1; i++) visualRow += rowsForLine(lastSourceLines[i] ?? "", capacity);
         const ownRows = rowsForLine(lastSourceLines[litLine - 1] ?? "", capacity);
         highlightEl.style.display = "block";
         highlightEl.style.height = `${lineHeight * ownRows}px`;
         highlightEl.style.top = `${paddingTop + visualRow * lineHeight - source.scrollTop}px`;
       }
-
-      function highlightLine(n) {
-        litLine = n;
-        positionHighlight();
-      }
-
-      function hideHighlight() {
-        litLine = -1;
-        positionHighlight();
-      }
-
+      function highlightLine(n) { litLine = n; positionHighlight(); }
+      function hideHighlight() { litLine = -1; positionHighlight(); }
       source.addEventListener("scroll", positionHighlight);
 
-      // ---- running -------------------------------------------------------
+      // ---- click the picture, ask why (§417-418) ---------------------------
 
-      async function updateSurface() {
-        // Recomputed from the CURRENT editor text on every Run (§6.1) — a
-        // program that never ran (a syntax error) still gets an honest
-        // surface pane, via renderSurface's own error handling.
-        const { surface } = await renderSurface(surfaceEl, source.value, { loader });
-        renderSurfaceSummary(surface);
+      const FUNC_HEADER = /^to\s+((?:(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)(?:\s+(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)*)\s*(?:of\b|:)/;
+      const CALL_HEADER = /^(?!let\b)((?:(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)(?:\s+(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)*)\s*(?:of\b|$)/;
+
+      function definitionAt(sourceLine) {
+        for (let i = sourceLine - 1; i >= 0; i--) {
+          const m = FUNC_HEADER.exec(lastSourceLines[i] ?? "");
+          if (m) return m[1];
+        }
+        return null;
+      }
+      function callAt(sourceLine) {
+        const m = CALL_HEADER.exec(lastSourceLines[sourceLine - 1] ?? "");
+        return m ? m[1] : null;
       }
 
-      // garden.html's own renderSurfaceSummary, read off js/shapes.mjs's real
-      // methods (isPure/boundaries/targets/producesApproximate/
-      // approximationRoutes) rather than an asserted claim.
-      function renderSurfaceSummary(surface) {
-        if (!surface) return;
-        const lines = [];
-        if (surface.isPure()) {
-          lines.push(`<span class="sfc-pure">pure — this program touches nothing outside itself</span>`);
-        } else {
-          const boundaries = surface.boundaries();
-          const targets = surface.targets();
-          const onlyProtocols =
-            targets.length > 0 && targets.every((t) => t.startsWith("draw ") || t.startsWith("sound "));
-          lines.push(
-            `<span class="sfc-pure">${esc(boundaries.join(", "))} — the only boundary it touches` +
-              (onlyProtocols
-                ? `, and every one of the ${targets.length} things it writes there is the picture`
-                : "") +
-              `</span>`,
-          );
-        }
-        if (surface.producesApproximate()) {
-          lines.push(`<span class="sfc-approx">numbers: approximate — this program reaches an approximating builtin</span>`);
-          const routes = surface.approximationRoutes();
-          const longest = routes.reduce((a, b) => (b.length > a.length ? b : a), routes[0] ?? "");
-          if (longest) {
-            lines.push(
-              `<span class="sfc-dim">  ${esc(longest)}` +
-                (routes.length > 1 ? `   (the longest of ${routes.length} routes)` : "") +
-                `</span>`,
-            );
-          }
-        } else {
-          lines.push(`<span class="sfc-pure">numbers: exact throughout</span>`);
-        }
-        surfaceSummaryEl.innerHTML = lines.join("\n");
-      }
-
-      async function run() {
-        hideCard();
-        const src = source.value;
-        const result = await runProgramGraph(src, { base: BASE, loader });
-        if (result.error) {
-          // `result.error.message` already carries the tag (browser_main.mjs
-          // builds it from PlanesError's own `.message`, which is
-          // `"tag: detail"` — unlike stream.mjs's protocol errors below,
-          // whose `.message` is bare). Re-prepending the tag here would
-          // print it twice, which is exactly the message a nonsense sky
-          // phrase produces if this is not guarded against — and getting
-          // this message right matters more than any pixel on the page
-          // (§3.3.1).
-          showOutput([`✗ ${result.error.message}`], true);
-          await updateSurface();
-          return;
-        }
-        lastLines = result.output;
-        lastTrace = result.trace ?? [];
-        lastAnnotations = result.annotations ?? {};
-        lastSourceLines = src.split("\n");
-
-        const recorder = markSink();
-        walkDrawing(lastLines, recorder);
-        lastMarks = recorder.marks.slice();
-
-        const { drawn, text, errors } = paint(ctx, lastLines, DIMENSIONS);
-        if (errors.length) {
-          const stale = staleRendererWarning(errors, HIGHEST_VERSION);
-          if (stale) {
-            showOutput(stale.split("\n"), true);
-          } else {
-            showOutput([...text, ...errors.map((e) => `✗ ${e.tag}: ${e.message}`)], true);
-          }
-          await updateSurface();
-          return;
-        }
-        void drawn;
-        showOutput(text, false);
-        await updateSurface();
-      }
-
-      function repaintFrame() {
-        if (!lastLines.length) return;
-        paint(ctx, lastLines, DIMENSIONS);
-      }
-
-      runBtn.addEventListener("click", () => { run(); });
-      source.addEventListener("keydown", (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();
-      });
-
-      // ---- click the picture, ask why ----------------------------------------
-
-      // The right-hand side of the line that binds `name` — only when it is
-      // unambiguous: inside the enclosing definition, or the program's only
-      // binding of that name. garden.html's own bindingOf (why.mjs card §5.2).
+      // The right-hand side of the line that binds `name` — inside the
+      // enclosing definition when there is one, or the program's only
+      // binding of that name otherwise (garden.html's own bindingOf).
       function bindingOf(name, definition) {
         const pattern = new RegExp(
           `^\\s*(?:let\\s+)?${name.replace(/[-.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=\\s*(.+?)(?:\\s+because\\s.*)?$`,
@@ -558,33 +849,28 @@ flower of 120, spot
         return all.length === 1 ? all[0] : null;
       }
 
-      // The enclosing `to <name>` of a source line — a multi-word name is
-      // several NAME tokens (checkpoint v26.0 §405), so the capture stops at
-      // the first `of` or `:` rather than swallowing the parameter list too.
-      const FUNC_HEADER = /^to\s+((?:(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)(?:\s+(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)*)\s*(?:of\b|:)/;
-
-      function definitionAt(sourceLine) {
-        for (let i = sourceLine - 1; i >= 0; i--) {
-          const m = FUNC_HEADER.exec(lastSourceLines[i] ?? "");
-          if (m) return m[1];
+      // Every name reachable from this node's derivation, nearest first —
+      // used ONLY to resolve a SPECIFIC name we already know we want
+      // (parseArgs below), never to pick "interesting" names heuristically.
+      // That is what keeps an internal helper's own locals (scene.planes's
+      // `stem-top`, `petal`'s `cx`/`cy`) off the card: nothing ever asks for
+      // them by name.
+      function namedNodes(node) {
+        const found = [];
+        const queue = [node];
+        const walked = new Set();
+        while (queue.length) {
+          const cur = queue.shift();
+          if (!cur || walked.has(cur)) continue;
+          walked.add(cur);
+          if (cur.kind === "name") {
+            const text = readable(cur.value);
+            if (text !== null && !found.some((f) => f.name === cur.label)) found.push({ name: cur.label, value: text });
+          }
+          for (const input of Array.isArray(cur.inputs) ? cur.inputs : []) queue.push(input);
         }
-        return null;
+        return found;
       }
-
-      // The name called on the source line itself — route 2 of the heading
-      // precedence in renderCard, for a line with no enclosing `to`. Same
-      // multi-word handling as FUNC_HEADER; the `let`-exclusion keeps an
-      // assignment line (never a call, never a mark) from heading a card
-      // with the name it binds.
-      const CALL_HEADER = /^(?!let\b)((?:(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)(?:\s+(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)*)\s*(?:of\b|$)/;
-
-      function callAt(sourceLine) {
-        const m = CALL_HEADER.exec(lastSourceLines[sourceLine - 1] ?? "");
-        return m ? m[1] : null;
-      }
-
-      // A name a reader can read — why.mjs's own valueText rounds a long
-      // decimal for the same reason.
       function readable(value) {
         if (value === null || value === undefined) return "nothing";
         if (typeof value === "boolean") return value ? "true" : "false";
@@ -596,37 +882,59 @@ flower of 120, spot
           }
           return text;
         }
-        if (typeof value === "number") {
-          return Number.isInteger(value) ? String(value) : String(Math.round(value * 1000) / 1000);
-        }
+        if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(Math.round(value * 1000) / 1000);
         if (typeof value === "string") return value;
-        return null; // a record or a list is not a step a reader wants
+        return null;
       }
 
-      const INPUT_NAMES = new Set(["tick", "seed", "keys", "pointer", "state"]);
-
-      function namedNodes(node) {
-        const found = [];
-        const queue = [node];
-        const walked = new Set();
-        while (queue.length) {
-          const current = queue.shift();
-          if (!current || walked.has(current)) continue;
-          walked.add(current);
-          if (current.kind === "name" && !INPUT_NAMES.has(current.label)) {
-            const text = readable(current.value);
-            if (text !== null && !found.some((f) => f.name === current.label)) {
-              found.push({ name: current.label, value: text });
-            }
+      // "call-name of a, b, c" -> { name: "call-name", args: ["a", "b", "c"] }
+      // — read straight off the SOURCE TEXT she wrote, the same discipline
+      // why.mjs's own header names ("the expression comes out of the
+      // PROGRAM'S OWN TEXT"). Not `export`ed — nothing can import from an
+      // inline module script — js/test/tutor_redesign.test.mjs extracts
+      // this function's own source text and evaluates it directly, the
+      // same convention the prior build's CALL_HEADER extraction used.
+      function parseArgs(text) {
+        const m = /^((?:(?!\bof\b)[A-Za-z_][A-Za-z0-9_-]*)(?:\s+(?!\bof\b)[A-Za-z_][A-Za-z0-9_-]*)*)\s+of\s+(.+)$/.exec(text.trim());
+        if (!m) return null;
+        return { name: m[1], args: splitArgs(m[2]) };
+      }
+      function splitArgs(s) {
+        const out = [];
+        let depth = 0;
+        let cur = "";
+        let inStr = false;
+        for (const ch of s) {
+          if (inStr) {
+            cur += ch;
+            if (ch === '"') inStr = false;
+            continue;
           }
-          for (const input of Array.isArray(current.inputs) ? current.inputs : []) {
-            queue.push(input);
+          if (ch === '"') {
+            inStr = true;
+            cur += ch;
+            continue;
           }
+          if (ch === "(") depth += 1;
+          if (ch === ")") depth -= 1;
+          if (ch === "," && depth === 0) {
+            out.push(cur.trim());
+            cur = "";
+            continue;
+          }
+          cur += ch;
         }
-        return found;
+        if (cur.trim()) out.push(cur.trim());
+        return out;
       }
 
-      const MAX_STEPS = 4;
+      const NUMBER_RE = /^-?\d+(\.\d+)?$/;
+      const BARE_NAME_RE = /^[A-Za-z_][A-Za-z0-9_-]*$/;
+
+      // Numbers a picker writes, not a child: a friendlier fallback label
+      // set for `custom-sky`'s own three OKLCH numbers, so a week-4 card
+      // still reads as plain words rather than "value 1".
+      const CARD_LABELS = { "custom-sky": ["lightness", "richness", "hue"] };
 
       function hideCard() {
         cardEl.hidden = true;
@@ -640,93 +948,60 @@ flower of 120, spot
         if (!entry) return;
         const [node, sourceLine] = entry;
         const definition = definitionAt(sourceLine);
-        const c = card(node, {
-          annotations: lastAnnotations,
-          line: sourceLine,
-          sourceText: lastSourceLines[sourceLine - 1] ?? "",
-        });
+        const sourceText = lastSourceLines[sourceLine - 1] ?? "";
+        const c = card(node, { annotations: lastAnnotations, line: sourceLine, sourceText });
 
-        // Up to four named values, nearest first — annotated ones (a
-        // `because` the author wrote) come first so a MAX_STEPS cut never
-        // crowds out the sentence that matters most.
-        const all = namedNodes(node).filter((n) => {
-          // An ANNOTATED name is never dropped, even when its own binding is
-          // a bare literal — the sentence is the point of showing it (found
-          // live: `let reach = 90 because "..."` was being filtered out here
-          // before this guard, since "90" bound to "90" looked redundant on
-          // the number alone, silently dropping the one row §5.2 calls the
-          // card's most important).
-          if (lastAnnotations[n.name] !== undefined) return true;
-          const binding = bindingOf(n.name, definition);
-          return binding !== n.value; // a name bound to a bare literal explains nothing
-        });
-        const annotated = all.filter((n) => lastAnnotations[n.name] !== undefined);
-        const chosen = [];
-        for (const candidate of [...annotated, ...all]) {
-          if (chosen.length >= MAX_STEPS) break;
-          if (!chosen.some((ch) => ch.name === candidate.name)) chosen.push(candidate);
-        }
-        chosen.sort((a, b) => all.indexOf(a) - all.indexOf(b));
-
-        const rowsHtml = chosen
-          .map((n) => {
-            const binding = bindingOf(n.name, definition);
-            const because = lastAnnotations[n.name] ?? "";
-            return (
-              `<div class="step"><span class="dot"></span><div class="line">` +
-              (because ? `<span class="because">"${esc(because)}"</span>` : "") +
-              `<span class="val">${esc(n.name)} ${esc(n.value)}</span>` +
-              (binding ? ` <span class="src">from ${esc(binding)}</span>` : "") +
-              `</div></div>`
-            );
-          })
-          .join("");
-
-        const originHtml =
-          `<div class="step origin"><span class="dot"></span><div class="line">` +
-          `<span class="src">${esc(c.origin.text)}</span></div></div>`;
-
-        const badgesHtml =
-          `<div class="divider"></div>` +
-          (c.approximate
-            ? `<span class="badge">approximate — the chain reaches an approximating builtin</span>` +
-              `<div class="badge-note">Not unpredictable — every machine computes this identically.</div>`
-            : `<span class="badge calm">exact — nothing in this chain approximates</span>` +
-              `<div class="badge-note">Every value here is a rational held as a rational.</div>`);
-
-        const closingHtml = `<div class="closing">asking performed nothing — the effect surface above is unchanged</div>`;
-
-        // The heading names the enclosing function when there is one — a
-        // fact about the CHILD'S OWN program, since scene.planes helpers
-        // report their line as the entry-file call site (interp.py's
-        // trace_line), never a line inside scene.planes itself. Otherwise
-        // the name called on the source line itself, so a click on a mark
-        // with no enclosing `to` still reads as what was drawn — "moon",
-        // not "line 7". Otherwise the source line number, never an
-        // invented name. The line number itself is never lost: it stays
-        // under the heading whenever the heading names something.
         const called = definition ? null : callAt(sourceLine);
-        const named = definition ?? called;
-        const heading = named ?? `line ${sourceLine}`;
-        const whereHtml = named ? `<div class="where">line ${sourceLine}</div>` : "";
+        const subject = definition ?? called ?? `line ${sourceLine}`;
+
+        // ---- the plain-word numbers (§417: across, down, tall — never raw
+        // r/x/y) and, alongside them, HER SENTENCE if one of her own named
+        // values is among this call's own arguments. -----------------------
+        const parsed = parseArgs(sourceText);
+        const placeable = parsed && PLACEABLES.find((p) => p.name === parsed.name);
+        const labels = placeable ? placeable.shape : CARD_LABELS[parsed && parsed.name] || null;
+        const nums = [];
+        let leadSentence = null;
+        if (parsed && labels) {
+          const chain = namedNodes(node);
+          parsed.args.forEach((arg, i) => {
+            const label = labels[i] ?? `number ${i + 1}`;
+            if (NUMBER_RE.test(arg)) {
+              nums.push([label, arg]);
+            } else if (BARE_NAME_RE.test(arg)) {
+              const found = chain.find((n) => n.name === arg);
+              nums.push([label, found ? found.value : arg]);
+              if (!leadSentence && lastAnnotations[arg] !== undefined) leadSentence = lastAnnotations[arg];
+            }
+          });
+        }
+        // A sentence attached somewhere deeper in the chain (not one of
+        // this call's own immediate arguments) still leads, if there is one
+        // — why.mjs's own annotationsInChain, nearest first.
+        if (!leadSentence && c.because.length) leadSentence = c.because[0].text;
+
+        const midHtml = leadSentence
+          ? `<div class="voice">“${esc(leadSentence)}”</div>`
+          : `<div class="invite"><div class="big">this one has no reason yet.</div><div class="how">want to give it one? name its number with <code>let</code>, then add <code>because "…"</code> in your own words.</div></div>`;
+
+        const numsHtml = nums.length
+          ? `<div class="nums">${nums.map(([k, v]) => `<div class="row"><span class="k">${esc(k)}</span><span>${esc(v)}</span></div>`).join("")}</div>`
+          : "";
+
+        const exactHtml = `<div class="exactness">${c.approximate ? "this number is approximate — the chain reaches an approximating builtin, and every machine computes it identically" : "this number is exact — nothing in this chain approximates"}</div>`;
 
         cardEl.innerHTML =
-          `<div class="head"><h4>${esc(heading)}</h4>` +
-          `<button class="close" type="button" aria-label="close">✕</button></div>` +
-          whereHtml +
-          rowsHtml +
-          originHtml +
-          badgesHtml +
-          closingHtml;
+          `<button class="close" type="button" aria-label="close">✕</button>` +
+          `<p class="q">where did <span class="thing">${esc(subject)}</span> come from?</p>` +
+          midHtml + numsHtml +
+          `<div class="fromline">from the line you wrote: <b>line ${sourceLine}</b></div>` +
+          exactHtml;
         cardEl.querySelector(".close").addEventListener("click", hideCard);
 
-        // Positioned in CSS pixels, scaled by the ratio of the element's
-        // laid-out width to the program's own width — never the backing
-        // store's.
         const rect = canvas.getBoundingClientRect();
         const scale = rect.width / DIMENSIONS.width;
         cardEl.hidden = false;
-        cardEl.style.left = `${Math.max(4, Math.min(rect.width - 306, x * scale + 12))}px`;
+        cardEl.style.left = `${Math.max(4, Math.min(rect.width - 286, x * scale + 12))}px`;
         cardEl.style.top = "0px";
         cardEl.style.maxHeight = `${Math.max(120, rect.height - 8)}px`;
         const wanted = y * scale - 8;
@@ -741,8 +1016,6 @@ flower of 120, spot
         const rect = canvas.getBoundingClientRect();
         const x = ((event.clientX - rect.left) / rect.width) * DIMENSIONS.width;
         const y = ((event.clientY - rect.top) / rect.height) * DIMENSIONS.height;
-        // ALL marks are hit-tested — no subject filter (§5.1): in a
-        // twelve-line program every mark is answerable.
         const found = hitTest(lastMarks, x, y, { area: DIMENSIONS });
         if (found < 0) {
           hideCard();
@@ -751,9 +1024,6 @@ flower of 120, spot
         renderCard(found, x, y);
       });
 
-      // Every ordinary way out: the ✕ (bound per-card above), Escape, a
-      // click on empty canvas (the found < 0 branch above), and a click
-      // anywhere off the picture.
       document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") hideCard();
       });
@@ -763,40 +1033,117 @@ flower of 120, spot
         hideCard();
       });
 
-      // ---- exports ------------------------------------------------------
+      // ---- exports: a picture (SVG/PNG), and a program (save/reopen) -------
 
       $("save-svg").addEventListener("click", () => {
-        if (!lastLines.length) {
-          showOutput(["nothing has been drawn yet"], true);
-          return;
-        }
+        if (!lastLines.length) { showOops("nothing has been drawn yet — press Run first"); return; }
         const { svg, errors } = toSvg(lastLines, DIMENSIONS);
-        if (errors.length) {
-          showOutput(errors.map((e) => `✗ ${e.tag}: ${e.message}`), true);
-          return;
-        }
-        downloadSvg(svg, "tutor");
+        if (errors.length) { showOops(errors.map((e) => e.message).join("; ")); return; }
+        downloadSvg(svg, "tutor-garden");
       });
-
       $("save-png").addEventListener("click", () => {
-        if (!lastLines.length) {
-          showOutput(["nothing has been drawn yet"], true);
-          return;
-        }
-        downloadPng(canvas, lastLines, DIMENSIONS, "tutor");
+        if (!lastLines.length) { showOops("nothing has been drawn yet — press Run first"); return; }
+        downloadPng(canvas, lastLines, DIMENSIONS, "tutor-garden");
         canvas.width = DIMENSIONS.width * CANVAS_SCALE;
         canvas.height = DIMENSIONS.height * CANVAS_SCALE;
         repaintFrame();
       });
 
-      // ---- boot -----------------------------------------------------------
+      // §9: save-and-reopen IS the persistence model — no localStorage, no
+      // sessionStorage. The file is her program's own source text, nothing
+      // more; a friend (or her own next login) opens it back into this same
+      // editor and it regrows identically, because the program is a pure
+      // function of what it says.
+      $("save-garden").addEventListener("click", () => {
+        if (source.value.trim() === "") { showOops("write your garden first, then save it"); return; }
+        seedTicket = seedTicket ?? String(Math.floor(Math.random() * 900000) + 100000);
+        $("seedbox").textContent = seedTicket;
+        $("cert-seed").textContent = seedTicket;
+        const blob = new Blob([source.value], { type: "text/plain;charset=utf-8" });
+        downloadBlob(blob, exportFilename("garden", "planes", new Date()));
+      });
+
+      $("open-garden").addEventListener("change", async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const text = await file.text();
+        source.value = text;
+        updateGhost();
+        showOops(null);
+        run();
+      });
+
+      // ---- the week-5 capstone: the honest-garden card, derived not
+      // asserted (§424) -------------------------------------------------
+
+      async function updateHonestCard() {
+        if (currentWeek !== 5) return;
+        const src = source.value.trim() === "" ? WEEK_PROGRAMS[5].lines.join("\n") : source.value;
+        const el = $("honest-text");
+        // A program mid-typed is routinely syntactically incomplete — that
+        // is normal, not a fault, and analyseProgramGraph's own uses_in()
+        // scan can throw on it directly (before its own try/catch even
+        // starts). This card is best-effort background text, never a
+        // question that "performs" anything a reader is waiting on, so any
+        // failure here — a real syntax error or a genuine analysis error —
+        // falls back to the same honest, generic sentence rather than
+        // surfacing as a console error.
+        let surface = null;
+        try {
+          ({ surface } = await analyseProgramGraph(src, { base: BASE, loader }));
+        } catch {
+          surface = null;
+        }
+        if (!surface) {
+          el.textContent = "Your garden can't secretly do anything — it can't reach the internet, open your files, or send anything anywhere.";
+          return;
+        }
+        const boundaries = surface.boundaries();
+        const onlyPicture = boundaries.length === 1 && boundaries[0] === "console";
+        el.textContent = onlyPicture
+          ? "Your garden touches exactly one thing outside itself — the picture. It can't reach the internet, open your files, or send anything anywhere, and you can prove it without even running it."
+          : `Your garden touches: ${boundaries.join(", ")}. You can see exactly what it can and can't do without ever running it.`;
+      }
+
+      // Debounced: the honest card is background reflection text, not
+      // something a keystroke should pay for immediately — re-analysing on
+      // every character (and, worse, re-fetching a `use` target for every
+      // partial word typed on the way to spelling it) is wasted work for a
+      // panel nobody is staring at mid-keystroke.
+      let honestCardTimer = null;
+      function scheduleHonestCard() {
+        if (currentWeek !== 5) return;
+        clearTimeout(honestCardTimer);
+        honestCardTimer = setTimeout(updateHonestCard, 500);
+      }
+
+      const scrim = $("scrim");
+      $("open-cert").addEventListener("click", () => {
+        const name = $("child-name").value.trim();
+        $("cert-name").textContent = name || "a Planes gardener";
+        if (seedTicket) $("cert-seed").textContent = seedTicket;
+        scrim.classList.add("show");
+      });
+      $("cert-x").addEventListener("click", () => scrim.classList.remove("show"));
+      $("cert-close2").addEventListener("click", () => scrim.classList.remove("show"));
+      $("cert-print").addEventListener("click", () => window.print());
+      scrim.addEventListener("click", (e) => { if (e.target === scrim) scrim.classList.remove("show"); });
+
+      // ---- boot --------------------------------------------------------
+
+      renderKey();
+      renderSwatches();
+
+      const initialWeek = clampWeek(Number(new URL(location.href).searchParams.get("week")));
+      setWeek(initialWeek, { pushUrl: false });
 
       const stale = staleModuleWarning();
       if (stale) {
-        showOutput(stale.split("\n"), true);
-      } else {
-        run();
+        showOops(stale);
       }
+      updateHonestCard();
+      source.addEventListener("input", scheduleHonestCard);
+      $("weeks").addEventListener("click", () => updateHonestCard());
     </script>
   </body>
 </html>
