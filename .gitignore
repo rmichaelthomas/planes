@@ -36,3 +36,11 @@ config.json
 # the ROOT. This one is ignored as well as unserved, because it is a local
 # copy of a retired file rather than one the repo keeps.
 mockups/the-living-garden.html
+
+# Scratch working documents from the superpowers skill set (brainstorms,
+# plans, specs produced while shaping a build before it has one). Not this
+# repo's documentation — that lives directly under docs/ (annotation-scope.md,
+# error-messages.md) and a handful of docs/superpowers/ files already tracked
+# from past builds, which this does not untrack. This only keeps FUTURE
+# scratch drops out of `git status`.
+docs/superpowers/
