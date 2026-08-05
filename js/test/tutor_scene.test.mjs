@@ -66,10 +66,13 @@ const STARTER_PROGRAM = `use scene
 start
 sky of "just before dark"
 ground of "wet grass"
+
 moon of 240, 90
 star of 100, 60
-flower of 120, 90
 firefly of 300, 200
+
+let spot = 90 because "the corner gets the sun after noon, so it grows tallest"
+flower of 120, spot
 `;
 
 // ---- 1: every helper emits a stream `walk` accepts, zero errors ------------
