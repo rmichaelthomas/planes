@@ -28,9 +28,13 @@
       builder in js/paint/why.mjs — is UNCHANGED from #71-73; what changed
       is this shell (hero-first layout, structured ghost-text authoring, a
       read-only generated vocabulary key, the reflection card's
-      because-first/because-invite redesign, week-aware progressive
-      disclosure, and a week-5 capstone + certificate) and the richer
+      because-first/because-invite redesign, lesson-aware progressive
+      disclosure, and a final capstone + certificate) and the richer
       paint/scene.planes it points at.
+
+      LESSONS, NOT WEEKS: the teaching unit is an ordered LESSONS array, not
+      a fixed week count — see the LESSONS declaration below. Adding,
+      cutting, or reordering a lesson is a data edit, not a shell rebuild.
     -->
     <style>
       /* The identity tokens, shared verbatim with garden.html and every
@@ -69,15 +73,15 @@
       .brand h1{font-weight:900; font-size:20px; letter-spacing:-.02em; margin:0; line-height:1}
       .brand .tag{font-family:var(--mono); font-size:10px; color:var(--ink-60); margin-top:3px}
       .brand .tag a{color:var(--clay)}
-      .weeks{display:flex; gap:4px; background:#fff; border:1px solid var(--line); border-radius:10px; padding:4px}
-      .weeks button{
+      .lessons{display:flex; gap:4px; background:#fff; border:1px solid var(--line); border-radius:10px; padding:4px; flex-wrap:wrap}
+      .lessons button{
         font-family:var(--display); font-weight:700; font-size:12px; border:0; background:none;
         color:var(--ink-60); padding:6px 11px; border-radius:7px; cursor:pointer; line-height:1.1;
       }
-      .weeks button small{display:block; font-weight:500; font-size:9px; color:var(--ink-40); margin-top:1px}
-      .weeks button[aria-pressed="true"]{background:var(--graphite); color:var(--paper)}
-      .weeks button[aria-pressed="true"] small{color:rgba(247,242,233,.7)}
-      .weeks button:focus-visible{outline:2px solid var(--clay); outline-offset:2px}
+      .lessons button small{display:block; font-weight:500; font-size:9px; color:var(--ink-40); margin-top:1px}
+      .lessons button[aria-pressed="true"]{background:var(--graphite); color:var(--paper)}
+      .lessons button[aria-pressed="true"] small{color:rgba(247,242,233,.7)}
+      .lessons button:focus-visible{outline:2px solid var(--clay); outline-offset:2px}
 
       .lesson{
         background:color-mix(in oklab, var(--amber) 16%, var(--paper));
@@ -151,6 +155,12 @@
       }
       .editor-top .run:hover{background:color-mix(in oklab, var(--clay) 85%, black)}
       .editor-top .run:focus-visible{outline:2px solid var(--graphite); outline-offset:2px}
+      .editor-top .ghost-toggle{
+        font-family:var(--mono); font-size:10.5px; font-weight:600; padding:5px 10px;
+        border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink-60); cursor:pointer;
+      }
+      .editor-top .ghost-toggle:hover{background:var(--line); color:var(--graphite)}
+      .editor-top .ghost-toggle[hidden]{display:none}
       .editor-wrap{position:relative}
       .code-surface{
         display:block; width:100%; margin:0; padding:12px 14px; border:0;
@@ -159,7 +169,7 @@
       }
       #ghost{position:absolute; inset:0; color:var(--ink-40); pointer-events:none; overflow:hidden}
       textarea#source{
-        position:relative; background:transparent; color:var(--graphite); resize:vertical;
+        position:relative; background:transparent; color:var(--graphite);
         min-height:15rem; caret-color:var(--clay);
       }
       textarea#source:focus-visible{outline:2px solid var(--clay); outline-offset:-1px}
@@ -177,6 +187,12 @@
       .key-head{display:flex; align-items:baseline; gap:10px; margin-bottom:12px; flex-wrap:wrap}
       .key-head h3{font-weight:800; font-size:13px; margin:0; letter-spacing:.02em}
       .key-head .subtitle{font-size:11.5px; color:var(--ink-60); margin:0}
+      .key-head .key-toggle{
+        font-family:var(--mono); font-size:10.5px; font-weight:600; padding:4px 9px;
+        border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink-60); cursor:pointer;
+      }
+      .key-head .key-toggle:hover{background:var(--line); color:var(--graphite)}
+      .key-head .key-toggle[hidden]{display:none}
       .key-cols{display:grid; grid-template-columns:repeat(4, 1fr); gap:18px}
       @media (max-width:760px){.key-cols{grid-template-columns:repeat(2,1fr); gap:14px}}
       @media (max-width:420px){.key-cols{grid-template-columns:1fr}}
@@ -191,7 +207,7 @@
       .choice .q{color:var(--ink-40)}
       .key .mini{font-size:11px; color:var(--ink-60); line-height:1.5; margin:13px 0 0; padding-top:11px; border-top:1px solid var(--line)}
 
-      /* ---------- week 4: unlabeled colour swatches ---------- */
+      /* ---------- the your-own-sky lesson: unlabeled colour swatches ---------- */
       .swatches{margin-top:12px; border:1px solid var(--line); border-radius:14px; padding:14px 16px; background:#fff}
       .swatches[hidden]{display:none}
       .swatches h3{font-weight:800; font-size:13px; margin:0 0 4px}
@@ -204,7 +220,7 @@
       .swatch:hover{box-shadow:0 0 0 2px var(--clay)}
       .swatch:focus-visible{outline:2px solid var(--graphite); outline-offset:2px}
 
-      /* ---------- week 5 capstone + certificate ---------- */
+      /* ---------- the final-lesson capstone + certificate ---------- */
       .capstone{margin-top:16px}
       .capstone[hidden]{display:none}
       .capgrid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
@@ -279,7 +295,7 @@
       }
 
       footer{margin-top:24px; font-family:var(--mono); font-size:10px; color:var(--ink-40); line-height:1.7; max-width:700px}
-      @media (max-width:620px){.weeks button{padding:6px 8px; font-size:11px}.weeks button small{display:none}}
+      @media (max-width:620px){.lessons button{padding:6px 8px; font-size:11px}.lessons button small{display:none}}
     </style>
   </head>
   <body>
@@ -292,13 +308,7 @@
             <div class="tag">draw something, then ask it where it came from · <a href="./index.html">all of Planes</a></div>
           </div>
         </div>
-        <div class="weeks" id="weeks" role="group" aria-label="week">
-          <button type="button" data-week="1">1<small>draw</small></button>
-          <button type="button" data-week="2">2<small>day → night</small></button>
-          <button type="button" data-week="3">3<small>your words</small></button>
-          <button type="button" data-week="4">4<small>your colors</small></button>
-          <button type="button" data-week="5">5<small>keep it</small></button>
-        </div>
+        <div class="lessons" id="lessons" role="group" aria-label="lesson"></div>
       </header>
 
       <div class="lesson"><div class="n" id="lesson-n">1</div><div class="say" id="lesson-say"></div></div>
@@ -316,7 +326,11 @@
 
       <div class="work">
         <div class="editor-shell">
-          <div class="editor-top"><span class="label">your program</span><button class="run" id="run" type="button">Run ▸</button></div>
+          <div class="editor-top">
+            <span class="label">your program</span>
+            <button class="ghost-toggle" id="ghost-toggle" type="button" hidden aria-pressed="false">hide hints</button>
+            <button class="run" id="run" type="button">Run ▸</button>
+          </div>
           <div class="editor-wrap">
             <div id="line-highlight"></div>
             <pre id="ghost" class="code-surface" aria-hidden="true"></pre>
@@ -328,6 +342,7 @@
         <aside class="key" id="key">
           <div class="key-head">
             <h3>words you can use</h3>
+            <button class="key-toggle" id="key-toggle" type="button" hidden aria-pressed="false">hide key</button>
             <p class="subtitle">Type these into your program — the key just shows how they're spelled.</p>
           </div>
           <div class="key-cols">
@@ -384,9 +399,9 @@
             <div class="try">
               <code>two-flowers of 380, spot</code> — another pair, way over on the right<br />
               <code>sky of "just before dark"</code> — a different time of day<br />
-              make a <b>new sky</b> in your own words, like you did in week 4
+              make a <b>new sky</b> in your own words, the way the "your own sky" lesson showed you
             </div>
-            <p style="margin-top:10px">What you did this week is real programming. The same ideas — naming things, saying why, building from small pieces — work in every language there is.</p>
+            <p style="margin-top:10px">What you did here is real programming. The same ideas — naming things, saying why, building from small pieces — work in every language there is.</p>
           </div>
         </div>
         <div class="cert-open">
@@ -492,19 +507,26 @@
       let lastMarks = [];
       let lastSourceLines = [];
       let litLine = -1;
-      let currentWeek = 1;
+      let currentLesson = 0;
+      let ghostHidden = false; // view state only — resets to false on every setLesson
+      let keyHidden = false; // view state only — resets to false on every setLesson
       let seedTicket = null; // decorative save ticket, §7.2/§9 — never fed back into the program
 
       const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-      // ---- week 1-5 content: the target program each week teaches, plus its
-      // structured ghost (§425). ONE object drives both — the ghost is built
-      // from `lines`, never a second hand-kept copy. ----------------------
+      // ---- the lesson set: an ORDERED ARRAY, not a fixed week count. Each
+      // lesson declares its own title, target program, lesson text, and
+      // which surfaces it shows (§408/T-Q4: "a lesson is a session, not a
+      // document"). The count is never a constant anywhere below — every
+      // reader goes through LESSONS.length and LESSONS[i]. ONE object drives
+      // both the target program and its structured ghost (§425) — the ghost
+      // is built from `lines`, never a second hand-kept copy. ------------
 
       const BLANK = "…";
 
-      const WEEK_PROGRAMS = {
-        1: {
+      const LESSONS = [
+        {
+          title: "place a thing",
           lesson: "Type these lines, then press <b>Run</b>. The key below shows every word you can use and how it's spelled.",
           lines: [
             "use scene",
@@ -514,14 +536,26 @@
             'ground of "wet grass"',
             "",
             "sun of 240, 70",
-            "two-bees of 300, 150",
-            "",
-            'let spot = 90 because "it\'s the tallest in the yard"',
-            "two-flowers of 120, spot",
           ],
+          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
         },
-        2: {
-          lesson: 'Change the sky to <b>"the middle of the night"</b>, then swap <b>sun</b> → <b>moon</b> and <b>two-bees</b> → <b>two-fireflies</b>.',
+        {
+          title: "across & down",
+          lesson: "Put one <b>bee</b> in the sky with <b>bee of 300, 150</b>. The first number is how far <b>across</b> (→), the second is how far <b>down</b> (↓). Run it, then change 300 to 400 and run again — watch it slide across.",
+          lines: [
+            "use scene",
+            "",
+            "start",
+            'sky of "middle of the afternoon"',
+            'ground of "wet grass"',
+            "",
+            "bee of 300, 150",
+          ],
+          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
+        },
+        {
+          title: "day → night",
+          lesson: 'Build the same garden at night. It\'s almost the same program — the sky is <b>"the middle of the night"</b>, and it\'s a <b>moon</b> and a <b>firefly</b> instead of a sun and a bee.',
           lines: [
             "use scene",
             "",
@@ -530,14 +564,30 @@
             'ground of "wet grass"',
             "",
             "moon of 240, 70",
-            "two-fireflies of 300, 150",
+            "firefly of 300, 150",
+          ],
+          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
+        },
+        {
+          title: "name it & why",
+          lesson: 'Give a number a name and a reason. <b>let spot = 90 because "…"</b> names the height, and the <b>because</b> is your own words for why.',
+          lines: [
+            "use scene",
+            "",
+            "start",
+            'sky of "middle of the afternoon"',
+            'ground of "wet grass"',
+            "",
+            "sun of 240, 70",
             "",
             'let spot = 90 because "it\'s the tallest in the yard"',
             "two-flowers of 120, spot",
           ],
+          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
         },
-        3: {
-          lesson: "Add a second pair of flowers with its own <b>let</b> and <b>because</b>. Then try moving just one.",
+        {
+          title: "two, their own height",
+          lesson: "This garden has <b>two</b> pairs of flowers, each with its own <b>let … because</b> line, sitting at different heights. Try moving just one.",
           lines: [
             "use scene",
             "",
@@ -551,9 +601,11 @@
             'let shady = 44 because "these never get past the fence shadow"',
             "two-flowers of 300, shady",
           ],
+          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
         },
-        4: {
-          lesson: "Name your own sky with <b>to your words here:</b>, then tap a color in the panel below to fill in its numbers.",
+        {
+          title: "your own sky",
+          lesson: "This time you make your <b>own</b> sky. Name it with <b>to your words here:</b>, then tap a color in the panel below — it writes the numbers into a <b>custom-sky</b> line for you.",
           lines: [
             "use scene",
             "",
@@ -569,9 +621,11 @@
             'let spot = 90 because "it\'s the tallest in the yard"',
             "two-flowers of 120, spot",
           ],
+          surfaces: { key: true, swatches: true, capstone: false, ghostToggle: false, keyToggle: false },
         },
-        5: {
-          lesson: "Your garden is done. See what it can do, share it, and get your certificate.",
+        {
+          title: "it's yours now",
+          lesson: "Your garden is done. See what it can do, share it, and get your certificate. Want to keep going? Turn off the hints and the garden is yours to grow however you like.",
           lines: [
             "use scene",
             "",
@@ -585,15 +639,18 @@
             'let spot = 90 because "it\'s the tallest in the yard"',
             "two-flowers of 120, spot",
           ],
+          // The key stays available on the final lesson too — Rob's call:
+          // toggleable like the hints, not removed outright.
+          surfaces: { key: true, swatches: false, capstone: true, ghostToggle: true, keyToggle: true },
         },
-      };
+      ];
 
       // A ghost line replaces every number and every quoted phrase with a
       // blank — the word itself (`sky of`, `let`, `because`) stays, since
       // that is the spelling she is meant to read off the key and type
-      // herself. A `to <name>:` header (week 4's own sky name) has neither
-      // a number nor a quote to blank, so it is shown whole, as an example
-      // of the shape rather than a fill-in-the-blank.
+      // herself. A `to <name>:` header (the "your own sky" lesson's own sky
+      // name) has neither a number nor a quote to blank, so it is shown
+      // whole, as an example of the shape rather than a fill-in-the-blank.
       function ghostLine(line) {
         return line
           .replace(/"[^"]*"/g, `"${BLANK}"`)
@@ -613,8 +670,8 @@
         return " ".repeat(typedLine.length) + targetLine.slice(typedLine.length);
       }
 
-      function ghostFor(weekNum, typedText) {
-        const target = WEEK_PROGRAMS[weekNum].lines;
+      function ghostFor(lessonIndex, typedText) {
+        const target = LESSONS[lessonIndex].lines;
         const typedLines = typedText.split("\n");
         const n = Math.max(target.length, typedLines.length);
         const out = [];
@@ -650,7 +707,7 @@
         $("key-note").textContent = COORDINATE_NOTE;
       }
 
-      // ---- week 4: unlabeled colour swatches, real OKLCH -> hex -----------
+      // ---- the your-own-sky lesson: unlabeled colour swatches, real OKLCH -> hex --
 
       const SWATCHES = [
         [0.55, 0.20, 25],
@@ -695,42 +752,118 @@
       // keystroke against her CURRENT text, so it recedes exactly as far as
       // she has typed on each line — never the whole block disappearing
       // after one keystroke, and never sitting underneath what she wrote. A
-      // line she has already matched or outgrown (this week's own, or
-      // carried over from a finished earlier week) naturally shows nothing
-      // more to hint, which is also how "thins to the new lines" (§425)
-      // falls out of the same mechanism, with no separate diff logic.
+      // line she has already matched or outgrown within the current lesson
+      // naturally shows nothing more to hint.
       function updateGhost() {
-        ghostEl.textContent = ghostFor(currentWeek, source.value);
+        if (ghostHidden) {
+          ghostEl.textContent = "";
+          return;
+        }
+        ghostEl.textContent = ghostFor(currentLesson, source.value);
       }
       source.addEventListener("input", updateGhost);
 
-      // ---- week-aware progressive disclosure (§423) -----------------------
+      // ---- autosize: the editor grows to fit whichever is taller, the
+      // typed text or the current lesson's ghost. A program taller than a
+      // fixed fold otherwise clips invisibly, with no signal there is more
+      // to type — the ghost <pre> is position:absolute; inset:0 inside
+      // .editor-wrap, whose only in-flow child is the textarea, so sizing
+      // the textarea sizes the ghost with it. ------------------------------
 
-      function clampWeek(n) {
-        return Math.min(5, Math.max(1, Number.isFinite(n) ? Math.trunc(n) : 1));
+      function autosizeEditor() {
+        source.style.height = "auto";
+        const minPx = 15 * parseFloat(getComputedStyle(document.documentElement).fontSize || "16");
+        const need = Math.max(source.scrollHeight, ghostEl.scrollHeight, minPx);
+        source.style.height = `${need}px`;
+      }
+      source.addEventListener("input", autosizeEditor);
+
+      // ---- the ghost-hide toggle (final lesson only): view state, not
+      // saved state — resets to shown on every setLesson. -----------------
+
+      const ghostToggleEl = $("ghost-toggle");
+      function updateGhostToggleLabel() {
+        ghostToggleEl.textContent = ghostHidden ? "show hints" : "hide hints";
+        ghostToggleEl.setAttribute("aria-pressed", String(ghostHidden));
+      }
+      ghostToggleEl.addEventListener("click", () => {
+        ghostHidden = !ghostHidden;
+        updateGhostToggleLabel();
+        updateGhost();
+      });
+
+      // ---- the key-hide toggle (final lesson only, same pattern as the
+      // ghost toggle above): the key stays available, but a learner ready
+      // for a clean surface can hide it too. View state, not saved state —
+      // resets to shown on every setLesson. -------------------------------
+
+      const keyToggleEl = $("key-toggle");
+      function updateKeyToggleLabel() {
+        keyToggleEl.textContent = keyHidden ? "show key" : "hide key";
+        keyToggleEl.setAttribute("aria-pressed", String(keyHidden));
+      }
+      function applyKeyVisibility() {
+        keyEl.hidden = !LESSONS[currentLesson].surfaces.key || keyHidden;
+      }
+      keyToggleEl.addEventListener("click", () => {
+        keyHidden = !keyHidden;
+        updateKeyToggleLabel();
+        applyKeyVisibility();
+      });
+
+      // ---- lesson-aware progressive disclosure — surfaces are DECLARED by
+      // each lesson (§10.4), never inferred from an index comparison. ------
+
+      function clampLesson(n) {
+        return Math.min(LESSONS.length - 1, Math.max(0, Number.isFinite(n) ? Math.trunc(n) : 0));
       }
 
-      function setWeek(n, { pushUrl = true } = {}) {
-        currentWeek = clampWeek(n);
-        for (const btn of document.querySelectorAll("#weeks button")) {
-          btn.setAttribute("aria-pressed", String(Number(btn.dataset.week) === currentWeek));
+      function renderLessonNav() {
+        $("lessons").innerHTML = LESSONS.map(
+          (l, i) => `<button type="button" data-lesson="${i}">${i + 1}<small>${esc(l.title)}</small></button>`,
+        ).join("");
+      }
+
+      // Switching lessons resets the editor to empty so the new lesson's
+      // ghost guides from a blank surface (carried-over text otherwise
+      // suppresses the ghost wherever it's already "long enough"). Guarded
+      // by a confirm ONLY when there is unsaved text — an untouched lesson
+      // switches silently.
+      function setLesson(n, { pushUrl = true } = {}) {
+        if (source.value.trim() !== "") {
+          const ok = window.confirm("Switching lessons will clear what you've typed. Switch anyway?");
+          if (!ok) return;
         }
-        lessonNEl.textContent = String(currentWeek);
-        lessonSayEl.innerHTML = WEEK_PROGRAMS[currentWeek].lesson;
-        keyEl.hidden = currentWeek === 5;
-        swatchesEl.hidden = currentWeek < 4;
-        capstoneEl.hidden = currentWeek !== 5;
+        currentLesson = clampLesson(n);
+        source.value = "";
+        ghostHidden = false;
+        keyHidden = false;
+        const lesson = LESSONS[currentLesson];
+        for (const btn of document.querySelectorAll("#lessons button")) {
+          btn.setAttribute("aria-pressed", String(Number(btn.dataset.lesson) === currentLesson));
+        }
+        lessonNEl.textContent = String(currentLesson + 1);
+        lessonSayEl.innerHTML = lesson.lesson;
+        applyKeyVisibility();
+        swatchesEl.hidden = !lesson.surfaces.swatches;
+        capstoneEl.hidden = !lesson.surfaces.capstone;
+        ghostToggleEl.hidden = !lesson.surfaces.ghostToggle;
+        updateGhostToggleLabel();
+        keyToggleEl.hidden = !lesson.surfaces.keyToggle;
+        updateKeyToggleLabel();
         if (pushUrl) {
           const url = new URL(location.href);
-          url.searchParams.set("week", String(currentWeek));
+          url.searchParams.delete("week");
+          url.searchParams.set("lesson", String(currentLesson));
           history.replaceState(null, "", url);
         }
         updateGhost();
+        autosizeEditor();
       }
 
-      $("weeks").addEventListener("click", (e) => {
+      $("lessons").addEventListener("click", (e) => {
         const btn = e.target.closest("button");
-        if (btn) setWeek(Number(btn.dataset.week));
+        if (btn) setLesson(Number(btn.dataset.lesson));
       });
 
       // ---- running ---------------------------------------------------------
@@ -790,6 +923,23 @@
         if (error.tag === "unknown-sky-feeling" || error.tag === "unknown-ground-feeling") {
           const said = error.message.replace(/^[a-z-]+:\s*/, "").split(" — try one of:")[0];
           return `${said} — try one of the skies or grounds shown in the key below.`;
+        }
+        // interp.mjs's Env.get (a bare, unresolved name) and its function
+        // lookup (a call like "banana of 10, 10") raise two DIFFERENT tags
+        // for the same first-timer mistake — an unrecognised word — each
+        // with its own raw fix ("define it first: let <name> = ..." /
+        // "define it: to <name>: ...") that reads as machine grammar.
+        // Point at the key instead, the same discipline the sky/ground
+        // softening above follows. `let` is only offered as a next step for
+        // unknown-name — it names a NUMBER (lesson 4), not a callable, so it
+        // is not a real fix for an unrecognised call.
+        if (error.tag === "unknown-name" || error.tag === "unknown-function") {
+          const m = /no (?:name|function named) '([^']+)'/.exec(error.message || "");
+          const nameSaid = m ? m[1] : null;
+          const suffix = error.tag === "unknown-name" ? ", or name it yourself first with let." : ".";
+          return nameSaid
+            ? `“${nameSaid}” isn't a word this program knows yet — check the spelling against the key below${suffix}`
+            : `That's a word this program doesn't know yet — check it against the key below${suffix}`;
         }
         return error.message.replace(/^[a-z-]+:\s*/, "");
       }
@@ -973,8 +1123,8 @@
       const BARE_NAME_RE = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 
       // Numbers a picker writes, not a child: a friendlier fallback label
-      // set for `custom-sky`'s own three OKLCH numbers, so a week-4 card
-      // still reads as plain words rather than "value 1".
+      // set for `custom-sky`'s own three OKLCH numbers, so its card still
+      // reads as plain words rather than "value 1".
       const CARD_LABELS = { "custom-sky": ["lightness", "richness", "hue"] };
 
       function hideCard() {
@@ -1025,8 +1175,18 @@
           ? `<div class="voice">“${esc(leadSentence)}”</div>`
           : `<div class="invite"><div class="big">this one has no reason yet.</div><div class="how">want to give it one? name its number with <code>let</code>, then add <code>because "…"</code> in your own words.</div></div>`;
 
+        // A direction glyph reinforces the label as a DIRECTION, not just a
+        // word — the click that opens this card is the confirmation moment
+        // for whichever number she just changed. `how-tall` gets none: a
+        // height is a size, not a position, and a left/right/up/down arrow
+        // would claim a direction the number doesn't have.
+        const DIRECTION_GLYPH = { across: "→", down: "↓" };
         const numsHtml = nums.length
-          ? `<div class="nums">${nums.map(([k, v]) => `<div class="row"><span class="k">${esc(k)}</span><span>${esc(v)}</span></div>`).join("")}</div>`
+          ? `<div class="nums">${nums.map(([k, v]) => {
+              const glyph = DIRECTION_GLYPH[k];
+              const label = glyph ? `${esc(k)} ${glyph}` : esc(k);
+              return `<div class="row"><span class="k">${label}</span><span>${esc(v)}</span></div>`;
+            }).join("")}</div>`
           : "";
 
         const exactHtml = `<div class="exactness">${c.approximate ? "this number is approximate — the chain reaches an approximating builtin, and every machine computes it identically" : "this number is exact — nothing in this chain approximates"}</div>`;
@@ -1114,12 +1274,12 @@
         run();
       });
 
-      // ---- the week-5 capstone: the honest-garden card, derived not
+      // ---- the final-lesson capstone: the honest-garden card, derived not
       // asserted (§424) -------------------------------------------------
 
       async function updateHonestCard() {
-        if (currentWeek !== 5) return;
-        const src = source.value.trim() === "" ? WEEK_PROGRAMS[5].lines.join("\n") : source.value;
+        if (!LESSONS[currentLesson].surfaces.capstone) return;
+        const src = source.value.trim() === "" ? LESSONS[currentLesson].lines.join("\n") : source.value;
         const el = $("honest-text");
         // A program mid-typed is routinely syntactically incomplete — that
         // is normal, not a fault, and analyseProgramGraph's own uses_in()
@@ -1153,7 +1313,7 @@
       // panel nobody is staring at mid-keystroke.
       let honestCardTimer = null;
       function scheduleHonestCard() {
-        if (currentWeek !== 5) return;
+        if (!LESSONS[currentLesson].surfaces.capstone) return;
         clearTimeout(honestCardTimer);
         honestCardTimer = setTimeout(updateHonestCard, 500);
       }
@@ -1174,9 +1334,17 @@
 
       renderKey();
       renderSwatches();
+      renderLessonNav();
 
-      const initialWeek = clampWeek(Number(new URL(location.href).searchParams.get("week")));
-      setWeek(initialWeek, { pushUrl: false });
+      // ?lesson=N is the only URL param this page writes; ?week=N is read
+      // as a fallback for old links (week n -> lesson n-1), never written.
+      const bootParams = new URL(location.href).searchParams;
+      const initialLesson = bootParams.has("lesson")
+        ? Number(bootParams.get("lesson"))
+        : bootParams.has("week")
+          ? Number(bootParams.get("week")) - 1
+          : 0;
+      setLesson(initialLesson, { pushUrl: false });
 
       const stale = staleModuleWarning();
       if (stale) {
@@ -1184,7 +1352,7 @@
       }
       updateHonestCard();
       source.addEventListener("input", scheduleHonestCard);
-      $("weeks").addEventListener("click", () => updateHonestCard());
+      $("lessons").addEventListener("click", () => updateHonestCard());
     </script>
   </body>
 </html>

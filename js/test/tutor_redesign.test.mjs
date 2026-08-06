@@ -68,15 +68,15 @@ function extractFunction(html, name) {
   return html.slice(start, i);
 }
 
-function extractObjectLiteral(html, constName) {
-  const marker = `const ${constName} = {`;
+function extractArrayLiteral(html, constName) {
+  const marker = `const ${constName} = [`;
   const start = html.indexOf(marker);
   assert.ok(start >= 0, `tutor.html no longer declares const ${constName} where this suite reads it`);
   let i = start + marker.length - 1;
   let depth = 0;
   for (; i < html.length; i++) {
-    if (html[i] === "{") depth++;
-    else if (html[i] === "}") {
+    if (html[i] === "[") depth++;
+    else if (html[i] === "]") {
       depth--;
       if (depth === 0) {
         i++;
@@ -107,15 +107,15 @@ function loadGhostFor() {
   const ghostLineSrc = extractFunction(html, "ghostLine");
   const ghostSuffixSrc = extractFunction(html, "ghostSuffix");
   const ghostForSrc = extractFunction(html, "ghostFor");
-  const weekPrograms = extractObjectLiteral(html, "WEEK_PROGRAMS");
+  const lessonsLiteral = extractArrayLiteral(html, "LESSONS");
   // eslint-disable-next-line no-new-func
   return new Function(
-    `const BLANK = ${BLANK};\nconst WEEK_PROGRAMS = ${weekPrograms};\n${ghostLineSrc}\n${ghostSuffixSrc}\n${ghostForSrc}\nreturn ghostFor;`,
+    `const BLANK = ${BLANK};\nconst LESSONS = ${lessonsLiteral};\n${ghostLineSrc}\n${ghostSuffixSrc}\n${ghostForSrc}\nreturn ghostFor;`,
   )();
 }
 
-function loadWeekPrograms() {
-  const literal = extractObjectLiteral(pageSrc(), "WEEK_PROGRAMS");
+function loadLessons() {
+  const literal = extractArrayLiteral(pageSrc(), "LESSONS");
   // eslint-disable-next-line no-eval
   return eval(`(${literal})`);
 }
@@ -235,31 +235,32 @@ test("E: Run on an empty editor is guarded before it ever reaches the engine", (
   assert.ok(guardIndex < engineCallIndex, "the empty-editor guard must run BEFORE runProgramGraph is ever called");
 });
 
-test("E: ghost text is generated from WEEK_PROGRAMS, never a second hand-kept copy, and is genuinely blanked", () => {
+test("E: ghost text is generated from LESSONS, never a second hand-kept copy, and is genuinely blanked", () => {
   const ghostLine = loadGhostLine();
-  const WEEK_PROGRAMS = loadWeekPrograms();
-  for (const [week, spec] of Object.entries(WEEK_PROGRAMS)) {
+  const LESSONS = loadLessons();
+  LESSONS.forEach((spec, i) => {
     const ghosted = spec.lines.map(ghostLine);
     const anyBlanked = ghosted.some((l) => l.includes("…"));
-    assert.ok(anyBlanked, `week ${week}'s ghost text carries no blanks at all`);
+    assert.ok(anyBlanked, `lesson ${i}'s ghost text carries no blanks at all`);
     // every number and every quoted phrase in the real program is gone from
     // the ghost version
     for (const line of ghosted) {
       assert.ok(!/"[a-z][^"]*"/i.test(line), `a ghost line still carries a real quoted phrase: "${line}"`);
       assert.ok(!/\b\d+\b/.test(line) || line.includes("…"), `a ghost line still carries a raw number: "${line}"`);
     }
-  }
+  });
 });
 
-test("E: every week's target program actually runs, and its ghost is a strict textual reduction of it (never longer, never a different line count)", () => {
+test("E: every lesson's target program actually runs, and its ghost is a strict textual reduction of it (never longer, never a different line count)", () => {
   const ghostLine = loadGhostLine();
-  const WEEK_PROGRAMS = loadWeekPrograms();
-  for (const [week, spec] of Object.entries(WEEK_PROGRAMS)) {
-    assert.ok(Array.isArray(spec.lines) && spec.lines.length > 0, `week ${week} has no lines`);
-    assert.equal(typeof spec.lesson, "string", `week ${week} has no lesson text`);
+  const LESSONS = loadLessons();
+  LESSONS.forEach((spec, i) => {
+    assert.ok(Array.isArray(spec.lines) && spec.lines.length > 0, `lesson ${i} has no lines`);
+    assert.equal(typeof spec.lesson, "string", `lesson ${i} has no lesson text`);
+    assert.equal(typeof spec.title, "string", `lesson ${i} has no title`);
     const ghosted = spec.lines.map(ghostLine);
-    assert.equal(ghosted.length, spec.lines.length, `week ${week}'s ghost has a different line count than its target`);
-  }
+    assert.equal(ghosted.length, spec.lines.length, `lesson ${i}'s ghost has a different line count than its target`);
+  });
 });
 
 test("E: ghost text and the real editor are separate elements — the ghost pre is never nested inside the textarea", () => {
@@ -278,17 +279,17 @@ test("E: ghost text and the real editor are separate elements — the ghost pre 
 
 test("E: an untouched line still shows its full hint — the ghost does not require a first keystroke to appear", () => {
   const ghostFor = loadGhostFor();
-  const full = ghostFor(1, "");
-  assert.ok(full.includes('sky of "'), "week 1's ghost is empty before she has typed anything");
+  const full = ghostFor(0, "");
+  assert.ok(full.includes('sky of "'), "lesson 0's ghost is empty before she has typed anything");
 });
 
 test("E: the ghost recedes exactly as far as she has typed on a line, and keeps hinting the rest", () => {
   const ghostFor = loadGhostFor();
-  // She has typed the literal part of line 2 ('sky of "') but nothing of
+  // She has typed the literal part of line 4 ('sky of "') but nothing of
   // her own phrase yet — the remaining hint (the blank and closing quote)
   // must still be there, padded out to start right where her text ends.
   const typed = 'use scene\n\nstart\nsky of "';
-  const lines = ghostFor(1, typed).split("\n");
+  const lines = ghostFor(0, typed).split("\n");
   assert.equal(lines[3].slice(0, 8), "        ", "the hint must not sit underneath what she already typed");
   assert.ok(lines[3].trim().length > 0, "the rest of line 4's hint vanished after only a partial keystroke");
 });
@@ -296,31 +297,30 @@ test("E: the ghost recedes exactly as far as she has typed on a line, and keeps 
 test("E: once she has typed past a line's own hint, that line stops hinting (no overlap, nothing left to show)", () => {
   const ghostFor = loadGhostFor();
   const typed = 'use scene\n\nstart\nsky of "middle of the afternoon and then some more"';
-  const lines = ghostFor(1, typed).split("\n");
+  const lines = ghostFor(0, typed).split("\n");
   assert.equal(lines[3], "", "a line she has typed past its own target length must show no leftover hint");
 });
 
-test("E: a full, correct week-1 program leaves nothing left to hint on any of its own lines", () => {
+test("E: a full, correct lesson-0 program leaves nothing left to hint on any of its own lines", () => {
   const ghostFor = loadGhostFor();
-  const WEEK_PROGRAMS = loadWeekPrograms();
-  const typed = WEEK_PROGRAMS[1].lines.join("\n");
-  const remaining = ghostFor(1, typed);
+  const LESSONS = loadLessons();
+  const typed = LESSONS[0].lines.join("\n");
+  const remaining = ghostFor(0, typed);
   assert.equal(remaining.trim(), "", `finished lines still show a hint: ${JSON.stringify(remaining)}`);
 });
 
-test("E: switching weeks with her prior work still in the editor only hints the genuinely new or changed lines", () => {
+test("E: ghostFor given text shaped like a different lesson still shows a live hint somewhere (the mechanism reads per-line, not all-or-nothing)", () => {
+  // ghostFor is a pure function of (lessonIndex, typedText) — it has no
+  // idea whether the browser's own reset-on-switch (setLesson, §6) put
+  // that text there. Lessons no longer carry text forward between each
+  // other in the live page, but the pure function must still degrade
+  // sanely on a mismatched pairing: it must not go uniformly blank just
+  // because SOME text is present — only a line whose own hint that text
+  // actually covers should go blank.
   const ghostFor = loadGhostFor();
-  const WEEK_PROGRAMS = loadWeekPrograms();
-  // Her week-1 program, carried into week 2 unedited (§425/§426: weeks 2-5
-  // start from what she finished the week before).
-  const typed = WEEK_PROGRAMS[1].lines.join("\n");
-  const week2Ghost = ghostFor(2, typed).split("\n");
-  // Line 4 (sky) is unchanged in LENGTH between week 1 and week 2's target
-  // even though the PHRASE differs — a known limitation of length-only
-  // matching, not asserted here. Line 5 (moon vs sun) is one line index
-  // later in week 2's own list; assert at least ONE line in the block shows
-  // a live hint, proving the mechanism does not just go uniformly blank the
-  // moment any text exists.
-  const anyHint = week2Ghost.some((l) => l.trim().length > 0);
-  assert.ok(anyHint, "week 2's ghost shows nothing at all once week 1's program is already in the editor");
+  const LESSONS = loadLessons();
+  const typed = LESSONS[0].lines.join("\n");
+  const otherGhost = ghostFor(2, typed).split("\n");
+  const anyHint = otherGhost.some((l) => l.trim().length > 0);
+  assert.ok(anyHint, "a mismatched lesson/text pairing shows nothing at all — the mechanism went uniformly blank");
 });

@@ -17,20 +17,24 @@
 // SKY/GROUND objects. Colour values are explicitly NOT LOCKED (checkpoint
 // v27.0, "WHAT IS NOT LOCKED").
 
-// ---- the things a child can place, and their shape ------------------------
+// ---- the things a learner can place, and their shape -----------------------
 //
-// Curated to what the taught curriculum (mockup v7's five-week arc) actually
-// has her type — not an exhaustive dump of every callable in scene.planes.
-// `flower`/`bee`/`firefly` (singular) remain real, working helpers (the
-// paired ones are built out of them, §416), but no week's ghost text or key
-// ever asks her to spell them, so they stay off this reference strip the
-// same way an advanced builtin stays off a beginner's cheat sheet.
+// Curated to what the taught curriculum (tutor.html's LESSONS array) actually
+// has them type — not an exhaustive dump of every callable in scene.planes.
+// `flower`/`bee`/`firefly` (singular) are now on this reference strip
+// alongside their paired counterparts: the lesson set teaches placing and
+// moving ONE object first (the across/down lesson), so the singular forms
+// are taught directly, with the paired forms staying for the symmetry
+// lessons that follow.
 export const PLACEABLES = Object.freeze([
   Object.freeze({ name: "sun", shape: Object.freeze(["across", "down"]) }),
   Object.freeze({ name: "moon", shape: Object.freeze(["across", "down"]) }),
   Object.freeze({ name: "star", shape: Object.freeze(["across", "down"]) }),
+  Object.freeze({ name: "bee", shape: Object.freeze(["across", "down"]) }),
   Object.freeze({ name: "two-bees", shape: Object.freeze(["across", "down"]) }),
+  Object.freeze({ name: "firefly", shape: Object.freeze(["across", "down"]) }),
   Object.freeze({ name: "two-fireflies", shape: Object.freeze(["across", "down"]) }),
+  Object.freeze({ name: "flower", shape: Object.freeze(["across", "how-tall"]) }),
   Object.freeze({ name: "two-flowers", shape: Object.freeze(["across", "how-tall"]) }),
 ]);
 
