@@ -546,6 +546,75 @@ switch (sub) {
     );
     break;
   }
+  case "whytree": {
+    // whytree <config-json> — R2's cross-language probe for a synthetic
+    // scenario. `config`:
+    //   { window, steps: [src, ...], subject, maxDepth, because,
+    //     responses, files, now }
+    // Runs each of `steps` in order on ONE Interpreter + TestHost (so a
+    // scenario can grow a chain past a retention window over several
+    // calls, the same way `retention` above does), then computes the
+    // three readable registers for env.get(subject) — card (explain),
+    // prompt (whyTree), and machine (whyMachine). test_why_readable.py
+    // runs the identical scenario through interp.py's why_tree/
+    // why_machine and diffs every field.
+    loadGrammar();
+    const { whyTree: jsWhyTree, whyMachine: jsWhyMachine, explain: jsExplain } =
+      await import("./interp.mjs");
+    const cfg = JSON.parse(rest[0]);
+    const host = new TestHost({
+      responses: cfg.responses ?? {},
+      files: cfg.files ?? {},
+      now: cfg.now ?? 1000000.0,
+    });
+    const itp = new Interpreter({ host, window: cfg.window ?? null });
+    for (const step of cfg.steps) itp.run(step);
+    const traced = itp.env.get(cfg.subject);
+    const maxDepth = cfg.maxDepth ?? 14;
+    const because = cfg.because ?? null;
+    out(
+      JSON.stringify({
+        card: jsExplain(traced, because),
+        prompt: jsWhyTree(traced, maxDepth, because),
+        machine: jsWhyMachine(traced, maxDepth, because),
+      }),
+    );
+    break;
+  }
+  case "whytree-corpus": {
+    // whytree-corpus <file> — the three readable registers for every
+    // show/why value a corpus program traces, one entry per itp.trace
+    // line, mirroring `trace`'s own shape above. test_why_readable.py
+    // diffs this against interp.py run on the same file, corpus-wide —
+    // the byte-identity gate §8 and invariant 1 name.
+    loadGrammar();
+    const { whyTree: jsWhyTree, whyMachine: jsWhyMachine, explain: jsExplain, Traced: JsTraced } =
+      await import("./interp.mjs");
+    const host = new TestHost({ responses: {}, files: {}, now: 1000000.0 });
+    const itp = new Interpreter({ host });
+    const { runFile } = await import("./run_file.mjs");
+    let tag = null;
+    try {
+      await runFile(itp, rest[0]);
+    } catch (e) {
+      if (e instanceof PlanesError) tag = e.tag;
+      else if (e instanceof PlanesSyntaxError) tag = "PARSE";
+      else if (e instanceof RangeError) tag = "recursion-too-deep";
+      else if (e && e.name === "ModuleError") tag = "module-error";
+      else throw e;
+    }
+    const entries = itp.trace.map(([node, line]) => {
+      const traced = new JsTraced(node.value, node);
+      return {
+        line,
+        card: jsExplain(traced),
+        prompt: jsWhyTree(traced),
+        machine: jsWhyMachine(traced),
+      };
+    });
+    out(JSON.stringify({ tag, outputCount: itp.output.length, entries }));
+    break;
+  }
   case "render": {
     // render <file> — canonical source, byte-for-byte against render.py.
     loadGrammar();
