@@ -1974,8 +1974,317 @@ def render(node):
     return fmt(node.value)
 
 
+# ============================================================ readable deep walk (R2)
+#
+# `why_tree` is the deep walk `why` reaches on demand — `explain` above stays
+# the one-layer default (§453's card register; that text is unchanged by
+# this build). Three things changed here from HEAD: a run of consecutive,
+# identical-in-shape reassignment/recursion hops folds into one labeled
+# aggregate rather than printing every hop (§451); folding stops at a seal,
+# which still renders as a leaf carrying its fixed refusal sentence (§452 —
+# R1's own behavior, confirmed unchanged, not rebuilt); and the silent
+# `depth > max_depth: "..."` line is gone (§455) — a walk that reaches its
+# own requested depth simply stops, with an explicit note that more exists,
+# never a bare ellipsis.
+#
+# The two "hop" helpers below compare SHAPE, not value: kind and label at
+# every position, with the walk's own continuation abstracted to a
+# placeholder so two hops that differ only in their numbers compare equal.
+# That is what lets `total = total + n` run 600 times fold to one line
+# while a step that switches from `+` to `*` does not.
+
+_WHY_MIN_FOLD = 8      # a run shorter than this reads fine unfolded (F1's
+                       # margin) — high enough that test_values.py's 3-step
+                       # accumulation ("one derivation node per accumulation
+                       # step") stays exactly as it prints today; folding
+                       # earns its keep only once a chain runs well past
+                       # what a single screen already shows comfortably.
+
+_WHY_SEARCH_BUDGET = 4000  # a node visited-count cap, SHARED and
+                           # cumulative across every search one
+                           # `_why_find_run` call performs — not a fresh
+                           # allowance per hop. A single very expensive hop
+                           # (one whose own subtree is large) is exactly as
+                           # capped as many cheap ones adding up, because
+                           # both draw from the one budget. Most bound names
+                           # never repeat at all (an ordinary one-off
+                           # assignment, not a loop), and proving that
+                           # exhaustively costs the size of everything still
+                           # reachable from that point. Found live in this
+                           # build: benchmarks/world_shape.planes (R1's own
+                           # S=64 fixture) made an unbudgeted search run for
+                           # minutes, and a budget reset per hop rather than
+                           # shared across the whole call still did — a run
+                           # whose OWN hops are each individually large, not
+                           # only many small failed searches, needs the
+                           # total bounded, not each part separately. A real
+                           # repeat is always found within a handful of
+                           # nodes, so the budget only ever gives up on a
+                           # name that was never going to fold (or folds
+                           # less far than the true extent) — always a safe
+                           # under-fold, never a wrong count.
+
+
+class _WhyBudget:
+    """A shared, mutable operation counter threaded through every search
+    one `_why_find_run` call performs. `take()` returns False once
+    exhausted; every caller treats that identically to "no match here" —
+    conservative, so a budget cutoff can only ever under-fold, never claim
+    a run longer or shaped differently than what was actually verified."""
+    __slots__ = ("left",)
+
+    def __init__(self, n=_WHY_SEARCH_BUDGET):
+        self.left = n
+
+    def take(self):
+        if self.left <= 0:
+            return False
+        self.left -= 1
+        return True
+
+
+def _why_next_stop(node, label, budget):
+    """Iterative DFS, construction order (so both languages agree), for
+    the next same-label 'name' node or seal reachable from `node`'s
+    inputs. None at a natural leaf or once `budget` is exhausted.
+
+    Iterative, not recursive — the same reason `_cut`/`_seal` above are
+    (their own docstrings say why): a field reference inside a helper
+    function is its own 'name' node whose own input traces back through
+    every earlier call, so the path to a match can run hundreds of levels
+    deep even for a chain a human would call short. Found live in this
+    build: probe/parser/cursor_scales.planes (200 calls threading a
+    record through `for each`, each field access one more link) exceeded
+    Python's default recursion limit with the recursive form.
+
+    Memoized (the `exhausted` set) for the same reason as before: a Deriv
+    graph is a DAG, not a tree — a recursive call's own argument and
+    return value commonly share a node — and unmemoized, this walk
+    re-derives a shared node's "no match here" once per path to it. An
+    explicit stack of (node, "exit") sentinels marks a node exhausted
+    only once every one of its own descendants has been ruled out —
+    post-order, the same shape `_seal`'s own two-pass walk uses."""
+    exhausted = set()
+    stack = [("enter", c) for c in reversed(node.inputs)]
+    while stack:
+        phase, n = stack.pop()
+        if phase == "exit":
+            exhausted.add(id(n))
+            continue
+        if id(n) in exhausted or not budget.take():
+            continue
+        if n.kind == "name" and n.label == label:
+            return n
+        if n.kind == "seal":
+            return n
+        stack.append(("exit", n))
+        for c in reversed(n.inputs):
+            stack.append(("enter", c))
+    return None
+
+
+def _why_hop_shape(head, stop_label, budget):
+    """The structural signature of one hop, as a fixed-length SHA-256
+    digest — `head`'s subtree with values erased, stopping (without
+    descending) at the next same-label 'name' node or at a seal — so the
+    signature describes exactly one step of a reassignment or recursion
+    chain, never what lies beyond it. Budgeted and memoized the same way
+    and for the same reasons as `_why_next_stop` above (DAG-sharing
+    blowup, and recursion depth on a long path to a match) — `_why_find_run`
+    calls this only after `_why_next_stop` has already located that same
+    stopping point nearby, so in practice this walk is short; the shared
+    budget is a backstop, not the common path.
+
+    A DIGEST, not a nested structure: two shapes used to compare
+    structurally, which walks every shared level natively — cheap for one
+    comparison, but `_why_find_run`'s loop compares against `shape0` on
+    every hop, and a hop whose own subtree is large paid that full
+    recursive-compare cost EVERY time, not once. Found live in this
+    build: benchmarks/world_shape.planes made this run for minutes with
+    the budget correctly bounding CONSTRUCTION but not COMPARISON. A
+    digest folds construction and comparison into the same accounting —
+    building it costs what building the nested form did, and comparing
+    two is then a fixed-length string check, not a walk. The same
+    technique R1's own seal fingerprint already uses (`_seal`, above),
+    applied here to a hop instead of a released subgraph.
+
+    Iterative post-order, explicit (node, "exit") stack frames the same
+    way `_why_next_stop` is now and `_seal` above already was: a child's
+    digest must exist before its parent's can be computed, and LIFO
+    ordering guarantees every child's "exit" pops before its parent's,
+    the same invariant a recursive call's own return-before-caller-
+    continues would have given for free — without paying for it in stack
+    depth."""
+    memo = {}
+
+    def finish(n):
+        children = ",".join(memo[id(c)] for c in n.inputs)
+        return hashlib.sha256(
+            f"{n.kind}\x1f{n.label}\x1f{children}".encode()).hexdigest()[:16]
+
+    stack = [("enter", c) for c in reversed(head.inputs)]
+    while stack:
+        phase, n = stack.pop()
+        key = id(n)
+        if phase == "exit":
+            memo[key] = finish(n)
+            continue
+        if key in memo:
+            continue
+        if not budget.take():
+            memo[key] = "<budget>"
+        elif n.kind == "name" and n.label == stop_label:
+            memo[key] = "<next>"
+        elif n.kind == "seal":
+            memo[key] = "<seal>"
+        else:
+            stack.append(("exit", n))
+            for c in reversed(n.inputs):
+                stack.append(("enter", c))
+
+    return finish(head)
+
+
+def _why_find_run(head):
+    """The maximal run of consecutive same-shape hops starting at `head`, a
+    'name' node. `run` is `head` plus every following same-label 'name'
+    node reached by an identically-shaped hop, in order (at least one
+    element — itself). `tail` is what the run gives way to: a seal, a
+    differently-shaped 'name' node, or None when the chain ends inside the
+    run's own last node.
+
+    One `_WhyBudget`, shared for the whole call: every hop this run
+    confirms draws from the same allowance, so a run with many hops costs
+    the same as a run with few large ones — the total is what is bounded,
+    not each part separately. Checks `_why_next_stop` before ever computing
+    a shape: the overwhelming majority of 'name' nodes in an ordinary
+    program are a one-off assignment, not a loop, and never repeat at
+    all — for those, the presence check alone already answers "no run
+    here" without also paying for a shape walk of the same subtree."""
+    budget = _WhyBudget()
+    nxt = _why_next_stop(head, head.label, budget)
+    if nxt is None or nxt.kind == "seal":
+        return [head], nxt
+    shape0 = _why_hop_shape(head, head.label, budget)
+    run = [head]
+    cur = head
+    while True:
+        if _why_hop_shape(cur, head.label, budget) != shape0:
+            return run, nxt
+        run.append(nxt)
+        cur = nxt
+        nxt = _why_next_stop(cur, head.label, budget)
+        if nxt is None or nxt.kind == "seal":
+            return run, nxt
+
+
+def _why_build(traced, max_depth=14, because=None):
+    """The one traversal every readable register renders from (§453): a
+    card, a prompt view, and a machine export computed by separate walks
+    could drift about which node they describe; one walk, shared by all
+    three, cannot.
+
+    Returns {"root": <node>, "because": because}, where a node is one of:
+      {"type": "step", kind, label, value, origin, children: [node, ...]}
+      {"type": "aggregate", label, count, tail: node or None}
+      {"type": "seal", label, value}
+      {"type": "repeat", kind, label, value}          -- DAG dedup (as HEAD)
+      {"type": "frontier", kind, label, value, origin, more}  -- depth limit
+    """
+    seen = {}
+
+    def walk(node, depth):
+        if id(node) in seen and node.inputs:
+            return {"type": "repeat", "kind": node.kind, "label": node.label,
+                    "value": fmt(node.value)}
+        seen[id(node)] = True
+
+        if node.kind == "seal":
+            return {"type": "seal", "label": node.label,
+                    "value": fmt(node.value)}
+
+        if node.kind == "name":
+            run, tail = _why_find_run(node)
+            if len(run) >= _WHY_MIN_FOLD:
+                return {
+                    "type": "step", "kind": node.kind, "label": node.label,
+                    "value": fmt(node.value), "origin": node.origin,
+                    "children": [{
+                        "type": "aggregate", "label": node.label,
+                        "count": len(run) - 1,
+                        "tail": walk(tail, depth + 1) if tail is not None else None,
+                    }],
+                }
+
+        if depth >= max_depth:
+            return {"type": "frontier", "kind": node.kind, "label": node.label,
+                    "value": fmt(node.value), "origin": node.origin,
+                    "more": bool(node.inputs)}
+
+        return {
+            "type": "step", "kind": node.kind, "label": node.label,
+            "value": fmt(node.value), "origin": node.origin,
+            "children": [walk(c, depth + 1) for c in node.inputs],
+        }
+
+    return {"root": walk(traced.node, 0), "because": because}
+
+
+def _why_render_prompt(built):
+    """The prompt register: indented, walkable text — `why_tree`'s return
+    shape, unchanged in form from HEAD, changed only in what fills it."""
+    lines = []
+
+    def origin_tail(node):
+        return f"   <- entered at {node['origin']}" if node.get("origin") else ""
+
+    def emit(node, depth):
+        indent = "  " * depth
+        t = node["type"]
+        if t == "seal":
+            lines.append(indent + f"{node['label']} = {node['value']}")
+            return
+        if t == "repeat":
+            lines.append(indent +
+                         f"{node['label']} = {node['value']}   (same as above)")
+            return
+        if t == "aggregate":
+            step_word = "step" if node["count"] == 1 else "steps"
+            lines.append(indent + f"{node['label']} advanced {node['count']} "
+                                   f"more times ({step_word} identical in "
+                                   "shape to the one above)")
+            if node["tail"] is not None:
+                emit(node["tail"], depth + 1)
+            return
+        if t == "frontier":
+            lines.append(indent + f"{node['label']} = {node['value']}"
+                                   f"{origin_tail(node)}")
+            if node["more"]:
+                lines.append("  " * (depth + 1) +
+                             "(more derivation below this depth — call "
+                             "again with a larger depth to expand)")
+            return
+        # "step"
+        lines.append(indent + f"{node['label']} = {node['value']}"
+                               f"{origin_tail(node)}")
+        for c in node["children"]:
+            emit(c, depth + 1)
+
+    emit(built["root"], 0)
+    if built["because"]:
+        lines.insert(1, "  " +
+                     f'because "{escape_string_literal(built["because"])}"')
+    return "\n".join(lines)
+
+
 def why_tree(traced, max_depth=14, because=None):
-    """Full transitive derivation, back to where each value entered.
+    """The deep walk's prompt register — `why`, walked explicitly and as
+    far as `max_depth` allows (R2, checkpoint v29.0 §448-458). A run of
+    identical-in-shape reassignment or recursion steps folds into one
+    labeled aggregate (§451); a seal, R1's own leaf, still renders as its
+    fixed refusal sentence and nothing folds past it (§452); nothing here
+    ever elides silently — a walk that reaches its own depth limit says so,
+    in words, rather than printing a bare "..." (§455).
 
     The graph is a DAG, not a tree: one source list feeds every item of a
     comprehension. Shared subgraphs are printed once and referred to after,
@@ -1984,28 +2293,15 @@ def why_tree(traced, max_depth=14, because=None):
     `because`, when given, is display text for the root beside the
     derivation — never an input the graph itself carries.
     """
-    lines = []
-    seen = {}
+    return _why_render_prompt(_why_build(traced, max_depth, because))
 
-    def walk(n, depth):
-        if depth > max_depth:
-            lines.append("  " * depth + "...")
-            return
-        tail = f"   <- entered at {n.origin}" if n.origin else ""
-        if id(n) in seen and n.inputs:
-            lines.append("  " * depth +
-                         f"{n.label} = {fmt(n.value)}   (same as above)")
-            return
-        seen[id(n)] = True
-        lines.append("  " * depth + f"{n.label} = {fmt(n.value)}{tail}")
-        if depth == 0 and because:
-            lines.append("  " * (depth + 1) +
-                         f'because "{escape_string_literal(because)}"')
-        for i in n.inputs:
-            walk(i, depth + 1)
 
-    walk(traced.node, 0)
-    return "\n".join(lines)
+def why_machine(traced, max_depth=14, because=None):
+    """The machine register (§453): the same walk `why_tree` renders as
+    text, returned as data instead — the step/aggregate/seal/frontier
+    shapes `_why_build` documents, for an agent or tool to read
+    structurally rather than parse back out of prose."""
+    return _why_build(traced, max_depth, because)
 
 
 def origins(traced):

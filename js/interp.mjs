@@ -1852,3 +1852,249 @@ export function origins(traced) {
   walk(traced.node);
   return found;
 }
+
+// ================================================================ the readable deep walk (R2, checkpoint v29.0 §448-458)
+//
+// interp.py's `why_tree` is the specification; this is that function's first
+// build here — js/interp.mjs had no deep-walk function at all before this
+// (§449's load-bearing asymmetry). `explain` above stays the one-layer
+// default (§453's card register, untouched). A run of consecutive,
+// identical-in-shape reassignment/recursion hops folds into one labeled
+// aggregate (§451); folding stops at a seal, which renders as a leaf
+// carrying its fixed refusal sentence (§452, R1's own behavior); nothing
+// here ever elides silently — a walk that reaches its own depth limit says
+// so, in words, never a bare "..." (§455).
+
+const WHY_MIN_FOLD = 8; // interp.py's _WHY_MIN_FOLD, verbatim — see its own
+                         // comment for why 8 (test_values.py's 3-step
+                         // accumulation must stay unfolded).
+
+// interp.py's _WHY_SEARCH_BUDGET, verbatim — a node visited-count cap,
+// SHARED and cumulative across every search one whyFindRun call performs.
+// See interp.py's own comment for the full reasoning (benchmarks/
+// world_shape.planes made an unbudgeted search run for minutes).
+const WHY_SEARCH_BUDGET = 4000;
+
+// interp.py's _WhyBudget, verbatim: a shared, mutable operation counter
+// threaded through every search one whyFindRun call performs. take()
+// returns false once exhausted; every caller treats that identically to
+// "no match here" — conservative, so a budget cutoff can only ever
+// under-fold, never claim a run longer or shaped differently than what
+// was actually verified.
+class WhyBudget {
+  constructor(n = WHY_SEARCH_BUDGET) {
+    this.left = n;
+  }
+  take() {
+    if (this.left <= 0) return false;
+    this.left -= 1;
+    return true;
+  }
+}
+
+// The structural signature of one hop, as a fixed-length SHA-256 digest —
+// interp.py's _why_hop_shape, verbatim, including WHY a digest and not a
+// nested structure: two shapes used to compare with a structural equality
+// check on the shape itself, which walks every shared level natively —
+// cheap for one comparison, but whyFindRun's loop compares against shape0
+// on every hop, and a hop whose own subtree is large paid that full
+// recursive-compare cost EVERY time, not once. Found live in this build:
+// benchmarks/world_shape.planes made this run for minutes with the budget
+// correctly bounding CONSTRUCTION but not COMPARISON. A digest folds
+// construction and comparison into the same accounting — building it costs
+// what building the nested form did, and comparing two is then a
+// fixed-length string check, not a walk. The same technique R1's own seal
+// fingerprint already uses (_seal, above), applied here to a hop instead
+// of a released subgraph.
+// Iterative post-order, explicit (node, "exit") stack frames — the same
+// reason interp.py's is now: a field reference inside a helper function is
+// its own 'name' node whose own input traces back through every earlier
+// call, so the path to a match can run hundreds of levels deep even for a
+// chain that looks short. Found live in this build:
+// probe/parser/cursor_scales.planes (200 calls threading a record through
+// `for each`, each field access one more link) made the recursive form of
+// this a stack-depth risk; V8's own default stack is deeper than Python's,
+// but the fix is the same in both languages for the same structural
+// reason, not tuned per-runtime. A child's digest must exist before its
+// parent's can be computed; LIFO ordering guarantees every child's "exit"
+// pops before its parent's — the same invariant a recursive call's own
+// return-before-caller-continues gives for free, without paying for it in
+// stack depth.
+function whyHopShape(head, stopLabel, budget) {
+  const memo = new Map();
+
+  function finish(n) {
+    const children = n.inputs.map((c) => memo.get(c)).join(",");
+    return sha256Hex(`${n.kind}\x1f${n.label}\x1f${children}`).slice(0, 16);
+  }
+
+  const stack = [];
+  for (const c of [...head.inputs].reverse()) stack.push(["enter", c]);
+  while (stack.length) {
+    const [phase, n] = stack.pop();
+    if (phase === "exit") {
+      memo.set(n, finish(n));
+      continue;
+    }
+    if (memo.has(n)) continue;
+    if (!budget.take()) {
+      memo.set(n, "<budget>");
+    } else if (n.kind === "name" && n.label === stopLabel) {
+      memo.set(n, "<next>");
+    } else if (n.kind === "seal") {
+      memo.set(n, "<seal>");
+    } else {
+      stack.push(["exit", n]);
+      for (const c of [...n.inputs].reverse()) stack.push(["enter", c]);
+    }
+  }
+
+  return finish(head);
+}
+
+// Iterative DFS, construction order (so both languages agree), for the
+// next same-label 'name' node or seal reachable from `node`'s inputs. null
+// at a natural leaf or once `budget` is exhausted. Memoized (the
+// `exhausted` set) the same way and for the same reasons as whyHopShape
+// above — DAG-sharing blowup, and recursion depth on a long path to a
+// match — via the same (node, "exit") sentinel stack.
+function whyNextStop(node, label, budget) {
+  const exhausted = new Set();
+  const stack = [];
+  for (const c of [...node.inputs].reverse()) stack.push(["enter", c]);
+  while (stack.length) {
+    const [phase, n] = stack.pop();
+    if (phase === "exit") {
+      exhausted.add(n);
+      continue;
+    }
+    if (exhausted.has(n) || !budget.take()) continue;
+    if (n.kind === "name" && n.label === label) return n;
+    if (n.kind === "seal") return n;
+    stack.push(["exit", n]);
+    for (const c of [...n.inputs].reverse()) stack.push(["enter", c]);
+  }
+  return null;
+}
+
+// The maximal run of consecutive same-shape hops starting at `head` — see
+// interp.py's _why_find_run for the full contract. One WhyBudget, shared
+// for the whole call, so a run with many hops costs the same as a run with
+// few large ones. Checks whyNextStop before ever computing a shape: most
+// 'name' nodes in an ordinary program are a one-off assignment and never
+// repeat at all.
+function whyFindRun(head) {
+  const budget = new WhyBudget();
+  let nxt = whyNextStop(head, head.label, budget);
+  if (nxt === null || nxt.kind === "seal") return { run: [head], tail: nxt };
+  const shape0 = whyHopShape(head, head.label, budget);
+  const run = [head];
+  let cur = head;
+  for (;;) {
+    if (whyHopShape(cur, head.label, budget) !== shape0) return { run, tail: nxt };
+    run.push(nxt);
+    cur = nxt;
+    nxt = whyNextStop(cur, head.label, budget);
+    if (nxt === null || nxt.kind === "seal") return { run, tail: nxt };
+  }
+}
+
+function whyBuild(traced, maxDepth = 14, because = null) {
+  const seen = new Set();
+
+  function walk(node, depth) {
+    if (seen.has(node) && node.inputs.length) {
+      return { type: "repeat", kind: node.kind, label: node.label, value: fmt(node.value) };
+    }
+    seen.add(node);
+
+    if (node.kind === "seal") {
+      return { type: "seal", label: node.label, value: fmt(node.value) };
+    }
+
+    if (node.kind === "name") {
+      const { run, tail } = whyFindRun(node);
+      if (run.length >= WHY_MIN_FOLD) {
+        return {
+          type: "step", kind: node.kind, label: node.label,
+          value: fmt(node.value), origin: node.origin,
+          children: [{
+            type: "aggregate", label: node.label, count: run.length - 1,
+            tail: tail !== null ? walk(tail, depth + 1) : null,
+          }],
+        };
+      }
+    }
+
+    if (depth >= maxDepth) {
+      return {
+        type: "frontier", kind: node.kind, label: node.label,
+        value: fmt(node.value), origin: node.origin, more: node.inputs.length > 0,
+      };
+    }
+
+    return {
+      type: "step", kind: node.kind, label: node.label,
+      value: fmt(node.value), origin: node.origin,
+      children: node.inputs.map((c) => walk(c, depth + 1)),
+    };
+  }
+
+  return { root: walk(traced.node, 0), because };
+}
+
+function whyRenderPrompt(built) {
+  const lines = [];
+
+  function originTail(node) {
+    return node.origin ? `   <- entered at ${node.origin}` : "";
+  }
+
+  function emit(node, depth) {
+    const indent = "  ".repeat(depth);
+    const t = node.type;
+    if (t === "seal") {
+      lines.push(`${indent}${node.label} = ${node.value}`);
+      return;
+    }
+    if (t === "repeat") {
+      lines.push(`${indent}${node.label} = ${node.value}   (same as above)`);
+      return;
+    }
+    if (t === "aggregate") {
+      const stepWord = node.count === 1 ? "step" : "steps";
+      lines.push(`${indent}${node.label} advanced ${node.count} more times ` +
+        `(${stepWord} identical in shape to the one above)`);
+      if (node.tail !== null) emit(node.tail, depth + 1);
+      return;
+    }
+    if (t === "frontier") {
+      lines.push(`${indent}${node.label} = ${node.value}${originTail(node)}`);
+      if (node.more) {
+        lines.push("  ".repeat(depth + 1) +
+          "(more derivation below this depth — call again with a larger depth to expand)");
+      }
+      return;
+    }
+    // "step"
+    lines.push(`${indent}${node.label} = ${node.value}${originTail(node)}`);
+    for (const c of node.children) emit(c, depth + 1);
+  }
+
+  emit(built.root, 0);
+  if (built.because) {
+    lines.splice(1, 0, `  because "${escapeStringLiteral(built.because)}"`);
+  }
+  return lines.join("\n");
+}
+
+// interp.py's why_tree is the specification (§8) — this must agree with it
+// byte for byte across the corpus; js/cli.mjs's `whytree` subcommand is what
+// test_why_readable.py diffs the two through.
+export function whyTree(traced, maxDepth = 14, because = null) {
+  return whyRenderPrompt(whyBuild(traced, maxDepth, because));
+}
+
+export function whyMachine(traced, maxDepth = 14, because = null) {
+  return whyBuild(traced, maxDepth, because);
+}
