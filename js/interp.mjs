@@ -7,7 +7,7 @@
 // measurement (Phase 2). Checked against interp.py by canonical-output
 // agreement on the corpus (test_js_interp.py). interp.py is the specification.
 
-import { MemoryHost, TestHost, HostError, pyJsonDumps } from "./host.mjs";
+import { Host, MemoryHost, TestHost, HostError, pyJsonDumps } from "./host.mjs";
 import { PlanesNumber, Inexact, NotANumber, numberFromText, rootOf, sineDegrees } from "./planes_num.mjs";
 import {
   escapeStringLiteral,
@@ -365,6 +365,7 @@ export class Interpreter {
     window = null,
     coreOnly = false,
     coreSurvey = false,
+    trace = true,
   } = {}) {
     // ---- the core-restricted mode (opt-in, off by default).
     //
@@ -464,6 +465,28 @@ export class Interpreter {
     this._pinned = new Map();   // id(Deriv) -> Deriv, kept alive by pin()
     this._ids = new WeakMap();
     this._nextId = 1;
+
+    // The tracing-off fast path (R3, checkpoint v30.0 §466-476). `trace`
+    // defaults to true — HEAD behavior, exactly. false is opt-in; `mk`
+    // below is the one place that reads it (Ruling 2: the toggle lives in
+    // mk, not threaded through every eval arm). `_untraced` is ONE shared,
+    // never-mutated Deriv returned by every `mk` call while tracing is off
+    // — not a fresh object per call — so a tracing-off run allocates no
+    // per-node Deriv graph at all (§N+3.4 measures this). `Traced.value`
+    // still carries the real per-call value; only the derivation graph is
+    // skipped. interp.py carries the identical field for the identical
+    // reason.
+    this.tracing = trace;
+    this._untraced = new Deriv("untraced", "", null);
+
+    // The record plane's effect log (R3, §7): the fast-path run's own
+    // record of what each effect actually returned, so a later replay can
+    // read it back instead of re-performing it. Piggybacked on the
+    // EXISTING `record` toggle rather than a third flag. Populated only
+    // for the four host effects a program can trigger directly (show,
+    // write, ask, read) — a `foreign` call is a claim, not one of the five
+    // required capabilities, and is out of R3's replay scope.
+    this.effectLog = [];
   }
 
   get fs() {
@@ -494,6 +517,16 @@ export class Interpreter {
     this.host.record(entry);
   }
 
+  // R3, §7: append this effect's ACTUAL result to `effectLog`, so a later
+  // replay can read it back rather than re-perform the effect. Gated on
+  // `this.record`, the same toggle `maybe_record` above already reads — a
+  // replay that needs this log requires the fast-path run to have set
+  // `record=true`. A no-op otherwise.
+  log_effect(kind, target, result) {
+    if (!this.record) return;
+    this.effectLog.push([kind, target, result]);
+  }
+
   // ---- the retention window (R1)
 
   // Python's `id()` is a free stable object identity; JS has none built in,
@@ -515,6 +548,12 @@ export class Interpreter {
     // file is built through here (not through `new Deriv` directly) so the
     // stamp — and, when a window is set, the cut below — apply uniformly,
     // with no operation-kind special case.
+    //
+    // R3 (§466-476): the first check, ahead of even the generation stamp —
+    // tracing off returns the one shared `_untraced` node and does
+    // nothing else, exactly as `window === null` already makes the window
+    // check below a no-op.
+    if (!this.tracing) return this._untraced;
     const gen = this._generation;
     this._generation += 1;
     const node = new Deriv(kind, label, value, inputs ?? [], origin, gen);
@@ -865,6 +904,7 @@ export class Interpreter {
       this.host.show(text);
       this.effects.push(["show", text]);
       this.maybe_record("show", text, this.host_anchor(), v.node);
+      this.log_effect("show", text, null);
       return v;
     }
     if (k === "Why") {
@@ -1103,6 +1143,7 @@ export class Interpreter {
       }
       this.effects.push(["write", dest.value, payload.length]);
       this.maybe_record("write", dest.value, this.host_anchor(), dest.node);
+      this.log_effect("write", dest.value, null);
       return new Traced(
         null,
         this.mk("effect", `write to ${dest.value}`, null, [value.node], `file:${dest.value}`),
@@ -1234,6 +1275,7 @@ export class Interpreter {
       }
       this.effects.push(["ask", url, body.length]);
       this.maybe_record("ask", url, this.host_anchor(), arg.node);
+      this.log_effect("ask", url, body);
       let parsed;
       try {
         parsed = fromForeign(this.host.parseJson(body));
@@ -1257,6 +1299,7 @@ export class Interpreter {
       }
       this.effects.push(["read", path, body.length]);
       this.maybe_record("read", path, this.host_anchor(), arg.node);
+      this.log_effect("read", path, body);
       return new Traced(body, this.mk("effect", `read ${path}`, body, [arg.node], `file:${path}`));
     }
     if (name === "count") {
@@ -1784,14 +1827,29 @@ function fromForeign(x) {
 // the explanation says where each side stopped being exact. Deduped by CONTENT
 // rather than by object identity, so two sides that entered the same way name
 // it once and two that entered differently name it twice.
+// Iterative, not recursive (R3, checkpoint v30.0 §468) — the one walk
+// `explain` reaches that used to recurse over the FULL derivation, so a
+// long unwindowed chain (exactly the shape `replay` reconstructs) could
+// exceed the engine's own stack depth. An explicit stack, construction
+// order, matching `_cut`/`_seal`/`whyNextStop`'s own iterative shape: a
+// node is pushed once per reference but PROCESSED only once, the first
+// time it is popped — `seen` gates at pop-time here exactly as the
+// recursive form gated at call-entry, so dedup and result order are
+// unchanged. interp.py carries the identical conversion for the identical
+// reason.
 export function approximationsIn(node, seen = new Set(), found = []) {
-  if (node === null || typeof node !== "object" || seen.has(node)) return found;
-  seen.add(node);
-  const v = node.value;
-  if (v instanceof PlanesNumber && v.approx !== null && !found.some((a) => a.eq(v.approx))) {
-    found.push(v.approx);
+  const stack = [node];
+  while (stack.length) {
+    const n = stack.pop();
+    if (n === null || typeof n !== "object" || seen.has(n)) continue;
+    seen.add(n);
+    const v = n.value;
+    if (v instanceof PlanesNumber && v.approx !== null && !found.some((a) => a.eq(v.approx))) {
+      found.push(v.approx);
+    }
+    const inputs = n.inputs ?? [];
+    for (let i = inputs.length - 1; i >= 0; i--) stack.push(inputs[i]);
   }
-  for (const inp of node.inputs ?? []) approximationsIn(inp, seen, found);
   return found;
 }
 
@@ -2097,4 +2155,94 @@ export function whyTree(traced, maxDepth = 14, because = null) {
 
 export function whyMachine(traced, maxDepth = 14, because = null) {
   return whyBuild(traced, maxDepth, because);
+}
+
+// ================================================================ replay (R3, checkpoint v30.0 §466-476)
+//
+// The fast path (tracing off, §3 above) builds no derivation graph. Any why
+// — any of the three registers above, on a value it produced — answers by
+// REPLAY: re-executing the same program from the start, tracing on, so the
+// real Deriv graph an eager run would have built exists again. This is
+// exact because Planes is deterministic and pure: the same source, run
+// against the same effect RESULTS in the same order, takes the identical
+// path through `eval` and stamps the identical generations — byte-
+// identical to an eager run of the same program, the gate test_replay.py
+// checks (§6).
+//
+// Effects are read back, never re-performed (§7). `ReplayHost` is the
+// mechanism: an ordinary second Host (no new host CAPABILITY, ruling 1)
+// that answers ask/read/write/show from a recorded log instead of
+// touching the world. A value whose effects were not recorded refuses
+// rather than silently re-performing them (F7). interp.py carries the
+// identical class and driver for the identical reason.
+
+export class ReplayHost extends Host {
+  constructor(effectLog) {
+    super();
+    this._log = effectLog ? [...effectLog] : [];
+    this._pos = 0;
+  }
+  get name() {
+    return "replay";
+  }
+  _next(kind, target) {
+    if (this._pos >= this._log.length) {
+      throw new HostError(
+        `replay refused: no recorded effect for ${kind} '${target}' — ` +
+          "the fast-path run must set record=true so effects are logged " +
+          "before a later replay can read them back instead of " +
+          "re-performing them",
+      );
+    }
+    const [loggedKind, loggedTarget, result] = this._log[this._pos];
+    if (loggedKind !== kind || loggedTarget !== target) {
+      throw new HostError(
+        `replay refused: expected the recorded effect ${loggedKind} ` +
+          `'${loggedTarget}' next but replay reached ${kind} '${target}' ` +
+          "— effects must replay in the exact order they were recorded",
+      );
+    }
+    this._pos += 1;
+    return result;
+  }
+  ask(url) {
+    return this._next("ask", url);
+  }
+  read(path) {
+    return this._next("read", path);
+  }
+  write(path, _text) {
+    this._next("write", path);
+  }
+  show(text) {
+    this._next("show", text);
+  }
+  clock() {
+    throw new HostError("replay refused: clock is not available during replay");
+  }
+  resolve(target) {
+    throw new HostError(
+      `replay refused: foreign target '${target}' cannot be replayed — ` +
+        "foreign effects are outside R3's effect log",
+    );
+  }
+  parseJson(text) {
+    return JSON.parse(text);
+  }
+}
+
+// Reconstruct `subject`'s Deriv slice from a tracing-off run, by
+// deterministic re-execution with tracing on (§5). `steps` is the same
+// ordered list of source snippets the fast-path run executed; `window` is
+// the fast path's own window, so a value already past it seals identically
+// here. `effectLog` is the fast path's own `itp.effectLog`; a `ReplayHost`
+// built from it answers every effect the replay reaches by reading it
+// back, in order, never by performing it. Returns the replayed `Traced`,
+// usable with `explain`/`whyTree`/`whyMachine`/`origins` exactly as an
+// eager run's value would be.
+export function replay(steps, subject, { window = null, effectLog = null } = {}) {
+  const host = new ReplayHost(effectLog ?? []);
+  const itp = new Interpreter({ host, window, trace: true, record: false });
+  for (const step of steps) itp.run(step);
+  return itp.env.get(subject);
 }
