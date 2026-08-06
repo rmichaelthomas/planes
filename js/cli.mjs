@@ -17,7 +17,7 @@ import { loadGrammar } from "./loader_node.mjs";
 import { tokenize, PlanesSyntaxError } from "./lexer.mjs";
 import { parse, PlanesAmbiguity } from "./parser.mjs";
 import { canonicalProgram } from "./canonical.mjs";
-import { Interpreter, PlanesError, CoreRestrictionError, lit } from "./interp.mjs";
+import { Interpreter, PlanesError, CoreRestrictionError, lit, replay } from "./interp.mjs";
 import { TestHost } from "./host.mjs";
 import { sha256Hex } from "./sha256.mjs";
 import { PlanesNumber, Fraction, Inexact } from "./planes_num.mjs";
@@ -613,6 +613,75 @@ switch (sub) {
       };
     });
     out(JSON.stringify({ tag, outputCount: itp.output.length, entries }));
+    break;
+  }
+  case "replay": {
+    // replay <config-json> — R3's cross-language probe (§6's gate). `config`:
+    //   { window, steps: [src, ...], subject, maxDepth, because,
+    //     responses, files, now, forceRefusal }
+    // Runs `steps` twice on TWO SEPARATE Interpreter+TestHost pairs built
+    // from the identical fixture (so each performs its own effects rather
+    // than sharing state):
+    //   fast   — trace: false, record: true, the shape a host wanting the
+    //            fast path actually runs. Reports output/effects/effectLog.
+    //   eager  — trace: true (HEAD shape), the shape a why answers from
+    //            directly today. Reports output/effects and the three
+    //            readable registers for env.get(subject).
+    // Then replays: `replay(steps, subject, {window, effectLog})` using
+    // `fast`'s own effectLog (or, if `forceRefusal` is set, an empty one —
+    // exercising §7/F7's named refusal on purpose) and reports the same
+    // three registers, or `{refused, message}` if replay refused.
+    // test_replay.py runs the identical config through interp.py's
+    // replay() and diffs every field — the eager-vs-replay byte-identity
+    // gate, in both languages and cross-language.
+    loadGrammar();
+    const { whyTree: jsWhyTree, whyMachine: jsWhyMachine, explain: jsExplain } =
+      await import("./interp.mjs");
+    const cfg = JSON.parse(rest[0]);
+    const window = cfg.window ?? null;
+    const maxDepth = cfg.maxDepth ?? 14;
+    const because = cfg.because ?? null;
+    const hostCfg = () => ({
+      responses: cfg.responses ?? {},
+      files: cfg.files ?? {},
+      now: cfg.now ?? 1000000.0,
+    });
+
+    const fastHost = new TestHost(hostCfg());
+    const fastItp = new Interpreter({ host: fastHost, window, trace: false, record: true });
+    for (const step of cfg.steps) fastItp.run(step);
+
+    const eagerHost = new TestHost(hostCfg());
+    const eagerItp = new Interpreter({ host: eagerHost, window, trace: true });
+    for (const step of cfg.steps) eagerItp.run(step);
+    const eagerTraced = eagerItp.env.get(cfg.subject);
+
+    let replayed;
+    try {
+      const effectLog = cfg.forceRefusal ? [] : fastItp.effectLog;
+      const replayedTraced = replay(cfg.steps, cfg.subject, { window, effectLog });
+      replayed = {
+        card: jsExplain(replayedTraced, because),
+        prompt: jsWhyTree(replayedTraced, maxDepth, because),
+        machine: jsWhyMachine(replayedTraced, maxDepth, because),
+      };
+    } catch (e) {
+      replayed = { refused: true, message: String(e.message ?? e) };
+    }
+
+    out(
+      JSON.stringify({
+        fast: { output: fastItp.output, effects: fastItp.effects, effectLog: fastItp.effectLog },
+        eager: {
+          output: eagerItp.output,
+          effects: eagerItp.effects,
+          card: jsExplain(eagerTraced, because),
+          prompt: jsWhyTree(eagerTraced, maxDepth, because),
+          machine: jsWhyMachine(eagerTraced, maxDepth, because),
+        },
+        replayed,
+      }),
+    );
     break;
   }
   case "render": {

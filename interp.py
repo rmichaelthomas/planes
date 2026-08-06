@@ -7,7 +7,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from host import HostError, PythonHost, TestHost
+from host import Host, HostError, PythonHost, TestHost
 from lexer import *
 from parser import BUILTIN_NAMES, find_discarded_writes, parse
 from planes_num import Inexact, NotANumber, Number, number_from_text, root_of, sine_degrees
@@ -448,7 +448,8 @@ def real_http(url):
 
 
 class Interpreter:
-    def __init__(self, http=None, fs=None, host=None, record=False, window=None):
+    def __init__(self, http=None, fs=None, host=None, record=False, window=None,
+                 trace=True):
         self.env = Env()
         self.funcs = {}
         self.foreigns = {}       # name -> Foreign declaration
@@ -533,6 +534,37 @@ class Interpreter:
         self._generation = 0
         self._pinned = {}           # id(Deriv) -> Deriv, kept alive by pin()
 
+        # The tracing-off fast path (R3, checkpoint v30.0 §466-476). `trace`
+        # defaults to True — HEAD behavior, exactly: every Deriv `mk` builds
+        # is real, stamped, and (when a window is set) cut, precisely as
+        # before this field existed. False is opt-in, for a host that wants
+        # to run without paying the derivation-graph cost on every tick —
+        # `mk` below is the one place that reads it (Ruling 2: the toggle
+        # lives in mk, not threaded through every eval arm). `_untraced` is
+        # ONE shared, never-mutated Deriv, returned by every `mk` call while
+        # tracing is off — not a fresh object per call — so a tracing-off
+        # run allocates no per-node Deriv graph at all (§N+3.4 measures
+        # this). `Traced.value` still carries the real per-call value; only
+        # the derivation graph is skipped. A `why` (any register) asked
+        # about a value built this way finds `_untraced` and nothing else —
+        # answering it is what `replay` (§5 below) is for.
+        self.tracing = trace
+        self._untraced = Deriv("untraced", "", None)
+
+        # The record plane's effect log (R3, §7): the fast-path run's own
+        # record of what each effect actually returned, so a later replay
+        # can read an effect back instead of re-performing it. Piggybacked
+        # on the EXISTING `record` toggle rather than a third flag — a
+        # replay that needs this is required to have run the fast path with
+        # `record=True` (stated as a dependency in REPORT_REPLAY.md), the
+        # same way `self.records` already depends on it. Populated only for
+        # the four host effects a program can trigger directly (show,
+        # write, ask, read) — `call_foreign` is a claim against an
+        # arbitrary host function, not one of the five required
+        # capabilities, and is out of R3's replay scope (documented in the
+        # report, not silently dropped).
+        self.effect_log = []
+
     @property
     def fs(self):
         """Files this run touched, when the host keeps them in memory."""
@@ -561,13 +593,35 @@ class Interpreter:
         self.records.append(entry)
         self.host.record(entry)
 
+    def log_effect(self, kind, target, result):
+        """R3, §7: append this effect's ACTUAL result to `effect_log`, so a
+        later replay can read it back rather than re-perform the effect.
+        Gated on `self.record`, the same toggle `maybe_record` above
+        already reads — a replay that needs this log requires the
+        fast-path run to have set `record=True` (REPORT_REPLAY.md states
+        the dependency). A no-op otherwise, so this can only ever add to
+        `effect_log`, never change output/effects/records/the surface —
+        the same inertness `maybe_record` itself keeps."""
+        if not self.record:
+            return
+        self.effect_log.append((kind, target, result))
+
     # ---- the retention window (R1)
 
     def mk(self, kind, label, value, inputs=None, origin=None):
         """Build a Deriv, stamped with the next generation. Every Deriv in
         this file is built through here (not through the dataclass
         directly) so the stamp — and, when a window is set, the cut below —
-        apply uniformly, with no operation-kind special case."""
+        apply uniformly, with no operation-kind special case.
+
+        R3 (§466-476): the first check, ahead of even the generation stamp
+        — tracing off returns the one shared `_untraced` node and does
+        nothing else, exactly as `window=None` already makes the window
+        check below a no-op. No generation is spent and no Deriv is
+        allocated, so a tracing-off run costs nothing this function did not
+        already cost on HEAD before this build."""
+        if not self.tracing:
+            return self._untraced
         gen = self._generation
         self._generation += 1
         node = Deriv(kind, label, value, list(inputs) if inputs else [],
@@ -925,6 +979,7 @@ class Interpreter:
             self.host.show(text)
             self.effects.append(("show", text))
             self.maybe_record("show", text, self.host_anchor(), derivation=v.node)
+            self.log_effect("show", text, None)
             return v
 
         if isinstance(stmt, Why):
@@ -1159,6 +1214,7 @@ class Interpreter:
             self.effects.append(("write", dest.value, len(payload)))
             self.maybe_record("write", dest.value, self.host_anchor(),
                               derivation=dest.node)
+            self.log_effect("write", dest.value, None)
             return Traced(None, self.mk("effect", f"write to {dest.value}", None,
                                       [value.node], origin=f"file:{dest.value}"))
 
@@ -1308,6 +1364,7 @@ class Interpreter:
                     "without the network needs a stubbed response")
             self.effects.append(("ask", url, len(body)))
             self.maybe_record("ask", url, self.host_anchor(), derivation=arg.node)
+            self.log_effect("ask", url, body)
             try:
                 parsed = from_foreign(self.host.parse_json(body))
             except Exception:
@@ -1334,6 +1391,7 @@ class Interpreter:
                                   "check the path, or write it first")
             self.effects.append(("read", path, len(body)))
             self.maybe_record("read", path, self.host_anchor(), derivation=arg.node)
+            self.log_effect("read", path, body)
             return Traced(body, self.mk("effect", f"read {path}", body,
                                       [arg.node], origin=f"file:{path}"))
 
@@ -1911,17 +1969,33 @@ def approximations_in(traced, seen=None, found=None):
     both is the whole reason the no-tolerance rule is defensible: the answer is
     plain, and the explanation says where each side stopped being exact. One
     epsilon nobody chose would replace both of these lines with silence.
+
+    Iterative, not recursive (R3, checkpoint v30.0 §468) — the one walk
+    `explain` reaches that used to recurse over the FULL derivation (not
+    one layer: it has to check every node reachable from the root for an
+    approximate number), so a long unwindowed chain — exactly the shape
+    `replay` (§5) reconstructs — could exceed Python's recursion limit past
+    roughly 450 steps. An explicit stack, construction order (so both
+    languages still agree), matching `_cut`/`_seal`/`_why_next_stop`'s own
+    iterative shape: a node is pushed once per reference but PROCESSED
+    (and its approximation, if any, recorded) only once, the first time it
+    is popped — `seen` gates at pop-time here exactly as the recursive
+    form gated at call-entry, so dedup and result order are unchanged.
     """
     seen = set() if seen is None else seen
     found = [] if found is None else found
-    if id(traced) in seen:
-        return found
-    seen.add(id(traced))
-    v = getattr(traced, "value", None)
-    if isinstance(v, Number) and v.approx is not None and v.approx not in found:
-        found.append(v.approx)
-    for inp in getattr(traced, "inputs", ()) or ():
-        approximations_in(inp, seen, found)
+    stack = [traced]
+    while stack:
+        node = stack.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        v = getattr(node, "value", None)
+        if isinstance(v, Number) and v.approx is not None and v.approx not in found:
+            found.append(v.approx)
+        inputs = getattr(node, "inputs", ()) or ()
+        for inp in reversed(inputs):
+            stack.append(inp)
     return found
 
 
@@ -2316,3 +2390,111 @@ def origins(traced):
 
     walk(traced.node)
     return found
+
+
+# ================================================================ replay (R3)
+#
+# The fast path (tracing off, §3 above) builds no derivation graph. Any why
+# — any of the three registers above, on a value it produced — answers by
+# REPLAY: re-executing the same program from the start, tracing on, so the
+# real Deriv graph an eager run would have built exists again. This is exact
+# because Planes is deterministic and pure (§466): the same source, run
+# against the same effect RESULTS in the same order, takes the identical
+# path through `eval` and stamps the identical generations — byte-identical
+# to an eager run of the same program, the gate test_replay.py checks (§6).
+#
+# Effects are read back, never re-performed (§7). `ReplayHost` is the
+# mechanism: an ordinary second Host (the same seam TestHost already proves
+# is real — no new host CAPABILITY, ruling 1) that answers `ask`/`read`/
+# `write`/`show` from a recorded log instead of touching the world. A value
+# whose effects were not recorded — the fast-path run did not set
+# `record=True` — refuses rather than silently re-performing them (F7).
+
+class ReplayHost(Host):
+    """Answers the four effects a program can trigger directly from
+    `effect_log` (an ordered `(kind, target, result)` list — `Interpreter.
+    log_effect`'s own shape), instead of performing them. `clock` and
+    `resolve` are refused outright: `record=False` during replay means
+    `clock` is never reached (`maybe_record` short-circuits before it), and
+    a `foreign` call is a claim against an arbitrary host function, outside
+    R3's effect log (documented in REPORT_REPLAY.md, not silently
+    supported by accident). `parse_json` is pure computation over already-
+    recorded text, not a fresh effect, so it is real, not replayed.
+    """
+
+    name = "replay"
+
+    def __init__(self, effect_log):
+        self._log = list(effect_log)
+        self._pos = 0
+
+    def _next(self, kind, target):
+        if self._pos >= len(self._log):
+            raise HostError(
+                f"replay refused: no recorded effect for {kind} '{target}' "
+                "— the fast-path run must set record=True so effects are "
+                "logged before a later replay can read them back instead "
+                "of re-performing them")
+        logged_kind, logged_target, result = self._log[self._pos]
+        if logged_kind != kind or logged_target != target:
+            raise HostError(
+                f"replay refused: expected the recorded effect "
+                f"{logged_kind} '{logged_target}' next but replay reached "
+                f"{kind} '{target}' — effects must replay in the exact "
+                "order they were recorded")
+        self._pos += 1
+        return result
+
+    def ask(self, url):
+        return self._next("ask", url)
+
+    def read(self, path):
+        return self._next("read", path)
+
+    def write(self, path, text):
+        self._next("write", path)
+
+    def show(self, text):
+        self._next("show", text)
+
+    def clock(self):
+        raise HostError(
+            "replay refused: clock is not available during replay")
+
+    def resolve(self, target):
+        raise HostError(
+            f"replay refused: foreign target '{target}' cannot be "
+            "replayed — foreign effects are outside R3's effect log")
+
+    def parse_json(self, text):
+        return json.loads(text)
+
+
+def replay(steps, subject, window=None, effect_log=None):
+    """Reconstruct `subject`'s Deriv slice from a tracing-off run, by
+    deterministic re-execution with tracing on (§5).
+
+    `steps` is the same ordered list of source snippets the fast-path run
+    executed (one `Interpreter.run` call per step — the shape
+    `retention`/`whytree`'s own CLI configs already use for a scenario that
+    grows over several calls); `window` is the fast path's own window, so a
+    value already past it seals identically here — replay does not need to
+    reconstruct sealed history in detail, only re-run far enough that its
+    own `_cut` seals it again at the same generation (§5's "anchors at the
+    seal's recorded generation", which falls out of re-execution rather
+    than needing a separate mechanism, since generation stamping depends
+    only on construction order and that order is unchanged). `effect_log`
+    is the fast path's own `Interpreter.effect_log` (empty/`None` for a
+    program with no effects); a `ReplayHost` built from it answers every
+    effect the replay reaches by reading it back, in order, never by
+    performing it — and refuses, by name, if the replay reaches an effect
+    the log does not cover (§7/F7).
+
+    Returns the replayed `Traced`, usable with `explain`/`why_tree`/
+    `why_machine`/`origins` exactly as an eager run's value would be.
+    """
+    host = ReplayHost(effect_log or [])
+    itp = Interpreter(host=host, window=window, trace=True, record=False)
+    for step in steps:
+        itp.run(step)
+    return itp.env.get(subject)
