@@ -53,6 +53,13 @@ export class Host {
   // The optional record plane — a no-op by default; a host that does nothing
   // here is still complete.
   record(_entry) {}
+  // The optional retention-window persistence method (R1, checkpoint v28.0
+  // §441) — a no-op by default, joining `record` in the tier a second host
+  // does not have to implement. The interpreter decides WHAT to seal and
+  // computes the fingerprint; a host that wants the released subgraph to
+  // survive past this run is the only thing that can make that durable.
+  // Required surface stays at seven (host.py's own count).
+  snapshot(_fingerprint, _entry) {}
   resolve(_target) {
     throw new HostError("resolve: not implemented on the abstract host");
   }
@@ -165,6 +172,7 @@ export class MemoryHost extends Host {
     this.cwd = cwd;
     this.shown = [];
     this.recorded = [];
+    this.snapshots = {};
     this._resolved = {};
     this._targets = sharedTargets(() => this.cwd);
   }
@@ -194,6 +202,9 @@ export class MemoryHost extends Host {
   }
   record(entry) {
     this.recorded.push(entry);
+  }
+  snapshot(fingerprint, entry) {
+    this.snapshots[fingerprint] = entry;
   }
   resolve(target) {
     return resolveWith(this._targets, this._resolved, target);

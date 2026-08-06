@@ -18,17 +18,29 @@ import { parse, findDiscardedWrites } from "./parser.mjs";
 import { builtinNames, effectKinds } from "./lexer.mjs";
 import { core } from "./grammar_data.mjs";
 import { keywordsOf, lineOf, recordLines, suspectKinds } from "./core_restrict.mjs";
+import { sha256Hex } from "./sha256.mjs";
 
 // ================================================================ values
 
 // One node in a derivation graph. Provenance lives here, not in types.
+//
+// The last three fields are R1's (checkpoint v28.0 §441): `generation` is a
+// construction-order stamp every node gets; `releasedCount` and
+// `fingerprint` are set only on a seal (kind="seal"), the node a retention
+// window cuts a chain down to. A seal is otherwise an ordinary Deriv — empty
+// inputs, a value, a label — so render/origins/approximationsIn need no
+// seal-specific case to walk one.
 export class Deriv {
-  constructor(kind, label, value, inputs = [], origin = null) {
+  constructor(kind, label, value, inputs = [], origin = null, generation = 0,
+              releasedCount = null, fingerprint = null) {
     this.kind = kind;
     this.label = label;
     this.value = value;
     this.inputs = inputs;
     this.origin = origin;
+    this.generation = generation;
+    this.releasedCount = releasedCount;
+    this.fingerprint = fingerprint;
   }
 }
 
@@ -329,6 +341,19 @@ class PlanesFunction {
   }
 }
 
+// The fixed sentence a seal names (R1 §5) — true because Planes is
+// deterministic and pure: history behind a seal is not lost, only
+// compressed to a seed that a deterministic replay from `snapshot`
+// recovers exactly. Byte-identical to interp.py's seal_refusal by
+// construction — both build it from the same template with the same two
+// values.
+export function sealRefusal(generation, snapshot) {
+  return (
+    `history before generation ${generation} was released; ` +
+    `deterministic replay from snapshot ${snapshot} recovers it exactly.`
+  );
+}
+
 // ================================================================ interpreter
 
 export class Interpreter {
@@ -337,6 +362,7 @@ export class Interpreter {
     fs = null,
     host = null,
     record = false,
+    window = null,
     coreOnly = false,
     coreSurvey = false,
   } = {}) {
@@ -426,6 +452,18 @@ export class Interpreter {
     } else this.host = new MemoryHost();
     this.record = record;
     this.records = [];
+
+    // The retention window (R1, checkpoint v28.0 §441). `window` is
+    // host-supplied, in the memory math's own unit (a count of Deriv
+    // nodes — REPORT_UPDATE_COST.md §5.4). null (the default) means
+    // unbounded: `mk` and `_cut` below skip straight past every window
+    // check, so an unbounded run allocates no seal and costs no more than
+    // HEAD did.
+    this.window = window;
+    this._generation = 0;
+    this._pinned = new Map();   // id(Deriv) -> Deriv, kept alive by pin()
+    this._ids = new WeakMap();
+    this._nextId = 1;
   }
 
   get fs() {
@@ -454,6 +492,188 @@ export class Interpreter {
     };
     this.records.push(entry);
     this.host.record(entry);
+  }
+
+  // ---- the retention window (R1)
+
+  // Python's `id()` is a free stable object identity; JS has none built in,
+  // so every Deriv this interpreter creates (and any externally-built one
+  // it is handed, e.g. by `lit`) gets one lazily via a WeakMap on first use
+  // — stable for the object's lifetime, never reused, and adds no field to
+  // Deriv itself.
+  _id(node) {
+    let n = this._ids.get(node);
+    if (n === undefined) {
+      n = this._nextId++;
+      this._ids.set(node, n);
+    }
+    return n;
+  }
+
+  mk(kind, label, value, inputs = [], origin = null) {
+    // Build a Deriv, stamped with the next generation. Every Deriv in this
+    // file is built through here (not through `new Deriv` directly) so the
+    // stamp — and, when a window is set, the cut below — apply uniformly,
+    // with no operation-kind special case.
+    const gen = this._generation;
+    this._generation += 1;
+    const node = new Deriv(kind, label, value, inputs ?? [], origin, gen);
+    if (this.window !== null) this._cut(node);
+    return node;
+  }
+
+  mkLit(v, label = null) {
+    return new Traced(v, this.mk("literal", label !== null ? label : fmt(v), v));
+  }
+
+  pin(tracedOrNode) {
+    // Keep a specific derivation reachable past the window (§6).
+    //
+    // `this._pinned` holds a direct, strong reference to the node — an
+    // independent root the interpreter's own bookkeeping keeps alive, the
+    // same way a still-bound env variable keeps a value alive today, not a
+    // flag that changes how `_cut` treats every OTHER edge that happens to
+    // pass through it. That is what keeps a pin cheap and local: `_cut` is
+    // still free to seal the live chain's own edge to a pinned node —
+    // cutting one path to it does not lose it, since `this._pinned` is a
+    // second, independent path — so pinning one derivation never blocks
+    // the window from continuing to bound everything built after it.
+    // Pure bookkeeping otherwise — an id in a map — so it can never change
+    // output, effects, or the static surface (v6.0's annotation-plane
+    // inertness). Returns the pinned node.
+    const node = tracedOrNode instanceof Traced ? tracedOrNode.node : tracedOrNode;
+    this._pinned.set(this._id(node), node);
+    return node;
+  }
+
+  _cut(node) {
+    // Apply the window to `node`'s own reachable inputs, in place.
+    //
+    // Age is measured against `node.generation` — ONE fixed reference
+    // point for the whole call, not each intermediate ancestor's own
+    // generation. A chain a `with`/`plus` loop builds links each new step
+    // to the one immediately before it, one generation apart, always — so
+    // checking an ancestor's age against its DIRECT parent's generation
+    // would never see more than 1 and would never cut anything. Checked
+    // against `node`'s own generation instead, an ancestor many steps
+    // behind reads as exactly that old, however many links away it is.
+    //
+    // A pinned input is left exactly as it is — not replaced, and its own
+    // inputs not descended into either, so its derivation stays whole from
+    // the moment it was pinned. Everything else old enough is replaced by
+    // a seal. Mutating an existing node's `inputs` here is safe: it
+    // changes only PROVENANCE, never the node's `value`, set once and
+    // never touched — so no output, effect, or static surface can differ
+    // because a cut happened.
+    //
+    // Iterative, not recursive: an unpinned linear chain is a Deriv graph
+    // thousands of nodes deep, and a recursive walk would exceed the call
+    // stack long before the window ever needed to cut anything. Discover
+    // the whole reachable subgraph once with an explicit stack, then
+    // rebuild each node's `inputs` deepest-first. In practice this
+    // discovers at most one window's worth of nodes before hitting a leaf,
+    // a pin, or an already-placed seal — each of which stops discovery
+    // cold — which is what keeps the per-call cost bounded rather than
+    // growing with total history.
+    if (node.kind === "seal" || this._pinned.has(this._id(node))) return;
+    const current = node.generation;
+    const order = [];
+    const stack = [node];
+    const seen = new Set([this._id(node)]);
+    while (stack.length) {
+      const n = stack.pop();
+      order.push(n);
+      if (n.kind === "seal" || this._pinned.has(this._id(n))) continue;
+      for (const inp of n.inputs) {
+        const iid = this._id(inp);
+        if (!seen.has(iid)) {
+          seen.add(iid);
+          stack.push(inp);
+        }
+      }
+    }
+    for (let i = order.length - 1; i >= 0; i--) {
+      const n = order[i];
+      if (n.kind === "seal" || this._pinned.has(this._id(n))) continue;
+      let changed = false;
+      const newInputs = [];
+      for (const inp of n.inputs) {
+        if (inp.kind === "seal" || this._pinned.has(this._id(inp))) {
+          newInputs.push(inp);
+        } else if (current - inp.generation > this.window) {
+          newInputs.push(this._seal(inp));
+          changed = true;
+        } else {
+          newInputs.push(inp);
+        }
+      }
+      if (changed) n.inputs = newInputs;
+    }
+  }
+
+  _seal(root) {
+    // Replace `root`'s own chain with a seal: the value at the cut, the
+    // generation it cut at, how many steps it releases, and a fingerprint
+    // over a canonical, deterministic text of what is released.
+    //
+    // Two iterative passes: the first assigns every reachable node a
+    // stable index in first-discovery order (a stack, so both
+    // implementations visit in the identical order given the identical
+    // graph); the second emits one line per node — kind, label, value,
+    // origin, and its inputs' already-known indices — so the whole DAG,
+    // sharing included, is a flat, order-independent-to-write text. Same
+    // program, same traversal order in both langs, so the same text, and
+    // so the same fingerprint — extending the corpus's byte-identical-
+    // agreement discipline to the released subgraph, not only to output.
+    //
+    // NOT memoized across calls, deliberately, to match interp.py: Python's
+    // `id()` is a memory address it is free to reuse once `root` is
+    // collected — the exact case a seal exists to create — so a cache keyed
+    // there without holding `root` alive can hand back a stale seal for the
+    // wrong subgraph. This side's own `_id` never repeats a number, so it
+    // would not have hit that bug, but the two implementations stay
+    // structurally aligned rather than one memoizing what the other cannot.
+    const order = new Map();
+    const seq = [];
+    const stack = [root];
+    while (stack.length) {
+      const n = stack.pop();
+      const nid = this._id(n);
+      if (order.has(nid)) continue;
+      order.set(nid, order.size);
+      seq.push(n);
+      if (n.kind !== "seal") {
+        for (const inp of n.inputs) {
+          if (!order.has(this._id(inp))) stack.push(inp);
+        }
+      }
+    }
+    let count = 0;
+    const parts = [];
+    for (const n of seq) {
+      if (n.kind === "seal") {
+        // A prior cut, absorbed rather than re-walked: its own
+        // releasedCount folds in, and its fingerprint stands for
+        // everything it already summarized.
+        count += n.releasedCount;
+        parts.push(`seal\x1f${n.generation}\x1f${n.fingerprint}`);
+        continue;
+      }
+      count += 1;
+      const children = n.inputs.map((i) => String(order.get(this._id(i)))).join(",");
+      parts.push(`${n.kind}\x1f${n.label}\x1f${fmt(n.value)}\x1f${n.origin ?? ""}\x1f${children}`);
+    }
+    const fingerprint = sha256Hex(parts.join("\n")).slice(0, 12);
+    const seal = new Deriv(
+      "seal", sealRefusal(root.generation, fingerprint), root.value, [],
+      null, root.generation, count, fingerprint,
+    );
+    // A host capability, requested and never performed directly — the same
+    // rule maybe_record already follows for the clock and any persistence.
+    // The default is a no-op; a host that wants durable retention of the
+    // released subgraph can keep it.
+    this.host.snapshot(fingerprint, { generation: root.generation, releasedCount: count });
+    return seal;
   }
 
   // ---- driving
@@ -627,7 +847,7 @@ export class Interpreter {
       const val = this.eval(stmt.expr, env);
       const named = new Traced(
         val.value,
-        new Deriv("name", stmt.name, val.value, [val.node]),
+        this.mk("name", stmt.name, val.value, [val.node]),
       );
       if (stmt.is_let) env.bind_local(stmt.name, named);
       else env.set(stmt.name, named);
@@ -736,7 +956,7 @@ export class Interpreter {
       for (const [name, val] of bindings) {
         env.bind_local(
           name,
-          new Traced(val, new Deriv("field", `.${name}`, val, [subject.node])),
+          new Traced(val, this.mk("field", `.${name}`, val, [subject.node])),
         );
       }
     }
@@ -747,21 +967,21 @@ export class Interpreter {
     const fields = stmt.pattern.map((e) => e.items[0]).join(", ");
     const label = `when {${fields}} ` + (matched ? "matched" : "did not match");
     const rv = result !== null ? result.value : null;
-    const rn = result !== null ? result.node : new Deriv("literal", "nothing", null);
-    return new Traced(rv, new Deriv("op", label, rv, [subject.node, rn]));
+    const rn = result !== null ? result.node : this.mk("literal", "nothing", null);
+    return new Traced(rv, this.mk("op", label, rv, [subject.node, rn]));
   }
 
   // ---- expressions
   eval(node, env) {
     const k = node.__node;
     if (this.coreOnly) this.checkCore(node);
-    if (k === "Num") return lit(node.value);
+    if (k === "Num") return this.mkLit(node.value);
     if (k === "Str") {
       const label = `"${escapeStringLiteral(node.value)}"`;
-      return new Traced(node.value, new Deriv("literal", label, node.value));
+      return new Traced(node.value, this.mk("literal", label, node.value));
     }
-    if (k === "Bool") return lit(node.value);
-    if (k === "Nothing") return lit(null);
+    if (k === "Bool") return this.mkLit(node.value);
+    if (k === "Nothing") return this.mkLit(null);
     if (k === "Var") {
       if (this.funcs.has(node.name) && !env.has(node.name)) {
         return this.call(node.name, [], env, node.line ?? 0);
@@ -777,7 +997,7 @@ export class Interpreter {
       for (const [key, t] of parts) val.set(key, t.value);
       return new Traced(
         val,
-        new Deriv("record", "{record}", val, parts.map(([, t]) => t.node)),
+        this.mk("record", "{record}", val, parts.map(([, t]) => t.node)),
       );
     }
     if (k === "ListLit") {
@@ -785,7 +1005,7 @@ export class Interpreter {
       const vals = items.map((i) => i.value);
       return new Traced(
         vals,
-        new Deriv("list", `[${vals.length} items]`, vals, items.map((i) => i.node)),
+        this.mk("list", `[${vals.length} items]`, vals, items.map((i) => i.node)),
       );
     }
     if (k === "RecordUpdate") {
@@ -805,7 +1025,7 @@ export class Interpreter {
       for (const [key, t] of parts) nw.set(key, t.value);
       return new Traced(
         nw,
-        new Deriv("op", "with", nw, [base.node, ...parts.map(([, t]) => t.node)]),
+        this.mk("op", "with", nw, [base.node, ...parts.map(([, t]) => t.node)]),
       );
     }
     if (k === "ListPlus") {
@@ -819,17 +1039,17 @@ export class Interpreter {
       }
       const item = this.eval(node.item, env);
       const nw = [...base.value, item.value];
-      return new Traced(nw, new Deriv("op", "plus", nw, [base.node, item.node]));
+      return new Traced(nw, this.mk("op", "plus", nw, [base.node, item.node]));
     }
     if (k === "Not") {
       const v = this.eval(node.expr, env);
       const r = !condition(v.value);
-      return new Traced(r, new Deriv("op", "not", r, [v.node]));
+      return new Traced(r, this.mk("op", "not", r, [v.node]));
     }
     if (k === "IsNothing") {
       const v = this.eval(node.expr, env);
       const r = v.value === null || v.value === undefined;
-      return new Traced(r, new Deriv("op", "is nothing", r, [v.node]));
+      return new Traced(r, this.mk("op", "is nothing", r, [v.node]));
     }
     if (k === "BinOp") return this.eval_binop(node, env);
     if (k === "Field") {
@@ -842,7 +1062,7 @@ export class Interpreter {
         );
       }
       const val = obj.value.has(node.name) ? obj.value.get(node.name) : null;
-      return new Traced(val, new Deriv("field", `.${node.name}`, val, [obj.node]));
+      return new Traced(val, this.mk("field", `.${node.name}`, val, [obj.node]));
     }
     if (k === "Call") return this.call(node.name, node.args, env, node.line ?? 0);
     if (k === "Builtin")
@@ -858,7 +1078,7 @@ export class Interpreter {
         throw new PlanesError("not-a-number", `cannot round ${detailValue(v.value)}`, "round only works on numbers");
       }
       const n = PlanesNumber.of(v.value).roundTo(Number(PlanesNumber.of(p.value).asInt()));
-      return new Traced(n, new Deriv("op", `round to ${fmt(p.value)} places`, n, [v.node]));
+      return new Traced(n, this.mk("op", `round to ${fmt(p.value)} places`, n, [v.node]));
     }
     if (k === "WriteTo") {
       const value = this.eval(node.value, env);
@@ -885,7 +1105,7 @@ export class Interpreter {
       this.maybe_record("write", dest.value, this.host_anchor(), dest.node);
       return new Traced(
         null,
-        new Deriv("effect", `write to ${dest.value}`, null, [value.node], `file:${dest.value}`),
+        this.mk("effect", `write to ${dest.value}`, null, [value.node], `file:${dest.value}`),
       );
     }
     if (k === "OrFail") {
@@ -942,17 +1162,17 @@ export class Interpreter {
   eval_binop(node, env) {
     if (node.op === "and") {
       const left = this.eval(node.left, env);
-      if (!condition(left.value)) return new Traced(false, new Deriv("op", "and", false, [left.node]));
+      if (!condition(left.value)) return new Traced(false, this.mk("op", "and", false, [left.node]));
       const right = this.eval(node.right, env);
       const v = condition(right.value);
-      return new Traced(v, new Deriv("op", "and", v, [left.node, right.node]));
+      return new Traced(v, this.mk("op", "and", v, [left.node, right.node]));
     }
     if (node.op === "or") {
       const left = this.eval(node.left, env);
-      if (condition(left.value)) return new Traced(true, new Deriv("op", "or", true, [left.node]));
+      if (condition(left.value)) return new Traced(true, this.mk("op", "or", true, [left.node]));
       const right = this.eval(node.right, env);
       const v = condition(right.value);
-      return new Traced(v, new Deriv("op", "or", v, [left.node, right.node]));
+      return new Traced(v, this.mk("op", "or", v, [left.node, right.node]));
     }
     if (node.op === "first") {
       const n = this.eval(node.left, env);
@@ -980,12 +1200,12 @@ export class Interpreter {
         typeof src.value === "string"
           ? codePoints(src.value).slice(0, count).join("")
           : src.value.slice(0, count);
-      return new Traced(v, new Deriv("op", `first ${count} of`, v, [src.node]));
+      return new Traced(v, this.mk("op", `first ${count} of`, v, [src.node]));
     }
     const left = this.eval(node.left, env);
     const right = this.eval(node.right, env);
     const v = applyOp(node.op, left.value, right.value);
-    return new Traced(v, new Deriv("op", node.op, v, [left.node, right.node]));
+    return new Traced(v, this.mk("op", node.op, v, [left.node, right.node]));
   }
 
   // `line` is supplied by the caller (a Call node carries one; a Builtin node
@@ -1020,7 +1240,7 @@ export class Interpreter {
       } catch {
         parsed = body;
       }
-      return new Traced(parsed, new Deriv("effect", `ask ${url}`, parsed, [arg.node], `network:${url}`));
+      return new Traced(parsed, this.mk("effect", `ask ${url}`, parsed, [arg.node], `network:${url}`));
     }
     if (name === "read") {
       if (!this.modules.has("file")) {
@@ -1037,7 +1257,7 @@ export class Interpreter {
       }
       this.effects.push(["read", path, body.length]);
       this.maybe_record("read", path, this.host_anchor(), arg.node);
-      return new Traced(body, new Deriv("effect", `read ${path}`, body, [arg.node], `file:${path}`));
+      return new Traced(body, this.mk("effect", `read ${path}`, body, [arg.node], `file:${path}`));
     }
     if (name === "count") {
       let n;
@@ -1051,17 +1271,17 @@ export class Interpreter {
           "count takes a list, a record, or text — check which of those this value should be",
         );
       const v = PlanesNumber.of(n);
-      return new Traced(v, new Deriv("op", "count of", v, [arg.node]));
+      return new Traced(v, this.mk("op", "count of", v, [arg.node]));
     }
     if (name === "lower") {
       requireText("lower", "lowercase", arg.value);
       const v = arg.value.toLowerCase();
-      return new Traced(v, new Deriv("op", "lower of", v, [arg.node]));
+      return new Traced(v, this.mk("op", "lower of", v, [arg.node]));
     }
     if (name === "upper") {
       requireText("upper", "uppercase", arg.value);
       const v = arg.value.toUpperCase();
-      return new Traced(v, new Deriv("op", "upper of", v, [arg.node]));
+      return new Traced(v, this.mk("op", "upper of", v, [arg.node]));
     }
     if (name === "whole") {
       if (!isNum(arg.value)) {
@@ -1074,7 +1294,7 @@ export class Interpreter {
         );
       }
       const n = PlanesNumber.of(arg.value).roundTo(0);
-      return new Traced(n, new Deriv("op", "whole of", n, [arg.node]));
+      return new Traced(n, this.mk("op", "whole of", n, [arg.node]));
     }
     if (name === "number") {
       // The twelfth builtin (A-Q19): text to an exact number, closing the
@@ -1109,7 +1329,7 @@ export class Interpreter {
             'notation, e.g. number of "12.5"',
         );
       }
-      return new Traced(n, new Deriv("op", "number of", n, [arg.node]));
+      return new Traced(n, this.mk("op", "number of", n, [arg.node]));
     }
     if (name === "sine") {
       // The eleventh builtin, and the operation that approximates at EVERY
@@ -1126,7 +1346,7 @@ export class Interpreter {
         );
       }
       const n = sineDegrees(arg.value);
-      return new Traced(n, new Deriv("op", "sine of", n, [arg.node]));
+      return new Traced(n, this.mk("op", "sine of", n, [arg.node]));
     }
     if (name === "root") {
       // The thirteenth builtin (square-root-spec.md, closing §253), and the
@@ -1151,16 +1371,16 @@ export class Interpreter {
         );
       }
       const n = rootOf(PlanesNumber.of(arg.value));
-      return new Traced(n, new Deriv("op", "root of", n, [arg.node]));
+      return new Traced(n, this.mk("op", "root of", n, [arg.node]));
     }
     if (name === "text") {
       const v = fmt(arg.value);
-      return new Traced(v, new Deriv("op", "text of", v, [arg.node]));
+      return new Traced(v, this.mk("op", "text of", v, [arg.node]));
     }
     if (name === "normalize") {
       requireText("normalize", "normalize", arg.value);
       const v = arg.value.normalize("NFC");
-      return new Traced(v, new Deriv("op", "normalize of", v, [arg.node]));
+      return new Traced(v, this.mk("op", "normalize of", v, [arg.node]));
     }
     if (name === "join") {
       if (!Array.isArray(arg.value)) {
@@ -1172,7 +1392,7 @@ export class Interpreter {
         }
       }
       const v = arg.value.join("");
-      return new Traced(v, new Deriv("op", "join of", v, [arg.node]));
+      return new Traced(v, this.mk("op", "join of", v, [arg.node]));
     }
     if (name === "rest") {
       if (typeof arg.value === "string") {
@@ -1185,7 +1405,7 @@ export class Interpreter {
         throw new PlanesError("empty-list", "cannot take the rest of an empty list", "check it is not empty first, e.g. `if count of xs > 0:`");
       }
       const v = arg.value.slice(1);
-      return new Traced(v, new Deriv("op", "rest of", v, [arg.node]));
+      return new Traced(v, this.mk("op", "rest of", v, [arg.node]));
     }
     throw new PlanesError(
       "unknown-builtin",
@@ -1197,7 +1417,7 @@ export class Interpreter {
 
   run_or_fail_handler(node, error, env) {
     const rec = errorRecord(error);
-    const bound = new Traced(rec, new Deriv("record", "{record}", rec, []));
+    const bound = new Traced(rec, this.mk("record", "{record}", rec, []));
     env.bind_local(node.tag, bound);
     return this.exec_block(node.handler, env);
   }
@@ -1218,7 +1438,7 @@ export class Interpreter {
     const nodes = [];
     for (const item of seq) {
       const inner = new Env(env);
-      const item_t = new Traced(item, new Deriv("item", node.var, item, [source.node]));
+      const item_t = new Traced(item, this.mk("item", node.var, item, [source.node]));
       inner.bind_local(node.var, item_t);
       if (node.where !== null) {
         if (!condition(this.eval(node.where, inner).value)) continue;
@@ -1230,7 +1450,7 @@ export class Interpreter {
       }
     }
     const label = `for each ${node.var}` + (node.where !== null ? " where ..." : "");
-    return new Traced(results, new Deriv("comprehension", label, results, [source.node, ...nodes.slice(0, 3)]));
+    return new Traced(results, this.mk("comprehension", label, results, [source.node, ...nodes.slice(0, 3)]));
   }
 
   call(name, args, env, line = 0) {
@@ -1275,7 +1495,7 @@ export class Interpreter {
     const inner = new Env(fn.env);
     for (let i = 0; i < fn.params.length; i++) {
       const a = arg_vals[i];
-      inner.bind_local(fn.params[i], new Traced(a.value, new Deriv("name", fn.params[i], a.value, [a.node])));
+      inner.bind_local(fn.params[i], new Traced(a.value, this.mk("name", fn.params[i], a.value, [a.node])));
     }
     // Where this call was WRITTEN, and whose body is now running. Both are
     // restored on every exit path — including a `give` and a depth refusal —
@@ -1288,12 +1508,12 @@ export class Interpreter {
       for (const s of fn.body) {
         if (s.__node !== "Note") this.exec_stmt(s, inner);
       }
-      return new Traced(null, new Deriv("call", iname, null, arg_vals.map((a) => a.node)));
+      return new Traced(null, this.mk("call", iname, null, arg_vals.map((a) => a.node)));
     } catch (e) {
       if (e instanceof GiveSignal) {
         return new Traced(
           e.value.value,
-          new Deriv("call", iname, e.value.value, [e.value.node, ...arg_vals.map((a) => a.node)]),
+          this.mk("call", iname, e.value.value, [e.value.node, ...arg_vals.map((a) => a.node)]),
         );
       }
       if (e instanceof RangeError) {
@@ -1362,7 +1582,7 @@ export class Interpreter {
       throw new PlanesError("foreign-failed", `'${decl.name}' raised ${e.name ?? "Error"}: ${e.message ?? e}`, "wrap the call with `or fail as ...` to name the failure");
     }
     const value = fromForeign(raw);
-    return new Traced(value, new Deriv("foreign", decl.name, value, arg_vals.map((a) => a.node), `foreign:${decl.target}`));
+    return new Traced(value, this.mk("foreign", decl.name, value, arg_vals.map((a) => a.node), `foreign:${decl.target}`));
   }
 }
 
@@ -1608,6 +1828,12 @@ export function render(node) {
   }
   if (k === "list") return node.label;
   if (k === "record") return node.label;
+  if (k === "seal") {
+    // R1 §5: the seal's own label IS the fixed refusal sentence, so this
+    // arm — like "list"/"record"/"effect" above — is just "return
+    // node.label"; no seal-specific rendering logic exists.
+    return node.label;
+  }
   if (k === "op") {
     if (node.label.endsWith(" of") || node.label === "not") {
       return `${node.label} ${render(node.inputs[0])}`;

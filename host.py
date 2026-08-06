@@ -74,6 +74,21 @@ class Host:
         not depend on this happening. The default is a no-op.
         """
 
+    # ---- the retention window (R1, §441) — a host capability, not a
+    # language feature. The interpreter decides WHAT to seal and computes
+    # the fingerprint; a host that wants the released subgraph to survive
+    # past this run is the only thing that can make that durable, the same
+    # division `record` already draws. Optional, joining `record` in the
+    # tier a second host does not have to implement: the required surface
+    # stays at seven (test_host.py's own count).
+
+    def snapshot(self, fingerprint, entry):
+        """Persist a released subgraph's summary, if this host keeps one.
+
+        Optional: a host that does nothing here is still a complete host.
+        The default is a no-op — the same shape as `record` above.
+        """
+
     # ---- foreign resolution
 
     def resolve(self, target):
@@ -172,6 +187,7 @@ class TestHost(PythonHost):
         self.now = now if now is not None else 1_000_000.0
         self.shown = []
         self.recorded = []      # the record plane's in-memory sink
+        self.snapshots = {}     # the retention window's in-memory sink
 
     def ask(self, url):
         r = self.responses
@@ -197,3 +213,6 @@ class TestHost(PythonHost):
 
     def record(self, entry):
         self.recorded.append(entry)
+
+    def snapshot(self, fingerprint, entry):
+        self.snapshots[fingerprint] = entry
