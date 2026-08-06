@@ -472,6 +472,80 @@ switch (sub) {
     );
     break;
   }
+  case "retention": {
+    // retention <config-json> — R1's cross-language probe. `config`:
+    //   { window, steps: [src, ...], pinAfterStep, pinName, subject,
+    //     responses, files, now }
+    // Runs each of `steps` in order on ONE Interpreter + TestHost (so a
+    // scenario can grow a chain past the window over several calls, the
+    // same way a per-tick host would), optionally pinning
+    // env.get(pinName)'s node right after step index `pinAfterStep`
+    // completes. Reports the generation count, how much of `subject`'s
+    // derivation is reachable, the first seal found walking from it (its
+    // generation/releasedCount/fingerprint and its label — the refusal
+    // sentence), how much of the pinned node's own derivation is
+    // reachable (or null if nothing was pinned), and output/effects for
+    // an inertness comparison. test_retention.py runs the identical
+    // config through interp.py and diffs every field.
+    loadGrammar();
+    const cfg = JSON.parse(rest[0]);
+    const host = new TestHost({
+      responses: cfg.responses ?? {},
+      files: cfg.files ?? {},
+      now: cfg.now ?? 1000000.0,
+    });
+    const itp = new Interpreter({ host, window: cfg.window ?? null });
+    let pinnedNode = null;
+    for (let idx = 0; idx < cfg.steps.length; idx++) {
+      itp.run(cfg.steps[idx]);
+      if (cfg.pinAfterStep === idx && cfg.pinName) {
+        pinnedNode = itp.pin(itp.env.get(cfg.pinName));
+      }
+    }
+    function reachableCount(node) {
+      const seen = new Set();
+      const stack = [node];
+      while (stack.length) {
+        const n = stack.pop();
+        if (seen.has(n)) continue;
+        seen.add(n);
+        if (n.kind !== "seal") for (const i of n.inputs) stack.push(i);
+      }
+      return seen.size;
+    }
+    function findSeal(node) {
+      const seen = new Set();
+      const stack = [node];
+      while (stack.length) {
+        const n = stack.pop();
+        if (seen.has(n)) continue;
+        seen.add(n);
+        if (n.kind === "seal") return n;
+        for (const i of n.inputs) stack.push(i);
+      }
+      return null;
+    }
+    const subjectNode = itp.env.get(cfg.subject).node;
+    const seal = findSeal(subjectNode);
+    out(
+      JSON.stringify({
+        generations: itp._generation,
+        reachable: reachableCount(subjectNode),
+        seal: seal
+          ? {
+              generation: seal.generation,
+              releasedCount: seal.releasedCount,
+              fingerprint: seal.fingerprint,
+              refusal: seal.label,
+            }
+          : null,
+        pinnedReachable: pinnedNode ? reachableCount(pinnedNode) : null,
+        output: itp.output,
+        effects: itp.effects,
+      }),
+    );
+    break;
+  }
   case "render": {
     // render <file> — canonical source, byte-for-byte against render.py.
     loadGrammar();

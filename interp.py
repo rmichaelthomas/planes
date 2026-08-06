@@ -1,4 +1,5 @@
 """Planes evaluator — values, provenance, effects."""
+import hashlib
 import json
 import os
 import unicodedata
@@ -24,12 +25,23 @@ class _BuiltinName:
 
 @dataclass
 class Deriv:
-    """One node in a derivation graph. Provenance lives here, not in types."""
+    """One node in a derivation graph. Provenance lives here, not in types.
+
+    The last three fields are R1's (checkpoint v28.0 §441): `generation` is
+    a construction-order stamp every node gets; `released_count` and
+    `fingerprint` are set only on a seal (kind="seal"), the node a
+    retention window cuts a chain down to. A seal is otherwise an ordinary
+    Deriv — empty inputs, a value, a label — so render/origins/why_tree/
+    approximationsIn need no seal-specific case to walk one.
+    """
     kind: str                                  # literal|name|op|call|field|effect|...
     label: str
     value: Any
     inputs: list = field(default_factory=list)
     origin: Optional[str] = None               # where this entered the program
+    generation: int = 0
+    released_count: Optional[int] = None
+    fingerprint: Optional[str] = None
 
 
 @dataclass
@@ -416,6 +428,17 @@ class Function:
     file: Optional[str] = None
 
 
+def seal_refusal(generation, snapshot):
+    """The fixed sentence a seal names (R1 §5) — true because Planes is
+    deterministic and pure: history behind a seal is not lost, only
+    compressed to a seed that a deterministic replay from `snapshot`
+    recovers exactly. Byte-identical across implementations by construction
+    — both build it from the same template with the same two values."""
+    return (f"history before generation {generation} was released; "
+            f"deterministic replay from snapshot {snapshot} recovers it "
+            f"exactly.")
+
+
 # ================================================================ interpreter
 
 def real_http(url):
@@ -425,7 +448,7 @@ def real_http(url):
 
 
 class Interpreter:
-    def __init__(self, http=None, fs=None, host=None, record=False):
+    def __init__(self, http=None, fs=None, host=None, record=False, window=None):
         self.env = Env()
         self.funcs = {}
         self.foreigns = {}       # name -> Foreign declaration
@@ -499,6 +522,17 @@ class Interpreter:
         self.record = record
         self.records = []
 
+        # The retention window (R1, checkpoint v28.0 §441). `window` is
+        # host-supplied, in the memory math's own unit (a count of
+        # Deriv nodes — REPORT_UPDATE_COST.md §5.4). None (the default)
+        # means unbounded: `mk` and `_cut` below skip straight past every
+        # window check, so an unbounded run allocates no seal and costs no
+        # more than HEAD did — invariant 2 (§N+1) holds by construction,
+        # not by a separate code path re-implementing HEAD's behaviour.
+        self.window = window
+        self._generation = 0
+        self._pinned = {}           # id(Deriv) -> Deriv, kept alive by pin()
+
     @property
     def fs(self):
         """Files this run touched, when the host keeps them in memory."""
@@ -526,6 +560,189 @@ class Interpreter:
                        when=self.host.clock(), derivation=derivation)
         self.records.append(entry)
         self.host.record(entry)
+
+    # ---- the retention window (R1)
+
+    def mk(self, kind, label, value, inputs=None, origin=None):
+        """Build a Deriv, stamped with the next generation. Every Deriv in
+        this file is built through here (not through the dataclass
+        directly) so the stamp — and, when a window is set, the cut below —
+        apply uniformly, with no operation-kind special case."""
+        gen = self._generation
+        self._generation += 1
+        node = Deriv(kind, label, value, list(inputs) if inputs else [],
+                     origin, generation=gen)
+        if self.window is not None:
+            self._cut(node)
+        return node
+
+    def mk_lit(self, v, label=None):
+        return Traced(v, self.mk("literal", label if label is not None else fmt(v), v))
+
+    def pin(self, traced_or_node):
+        """Keep a specific derivation reachable past the window (§6).
+
+        `self._pinned` holds a direct, strong reference to the node — an
+        independent root the interpreter's own bookkeeping keeps alive,
+        the same way a still-bound `env` variable keeps a value alive
+        today, not a flag that changes how `_cut` treats every OTHER edge
+        that happens to pass through it. That is what keeps a pin cheap
+        and local: `_cut` is still free to seal the live chain's own edge
+        to a pinned node — cutting one path to it does not lose it, since
+        `self._pinned` is a second, independent path — so pinning one
+        derivation never blocks the window from continuing to bound
+        everything built after it. Pure bookkeeping otherwise — an id in a
+        dict — so it can never change output, effects, or the static
+        surface (v6.0's annotation-plane inertness, the discipline
+        test_record.py's inertness gate checks for the record plane).
+        Returns the pinned node.
+        """
+        node = traced_or_node.node if isinstance(traced_or_node, Traced) \
+            else traced_or_node
+        self._pinned[id(node)] = node
+        return node
+
+    def _cut(self, node):
+        """Apply the window to `node`'s own reachable inputs, in place.
+
+        Age is measured against `node.generation` — ONE fixed reference
+        point for the whole call, not each intermediate ancestor's own
+        generation. That distinction matters: a chain a `with`/`plus` loop
+        builds links each new step to the one immediately before it, one
+        generation apart, always — so checking an ancestor's age against
+        its DIRECT parent's generation would never see more than 1 and
+        would never cut anything. Checked against `node`'s own generation
+        instead, an ancestor many steps behind the node actually being
+        built reads as exactly that old, however many links away it is.
+
+        A pinned input is left exactly as it is — not replaced, and its
+        own inputs not descended into either, so its derivation stays
+        whole from the moment it was pinned. Everything else old enough is
+        replaced by a seal. Mutating an existing node's `inputs` here is
+        safe: it changes only PROVENANCE, never the node's `value`, which
+        is set once and never touched — so no output, effect, or static
+        surface can differ because a cut happened (§N+1 invariant 2's twin
+        for the windowed case).
+
+        Iterative, not recursive: an unpinned linear chain — the shape a
+        long-running `with`/`plus` loop actually builds — is a Deriv graph
+        thousands of nodes deep, and a recursive walk over it would exceed
+        Python's call-stack depth long before the window ever needed to
+        cut anything. Discover the whole reachable subgraph once with an
+        explicit stack, then rebuild each node's `inputs` deepest-first,
+        so a parent's decision always sees its child's already-finished
+        result. In practice this discovers at most one window's worth of
+        nodes before hitting a leaf, a pin, or an already-placed seal —
+        each of which stops discovery cold — which is what keeps the
+        per-call cost bounded rather than growing with total history: the
+        previous call already pushed a seal in place just past the window
+        boundary.
+        """
+        if node.kind == "seal" or id(node) in self._pinned:
+            return
+        current = node.generation
+        order = []
+        stack = [node]
+        seen = {id(node)}
+        while stack:
+            n = stack.pop()
+            order.append(n)
+            if n.kind == "seal" or id(n) in self._pinned:
+                continue
+            for inp in n.inputs:
+                if id(inp) not in seen:
+                    seen.add(id(inp))
+                    stack.append(inp)
+        for n in reversed(order):
+            if n.kind == "seal" or id(n) in self._pinned:
+                continue
+            changed = False
+            new_inputs = []
+            for inp in n.inputs:
+                if inp.kind == "seal" or id(inp) in self._pinned:
+                    new_inputs.append(inp)
+                elif current - inp.generation > self.window:
+                    new_inputs.append(self._seal(inp))
+                    changed = True
+                else:
+                    new_inputs.append(inp)
+            if changed:
+                n.inputs = new_inputs
+
+    def _seal(self, root):
+        """Replace `root`'s own chain with a seal: the value at the cut,
+        the generation it cut at, how many steps it releases, and a
+        fingerprint over a canonical, deterministic text of what is
+        released.
+
+        Two iterative passes, not a recursive walk (see `_protected`'s
+        note): the first assigns every reachable node a stable index in
+        first-discovery order (a stack, so both implementations visit in
+        the identical order given the identical graph); the second emits
+        one line per node — kind, label, value, origin, and its inputs'
+        already-known indices — so the whole DAG, sharing included, is a
+        flat, order-independent-to-write text. Same program, same
+        traversal order in both langs, so the same text, and so the same
+        fingerprint — extending the corpus's byte-identical-agreement
+        discipline to the released subgraph, not only to output.
+
+        NOT memoized across calls, deliberately: `id()` is a memory
+        address, and Python is free to reuse one once its object is
+        collected — which `root` becomes eligible for the moment nothing
+        else references it, exactly the case a seal exists to create. A
+        cache keyed on `id(root)` without holding `root` alive would, once
+        that address was reassigned to an unrelated later node, hand back
+        a stale seal for the wrong subgraph — found live in this build:
+        window=5 over a 200-line chain produced a Python seal stuck at
+        generation 19 while JavaScript's (correct; its ids never repeat)
+        advanced to 595. Each call here walks only what is still
+        reachable and not already behind an earlier seal, so the repeat
+        cost this would have saved is small and only ever paid when the
+        SAME node is independently discovered stale from more than one
+        surviving path — the DAG-sharing case, not the common linear one.
+        """
+        order = {}
+        seq = []
+        stack = [root]
+        while stack:
+            n = stack.pop()
+            if id(n) in order:
+                continue
+            order[id(n)] = len(order)
+            seq.append(n)
+            if n.kind != "seal":
+                for inp in n.inputs:
+                    if id(inp) not in order:
+                        stack.append(inp)
+        count = 0
+        parts = []
+        for n in seq:
+            if n.kind == "seal":
+                # A prior cut, absorbed rather than re-walked: its own
+                # released_count folds in, and its fingerprint stands for
+                # everything it already summarized.
+                count += n.released_count
+                parts.append(f"seal\x1f{n.generation}\x1f{n.fingerprint}")
+                continue
+            count += 1
+            children = ",".join(str(order[id(i)]) for i in n.inputs)
+            parts.append(
+                f"{n.kind}\x1f{n.label}\x1f{fmt(n.value)}\x1f"
+                f"{n.origin or ''}\x1f{children}")
+        fingerprint = hashlib.sha256(
+            "\n".join(parts).encode()).hexdigest()[:12]
+        seal = Deriv("seal", seal_refusal(root.generation, fingerprint),
+                     root.value, [], generation=root.generation,
+                     released_count=count, fingerprint=fingerprint)
+        # A host capability, requested and never performed directly — the
+        # same rule maybe_record already follows for the clock and any
+        # persistence (§99's "never performed by the interpreter
+        # directly"). The default is a no-op; a host that wants durable
+        # retention of the released subgraph can keep it.
+        self.host.snapshot(fingerprint,
+                           {"generation": root.generation,
+                            "released_count": count})
+        return seal
 
     # ---- driving
 
@@ -683,7 +900,7 @@ class Interpreter:
 
         if isinstance(stmt, Assign):
             val = self.eval(stmt.expr, env)
-            named = Traced(val.value, Deriv("name", stmt.name, val.value, [val.node]))
+            named = Traced(val.value, self.mk("name", stmt.name, val.value, [val.node]))
             if stmt.is_let:
                 env.bind_local(stmt.name, named)
             else:
@@ -776,7 +993,7 @@ class Interpreter:
             if matched:
                 for name, val in bindings:
                     env.bind_local(name, Traced(
-                        val, Deriv("field", f".{name}", val, [subject.node])))
+                        val, self.mk("field", f".{name}", val, [subject.node])))
             result = None
             for s in (stmt.body if matched else stmt.els):
                 if not isinstance(s, Note):
@@ -784,8 +1001,8 @@ class Interpreter:
             fields = ", ".join(f for f, _ in stmt.pattern)
             label = f"when {{{fields}}} " + ("matched" if matched else "did not match")
             rv = result.value if result is not None else None
-            rn = result.node if result is not None else Deriv("literal", "nothing", None)
-            return Traced(rv, Deriv("op", label, rv, [subject.node, rn]))
+            rn = result.node if result is not None else self.mk("literal", "nothing", None)
+            return Traced(rv, self.mk("op", label, rv, [subject.node, rn]))
 
         if isinstance(stmt, Fail):
             v = self.eval(stmt.message, env)
@@ -828,14 +1045,14 @@ class Interpreter:
 
     def eval(self, node, env):
         if isinstance(node, Num):
-            return lit(node.value)
+            return self.mk_lit(node.value)
         if isinstance(node, Str):
             label = f'"{escape_string_literal(node.value)}"'
-            return Traced(node.value, Deriv("literal", label, node.value))
+            return Traced(node.value, self.mk("literal", label, node.value))
         if isinstance(node, Bool):
-            return lit(node.value)
+            return self.mk_lit(node.value)
         if isinstance(node, Nothing):
-            return lit(None)
+            return self.mk_lit(None)
 
         if isinstance(node, Var):
             if node.name in self.funcs and not env.has(node.name):
@@ -845,13 +1062,13 @@ class Interpreter:
         if isinstance(node, RecordLit):
             parts = [(k, self.eval(v, env)) for k, v in node.fields]
             val = {k: t.value for k, t in parts}
-            return Traced(val, Deriv("record", "{record}", val,
+            return Traced(val, self.mk("record", "{record}", val,
                                      [t.node for _, t in parts]))
 
         if isinstance(node, ListLit):
             items = [self.eval(i, env) for i in node.items]
             vals = [i.value for i in items]
-            return Traced(vals, Deriv("list", f"[{len(vals)} items]", vals,
+            return Traced(vals, self.mk("list", f"[{len(vals)} items]", vals,
                                       [i.node for i in items]))
 
         if isinstance(node, RecordUpdate):
@@ -863,7 +1080,7 @@ class Interpreter:
                     "with updates a record; check the base is one")
             parts = [(k, self.eval(v, env)) for k, v in node.fields]
             new = {**base.value, **{k: t.value for k, t in parts}}
-            return Traced(new, Deriv("op", "with", new,
+            return Traced(new, self.mk("op", "with", new,
                                      [base.node] + [t.node for _, t in parts]))
 
         if isinstance(node, ListPlus):
@@ -875,17 +1092,17 @@ class Interpreter:
                     "plus appends to a list; check the base is one")
             item = self.eval(node.item, env)
             new = base.value + [item.value]
-            return Traced(new, Deriv("op", "plus", new, [base.node, item.node]))
+            return Traced(new, self.mk("op", "plus", new, [base.node, item.node]))
 
         if isinstance(node, Not):
             v = self.eval(node.expr, env)
             r = not condition(v.value)
-            return Traced(r, Deriv("op", "not", r, [v.node]))
+            return Traced(r, self.mk("op", "not", r, [v.node]))
 
         if isinstance(node, IsNothing):
             v = self.eval(node.expr, env)
             r = v.value is None
-            return Traced(r, Deriv("op", "is nothing", r, [v.node]))
+            return Traced(r, self.mk("op", "is nothing", r, [v.node]))
 
         if isinstance(node, BinOp):
             return self.eval_binop(node, env)
@@ -898,7 +1115,7 @@ class Interpreter:
                     f"cannot read .{node.name} from {detail_value(obj.value)}",
                     "check the value is a record before using dot access")
             val = obj.value.get(node.name)
-            return Traced(val, Deriv("field", f".{node.name}", val, [obj.node]))
+            return Traced(val, self.mk("field", f".{node.name}", val, [obj.node]))
 
         if isinstance(node, Call):
             return self.call(node.name, node.args, env, node.line)
@@ -914,7 +1131,7 @@ class Interpreter:
                                   f"cannot round {detail_value(v.value)}",
                                   "round only works on numbers")
             n = Number.of(v.value).round_to(Number.of(p.value).as_int())
-            return Traced(n, Deriv("op", f"round to {fmt(p.value)} places",
+            return Traced(n, self.mk("op", f"round to {fmt(p.value)} places",
                                    n, [v.node]))
 
         if isinstance(node, WriteTo):
@@ -942,7 +1159,7 @@ class Interpreter:
             self.effects.append(("write", dest.value, len(payload)))
             self.maybe_record("write", dest.value, self.host_anchor(),
                               derivation=dest.node)
-            return Traced(None, Deriv("effect", f"write to {dest.value}", None,
+            return Traced(None, self.mk("effect", f"write to {dest.value}", None,
                                       [value.node], origin=f"file:{dest.value}"))
 
         if isinstance(node, OrFail):
@@ -1018,18 +1235,18 @@ class Interpreter:
         if node.op == "and":
             left = self.eval(node.left, env)
             if not condition(left.value):
-                return Traced(False, Deriv("op", "and", False, [left.node]))
+                return Traced(False, self.mk("op", "and", False, [left.node]))
             right = self.eval(node.right, env)
             v = condition(right.value)
-            return Traced(v, Deriv("op", "and", v, [left.node, right.node]))
+            return Traced(v, self.mk("op", "and", v, [left.node, right.node]))
 
         if node.op == "or":
             left = self.eval(node.left, env)
             if condition(left.value):
-                return Traced(True, Deriv("op", "or", True, [left.node]))
+                return Traced(True, self.mk("op", "or", True, [left.node]))
             right = self.eval(node.right, env)
             v = condition(right.value)
-            return Traced(v, Deriv("op", "or", v, [left.node, right.node]))
+            return Traced(v, self.mk("op", "or", v, [left.node, right.node]))
 
         if node.op == "first":
             n = self.eval(node.left, env)
@@ -1051,12 +1268,12 @@ class Interpreter:
                     "`first n of` takes a list or text; a record has no order "
                     "to take a prefix of")
             v = src.value[: int(n.value)]
-            return Traced(v, Deriv("op", f"first {int(n.value)} of", v, [src.node]))
+            return Traced(v, self.mk("op", f"first {int(n.value)} of", v, [src.node]))
 
         left = self.eval(node.left, env)
         right = self.eval(node.right, env)
         v = apply_op(node.op, left.value, right.value)
-        return Traced(v, Deriv("op", node.op, v, [left.node, right.node]))
+        return Traced(v, self.mk("op", node.op, v, [left.node, right.node]))
 
     def eval_builtin(self, node, env):
         return self.builtin(node.name, self.eval(node.arg, env))
@@ -1095,7 +1312,7 @@ class Interpreter:
                 parsed = from_foreign(self.host.parse_json(body))
             except Exception:
                 parsed = body
-            return Traced(parsed, Deriv("effect", f"ask {url}", parsed,
+            return Traced(parsed, self.mk("effect", f"ask {url}", parsed,
                                         [arg.node], origin=f"network:{url}"))
 
         if node.name == "read":
@@ -1117,7 +1334,7 @@ class Interpreter:
                                   "check the path, or write it first")
             self.effects.append(("read", path, len(body)))
             self.maybe_record("read", path, self.host_anchor(), derivation=arg.node)
-            return Traced(body, Deriv("effect", f"read {path}", body,
+            return Traced(body, self.mk("effect", f"read {path}", body,
                                       [arg.node], origin=f"file:{path}"))
 
         if node.name == "count":
@@ -1132,15 +1349,15 @@ class Interpreter:
                     "count takes a list, a record, or text — check which of "
                     "those this value should be")
             v = Number.of(len(arg.value))
-            return Traced(v, Deriv("op", "count of", v, [arg.node]))
+            return Traced(v, self.mk("op", "count of", v, [arg.node]))
         if node.name == "lower":
             require_text("lower", "lowercase", arg.value)
             v = arg.value.lower()
-            return Traced(v, Deriv("op", "lower of", v, [arg.node]))
+            return Traced(v, self.mk("op", "lower of", v, [arg.node]))
         if node.name == "upper":
             require_text("upper", "uppercase", arg.value)
             v = arg.value.upper()
-            return Traced(v, Deriv("op", "upper of", v, [arg.node]))
+            return Traced(v, self.mk("op", "upper of", v, [arg.node]))
         if node.name == "whole":
             if not is_num(arg.value):
                 raise PlanesError(
@@ -1151,7 +1368,7 @@ class Interpreter:
                     "convert it first with number of — a boolean, a list, "
                     "a record, or nothing has no path to becoming a number")
             n = Number.of(arg.value).round_to(0)
-            return Traced(n, Deriv("op", "whole of", n, [arg.node]))
+            return Traced(n, self.mk("op", "whole of", n, [arg.node]))
 
         if node.name == "number":
             # The twelfth builtin (A-Q19): text to an exact number, closing the
@@ -1182,7 +1399,7 @@ class Interpreter:
                     "number of takes an optional leading -, digits, and at "
                     "most one . — no exponent notation, e.g. "
                     "number of \"12.5\"")
-            return Traced(n, Deriv("op", "number of", n, [arg.node]))
+            return Traced(n, self.mk("op", "number of", n, [arg.node]))
 
         if node.name == "sine":
             # The eleventh builtin, and the operation that approximates at
@@ -1198,7 +1415,7 @@ class Interpreter:
                     "sine of 30; if this is text, convert it first with "
                     "number of")
             n = sine_degrees(arg.value)
-            return Traced(n, Deriv("op", "sine of", n, [arg.node]))
+            return Traced(n, self.mk("op", "sine of", n, [arg.node]))
 
         if node.name == "root":
             # The thirteenth builtin (square-root-spec.md, closing §253), and
@@ -1220,15 +1437,15 @@ class Interpreter:
                     "has no imaginary number, so a negative radicand has no "
                     "value to return; test the sign before taking the root")
             n = root_of(arg.value)
-            return Traced(n, Deriv("op", "root of", n, [arg.node]))
+            return Traced(n, self.mk("op", "root of", n, [arg.node]))
 
         if node.name == "text":
             v = fmt(arg.value)
-            return Traced(v, Deriv("op", "text of", v, [arg.node]))
+            return Traced(v, self.mk("op", "text of", v, [arg.node]))
         if node.name == "normalize":
             require_text("normalize", "normalize", arg.value)
             v = unicodedata.normalize("NFC", arg.value)
-            return Traced(v, Deriv("op", "normalize of", v, [arg.node]))
+            return Traced(v, self.mk("op", "normalize of", v, [arg.node]))
         if node.name == "join":
             # Fold a list of text into one string in O(n) — the answer to the
             # O(n^2) repeated-`+` build the sweep measured (S2 §A.2). No
@@ -1247,7 +1464,7 @@ class Interpreter:
                         f"join needs a list of text, found {detail_value(x)}",
                         "convert each item first — e.g. text of n")
             v = "".join(arg.value)
-            return Traced(v, Deriv("op", "join of", v, [arg.node]))
+            return Traced(v, self.mk("op", "join of", v, [arg.node]))
         if node.name == "rest":
             # The list without its first element (S2 §A.3). Lists only — a
             # string wants `first n of` (#11's declined `rest n of x` for text
@@ -1271,7 +1488,7 @@ class Interpreter:
                     "cannot take the rest of an empty list",
                     "check it is not empty first, e.g. `if count of xs > 0:`")
             v = arg.value[1:]
-            return Traced(v, Deriv("op", "rest of", v, [arg.node]))
+            return Traced(v, self.mk("op", "rest of", v, [arg.node]))
 
         raise PlanesError(
             "unknown-builtin", f"no builtin is named '{node.name}'",
@@ -1287,7 +1504,7 @@ class Interpreter:
         assigns is visible afterward exactly the way an if-branch's is.
         """
         rec = error_record(error)
-        bound = Traced(rec, Deriv("record", "{record}", rec, []))
+        bound = Traced(rec, self.mk("record", "{record}", rec, []))
         env.bind_local(node.tag, bound)
         return self.exec_block(node.handler, env)
 
@@ -1300,7 +1517,7 @@ class Interpreter:
         results, nodes = [], []
         for idx, item in enumerate(source.value):
             inner = Env(env)
-            item_t = Traced(item, Deriv("item", node.var, item, [source.node]))
+            item_t = Traced(item, self.mk("item", node.var, item, [source.node]))
             inner.bind_local(node.var, item_t)
             if node.where is not None:
                 if not condition(self.eval(node.where, inner).value):
@@ -1311,7 +1528,7 @@ class Interpreter:
                 results.append(r.value)
                 nodes.append(r.node)
         label = f"for each {node.var}" + (" where ..." if node.where else "")
-        return Traced(results, Deriv("comprehension", label, results,
+        return Traced(results, self.mk("comprehension", label, results,
                                      [source.node] + nodes[:3]))
 
     def call(self, name, args, env, line=0):
@@ -1363,7 +1580,7 @@ class Interpreter:
                     for a in args]
         inner = Env(fn.env)
         for p, a in zip(fn.params, arg_vals):
-            inner.bind_local(p, Traced(a.value, Deriv("name", p, a.value, [a.node])))
+            inner.bind_local(p, Traced(a.value, self.mk("name", p, a.value, [a.node])))
         # Where this call was WRITTEN, and whose body is now running. Both are
         # restored on every exit path, including a `give` and a depth refusal,
         # so an early return can never leave the interpreter believing it is
@@ -1375,11 +1592,11 @@ class Interpreter:
             for s in fn.body:
                 if not isinstance(s, Note):
                     self.exec_stmt(s, inner)
-            return Traced(None, Deriv("call", iname, None,
+            return Traced(None, self.mk("call", iname, None,
                                       [a.node for a in arg_vals]))
         except _Give as g:
             return Traced(g.value.value,
-                          Deriv("call", iname, g.value.value,
+                          self.mk("call", iname, g.value.value,
                                 [g.value.node] + [a.node for a in arg_vals]))
         except RecursionError:
             # Narrow on purpose: only around the recursive re-entry through
@@ -1467,7 +1684,7 @@ class Interpreter:
                 "wrap the call with `or fail as ...` to name the failure")
 
         value = from_foreign(raw)
-        return Traced(value, Deriv("foreign", decl.name, value,
+        return Traced(value, self.mk("foreign", decl.name, value,
                                    [a.node for a in arg_vals],
                                    origin=f"foreign:{decl.target}"))
 
@@ -1744,6 +1961,11 @@ def render(node):
     if k == "list":
         return node.label
     if k == "record":
+        return node.label
+    if k == "seal":
+        # R1 §5: the seal's own label IS the fixed refusal sentence, so
+        # this arm — like "list"/"record"/"effect" above — is just
+        # "return node.label"; no seal-specific rendering logic exists.
         return node.label
     if k == "op":
         if node.label.endswith(" of") or node.label == "not":

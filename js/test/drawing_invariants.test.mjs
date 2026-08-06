@@ -143,7 +143,7 @@ test("no CSS oklch() string appears in any renderer .mjs", () => {
 
 // ---- the seams that must not grow -------------------------------------------
 
-test("the Host interface is the same seven methods, plus record and targetHint", () => {
+test("the Host interface is the same seven methods, plus record, snapshot, and targetHint", () => {
   const declared = Object.getOwnPropertyNames(Host.prototype)
     .filter((n) => n !== "constructor")
     // `name` is an accessor, not part of the seam.
@@ -151,7 +151,10 @@ test("the Host interface is the same seven methods, plus record and targetHint",
     .sort();
   const SEVEN = ["ask", "clock", "parseJson", "read", "resolve", "show", "write"];
   for (const m of SEVEN) assert.ok(declared.includes(m), `host.mjs lost ${m}`);
-  assert.deepEqual(declared, [...SEVEN, "record", "targetHint"].sort());
+  // `snapshot` (R1, checkpoint v28.0 §441) joins `record` in the optional
+  // tier beside the seven required methods — the retention window's host
+  // capability, matching record's shape exactly.
+  assert.deepEqual(declared, [...SEVEN, "record", "snapshot", "targetHint"].sort());
 });
 
 test("js/modules.mjs is pure: it imports nothing from node:", () => {
