@@ -187,6 +187,12 @@
       .key-head{display:flex; align-items:baseline; gap:10px; margin-bottom:12px; flex-wrap:wrap}
       .key-head h3{font-weight:800; font-size:13px; margin:0; letter-spacing:.02em}
       .key-head .subtitle{font-size:11.5px; color:var(--ink-60); margin:0}
+      .key-head .key-toggle{
+        font-family:var(--mono); font-size:10.5px; font-weight:600; padding:4px 9px;
+        border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink-60); cursor:pointer;
+      }
+      .key-head .key-toggle:hover{background:var(--line); color:var(--graphite)}
+      .key-head .key-toggle[hidden]{display:none}
       .key-cols{display:grid; grid-template-columns:repeat(4, 1fr); gap:18px}
       @media (max-width:760px){.key-cols{grid-template-columns:repeat(2,1fr); gap:14px}}
       @media (max-width:420px){.key-cols{grid-template-columns:1fr}}
@@ -201,7 +207,7 @@
       .choice .q{color:var(--ink-40)}
       .key .mini{font-size:11px; color:var(--ink-60); line-height:1.5; margin:13px 0 0; padding-top:11px; border-top:1px solid var(--line)}
 
-      /* ---------- week 4: unlabeled colour swatches ---------- */
+      /* ---------- the your-own-sky lesson: unlabeled colour swatches ---------- */
       .swatches{margin-top:12px; border:1px solid var(--line); border-radius:14px; padding:14px 16px; background:#fff}
       .swatches[hidden]{display:none}
       .swatches h3{font-weight:800; font-size:13px; margin:0 0 4px}
@@ -214,7 +220,7 @@
       .swatch:hover{box-shadow:0 0 0 2px var(--clay)}
       .swatch:focus-visible{outline:2px solid var(--graphite); outline-offset:2px}
 
-      /* ---------- week 5 capstone + certificate ---------- */
+      /* ---------- the final-lesson capstone + certificate ---------- */
       .capstone{margin-top:16px}
       .capstone[hidden]{display:none}
       .capgrid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
@@ -336,6 +342,7 @@
         <aside class="key" id="key">
           <div class="key-head">
             <h3>words you can use</h3>
+            <button class="key-toggle" id="key-toggle" type="button" hidden aria-pressed="false">hide key</button>
             <p class="subtitle">Type these into your program — the key just shows how they're spelled.</p>
           </div>
           <div class="key-cols">
@@ -392,9 +399,9 @@
             <div class="try">
               <code>two-flowers of 380, spot</code> — another pair, way over on the right<br />
               <code>sky of "just before dark"</code> — a different time of day<br />
-              make a <b>new sky</b> in your own words, like you did in week 4
+              make a <b>new sky</b> in your own words, the way the "your own sky" lesson showed you
             </div>
-            <p style="margin-top:10px">What you did this week is real programming. The same ideas — naming things, saying why, building from small pieces — work in every language there is.</p>
+            <p style="margin-top:10px">What you did here is real programming. The same ideas — naming things, saying why, building from small pieces — work in every language there is.</p>
           </div>
         </div>
         <div class="cert-open">
@@ -502,6 +509,7 @@
       let litLine = -1;
       let currentLesson = 0;
       let ghostHidden = false; // view state only — resets to false on every setLesson
+      let keyHidden = false; // view state only — resets to false on every setLesson
       let seedTicket = null; // decorative save ticket, §7.2/§9 — never fed back into the program
 
       const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -529,7 +537,7 @@
             "",
             "sun of 240, 70",
           ],
-          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false },
+          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
         },
         {
           title: "across & down",
@@ -543,7 +551,7 @@
             "",
             "bee of 300, 150",
           ],
-          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false },
+          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
         },
         {
           title: "day → night",
@@ -558,7 +566,7 @@
             "moon of 240, 70",
             "firefly of 300, 150",
           ],
-          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false },
+          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
         },
         {
           title: "name it & why",
@@ -575,7 +583,7 @@
             'let spot = 90 because "it\'s the tallest in the yard"',
             "two-flowers of 120, spot",
           ],
-          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false },
+          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
         },
         {
           title: "two, their own height",
@@ -593,7 +601,7 @@
             'let shady = 44 because "these never get past the fence shadow"',
             "two-flowers of 300, shady",
           ],
-          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false },
+          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
         },
         {
           title: "your own sky",
@@ -613,7 +621,7 @@
             'let spot = 90 because "it\'s the tallest in the yard"',
             "two-flowers of 120, spot",
           ],
-          surfaces: { key: true, swatches: true, capstone: false, ghostToggle: false },
+          surfaces: { key: true, swatches: true, capstone: false, ghostToggle: false, keyToggle: false },
         },
         {
           title: "it's yours now",
@@ -631,16 +639,18 @@
             'let spot = 90 because "it\'s the tallest in the yard"',
             "two-flowers of 120, spot",
           ],
-          surfaces: { key: false, swatches: false, capstone: true, ghostToggle: true },
+          // The key stays available on the final lesson too — Rob's call:
+          // toggleable like the hints, not removed outright.
+          surfaces: { key: true, swatches: false, capstone: true, ghostToggle: true, keyToggle: true },
         },
       ];
 
       // A ghost line replaces every number and every quoted phrase with a
       // blank — the word itself (`sky of`, `let`, `because`) stays, since
       // that is the spelling she is meant to read off the key and type
-      // herself. A `to <name>:` header (week 4's own sky name) has neither
-      // a number nor a quote to blank, so it is shown whole, as an example
-      // of the shape rather than a fill-in-the-blank.
+      // herself. A `to <name>:` header (the "your own sky" lesson's own sky
+      // name) has neither a number nor a quote to blank, so it is shown
+      // whole, as an example of the shape rather than a fill-in-the-blank.
       function ghostLine(line) {
         return line
           .replace(/"[^"]*"/g, `"${BLANK}"`)
@@ -697,7 +707,7 @@
         $("key-note").textContent = COORDINATE_NOTE;
       }
 
-      // ---- week 4: unlabeled colour swatches, real OKLCH -> hex -----------
+      // ---- the your-own-sky lesson: unlabeled colour swatches, real OKLCH -> hex --
 
       const SWATCHES = [
         [0.55, 0.20, 25],
@@ -742,10 +752,8 @@
       // keystroke against her CURRENT text, so it recedes exactly as far as
       // she has typed on each line — never the whole block disappearing
       // after one keystroke, and never sitting underneath what she wrote. A
-      // line she has already matched or outgrown (this week's own, or
-      // carried over from a finished earlier week) naturally shows nothing
-      // more to hint, which is also how "thins to the new lines" (§425)
-      // falls out of the same mechanism, with no separate diff logic.
+      // line she has already matched or outgrown within the current lesson
+      // naturally shows nothing more to hint.
       function updateGhost() {
         if (ghostHidden) {
           ghostEl.textContent = "";
@@ -784,6 +792,25 @@
         updateGhost();
       });
 
+      // ---- the key-hide toggle (final lesson only, same pattern as the
+      // ghost toggle above): the key stays available, but a learner ready
+      // for a clean surface can hide it too. View state, not saved state —
+      // resets to shown on every setLesson. -------------------------------
+
+      const keyToggleEl = $("key-toggle");
+      function updateKeyToggleLabel() {
+        keyToggleEl.textContent = keyHidden ? "show key" : "hide key";
+        keyToggleEl.setAttribute("aria-pressed", String(keyHidden));
+      }
+      function applyKeyVisibility() {
+        keyEl.hidden = !LESSONS[currentLesson].surfaces.key || keyHidden;
+      }
+      keyToggleEl.addEventListener("click", () => {
+        keyHidden = !keyHidden;
+        updateKeyToggleLabel();
+        applyKeyVisibility();
+      });
+
       // ---- lesson-aware progressive disclosure — surfaces are DECLARED by
       // each lesson (§10.4), never inferred from an index comparison. ------
 
@@ -810,17 +837,20 @@
         currentLesson = clampLesson(n);
         source.value = "";
         ghostHidden = false;
+        keyHidden = false;
         const lesson = LESSONS[currentLesson];
         for (const btn of document.querySelectorAll("#lessons button")) {
           btn.setAttribute("aria-pressed", String(Number(btn.dataset.lesson) === currentLesson));
         }
         lessonNEl.textContent = String(currentLesson + 1);
         lessonSayEl.innerHTML = lesson.lesson;
-        keyEl.hidden = !lesson.surfaces.key;
+        applyKeyVisibility();
         swatchesEl.hidden = !lesson.surfaces.swatches;
         capstoneEl.hidden = !lesson.surfaces.capstone;
         ghostToggleEl.hidden = !lesson.surfaces.ghostToggle;
         updateGhostToggleLabel();
+        keyToggleEl.hidden = !lesson.surfaces.keyToggle;
+        updateKeyToggleLabel();
         if (pushUrl) {
           const url = new URL(location.href);
           url.searchParams.delete("week");
@@ -1093,8 +1123,8 @@
       const BARE_NAME_RE = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 
       // Numbers a picker writes, not a child: a friendlier fallback label
-      // set for `custom-sky`'s own three OKLCH numbers, so a week-4 card
-      // still reads as plain words rather than "value 1".
+      // set for `custom-sky`'s own three OKLCH numbers, so its card still
+      // reads as plain words rather than "value 1".
       const CARD_LABELS = { "custom-sky": ["lightness", "richness", "hue"] };
 
       function hideCard() {
@@ -1244,7 +1274,7 @@
         run();
       });
 
-      // ---- the week-5 capstone: the honest-garden card, derived not
+      // ---- the final-lesson capstone: the honest-garden card, derived not
       // asserted (§424) -------------------------------------------------
 
       async function updateHonestCard() {
