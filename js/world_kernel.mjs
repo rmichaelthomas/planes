@@ -5,6 +5,37 @@
 //
 // Node-only, for the same reason js/world_runtime.mjs is Node-only: it
 // constructs a Node module loader through `load()`/`runFile`.
+//
+// RUNG 1 (Horizon Phase 1: the retention tail, build prompt §2) — MEASURED,
+// NOT SHIPPED. V8 has no counterpart to CPython's `gc.freeze()` — no way
+// from JS to move a set of objects permanently out of the collector's
+// scan — so the Python fix ("shrink what the collector re-scans") has no
+// JS equivalent. What V8 DOES expose, with `--expose-gc`, is
+// `global.gc()`/`global.gc({type:'minor'})`: a synchronous, caller-
+// triggered collection. This file CAN call it at the tick boundary
+// (`gcInterval`, below) — but by default it does not, because measuring
+// it (not assuming it) found it makes things worse, not better:
+//
+//   window=null, 1000 ticks: no forced gc ~200ms wall; global.gc() every
+//   tick ~20,000ms wall (100x). window=300, 300 ticks: no forced gc
+//   ~5.3ms/tick avg; global.gc() every tick ~11.5ms/tick avg (2.2x); even
+//   every 10 ticks, ~6.25ms/tick avg (1.2x) — still worse than doing
+//   nothing, at every interval tried, in both configurations.
+//
+// The reason tracks directly from the freeze gap above: `global.gc()`
+// (major or minor) always does work proportional to the CURRENT heap/
+// garbage volume, and every call pays that cost again — there is no way
+// to make the SECOND call cheaper than the first the way Python's
+// `gc.freeze()` does. V8's own automatic/incremental scheduler already
+// spreads that same work out more cheaply than any schedule this file can
+// force through the one lever `--expose-gc` exposes. So Rung 1's second
+// technique ("control collection timing") has a real JS counterpart
+// mechanically, but not a beneficial one — the measured, honest
+// conclusion (build prompt §2: "an explicit recorded reason it cannot"),
+// not a silent omission. `gcInterval` defaults to `Infinity` (never) for
+// exactly this reason; it stays available, not deleted, so a future
+// build with a different lever (e.g. `--max-semi-space-size` tuning,
+// unexplored here) has a documented starting point and a baseline to beat.
 
 import { computeDelta } from "./world_delta.mjs";
 import { WorldRuntime } from "./world_runtime.mjs";
@@ -16,10 +47,12 @@ import { WorldRuntime } from "./world_runtime.mjs";
 export class WorldKernelError extends Error {}
 
 export class WorldKernel {
-  constructor(path, { host = null, window = null, trace = true } = {}) {
+  constructor(path, { host = null, window = null, trace = true, gcInterval = Infinity } = {}) {
     this.runtime = new WorldRuntime(path, { host, window, trace });
     this.revision = 0;
     this.prevEnvelope = null;
+    this.gcInterval = gcInterval;
+    this._ticksSinceGcMaintain = 0;
   }
 
   // The one and only load + world-init call. Async because WorldRuntime's
@@ -53,6 +86,20 @@ export class WorldKernel {
     const { normalized: nextEnvelope, warnings } = this.runtime.envelope();
     const delta = computeDelta(this.prevEnvelope, nextEnvelope, this.revision);
     const elapsedSeconds = (performance.now() - t0) / 1000;
+
+    // Rung 1 (module docstring): OFF by default (gcInterval=Infinity) —
+    // measured, not assumed, to make things worse on this fixture. Kept
+    // as an opt-in for experimentation; when enabled, strictly after
+    // elapsedSeconds is captured — never inside t0/performance.now()
+    // above (build prompt invariant 2 / §6.2.D). Also a no-op unless the
+    // process was started with --expose-gc.
+    this._ticksSinceGcMaintain += 1;
+    if (this._ticksSinceGcMaintain >= this.gcInterval) {
+      if (typeof global !== "undefined" && typeof global.gc === "function") {
+        global.gc();
+      }
+      this._ticksSinceGcMaintain = 0;
+    }
 
     if (warnings.length > 0) {
       throw new WorldKernelError(

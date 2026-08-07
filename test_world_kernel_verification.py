@@ -29,9 +29,18 @@ import time
 REPO = os.path.dirname(os.path.abspath(__file__))
 
 READ_ONLY_CORE = (
-    "world_runtime.py", "interp.py", "world_ir.py", "world_delta.py",
+    "world_runtime.py", "world_ir.py", "world_delta.py",
     "grammar/protocols/world-v1.json",
 )
+# `interp.py` was here through Horizon Phase 1's engine-kernel spike (this
+# file's own build), which had no reason to touch it. Horizon Phase 1: the
+# retention tail (the next build) has a narrow, sanctioned one — Rung 2's
+# `_seal` allocation rewrite — so a blanket "untouched" assertion on this
+# file would now fail a legitimate build rather than catch scope creep.
+# `test_retention_tail_verification.py`'s own check F is the file's
+# successor guard: not "never changes" but "changes only inside `_seal`" —
+# a narrower, more precise invariant for exactly this file going forward,
+# not a loosening of the protection this list exists to provide.
 RESULTS_MD = os.path.join(REPO, "horizon-kernel-spike-results.md")
 KERNEL_SOURCE = os.path.join(REPO, "world_kernel.py")
 

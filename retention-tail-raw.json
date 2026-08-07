@@ -1,0 +1,1727 @@
+{
+  "commit": "de541dc1840ec3f71b84f054c585cba983b3b32e",
+  "ticks": 10000,
+  "gcInterval": 1,
+  "jsGcInterval": null,
+  "pySpecs": {
+    "cpu": "Apple M1 Pro",
+    "cores": 10,
+    "ramBytes": 17179869184,
+    "platform": "Darwin 25.5.0 arm64",
+    "pythonVersion": "3.14.6"
+  },
+  "nodeSpecs": {
+    "cpu": "Apple M1 Pro",
+    "cores": 10,
+    "ramBytes": 17179869184,
+    "platform": "Darwin 25.5.0 arm64",
+    "nodeVersion": "v22.23.1",
+    "exposedGc": true
+  },
+  "results": {
+    "python": {
+      "unbounded": {
+        "count": 10000,
+        "min": 0.0011827079579234123,
+        "max": 0.005423834081739187,
+        "mean": 0.0012912317896960302,
+        "p50": 0.0012865000171586871,
+        "p95": 0.0013854169519618154,
+        "p99": 0.0014745410298928618,
+        "p999": 0.0015970829408615828,
+        "over50msCount": 0,
+        "wallSeconds": 13.416297124931589,
+        "chainHash": "c85a23bc3d49cb15bb021caa5df5d99b6224090012722b6877e1b165e9ca7fed",
+        "halfSplit": {
+          "firstHalf": {
+            "count": 5000,
+            "min": 0.0011827079579234123,
+            "max": 0.001756250043399632,
+            "mean": 0.0012893140643835067,
+            "p50": 0.0012865830212831497,
+            "p95": 0.0013809590600430965,
+            "p99": 0.0014683339977636933,
+            "p999": 0.0015649170381948352,
+            "over50msCount": 0
+          },
+          "secondHalf": {
+            "count": 5000,
+            "min": 0.001192124909721315,
+            "max": 0.005423834081739187,
+            "mean": 0.0012931495150085538,
+            "p50": 0.001286374987103045,
+            "p95": 0.0013912500580772758,
+            "p99": 0.0014799999771639705,
+            "p999": 0.0016152909956872463,
+            "over50msCount": 0
+          }
+        }
+      },
+      "bounded": {
+        "count": 10000,
+        "min": 0.008085542009212077,
+        "max": 0.07647324993740767,
+        "mean": 0.009053367610217538,
+        "p50": 0.008969124988652766,
+        "p95": 0.009510166943073273,
+        "p99": 0.009971874998882413,
+        "p999": 0.02192958293017,
+        "over50msCount": 4,
+        "wallSeconds": 90.91238250001334,
+        "chainHash": "c85a23bc3d49cb15bb021caa5df5d99b6224090012722b6877e1b165e9ca7fed",
+        "halfSplit": {
+          "firstHalf": {
+            "count": 5000,
+            "min": 0.008085542009212077,
+            "max": 0.05062120803631842,
+            "mean": 0.008989263556757943,
+            "p50": 0.008892582962289453,
+            "p95": 0.009390583029016852,
+            "p99": 0.009944625082425773,
+            "p999": 0.031064084032550454,
+            "over50msCount": 1
+          },
+          "secondHalf": {
+            "count": 5000,
+            "min": 0.008285708026960492,
+            "max": 0.07647324993740767,
+            "mean": 0.009117471663677134,
+            "p50": 0.009053166955709457,
+            "p95": 0.00959725002758205,
+            "p99": 0.00998912495560944,
+            "p999": 0.01368324994109571,
+            "over50msCount": 3
+          }
+        }
+      }
+    },
+    "js": {
+      "unbounded": {
+        "count": 10000,
+        "min": 0.00011149999999997817,
+        "max": 0.16961370799999986,
+        "mean": 0.00021890650599999887,
+        "p50": 0.00013312500000006367,
+        "p95": 0.00020937499999996588,
+        "p99": 0.002347417000000064,
+        "p999": 0.003130583000000115,
+        "over50msCount": 1,
+        "wallSeconds": 2.274858042,
+        "chainHash": "c85a23bc3d49cb15bb021caa5df5d99b6224090012722b6877e1b165e9ca7fed",
+        "halfSplit": {
+          "firstHalf": {
+            "count": 5000,
+            "min": 0.00011149999999997817,
+            "max": 0.004306542000000008,
+            "mean": 0.00021063629019999887,
+            "p50": 0.00013383300000009512,
+            "p95": 0.0003554589999999962,
+            "p99": 0.002096249999999941,
+            "p999": 0.0034543339999999886,
+            "over50msCount": 0
+          },
+          "secondHalf": {
+            "count": 5000,
+            "min": 0.00011241700000005039,
+            "max": 0.16961370799999986,
+            "mean": 0.00022717672180000003,
+            "p50": 0.00013258300000006784,
+            "p95": 0.00015412500000002184,
+            "p99": 0.002543666999999914,
+            "p999": 0.0030154999999999744,
+            "over50msCount": 1
+          }
+        }
+      },
+      "bounded": {
+        "count": 10000,
+        "min": 0.0030590830000001004,
+        "max": 0.3406001670000005,
+        "mean": 0.0040710680858000005,
+        "p50": 0.0035707080000011047,
+        "p95": 0.005368958000002749,
+        "p99": 0.005799584000000323,
+        "p999": 0.01843866700000035,
+        "over50msCount": 7,
+        "wallSeconds": 40.81399925,
+        "chainHash": "c85a23bc3d49cb15bb021caa5df5d99b6224090012722b6877e1b165e9ca7fed",
+        "halfSplit": {
+          "firstHalf": {
+            "count": 5000,
+            "min": 0.003132084000000759,
+            "max": 0.3406001670000005,
+            "mean": 0.004152538550999989,
+            "p50": 0.003608666000000085,
+            "p95": 0.00538654200000019,
+            "p99": 0.005879041999999998,
+            "p999": 0.03558170800000153,
+            "over50msCount": 5
+          },
+          "secondHalf": {
+            "count": 5000,
+            "min": 0.0030590830000001004,
+            "max": 0.15166475000000354,
+            "mean": 0.003989597620599954,
+            "p50": 0.003533417000002373,
+            "p95": 0.0053408330000020215,
+            "p99": 0.005728166999997484,
+            "p999": 0.011040124999999535,
+            "over50msCount": 2
+          }
+        }
+      }
+    }
+  },
+  "updateCost": {
+    "python": {
+      "machine": {
+        "implementation": "python",
+        "pythonVersion": "3.14.6",
+        "platform": "Darwin 25.5.0 arm64",
+        "cpu": "arm"
+      },
+      "trials": 7,
+      "targetMs": 200.0,
+      "with": {
+        "widths": [
+          4,
+          8,
+          16,
+          32,
+          64,
+          128
+        ],
+        "rungNames": [
+          "rung1_single",
+          "rung2_chained",
+          "rung3_multi"
+        ],
+        "results": {
+          "4": {
+            "L": 225,
+            "N": 50625,
+            "controlMedianNs": 102843208,
+            "controlMinNs": 102176833,
+            "controlTrialsNs": [
+              102843208,
+              102810417,
+              103507084,
+              103337708,
+              102370792,
+              103424041,
+              102176833
+            ],
+            "rungs": {
+              "rung1_single": {
+                "label": "rung 1 -- let r2 = r with f0: 1: one field written, one copy",
+                "rungMedianNs": 215064625,
+                "rungMinNs": 213651000,
+                "rungTrialsNs": [
+                  218761958,
+                  214812625,
+                  218998416,
+                  213651000,
+                  218913958,
+                  215064625,
+                  214540959
+                ],
+                "marginalMedianNsPerCall": 2216.719348148148,
+                "marginalMinNsPerCall": 2201.9588543209875
+              },
+              "rung2_chained": {
+                "label": "rung 2 -- let r2 = r with f0: 1 with f1: 2: a second chained `with` -- rung 2 minus rung 3 isolates the second copy",
+                "rungMedianNs": 345962750,
+                "rungMinNs": 340408416,
+                "rungTrialsNs": [
+                  348585375,
+                  342241083,
+                  347504416,
+                  346177417,
+                  340408416,
+                  345962750,
+                  345759750
+                ],
+                "marginalMedianNsPerCall": 4802.36132345679,
+                "marginalMinNsPerCall": 4705.8090469135805
+              },
+              "rung3_multi": {
+                "label": "rung 3 -- let r2 = r with f0: 1, f1: 2: two fields in one RecordUpdate -- rung 3 minus rung 1 isolates one field write",
+                "rungMedianNs": 267421708,
+                "rungMinNs": 262185541,
+                "rungTrialsNs": [
+                  267421708,
+                  268372417,
+                  262185541,
+                  268007875,
+                  266865625,
+                  266445500,
+                  269161541
+                ],
+                "marginalMedianNsPerCall": 3250.9333333333334,
+                "marginalMinNsPerCall": 3160.665837037037
+              }
+            }
+          },
+          "8": {
+            "L": 227,
+            "N": 51529,
+            "controlMedianNs": 104889041,
+            "controlMinNs": 103482792,
+            "controlTrialsNs": [
+              104963084,
+              104797541,
+              104889041,
+              105712167,
+              103482792,
+              104878084,
+              104926083
+            ],
+            "rungs": {
+              "rung1_single": {
+                "label": "rung 1 -- let r2 = r with f0: 1: one field written, one copy",
+                "rungMedianNs": 224357166,
+                "rungMinNs": 219906750,
+                "rungTrialsNs": [
+                  224580875,
+                  221480583,
+                  224417625,
+                  219906750,
+                  224357166,
+                  227512125,
+                  220206250
+                ],
+                "marginalMedianNsPerCall": 2318.4638747113277,
+                "marginalMinNsPerCall": 2259.387102408353
+              },
+              "rung2_chained": {
+                "label": "rung 2 -- let r2 = r with f0: 1 with f1: 2: a second chained `with` -- rung 2 minus rung 3 isolates the second copy",
+                "rungMedianNs": 356860750,
+                "rungMinNs": 353958459,
+                "rungTrialsNs": [
+                  356884958,
+                  359231542,
+                  353958459,
+                  356860750,
+                  358153917,
+                  354298417,
+                  355255709
+                ],
+                "marginalMedianNsPerCall": 4889.901007199829,
+                "marginalMinNsPerCall": 4860.867996662074
+              },
+              "rung3_multi": {
+                "label": "rung 3 -- let r2 = r with f0: 1, f1: 2: two fields in one RecordUpdate -- rung 3 minus rung 1 isolates one field write",
+                "rungMedianNs": 274835042,
+                "rungMinNs": 270632500,
+                "rungTrialsNs": [
+                  274835042,
+                  275196000,
+                  276738416,
+                  276395708,
+                  271549250,
+                  270632500,
+                  273262583
+                ],
+                "marginalMedianNsPerCall": 3298.0651865939567,
+                "marginalMinNsPerCall": 3243.798792912729
+              }
+            }
+          },
+          "16": {
+            "L": 225,
+            "N": 50625,
+            "controlMedianNs": 103492375,
+            "controlMinNs": 102304459,
+            "controlTrialsNs": [
+              102304459,
+              103492375,
+              103456334,
+              103289333,
+              104107667,
+              104265375,
+              103544708
+            ],
+            "rungs": {
+              "rung1_single": {
+                "label": "rung 1 -- let r2 = r with f0: 1: one field written, one copy",
+                "rungMedianNs": 226565375,
+                "rungMinNs": 220346500,
+                "rungTrialsNs": [
+                  226565375,
+                  228557125,
+                  220843959,
+                  228118292,
+                  220346500,
+                  227388750,
+                  222026833
+                ],
+                "marginalMedianNsPerCall": 2431.071604938272,
+                "marginalMinNsPerCall": 2331.694637037037
+              },
+              "rung2_chained": {
+                "label": "rung 2 -- let r2 = r with f0: 1 with f1: 2: a second chained `with` -- rung 2 minus rung 3 isolates the second copy",
+                "rungMedianNs": 361247875,
+                "rungMinNs": 357871833,
+                "rungTrialsNs": [
+                  361080709,
+                  366494375,
+                  357871833,
+                  361247875,
+                  364230792,
+                  363326250,
+                  359956792
+                ],
+                "marginalMedianNsPerCall": 5091.466666666666,
+                "marginalMinNsPerCall": 5048.244424691358
+              },
+              "rung3_multi": {
+                "label": "rung 3 -- let r2 = r with f0: 1, f1: 2: two fields in one RecordUpdate -- rung 3 minus rung 1 isolates one field write",
+                "rungMedianNs": 278042333,
+                "rungMinNs": 272855000,
+                "rungTrialsNs": [
+                  274976208,
+                  278042333,
+                  279259584,
+                  279102334,
+                  280566500,
+                  272863791,
+                  272855000
+                ],
+                "marginalMedianNsPerCall": 3447.9004049382715,
+                "marginalMinNsPerCall": 3368.899575308642
+              }
+            }
+          },
+          "32": {
+            "L": 219,
+            "N": 47961,
+            "controlMedianNs": 98169500,
+            "controlMinNs": 97328583,
+            "controlTrialsNs": [
+              98398583,
+              97472500,
+              99025250,
+              98469500,
+              97328583,
+              98169500,
+              97500542
+            ],
+            "rungs": {
+              "rung1_single": {
+                "label": "rung 1 -- let r2 = r with f0: 1: one field written, one copy",
+                "rungMedianNs": 226376542,
+                "rungMinNs": 221575958,
+                "rungTrialsNs": [
+                  226376542,
+                  234720125,
+                  221575958,
+                  231673292,
+                  222325708,
+                  229424750,
+                  221812125
+                ],
+                "marginalMedianNsPerCall": 2673.151977648506,
+                "marginalMinNsPerCall": 2590.5918350326306
+              },
+              "rung2_chained": {
+                "label": "rung 2 -- let r2 = r with f0: 1 with f1: 2: a second chained `with` -- rung 2 minus rung 3 isolates the second copy",
+                "rungMedianNs": 367698750,
+                "rungMinNs": 361235375,
+                "rungTrialsNs": [
+                  366753750,
+                  372566667,
+                  361235375,
+                  367698750,
+                  375539708,
+                  361412375,
+                  368727833
+                ],
+                "marginalMedianNsPerCall": 5619.758762327725,
+                "marginalMinNsPerCall": 5502.528971455975
+              },
+              "rung3_multi": {
+                "label": "rung 3 -- let r2 = r with f0: 1, f1: 2: two fields in one RecordUpdate -- rung 3 minus rung 1 isolates one field write",
+                "rungMedianNs": 278158458,
+                "rungMinNs": 269495125,
+                "rungTrialsNs": [
+                  280783833,
+                  281640000,
+                  269495125,
+                  272979417,
+                  276766292,
+                  278158458,
+                  282008625
+                ],
+                "marginalMedianNsPerCall": 3752.819123871479,
+                "marginalMinNsPerCall": 3589.7196055128124
+              }
+            }
+          },
+          "64": {
+            "L": 208,
+            "N": 43264,
+            "controlMedianNs": 89496459,
+            "controlMinNs": 88386083,
+            "controlTrialsNs": [
+              89680750,
+              89930542,
+              88386083,
+              89712667,
+              89328625,
+              89496459,
+              88844625
+            ],
+            "rungs": {
+              "rung1_single": {
+                "label": "rung 1 -- let r2 = r with f0: 1: one field written, one copy",
+                "rungMedianNs": 218892708,
+                "rungMinNs": 216773875,
+                "rungTrialsNs": [
+                  217988083,
+                  232383041,
+                  219080375,
+                  218633416,
+                  227666792,
+                  218892708,
+                  216773875
+                ],
+                "marginalMedianNsPerCall": 2990.8526488535504,
+                "marginalMinNsPerCall": 2967.543269230769
+              },
+              "rung2_chained": {
+                "label": "rung 2 -- let r2 = r with f0: 1 with f1: 2: a second chained `with` -- rung 2 minus rung 3 isolates the second copy",
+                "rungMedianNs": 360537500,
+                "rungMinNs": 358846625,
+                "rungTrialsNs": [
+                  359096250,
+                  384468541,
+                  360537500,
+                  373665791,
+                  359275125,
+                  370191333,
+                  358846625
+                ],
+                "marginalMedianNsPerCall": 6264.816960983728,
+                "marginalMinNsPerCall": 6251.399362056213
+              },
+              "rung3_multi": {
+                "label": "rung 3 -- let r2 = r with f0: 1, f1: 2: two fields in one RecordUpdate -- rung 3 minus rung 1 isolates one field write",
+                "rungMedianNs": 272564625,
+                "rungMinNs": 266039000,
+                "rungTrialsNs": [
+                  266861500,
+                  272564625,
+                  274210667,
+                  280321208,
+                  266039000,
+                  266258167,
+                  274634375
+                ],
+                "marginalMedianNsPerCall": 4231.420257026627,
+                "marginalMinNsPerCall": 4106.252704326923
+              }
+            }
+          },
+          "128": {
+            "L": 197,
+            "N": 38809,
+            "controlMedianNs": 81101916,
+            "controlMinNs": 79325000,
+            "controlTrialsNs": [
+              79325000,
+              81794542,
+              80289916,
+              81101916,
+              81422750,
+              81184083,
+              81096250
+            ],
+            "rungs": {
+              "rung1_single": {
+                "label": "rung 1 -- let r2 = r with f0: 1: one field written, one copy",
+                "rungMedianNs": 235907500,
+                "rungMinNs": 230212875,
+                "rungTrialsNs": [
+                  236272458,
+                  230212875,
+                  233620459,
+                  236709167,
+                  255634333,
+                  235907500,
+                  234381958
+                ],
+                "marginalMedianNsPerCall": 3988.9093766909737,
+                "marginalMinNsPerCall": 3887.960911128862
+              },
+              "rung2_chained": {
+                "label": "rung 2 -- let r2 = r with f0: 1 with f1: 2: a second chained `with` -- rung 2 minus rung 3 isolates the second copy",
+                "rungMedianNs": 397913500,
+                "rungMinNs": 383570625,
+                "rungTrialsNs": [
+                  398086333,
+                  383570625,
+                  397913500,
+                  386269459,
+                  403320875,
+                  384716750,
+                  404523209
+                ],
+                "marginalMedianNsPerCall": 8163.353448942255,
+                "marginalMinNsPerCall": 7839.563632147182
+              },
+              "rung3_multi": {
+                "label": "rung 3 -- let r2 = r with f0: 1, f1: 2: two fields in one RecordUpdate -- rung 3 minus rung 1 isolates one field write",
+                "rungMedianNs": 276359084,
+                "rungMinNs": 271318167,
+                "rungTrialsNs": [
+                  273020208,
+                  286038875,
+                  275824916,
+                  284726375,
+                  276359084,
+                  286839167,
+                  271318167
+                ],
+                "marginalMedianNsPerCall": 5031.234198252982,
+                "marginalMinNsPerCall": 4947.1299698523535
+              }
+            }
+          }
+        },
+        "perWidth": {
+          "4": {
+            "fieldWriteMarginalMedianNs": 1034.2139851851853,
+            "fieldWriteMarginalMinNs": 958.7069827160494,
+            "secondCopyMarginalMedianNs": 1551.4279901234568,
+            "secondCopyMarginalMinNs": 1545.1432098765436,
+            "costPerUpdateMedianNs": 2216.719348148148,
+            "costPerUpdateMinNs": 2201.9588543209875
+          },
+          "8": {
+            "fieldWriteMarginalMedianNs": 979.601311882629,
+            "fieldWriteMarginalMinNs": 984.4116905043761,
+            "secondCopyMarginalMedianNs": 1591.8358206058724,
+            "secondCopyMarginalMinNs": 1617.069203749345,
+            "costPerUpdateMedianNs": 2318.4638747113277,
+            "costPerUpdateMinNs": 2259.387102408353
+          },
+          "16": {
+            "fieldWriteMarginalMedianNs": 1016.8287999999998,
+            "fieldWriteMarginalMinNs": 1037.204938271605,
+            "secondCopyMarginalMedianNs": 1643.5662617283947,
+            "secondCopyMarginalMinNs": 1679.3448493827163,
+            "costPerUpdateMedianNs": 2431.071604938272,
+            "costPerUpdateMinNs": 2331.694637037037
+          },
+          "32": {
+            "fieldWriteMarginalMedianNs": 1079.6671462229729,
+            "fieldWriteMarginalMinNs": 999.1277704801819,
+            "secondCopyMarginalMedianNs": 1866.939638456246,
+            "secondCopyMarginalMinNs": 1912.8093659431624,
+            "costPerUpdateMedianNs": 2673.151977648506,
+            "costPerUpdateMinNs": 2590.5918350326306
+          },
+          "64": {
+            "fieldWriteMarginalMedianNs": 1240.5676081730767,
+            "fieldWriteMarginalMinNs": 1138.7094350961538,
+            "secondCopyMarginalMedianNs": 2033.3967039571007,
+            "secondCopyMarginalMinNs": 2145.1466577292904,
+            "costPerUpdateMedianNs": 2990.8526488535504,
+            "costPerUpdateMinNs": 2967.543269230769
+          },
+          "128": {
+            "fieldWriteMarginalMedianNs": 1042.3248215620088,
+            "fieldWriteMarginalMinNs": 1059.1690587234916,
+            "secondCopyMarginalMedianNs": 3132.119250689273,
+            "secondCopyMarginalMinNs": 2892.4336622948285,
+            "costPerUpdateMedianNs": 3988.9093766909737,
+            "costPerUpdateMinNs": 3887.960911128862
+          }
+        },
+        "derived": {
+          "isolatedCopyNsPerFieldSlope": 12.403889688303302,
+          "isolatedCopyNsIntercept": 1448.9175773513184,
+          "costPerUpdateNsPerFieldSlope": 13.845280401164441,
+          "costPerUpdateNsIntercept": 2188.35969498289
+        }
+      },
+      "plus": {
+        "lengths": [
+          64,
+          256,
+          1024,
+          4096,
+          16384
+        ],
+        "rungName": "rung1_append",
+        "results": {
+          "64": {
+            "label": "rung 1 -- let xs2 = xs plus i: one append at length L",
+            "L": 261,
+            "N": 68121,
+            "controlMedianNs": 138740875,
+            "controlMinNs": 137940958,
+            "controlTrialsNs": [
+              138740875,
+              137940958,
+              139300541,
+              138920250,
+              138230417,
+              139262458,
+              138336875
+            ],
+            "rungMedianNs": 288952750,
+            "rungMinNs": 269378417,
+            "rungTrialsNs": [
+              289514750,
+              271444041,
+              288952750,
+              269933833,
+              291074458,
+              269378417,
+              290603417
+            ],
+            "marginalMedianNsPerCall": 2205.0744263883385,
+            "marginalMinNsPerCall": 1929.4704863404825
+          },
+          "256": {
+            "label": "rung 1 -- let xs2 = xs plus i: one append at length L",
+            "L": 207,
+            "N": 42849,
+            "controlMedianNs": 89917917,
+            "controlMinNs": 88994375,
+            "controlTrialsNs": [
+              88994375,
+              90583334,
+              89481500,
+              90342750,
+              90623125,
+              89917917,
+              89213250
+            ],
+            "rungMedianNs": 248017875,
+            "rungMinNs": 243242875,
+            "rungTrialsNs": [
+              248426167,
+              272012208,
+              247117250,
+              243242875,
+              245346458,
+              260158791,
+              248017875
+            ],
+            "marginalMedianNsPerCall": 3689.7000630119724,
+            "marginalMinNsPerCall": 3599.8156316366776
+          },
+          "1024": {
+            "label": "rung 1 -- let xs2 = xs plus i: one append at length L",
+            "L": 143,
+            "N": 20449,
+            "controlMedianNs": 50223291,
+            "controlMinNs": 49843292,
+            "controlTrialsNs": [
+              50223291,
+              50080583,
+              50918250,
+              50113750,
+              49843292,
+              50373417,
+              52601500
+            ],
+            "rungMedianNs": 246069417,
+            "rungMinNs": 219434375,
+            "rungTrialsNs": [
+              219434375,
+              246069417,
+              264909500,
+              235435958,
+              257557458,
+              223555917,
+              311161208
+            ],
+            "marginalMedianNsPerCall": 9577.296004694606,
+            "marginalMinNsPerCall": 8293.36803755685
+          },
+          "4096": {
+            "label": "rung 1 -- let xs2 = xs plus i: one append at length L",
+            "L": 78,
+            "N": 6084,
+            "controlMedianNs": 45452417,
+            "controlMinNs": 44883375,
+            "controlTrialsNs": [
+              45169125,
+              45734250,
+              45501250,
+              44883375,
+              45452417,
+              47673791,
+              45233459
+            ],
+            "rungMedianNs": 212066167,
+            "rungMinNs": 208778125,
+            "rungTrialsNs": [
+              208778125,
+              213188791,
+              255679209,
+              211045250,
+              212066167,
+              282247875,
+              211288000
+            ],
+            "marginalMedianNsPerCall": 27385.560486522027,
+            "marginalMinNsPerCall": 26938.650558842866
+          },
+          "16384": {
+            "label": "rung 1 -- let xs2 = xs plus i: one append at length L",
+            "L": 35,
+            "N": 1225,
+            "controlMedianNs": 137097541,
+            "controlMinNs": 132603958,
+            "controlTrialsNs": [
+              137097541,
+              133212667,
+              137841708,
+              132603958,
+              141331708,
+              132998209,
+              138701250
+            ],
+            "rungMedianNs": 268901042,
+            "rungMinNs": 257171792,
+            "rungTrialsNs": [
+              261929167,
+              257171792,
+              269489958,
+              294052833,
+              268901042,
+              259547333,
+              270321375
+            ],
+            "marginalMedianNsPerCall": 107594.69469387755,
+            "marginalMinNsPerCall": 101688.02775510204
+          }
+        },
+        "derived": {
+          "nsPerElementSlope": 6.43313363383781,
+          "nsIntercept": 2011.123449923627
+        }
+      },
+      "cumulative": {
+        "L": 16384,
+        "trialsNs": [
+          1249843916,
+          1157762250,
+          1174967959,
+          1365441083,
+          1118414542,
+          1522826791,
+          1202988916
+        ],
+        "totalMedianNs": 1202988916,
+        "totalMinNs": 1118414542,
+        "impliedNsPerCopiedElementMedian": 8.963512965278413,
+        "impliedNsPerCopiedElementMin": 8.333346313036952,
+        "extrapolateToEvents": 100000,
+        "extrapolatedTotalMedianNs": 44817116650.743805,
+        "extrapolatedTotalMinNs": 41666314897.8691,
+        "note": "extrapolation from the fitted O(L^2) constant; not measured directly"
+      },
+      "world": {
+        "subjectCounts": [
+          16,
+          64,
+          256
+        ],
+        "ticks": 32,
+        "facetW": 4,
+        "subjectW": 7,
+        "worldW": 3,
+        "results": {
+          "16": {
+            "S": 16,
+            "T": 32,
+            "k": 9,
+            "totalNsPerRunMedian": 24324384.333333332,
+            "totalNsPerRunMin": 24200986.0,
+            "parseNsPerRunMedian": 1277356.5555555555,
+            "parseNsPerRunMin": 1245240.6666666667,
+            "aParseNsPerTick": 39917.39236111111,
+            "bCopyNsPerTick": 163019.54276693234,
+            "cRemainderNsPerTick": 557200.0752886231,
+            "totalNsPerTick": 760137.0104166666,
+            "facetUpdateNs": 3250.9333333333334,
+            "subjectUpdateNs": 3286.2822232788008,
+            "worldUpdateNs": 4298.323506556753,
+            "plusCostNsAtAvgLength": 2110.837021248113,
+            "avgEventsLength": 15.5
+          },
+          "64": {
+            "S": 64,
+            "T": 32,
+            "k": 3,
+            "totalNsPerRunMedian": 93541236.0,
+            "totalNsPerRunMin": 92356361.66666667,
+            "parseNsPerRunMedian": 1602292.0,
+            "parseNsPerRunMin": 1558278.0,
+            "aParseNsPerTick": 50071.625,
+            "bCopyNsPerTick": 632850.6894843148,
+            "cRemainderNsPerTick": 2240241.310515685,
+            "totalNsPerTick": 2923163.625,
+            "facetUpdateNs": 3250.9333333333334,
+            "subjectUpdateNs": 3286.2822232788008,
+            "worldUpdateNs": 4298.323506556753,
+            "plusCostNsAtAvgLength": 2110.837021248113,
+            "avgEventsLength": 15.5
+          },
+          "256": {
+            "S": 256,
+            "T": 32,
+            "k": 1,
+            "totalNsPerRunMedian": 391172958.0,
+            "totalNsPerRunMin": 385072583.0,
+            "parseNsPerRunMedian": 2975917.0,
+            "parseNsPerRunMin": 2893958.0,
+            "aParseNsPerTick": 92997.40625,
+            "bCopyNsPerTick": 2512175.2763538444,
+            "cRemainderNsPerTick": 9618982.254896156,
+            "totalNsPerTick": 12224154.9375,
+            "facetUpdateNs": 3250.9333333333334,
+            "subjectUpdateNs": 3286.2822232788008,
+            "worldUpdateNs": 4298.323506556753,
+            "plusCostNsAtAvgLength": 2110.837021248113,
+            "avgEventsLength": 15.5
+          }
+        }
+      },
+      "retention": {
+        "S": 64,
+        "checkpoints": [
+          1,
+          100,
+          300,
+          600
+        ],
+        "results": {
+          "1": {
+            "checkpointTick": 1,
+            "S": 64,
+            "reachableDerivCount": 275,
+            "rssBytes": 31424512
+          },
+          "100": {
+            "checkpointTick": 100,
+            "S": 64,
+            "reachableDerivCount": 9086,
+            "rssBytes": 40665088
+          },
+          "300": {
+            "checkpointTick": 300,
+            "S": 64,
+            "reachableDerivCount": 26886,
+            "rssBytes": 61718528
+          },
+          "600": {
+            "checkpointTick": 600,
+            "S": 64,
+            "reachableDerivCount": 53586,
+            "rssBytes": 92160000
+          }
+        },
+        "rssBaselineBytes": 31424512,
+        "rssGrowthBytes": [
+          0,
+          9240576,
+          30294016,
+          60735488
+        ],
+        "derivCountPerTickSlope": 89.0,
+        "rssGrowthBytesPerTickSlope": 101961.29455383812,
+        "soakSeconds": 1800,
+        "soakTicksPerSecond": 60,
+        "soakTicks": 108000,
+        "extrapolatedRssGrowthBytes": 11011371517.852419,
+        "extrapolatedDerivCount": 9612186.0,
+        "note": "rss is a process-wide high-water mark contaminated by earlier phases in this run; growth is measured relative to the tick=1 checkpoint, not in absolute bytes. Extrapolation is from a 4-point linear fit over ticks 1..600; not measured directly."
+      }
+    },
+    "js": {
+      "machine": {
+        "implementation": "js",
+        "nodeVersion": "v22.23.1",
+        "platform": "Darwin 25.5.0 arm64",
+        "cpu": "Apple M1 Pro"
+      },
+      "trials": 7,
+      "targetMs": 200,
+      "with": {
+        "widths": [
+          4,
+          8,
+          16,
+          32,
+          64,
+          128
+        ],
+        "rungNames": [
+          "rung1_single",
+          "rung2_chained",
+          "rung3_multi"
+        ],
+        "results": {
+          "4": {
+            "L": 654,
+            "N": 427716,
+            "controlMedianNs": 46915208,
+            "controlMinNs": 46154625,
+            "controlTrialsNs": [
+              47375792,
+              46154625,
+              46915208,
+              46924084,
+              46699750,
+              46814166,
+              47815417
+            ],
+            "rungs": {
+              "rung1_single": {
+                "label": "rung 1 \u2014 let r2 = r with f0: 1: one field written, one copy",
+                "rungMedianNs": 217858666,
+                "rungMinNs": 207289292,
+                "rungTrialsNs": [
+                  219794416,
+                  220950917,
+                  217858666,
+                  214444792,
+                  217341542,
+                  207289292,
+                  233514834
+                ],
+                "marginalMedianNsPerCall": 399.6658016066736,
+                "marginalMinNsPerCall": 376.7328484321372
+              },
+              "rung2_chained": {
+                "label": "rung 2 \u2014 let r2 = r with f0: 1 with f1: 2: a second chained `with` \u2014 rung 2 minus rung 3 isolates the second copy",
+                "rungMedianNs": 375084334,
+                "rungMinNs": 362668250,
+                "rungTrialsNs": [
+                  368259292,
+                  375084334,
+                  433991375,
+                  381691167,
+                  362668250,
+                  374546000,
+                  409845542
+                ],
+                "marginalMedianNsPerCall": 767.2594104499248,
+                "marginalMinNsPerCall": 740.0088493299291
+              },
+              "rung3_multi": {
+                "label": "rung 3 \u2014 let r2 = r with f0: 1, f1: 2: two fields in one RecordUpdate \u2014 rung 3 minus rung 1 isolates one field write",
+                "rungMedianNs": 252141250,
+                "rungMinNs": 246061500,
+                "rungTrialsNs": [
+                  247636917,
+                  252141250,
+                  277835375,
+                  246061500,
+                  254702458,
+                  258822459,
+                  248863083
+                ],
+                "marginalMedianNsPerCall": 479.8184823574521,
+                "marginalMinNsPerCall": 467.38227001094185
+              }
+            }
+          },
+          "8": {
+            "L": 567,
+            "N": 321489,
+            "controlMedianNs": 35800250,
+            "controlMinNs": 35265000,
+            "controlTrialsNs": [
+              36463792,
+              35285875,
+              35265000,
+              35790375,
+              35800250,
+              36430375,
+              35961375
+            ],
+            "rungs": {
+              "rung1_single": {
+                "label": "rung 1 \u2014 let r2 = r with f0: 1: one field written, one copy",
+                "rungMedianNs": 225358000,
+                "rungMinNs": 221423458,
+                "rungTrialsNs": [
+                  227034708,
+                  235424667,
+                  224493417,
+                  229849625,
+                  224910417,
+                  225358000,
+                  221423458
+                ],
+                "marginalMedianNsPerCall": 589.6243728401283,
+                "marginalMinNsPerCall": 579.0507855634252
+              },
+              "rung2_chained": {
+                "label": "rung 2 \u2014 let r2 = r with f0: 1 with f1: 2: a second chained `with` \u2014 rung 2 minus rung 3 isolates the second copy",
+                "rungMedianNs": 403702792,
+                "rungMinNs": 394526834,
+                "rungTrialsNs": [
+                  394526834,
+                  403209584,
+                  401081417,
+                  434863542,
+                  403702792,
+                  412242250,
+                  411955000
+                ],
+                "marginalMedianNsPerCall": 1144.370544559845,
+                "marginalMinNsPerCall": 1117.4933947973336
+              },
+              "rung3_multi": {
+                "label": "rung 3 \u2014 let r2 = r with f0: 1, f1: 2: two fields in one RecordUpdate \u2014 rung 3 minus rung 1 isolates one field write",
+                "rungMedianNs": 259816083,
+                "rungMinNs": 249704041,
+                "rungTrialsNs": [
+                  268524500,
+                  249704041,
+                  259816083,
+                  261112792,
+                  253862625,
+                  272260542,
+                  253463125
+                ],
+                "marginalMedianNsPerCall": 696.8071473674061,
+                "marginalMinNsPerCall": 667.0182836737804
+              }
+            }
+          },
+          "16": {
+            "L": 477,
+            "N": 227529,
+            "controlMedianNs": 25379791,
+            "controlMinNs": 24834167,
+            "controlTrialsNs": [
+              25379791,
+              24834167,
+              25460416,
+              24958250,
+              25406833,
+              25061458,
+              25591458
+            ],
+            "rungs": {
+              "rung1_single": {
+                "label": "rung 1 \u2014 let r2 = r with f0: 1: one field written, one copy",
+                "rungMedianNs": 247060250,
+                "rungMinNs": 237725292,
+                "rungTrialsNs": [
+                  257251833,
+                  239455583,
+                  252186625,
+                  237725292,
+                  257821041,
+                  247060250,
+                  239917875
+                ],
+                "marginalMedianNsPerCall": 974.2954041023343,
+                "marginalMinNsPerCall": 935.6658931388965
+              },
+              "rung2_chained": {
+                "label": "rung 2 \u2014 let r2 = r with f0: 1 with f1: 2: a second chained `with` \u2014 rung 2 minus rung 3 isolates the second copy",
+                "rungMedianNs": 443143584,
+                "rungMinNs": 435619084,
+                "rungTrialsNs": [
+                  444156417,
+                  437776583,
+                  457544375,
+                  440949917,
+                  443143584,
+                  435619084,
+                  461949209
+                ],
+                "marginalMedianNsPerCall": 1836.0903137622017,
+                "marginalMinNsPerCall": 1805.4178456372595
+              },
+              "rung3_multi": {
+                "label": "rung 3 \u2014 let r2 = r with f0: 1, f1: 2: two fields in one RecordUpdate \u2014 rung 3 minus rung 1 isolates one field write",
+                "rungMedianNs": 267654666,
+                "rungMinNs": 259207041,
+                "rungTrialsNs": [
+                  261282792,
+                  267654666,
+                  263239792,
+                  283656709,
+                  259207041,
+                  273468792,
+                  297441208
+                ],
+                "marginalMedianNsPerCall": 1064.808771629111,
+                "marginalMinNsPerCall": 1030.0791283748445
+              }
+            }
+          },
+          "32": {
+            "L": 377,
+            "N": 142129,
+            "controlMedianNs": 16798000,
+            "controlMinNs": 16484084,
+            "controlTrialsNs": [
+              16671875,
+              16484084,
+              16898459,
+              17042750,
+              16700041,
+              16798000,
+              16983541
+            ],
+            "rungs": {
+              "rung1_single": {
+                "label": "rung 1 \u2014 let r2 = r with f0: 1: one field written, one copy",
+                "rungMedianNs": 272269125,
+                "rungMinNs": 261824584,
+                "rungTrialsNs": [
+                  285150000,
+                  261824584,
+                  272269125,
+                  286144000,
+                  262790375,
+                  292977917,
+                  263749667
+                ],
+                "marginalMedianNsPerCall": 1797.4595262050673,
+                "marginalMinNsPerCall": 1726.1818488837605
+              },
+              "rung2_chained": {
+                "label": "rung 2 \u2014 let r2 = r with f0: 1 with f1: 2: a second chained `with` \u2014 rung 2 minus rung 3 isolates the second copy",
+                "rungMedianNs": 509340000,
+                "rungMinNs": 487006083,
+                "rungTrialsNs": [
+                  509340000,
+                  530451750,
+                  507247417,
+                  487006083,
+                  532300334,
+                  489404875,
+                  511261542
+                ],
+                "marginalMedianNsPerCall": 3465.457436554116,
+                "marginalMinNsPerCall": 3310.527752956821
+              },
+              "rung3_multi": {
+                "label": "rung 3 \u2014 let r2 = r with f0: 1, f1: 2: two fields in one RecordUpdate \u2014 rung 3 minus rung 1 isolates one field write",
+                "rungMedianNs": 298212208,
+                "rungMinNs": 273722417,
+                "rungTrialsNs": [
+                  301448416,
+                  283102542,
+                  298212208,
+                  273722417,
+                  302780125,
+                  274946667,
+                  298218208
+                ],
+                "marginalMedianNsPerCall": 1979.9914725355136,
+                "marginalMinNsPerCall": 1809.8933574428863
+              }
+            }
+          },
+          "64": {
+            "L": 264,
+            "N": 69696,
+            "controlMedianNs": 8311292,
+            "controlMinNs": 8110083,
+            "controlTrialsNs": [
+              8644417,
+              8311292,
+              8345542,
+              8260917,
+              8668917,
+              8198583,
+              8110083
+            ],
+            "rungs": {
+              "rung1_single": {
+                "label": "rung 1 \u2014 let r2 = r with f0: 1: one field written, one copy",
+                "rungMedianNs": 249328583,
+                "rungMinNs": 240188958,
+                "rungTrialsNs": [
+                  243249625,
+                  250946959,
+                  259351500,
+                  240188958,
+                  249328583,
+                  264657917,
+                  247055458
+                ],
+                "marginalMedianNsPerCall": 3458.1222882231405,
+                "marginalMinNsPerCall": 3329.8736656336087
+              },
+              "rung2_chained": {
+                "label": "rung 2 \u2014 let r2 = r with f0: 1 with f1: 2: a second chained `with` \u2014 rung 2 minus rung 3 isolates the second copy",
+                "rungMedianNs": 460610917,
+                "rungMinNs": 451895791,
+                "rungTrialsNs": [
+                  463461500,
+                  453076584,
+                  461662667,
+                  451895791,
+                  460610917,
+                  458088458,
+                  491635625
+                ],
+                "marginalMedianNsPerCall": 6489.606648875115,
+                "marginalMinNsPerCall": 6367.448748852158
+              },
+              "rung3_multi": {
+                "label": "rung 3 \u2014 let r2 = r with f0: 1, f1: 2: two fields in one RecordUpdate \u2014 rung 3 minus rung 1 isolates one field write",
+                "rungMedianNs": 251186375,
+                "rungMinNs": 243114292,
+                "rungTrialsNs": [
+                  243114292,
+                  257689875,
+                  287327709,
+                  247127167,
+                  251186375,
+                  281354417,
+                  245435084
+                ],
+                "marginalMedianNsPerCall": 3484.7779356060605,
+                "marginalMinNsPerCall": 3371.846433080808
+              }
+            }
+          },
+          "128": {
+            "L": 177,
+            "N": 31329,
+            "controlMedianNs": 4213250,
+            "controlMinNs": 4065667,
+            "controlTrialsNs": [
+              5300542,
+              4206292,
+              4213250,
+              4787292,
+              4065667,
+              4710500,
+              4067458
+            ],
+            "rungs": {
+              "rung1_single": {
+                "label": "rung 1 \u2014 let r2 = r with f0: 1: one field written, one copy",
+                "rungMedianNs": 215119250,
+                "rungMinNs": 210151833,
+                "rungTrialsNs": [
+                  247551375,
+                  210658125,
+                  216114375,
+                  224176500,
+                  215119250,
+                  210494000,
+                  210151833
+                ],
+                "marginalMedianNsPerCall": 6731.973570812985,
+                "marginalMinNsPerCall": 6578.12780490919
+              },
+              "rung2_chained": {
+                "label": "rung 2 \u2014 let r2 = r with f0: 1 with f1: 2: a second chained `with` \u2014 rung 2 minus rung 3 isolates the second copy",
+                "rungMedianNs": 418879417,
+                "rungMinNs": 410024792,
+                "rungTrialsNs": [
+                  411662166,
+                  418879417,
+                  414837875,
+                  428672042,
+                  438230833,
+                  410024792,
+                  425082208
+                ],
+                "marginalMedianNsPerCall": 13235.857097258131,
+                "marginalMinNsPerCall": 12957.934341983466
+              },
+              "rung3_multi": {
+                "label": "rung 3 \u2014 let r2 = r with f0: 1, f1: 2: two fields in one RecordUpdate \u2014 rung 3 minus rung 1 isolates one field write",
+                "rungMedianNs": 227193542,
+                "rungMinNs": 212395625,
+                "rungTrialsNs": [
+                  215797583,
+                  246470583,
+                  212395625,
+                  217665458,
+                  229248959,
+                  227193542,
+                  291259334
+                ],
+                "marginalMedianNsPerCall": 7117.376615914967,
+                "marginalMinNsPerCall": 6649.748092821347
+              }
+            }
+          }
+        },
+        "perWidth": {
+          "4": {
+            "fieldWriteMarginalMedianNs": 80.15268075077853,
+            "fieldWriteMarginalMinNs": 90.64942157880466,
+            "secondCopyMarginalMedianNs": 287.44092809247263,
+            "secondCopyMarginalMinNs": 272.6265793189873,
+            "costPerUpdateMedianNs": 399.6658016066736,
+            "costPerUpdateMinNs": 376.7328484321372
+          },
+          "8": {
+            "fieldWriteMarginalMedianNs": 107.18277452727773,
+            "fieldWriteMarginalMinNs": 87.96749811035522,
+            "secondCopyMarginalMedianNs": 447.56339719243897,
+            "secondCopyMarginalMinNs": 450.47511112355323,
+            "costPerUpdateMedianNs": 589.6243728401283,
+            "costPerUpdateMinNs": 579.0507855634252
+          },
+          "16": {
+            "fieldWriteMarginalMedianNs": 90.51336752677685,
+            "fieldWriteMarginalMinNs": 94.41323523594792,
+            "secondCopyMarginalMedianNs": 771.2815421330906,
+            "secondCopyMarginalMinNs": 775.338717262415,
+            "costPerUpdateMedianNs": 974.2954041023343,
+            "costPerUpdateMinNs": 935.6658931388965
+          },
+          "32": {
+            "fieldWriteMarginalMedianNs": 182.53194633044632,
+            "fieldWriteMarginalMinNs": 83.71150855912583,
+            "secondCopyMarginalMedianNs": 1485.4659640186026,
+            "secondCopyMarginalMinNs": 1500.6343955139348,
+            "costPerUpdateMedianNs": 1797.4595262050673,
+            "costPerUpdateMinNs": 1726.1818488837605
+          },
+          "64": {
+            "fieldWriteMarginalMedianNs": 26.65564738292005,
+            "fieldWriteMarginalMinNs": 41.9727674471992,
+            "secondCopyMarginalMedianNs": 3004.8287132690543,
+            "secondCopyMarginalMinNs": 2995.6023157713503,
+            "costPerUpdateMedianNs": 3458.1222882231405,
+            "costPerUpdateMinNs": 3329.8736656336087
+          },
+          "128": {
+            "fieldWriteMarginalMedianNs": 385.40304510198257,
+            "fieldWriteMarginalMinNs": 71.62028791215744,
+            "secondCopyMarginalMedianNs": 6118.480481343164,
+            "secondCopyMarginalMinNs": 6308.186249162119,
+            "costPerUpdateMedianNs": 6731.973570812985,
+            "costPerUpdateMinNs": 6578.12780490919
+          }
+        },
+        "derived": {
+          "isolatedCopyNsPerFieldSlope": 47.19684280203696,
+          "isolatedCopyNsIntercept": 36.909439989251496,
+          "costPerUpdateNsPerFieldSlope": 51.21602812051319,
+          "costPerUpdateNsIntercept": 174.1169795701676
+        }
+      },
+      "plus": {
+        "lengths": [
+          64,
+          256,
+          1024,
+          4096,
+          16384
+        ],
+        "rungName": "rung1_append",
+        "results": {
+          "64": {
+            "label": "rung 1 \u2014 let xs2 = xs plus i: one append at length L",
+            "L": 700,
+            "N": 490000,
+            "controlMedianNs": 66263583,
+            "controlMinNs": 62260791,
+            "controlTrialsNs": [
+              66959417,
+              64266750,
+              66263583,
+              67862709,
+              66279334,
+              64246000,
+              62260791
+            ],
+            "rungMedianNs": 344519333,
+            "rungMinNs": 300956375,
+            "rungTrialsNs": [
+              344519333,
+              471239125,
+              326324500,
+              361938791,
+              337095958,
+              300956375,
+              373637250
+            ],
+            "marginalMedianNsPerCall": 567.8688775510204,
+            "marginalMinNsPerCall": 487.1338448979592
+          },
+          "256": {
+            "label": "rung 1 \u2014 let xs2 = xs plus i: one append at length L",
+            "L": 271,
+            "N": 73441,
+            "controlMedianNs": 15656500,
+            "controlMinNs": 13735834,
+            "controlTrialsNs": [
+              15656500,
+              16306791,
+              13735834,
+              15849917,
+              14573792,
+              16146625,
+              14206458
+            ],
+            "rungMedianNs": 108384208,
+            "rungMinNs": 103165125,
+            "rungTrialsNs": [
+              188454541,
+              104990334,
+              108384208,
+              113529709,
+              103165125,
+              108032833,
+              130863000
+            ],
+            "marginalMedianNsPerCall": 1262.61499707248,
+            "marginalMinNsPerCall": 1217.702523113792
+          },
+          "1024": {
+            "label": "rung 1 \u2014 let xs2 = xs plus i: one append at length L",
+            "L": 185,
+            "N": 34225,
+            "controlMedianNs": 5681166,
+            "controlMinNs": 5062042,
+            "controlTrialsNs": [
+              6761458,
+              5287041,
+              5658667,
+              5735083,
+              5062042,
+              5681166,
+              5792584
+            ],
+            "rungMedianNs": 260582083,
+            "rungMinNs": 243709542,
+            "rungTrialsNs": [
+              243709542,
+              244589375,
+              260582083,
+              278003250,
+              260554083,
+              292546042,
+              299648083
+            ],
+            "marginalMedianNsPerCall": 7447.798889700512,
+            "marginalMinNsPerCall": 6972.899926953981
+          },
+          "4096": {
+            "label": "rung 1 \u2014 let xs2 = xs plus i: one append at length L",
+            "L": 88,
+            "N": 7744,
+            "controlMedianNs": 5562750,
+            "controlMinNs": 5336459,
+            "controlTrialsNs": [
+              6014417,
+              5714375,
+              5383250,
+              5388250,
+              5562750,
+              6980958,
+              5336459
+            ],
+            "rungMedianNs": 263321167,
+            "rungMinNs": 236269833,
+            "rungTrialsNs": [
+              263321167,
+              236269833,
+              264409541,
+              243650250,
+              321743750,
+              381285167,
+              246206292
+            ],
+            "marginalMedianNsPerCall": 33284.91955061984,
+            "marginalMinNsPerCall": 29820.94189049587
+          },
+          "16384": {
+            "label": "rung 1 \u2014 let xs2 = xs plus i: one append at length L",
+            "L": 40,
+            "N": 1600,
+            "controlMedianNs": 19015917,
+            "controlMinNs": 18459000,
+            "controlTrialsNs": [
+              20727250,
+              19015917,
+              19308291,
+              18812041,
+              18459000,
+              19744833,
+              18692417
+            ],
+            "rungMedianNs": 227102375,
+            "rungMinNs": 171402875,
+            "rungTrialsNs": [
+              262828000,
+              276077625,
+              171402875,
+              227102375,
+              222080791,
+              192002542,
+              244857250
+            ],
+            "marginalMedianNsPerCall": 130054.03625,
+            "marginalMinNsPerCall": 95589.921875
+          }
+        },
+        "derived": {
+          "nsPerElementSlope": 7.9638823681596405,
+          "nsIntercept": -237.30604755443346
+        }
+      },
+      "cumulative": {
+        "L": 16384,
+        "trialsNs": [
+          1946796584,
+          1973000792,
+          1898324792,
+          1745837584,
+          1732389792,
+          1822571625,
+          1926800042
+        ],
+        "totalMedianNs": 1898324792,
+        "totalMinNs": 1732389792,
+        "impliedNsPerCopiedElementMedian": 14.144485172797259,
+        "impliedNsPerCopiedElementMin": 12.908097618339132,
+        "extrapolateToEvents": 100000,
+        "extrapolatedTotalMedianNs": 70721718639.72765,
+        "extrapolatedTotalMinNs": 64539842686.81474,
+        "note": "extrapolation from the fitted O(L^2) constant; not measured directly"
+      },
+      "world": {
+        "subjectCounts": [
+          16,
+          64,
+          256
+        ],
+        "ticks": 32,
+        "facetW": 4,
+        "subjectW": 7,
+        "worldW": 3,
+        "results": {
+          "16": {
+            "S": 16,
+            "T": 32,
+            "k": 8,
+            "totalNsPerRunMedian": 5509531.375,
+            "totalNsPerRunMin": 5122375.125,
+            "parseNsPerRunMedian": 199817.875,
+            "parseNsPerRunMin": 188911.5,
+            "aParseNsPerTick": 6244.30859375,
+            "bCopyNsPerTick": 26009.35568786245,
+            "cRemainderNsPerTick": 139919.19118713756,
+            "totalNsPerTick": 172172.85546875,
+            "facetUpdateNs": 479.8184823574521,
+            "subjectUpdateNs": 642.5599811149176,
+            "worldUpdateNs": 488.0704254332642,
+            "plusCostNsAtAvgLength": -113.86587084795903,
+            "avgEventsLength": 15.5
+          },
+          "64": {
+            "S": 64,
+            "T": 32,
+            "k": 11,
+            "totalNsPerRunMedian": 18993757.636363637,
+            "totalNsPerRunMin": 18515128.818181816,
+            "parseNsPerRunMedian": 497678,
+            "parseNsPerRunMin": 209783.9090909091,
+            "aParseNsPerTick": 15552.4375,
+            "bCopyNsPerTick": 102914.8090876939,
+            "cRemainderNsPerTick": 475087.6795486697,
+            "totalNsPerTick": 593554.9261363636,
+            "facetUpdateNs": 479.8184823574521,
+            "subjectUpdateNs": 642.5599811149176,
+            "worldUpdateNs": 488.0704254332642,
+            "plusCostNsAtAvgLength": -113.86587084795903,
+            "avgEventsLength": 15.5
+          },
+          "256": {
+            "S": 256,
+            "T": 32,
+            "k": 3,
+            "totalNsPerRunMedian": 73106680.33333333,
+            "totalNsPerRunMin": 71996638.66666667,
+            "parseNsPerRunMedian": 366431,
+            "parseNsPerRunMin": 355056,
+            "aParseNsPerTick": 11450.96875,
+            "bCopyNsPerTick": 410536.6226870197,
+            "cRemainderNsPerTick": 1862596.1689796469,
+            "totalNsPerTick": 2284583.7604166665,
+            "facetUpdateNs": 479.8184823574521,
+            "subjectUpdateNs": 642.5599811149176,
+            "worldUpdateNs": 488.0704254332642,
+            "plusCostNsAtAvgLength": -113.86587084795903,
+            "avgEventsLength": 15.5
+          }
+        }
+      },
+      "retention": {
+        "S": 64,
+        "checkpoints": [
+          1,
+          100,
+          300,
+          600
+        ],
+        "results": {
+          "1": {
+            "checkpointTick": 1,
+            "S": 64,
+            "reachableDerivCount": 275,
+            "heapUsedBytes": 5256120,
+            "gcForced": true
+          },
+          "100": {
+            "checkpointTick": 100,
+            "S": 64,
+            "reachableDerivCount": 9086,
+            "heapUsedBytes": 13937640,
+            "gcForced": true
+          },
+          "300": {
+            "checkpointTick": 300,
+            "S": 64,
+            "reachableDerivCount": 26886,
+            "heapUsedBytes": 31414056,
+            "gcForced": true
+          },
+          "600": {
+            "checkpointTick": 600,
+            "S": 64,
+            "reachableDerivCount": 53586,
+            "heapUsedBytes": 58496720,
+            "gcForced": true
+          }
+        },
+        "heapBaselineBytes": 5256120,
+        "heapGrowthBytes": [
+          0,
+          8681520,
+          26157936,
+          53240600
+        ],
+        "derivCountPerTickSlope": 89,
+        "heapGrowthBytesPerTickSlope": 88867.7428887486,
+        "soakSeconds": 1800,
+        "soakTicksPerSecond": 60,
+        "soakTicks": 108000,
+        "extrapolatedHeapGrowthBytes": 9597497093.32694,
+        "extrapolatedDerivCount": 9612186,
+        "note": "heapUsed is read after a forced GC (node --expose-gc) but still may carry residue from earlier phases in this run; growth is measured relative to the tick=1 checkpoint, not in absolute bytes. Extrapolation is from a 4-point linear fit over ticks 1..600; not measured directly."
+      }
+    }
+  },
+  "updateCostSources": {
+    "python": "pre-captured at /tmp/update_cost_py_2.json",
+    "js": "pre-captured at /tmp/update_cost_js.json"
+  }
+}
