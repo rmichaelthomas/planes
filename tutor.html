@@ -209,10 +209,17 @@
       @media (max-width:760px){.key-cols{grid-template-columns:repeat(2,1fr); gap:14px}}
       @media (max-width:420px){.key-cols{grid-template-columns:1fr}}
       .key .grp{min-width:0}
+      .key .grp[hidden]{display:none}
       .key .grp .lbl{font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-40); margin-bottom:7px}
-      .word{display:flex; align-items:baseline; gap:7px; padding:3px 0}
-      .word .w{font-family:var(--mono); font-weight:700; font-size:12.5px; color:var(--clay); white-space:nowrap}
-      .word .shape{font-family:var(--mono); font-size:10.5px; color:var(--ink-40); white-space:nowrap}
+      /* The typed word and its argument labels sit on separate lines, on
+         purpose: a row that reads left-to-right as "sun  across, down"
+         looks exactly like a line of program. Stacking the grey "needs:"
+         caption underneath, in the UI font rather than mono, breaks that
+         resemblance so a row can never be copied straight onto a program
+         line (§6 of the graduated-key build). */
+      .word{padding:4px 0}
+      .word .w{font-family:var(--mono); font-weight:700; font-size:12.5px; color:var(--clay); display:block}
+      .word .needs{font-family:var(--display); font-weight:500; font-size:10px; color:var(--ink-40); display:block; margin-top:1px}
       .choices{display:flex; flex-direction:column; gap:3px; margin:5px 0 2px 2px}
       .choice{font-family:var(--mono); font-size:11px; color:var(--slate); display:flex; align-items:center; gap:7px; line-height:1.3}
       .choice .sw{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
@@ -332,6 +339,7 @@
           <div id="coord-tip" hidden></div>
         </div>
         <p class="coord-hint" id="coord-hint">Hover the picture to find a spot — across runs 0–480, down 0–360, from the top-left corner (0,0).</p>
+        <p class="coord-hint" id="ask-hint" hidden>Click anything in your picture to ask where it came from.</p>
         <div class="canvas-foot">
           <button id="save-svg" type="button">Save SVG ⤓</button>
           <button id="save-png" type="button">Save PNG ⤓</button>
@@ -357,7 +365,7 @@
           <div class="key-head">
             <h3>words you can use</h3>
             <button class="key-toggle" id="key-toggle" type="button" hidden aria-pressed="false">hide key</button>
-            <p class="subtitle">Type these into your program — the key just shows how they're spelled.</p>
+            <p class="subtitle">Type the <b>word</b>. The grey part just tells you what numbers it needs — you don't type that.</p>
           </div>
           <div class="key-cols">
             <div class="grp">
@@ -375,9 +383,9 @@
             <div class="grp">
               <div class="lbl">name it &amp; say why</div>
               <div id="key-naming"></div>
-              <p class="mini" id="key-note" style="margin-top:9px; padding-top:0; border:0"></p>
             </div>
           </div>
+          <p class="mini" id="key-note"></p>
         </aside>
 
         <div class="swatches" id="swatches" hidden>
@@ -513,6 +521,7 @@
       const capstoneEl = $("capstone");
       const coordTipEl = $("coord-tip");
       const coordHintEl = $("coord-hint");
+      const askHintEl = $("ask-hint");
       const ctx = canvas.getContext("2d");
 
       // A direction glyph reinforces a number as a DIRECTION, not just a
@@ -708,30 +717,62 @@
         return out.join("\n");
       }
 
+      // ---- what a lesson's own lines actually use, derived rather than
+      // declared: no LESSONS[i] carries a hand-kept `vocab` field, so this
+      // can never drift from what the lesson actually teaches. A placeable
+      // must appear as a call header ("<name> of") — a name mentioned only
+      // in prose text can't leak a word into the key that lesson never
+      // asks her to type. Skies/grounds match their exact quoted phrase;
+      // naming words match as whole words. --------------------------------
+
+      function vocabForLesson(lessonIndex) {
+        const text = LESSONS[lessonIndex].lines.join("\n");
+        const placeables = PLACEABLES.filter((p) =>
+          new RegExp(`(^|\\n)\\s*${p.name.replace(/-/g, "\\-")}\\s+of\\b`).test(text),
+        );
+        const skies = SKY_PHRASES.filter((s) => text.includes(`"${s.phrase}"`));
+        const grounds = GROUND_PHRASES.filter((g) => text.includes(`"${g.phrase}"`));
+        const naming = NAMING_WORDS.filter((n) => new RegExp(`\\b${n.name}\\b`).test(text));
+        return { placeables, skies, grounds, naming };
+      }
+
       // ---- the read-only key, generated from js/scene_vocab.mjs (§420-421) --
 
-      function renderKey() {
-        const placeablesEl = $("key-placeables");
-        placeablesEl.innerHTML = PLACEABLES.map(
-          (p) => `<div class="word"><span class="w">${esc(p.name)}</span><span class="shape">${esc(p.shape.join(", "))}</span></div>`,
+      function renderKey(lessonIndex) {
+        const vocab = vocabForLesson(lessonIndex);
+
+        const placeablesGrp = $("key-placeables").closest(".grp");
+        placeablesGrp.hidden = vocab.placeables.length === 0;
+        $("key-placeables").innerHTML = vocab.placeables.map(
+          (p) => `<div class="word"><span class="w">${esc(p.name)}</span><span class="needs">needs: ${esc(p.shape.map(withGlyph).join(", "))}</span></div>`,
         ).join("");
 
-        const skyEl = $("key-sky");
-        skyEl.innerHTML = SKY_PHRASES.map(
+        const skyGrp = $("key-sky").closest(".grp");
+        skyGrp.hidden = vocab.skies.length === 0;
+        $("key-sky").innerHTML = vocab.skies.map(
           (s) => `<div class="choice"><span class="sw" style="background:${esc(s.color)}"></span><span class="q">"</span>${esc(s.phrase)}<span class="q">"</span></div>`,
         ).join("");
 
-        const groundEl = $("key-ground");
-        groundEl.innerHTML = GROUND_PHRASES.map(
+        const groundGrp = $("key-ground").closest(".grp");
+        groundGrp.hidden = vocab.grounds.length === 0;
+        $("key-ground").innerHTML = vocab.grounds.map(
           (g) => `<div class="choice"><span class="sw" style="background:${esc(g.color)}"></span><span class="q">"</span>${esc(g.phrase)}<span class="q">"</span></div>`,
         ).join("");
 
-        const namingEl = $("key-naming");
-        namingEl.innerHTML = NAMING_WORDS.map(
-          (n) => `<div class="word"><span class="w">${esc(n.name)}</span><span class="shape">${esc(n.shape.join(" "))}</span></div>`,
+        const namingGrp = $("key-naming").closest(".grp");
+        namingGrp.hidden = vocab.naming.length === 0;
+        $("key-naming").innerHTML = vocab.naming.map(
+          (n) => `<div class="word"><span class="w">${esc(n.name)}</span><span class="needs">needs: ${esc(n.shape.join(" "))}</span></div>`,
         ).join("");
-
         $("key-note").textContent = COORDINATE_NOTE;
+      }
+
+      // A direction glyph next to across/down in the key's own argument
+      // labels too — how-tall gets none, the same rule the why-card and the
+      // coordinate tip already follow (DIRECTION_GLYPH above).
+      function withGlyph(label) {
+        const glyph = DIRECTION_GLYPH[label];
+        return glyph ? `${label} ${glyph}` : label;
       }
 
       // ---- the your-own-sky lesson: unlabeled colour swatches, real OKLCH -> hex --
@@ -848,6 +889,7 @@
       }
       function updateCoordHintVisibility() {
         coordHintEl.hidden = hasRunThisLesson;
+        askHintEl.hidden = !hasRunThisLesson;
         if (hasRunThisLesson) hideCoordTip();
       }
 
@@ -914,6 +956,7 @@
         }
         lessonNEl.textContent = String(currentLesson + 1);
         lessonSayEl.innerHTML = lesson.lesson;
+        renderKey(currentLesson);
         applyKeyVisibility();
         updateCoordHintVisibility();
         swatchesEl.hidden = !lesson.surfaces.swatches;
@@ -1416,7 +1459,6 @@
 
       // ---- boot --------------------------------------------------------
 
-      renderKey();
       renderSwatches();
       renderLessonNav();
 
