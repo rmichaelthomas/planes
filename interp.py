@@ -7,6 +7,8 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+import world_ir
+import world_source_map
 from host import Host, HostError, PythonHost, TestHost
 from lexer import *
 from parser import BUILTIN_NAMES, find_discarded_writes, parse
@@ -428,6 +430,29 @@ class Function:
     file: Optional[str] = None
 
 
+@dataclass
+class WorldEmission:
+    """One `show` that produced a valid world-v1 envelope (Build 2, §3).
+
+    Interpreter-level OBSERVATION, the same plane `self.trace` occupies —
+    not a language feature, nothing a program can read, and appending one
+    performs nothing. `raw` is the envelope in the native-host form
+    `world_ir.parse_world_envelope` actually validated (Number already
+    converted to int/float, Map/dict already converted to dict — see
+    `to_host`); `normalized` and `warnings` are that call's own return
+    value, kept rather than recomputed so a consumer never re-derives what
+    the interpreter already knows to be true. `node` is the shown value's
+    own Deriv, so a world record's provenance is exactly the provenance the
+    program's own computation already built (§3 requirement 3) — nothing
+    about emission constructs a second derivation for the same value.
+    """
+    raw: dict
+    normalized: dict
+    warnings: list
+    node: Deriv
+    source_line: int
+
+
 def seal_refusal(generation, snapshot):
     """The fixed sentence a seal names (R1 §5) — true because Planes is
     deterministic and pure: history behind a seal is not lost, only
@@ -502,6 +527,15 @@ class Interpreter:
         self.call_sites = []
         self.effects = []            # ordered record of what the program did
         self.annotations = {}        # name -> latest `because` text, display-only
+
+        # Horizon Phase 0 Build 2, Phase 1 (build prompt §3, spec §9.2): a
+        # typed world envelope for every `show` of a value shaped like one,
+        # riding BESIDE `effects`/`output` rather than replacing anything in
+        # them — this list is the only thing Show adds to. Populated by
+        # `_maybe_emit_world_envelope` below, which never touches `effects`,
+        # `output`, or `trace`, so a program with no world content produces
+        # an empty list here and is otherwise unaffected (§N+1 invariant 2).
+        self.world_envelopes = []
 
         # Every effect goes through a host. `http=` and `fs=` are the older,
         # narrower way to say the same thing and still work; they build a
@@ -876,6 +910,74 @@ class Interpreter:
                 return line
         return 0
 
+    def _maybe_emit_world_envelope(self, traced, stmt_line):
+        """Build 2, §3: beside `show`, never instead of it. Called only from
+        the `Show` case below, AFTER every existing line there has already
+        run — so a refusal here can only ever happen once the ordinary show
+        (text/effects/trace/host/record/effect_log) has already completed
+        exactly as it does today (§N+1 invariant 2).
+
+        The gate is deliberately narrow: a shown value has to be a record
+        carrying a `version` field AND at least one of the three critical
+        facets (identity/situation/lineage) before this treats it as an
+        intentional emission attempt at all. The exact version match is
+        left to `world_ir.parse_world_envelope` itself rather than
+        duplicated here — this gate only decides whether an attempt was
+        made, `parse_world_envelope` is the one place that decides whether
+        it succeeds, exactly as js/interp.mjs's mirror of this gate leaves
+        it to `parseWorldEnvelope` (js/interp.mjs cannot import
+        `world_ir.SUPPORTED_VERSION` directly without breaking its
+        browser-loadability, so both gates are written the same
+        presence-only way rather than one checking a value the other
+        cannot reach). No program in this repo's corpus shows a top-level
+        record shaped that way today (the one place `version` appears as a
+        field is nested inside `identity`, never at the envelope's own top
+        level), so the gate cannot change behavior for any existing
+        program — it can only ever ADD a `WorldEmission` entry for a
+        program that opts in by shape.
+
+        Once gated in, the native form is built with `to_host` — the
+        SAME existing Number/dict/list -> int/float/dict/list boundary
+        `call_foreign` already crosses (`to_json`'s own `unwrap` for
+        `show`'s canonical text form takes non-whole numbers to exact TEXT
+        instead, which `world_ir`'s int/float field types would refuse; the
+        foreign boundary's own float conversion is the one `_type_ok`
+        expects) — and handed to `world_ir.parse_world_envelope`, the exact function
+        Build 1's own parser exposes. A refusal there is a `WorldIRError`,
+        not a `PlanesError`: it is a host-protocol-layer refusal, outside
+        the language's own error surface (`errors_coverage.py`/
+        `grammar_gen.py` never see a `WorldIRError` raise site), and it
+        propagates uncaught — the same "never silently swallowed" choice
+        `world_ir.py` itself makes for a malformed critical record.
+
+        When an `affordance` facet is present, its `sourceMapTarget` is
+        overwritten (never merely filled in when absent) with the real
+        resolved path this `show` was written at — `world_source_map`'s
+        extension of `trace_line`'s own entry-file line, formatted the one
+        way `format_source_map_path` builds it. A program need only supply
+        SOME placeholder string there (world-v1 requires the field present
+        with non-empty text); the real path is what actually reaches the
+        validator and what test_world_source_map.py resolves back to real
+        source (§4).
+        """
+        value = traced.value
+        if not isinstance(value, dict):
+            return
+        native = to_host(value)
+        if "version" not in native:
+            return
+        if not any(facet in native for facet in ("identity", "situation", "lineage")):
+            return
+        if isinstance(native.get("affordance"), dict):
+            resolved_line = self.trace_line(stmt_line)
+            path = world_source_map.format_source_map_path(self.entry_file, resolved_line)
+            if path is not None:
+                native["affordance"]["sourceMapTarget"] = path
+        normalized, warnings = world_ir.parse_world_envelope(native)
+        self.world_envelopes.append(WorldEmission(
+            raw=native, normalized=normalized, warnings=warnings,
+            node=traced.node, source_line=self.trace_line(stmt_line)))
+
     def hoist(self, stmts, env, renames=None, file=None):
         """Register function definitions before executing anything.
 
@@ -980,6 +1082,7 @@ class Interpreter:
             self.effects.append(("show", text))
             self.maybe_record("show", text, self.host_anchor(), derivation=v.node)
             self.log_effect("show", text, None)
+            self._maybe_emit_world_envelope(v, stmt.line)
             return v
 
         if isinstance(stmt, Why):

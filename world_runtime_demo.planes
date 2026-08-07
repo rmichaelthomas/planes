@@ -1,0 +1,59 @@
+# world_runtime_demo.planes — Horizon Phase 0 Build 2's own fixture,
+# exercised by test_world_emission.py, test_world_source_map.py,
+# test_world_runtime.py, test_world_runtime_conformance.py, and their JS
+# equivalents. One file serves all three phases:
+#
+#   Phase 1 (emission)     — the top-level `show demo-world` at the bottom
+#                             emits a typed world envelope beside the
+#                             ordinary show text/effect.
+#   Phase 2 (source maps)  — the affordance facet's `sourceMapTarget` is a
+#                             placeholder here; the interpreter overwrites
+#                             it with a real, resolvable path at emission.
+#   Phase 3 (persistence)  — `world-init` and `advance` are the calling
+#                             convention world_runtime.py/js drive directly,
+#                             never through `show`.
+#
+# Every record uses the exact world-v1 field names (grammar/protocols/
+# world-v1.json), not the informal names benchmarks/world_shape.planes uses
+# for its update-cost measurement — this file's job is protocol conformance,
+# not copy performance.
+
+to make-world of tick:
+  give {
+    version: 1,
+    identity: {
+      id: "wayfinder-1", kind: "character", subkind: "child",
+      displayName: "Kai", status: "canonical", schemaVersion: 1
+    },
+    situation: {
+      containingPlace: "landing-1", space: "world", x: tick, y: 0,
+      state: "standing", occupancy: 1, anchorId: "anchor-1",
+      chunkActive: true, physicsRef: "phys-1", audioRef: "audio-1"
+    },
+    affordance: {
+      action: "wave", precondition: "standing", valueShape: "boolean",
+      preview: "highlight", inverse: "lower", authorityRequired: "none",
+      explanation: "wave hello", sourceMapTarget: "pending", fallback: "deny"
+    },
+    lineage: {
+      corpusSource: "ala-eriri", culturalStatus: "canonical", author: "studio",
+      origin: "system", because: "seed world",
+      agreementFingerprint: "fp-1", permittedTransformations: "remix",
+      publishingRestriction: "none", systemBoundary: "immutable"
+    }
+  }
+
+# §12 item 4: a named world initialization function, called once.
+to world-init:
+  give make-world of 0
+
+# §12 item 5: a named advance function, called per fixed-step batch. Pure —
+# no ambient clock or random (spec §8.4) — and returns a NEW world record
+# via `with`, never mutating the one it was given (§12 item 6).
+to advance of world, tick:
+  let situation = world.situation
+  let new-situation = situation with x: situation.x + 1, state: "standing"
+  give world with situation: new-situation
+
+let demo-world = make-world of 0
+show demo-world

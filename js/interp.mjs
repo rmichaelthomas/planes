@@ -366,6 +366,7 @@ export class Interpreter {
     coreOnly = false,
     coreSurvey = false,
     trace = true,
+    emitWorld = null,
   } = {}) {
     // ---- the core-restricted mode (opt-in, off by default).
     //
@@ -447,6 +448,23 @@ export class Interpreter {
     this.callSites = [];
     this.effects = [];
     this.annotations = new Map();
+
+    // Horizon Phase 0 Build 2, Phase 1 (build prompt §3, spec §9.2): a typed
+    // world envelope for every `show` of a value shaped like one, riding
+    // BESIDE `effects`/`output` — this list is the only thing Show adds to.
+    //
+    // `emitWorld` is an optional, synchronous, dependency-injected hook —
+    // null (the default) unless a Node-only caller supplies one — because
+    // js/world_ir.mjs and js/world_source_map.mjs both read the filesystem
+    // directly and interp.mjs must stay browser-loadable (grammar_data.mjs's
+    // own comment: "No shared module statically imports node:fs, so every
+    // one of them loads in a browser tab"). interp.py has no such split and
+    // calls world_ir/world_source_map directly; js/world_emit_node.mjs is
+    // the Node-only bridge that supplies this hook, so a page that never
+    // passes `emitWorld` — every existing browser page — is completely
+    // unaffected by this build.
+    this.emitWorld = emitWorld;
+    this.worldEnvelopes = [];
     if (host !== null) this.host = host;
     else if (http !== null || fs !== null) {
       this.host = new TestHost({ responses: http ?? {}, files: fs ?? {} });
@@ -764,6 +782,38 @@ export class Interpreter {
     return 0;
   }
 
+  // Build 2, §3: beside `show`, never instead of it. Called only from the
+  // "Show" case below, AFTER every existing line there has already run, so
+  // a refusal can only happen once the ordinary show has already completed
+  // exactly as it does today (§N+1 invariant 2). A no-op whenever
+  // `emitWorld` is unset — every existing browser page, unchanged.
+  //
+  // The gate mirrors interp.py's own: a shown value has to be a record
+  // carrying a `version` key AND at least one of the three critical facets
+  // (identity/situation/lineage) before this treats it as an intentional
+  // emission attempt — the exact version match is left to `emitWorld`
+  // (js/world_emit_node.mjs, which calls parseWorldEnvelope) rather than
+  // duplicated here, since interp.mjs cannot import js/world_ir.mjs itself
+  // (see the `emitWorld` field comment in the constructor) and hardcoding
+  // the supported version number here would be a second, driftable copy of
+  // the one grammar/protocols/world-v1.json already states. No existing
+  // corpus program shows a top-level record shaped this way (confirmed by
+  // repo-wide search before this build), so the gate cannot change behavior
+  // for any program that does not opt in by shape.
+  _maybeEmitWorldEnvelope(traced, stmtLine) {
+    if (!this.emitWorld) return;
+    const value = traced.value;
+    if (!(value instanceof Map)) return;
+    const native = toHost(value);
+    if (!("version" in native)) return;
+    if (!("identity" in native || "situation" in native || "lineage" in native)) return;
+    const resolvedLine = this.trace_line(stmtLine);
+    const { normalized, warnings } = this.emitWorld(native, this.entryFile, resolvedLine);
+    this.worldEnvelopes.push({
+      raw: native, normalized, warnings, node: traced.node, sourceLine: resolvedLine,
+    });
+  }
+
   hoist(stmts, env, renames = null, file = null) {
     renames = renames ?? {};
     const rn = (k) => (k in renames ? renames[k] : k);
@@ -905,6 +955,7 @@ export class Interpreter {
       this.effects.push(["show", text]);
       this.maybe_record("show", text, this.host_anchor(), v.node);
       this.log_effect("show", text, null);
+      this._maybeEmitWorldEnvelope(v, stmt.line);
       return v;
     }
     if (k === "Why") {
@@ -1796,7 +1847,7 @@ export function toJson(v) {
   return pyJsonDumps(unwrap(v));
 }
 
-function toHost(x) {
+export function toHost(x) {
   if (x instanceof PlanesNumber) return x.isWhole() ? Number(x.asInt()) : x.toNumber();
   if (Array.isArray(x)) return x.map(toHost);
   if (x instanceof Map) {
