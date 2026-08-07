@@ -1858,7 +1858,7 @@ export function toHost(x) {
   return x;
 }
 
-function fromForeign(x) {
+export function fromForeign(x) {
   if (typeof x === "boolean") return x;
   if (typeof x === "number" || typeof x === "bigint") return PlanesNumber.of(x);
   if (Array.isArray(x)) return x.map(fromForeign);
