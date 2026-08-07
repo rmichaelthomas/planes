@@ -1,0 +1,467 @@
+# grammar/world_ir.planes — the self-hosted World IR (world-v1) parser/
+# validator. Horizon Phase 0 Build 1.
+#
+# A .planes module has no way to read JSON or another .planes/.mjs file's
+# data at runtime, so this file cannot load grammar/protocols/world-v1.json
+# the way world_ir.py and js/world_ir.mjs do. It carries world-v1's rules as
+# HAND-WRITTEN Planes, matching that file field for field and tag for tag —
+# the same "one source, read two ways" seam js/scene_vocab.mjs and
+# paint/scene.planes already use, except here there are three readings, not
+# two. test_world_ir_conformance.py is what keeps the three honest; nothing
+# here is checked against world-v1.json directly.
+#
+# THE TYPE-PROBE IDIOM. This language has no `typeof`/`kind of` builtin, and
+# `when subject is {...}:` raises `not-a-record` immediately if `subject`
+# isn't record-shaped — it cannot be used to ask "is this a record" without
+# risk. Every type check below is instead a PROBE: attempt an operation that
+# only succeeds for the wanted shape (`upper of` for text, `whole of` for a
+# number, `== true` for a boolean, `when v is {}:` for record-shape), and
+# catch its failure with `or fail as`. `count of`, `+`, and `==` never
+# coerce between kinds (the value model's own rule — `+` refuses
+# text+number, `==` refuses cross-type), which is what makes a probe a real
+# type test rather than a guess.
+#
+# FIELD PRESENCE, ALL AT ONCE. `when r is { f1, f2, ... }:` matches only if
+# EVERY named field is present — there is no way to test one field's
+# presence at a time when its name is a runtime value, so a record with any
+# field missing is reported the same way regardless of which one — "the
+# record is missing one or more required fields", not naming a specific
+# field. world_ir.py's `_validate_record` and js/world_ir.mjs's
+# `validateRecord` follow the identical rule for the identical reason, so
+# all three name the same detail text for a missing field.
+
+# ============================================================ type probes
+
+to is-record-shaped of v:
+  (record-shape-probe of v) or fail as probe-not-record: give false
+  give true
+
+to record-shape-probe of v:
+  when v is {}:
+    give true
+
+to is-text-shaped of v:
+  (upper of v) or fail as probe-not-text: give false
+  give true
+
+to is-number-shaped of v:
+  (whole of v) or fail as probe-not-number: give false
+  give true
+
+to is-boolean-shaped of v:
+  (v == true) or fail as probe-not-boolean: give false
+  give true
+
+to is-non-empty of v:
+  give (count of v) > 0
+
+to is-integer-valued of v:
+  give (whole of v) == v
+
+to is-in-unit-range of v:
+  give (v >= 0) and (v <= 1)
+
+# ============================================================= type dispatch
+
+to value-matches-type of value, type-name:
+  if type-name == "identifier":
+    give (is-text-shaped of value) and (is-non-empty of value)
+  else:
+    if type-name == "semantic-id":
+      give (is-text-shaped of value) and (is-non-empty of value)
+    else:
+      if type-name == "source-map-path":
+        give (is-text-shaped of value) and (is-non-empty of value)
+      else:
+        if type-name == "text":
+          give is-text-shaped of value
+        else:
+          if type-name == "integer":
+            give (is-number-shaped of value) and (is-integer-valued of value)
+          else:
+            if type-name == "number":
+              give is-number-shaped of value
+            else:
+              if type-name == "normalized-number":
+                give (is-number-shaped of value) and (is-in-unit-range of value)
+              else:
+                if type-name == "boolean":
+                  give is-boolean-shaped of value
+                else:
+                  fail "world-v1 declares field type '" + type-name + "', which this parser does not know" as unknown-field-type
+
+# `check-field` threads the first failure through a flat sequence of calls —
+# `ok-so-far` is `nothing` while every field checked so far has passed, or
+# the full reason text for the first field that failed. Once a failure is
+# recorded, later calls pass it through unchanged rather than re-checking,
+# giving first-failure-in-declared-order semantics without nested if/else
+# per field. The reason text matches world_ir.py's `_validate_record` and
+# js/world_ir.mjs's `validateRecord` word for word.
+to check-field of ok-so-far, value, type-name, field-name:
+  if not (ok-so-far is nothing):
+    give ok-so-far
+  else:
+    if value-matches-type of value, type-name:
+      give nothing
+    else:
+      give "field '" + field-name + "' fails its declared type '" + type-name + "'"
+
+# ==================================================== per-facet validation
+#
+# Each `validate-*` function checks the record is record-shaped, then field
+# presence with one `when`, then walks its fields in world-v1.json's
+# declared order with `check-field`. Returns `{ ok: false, reason: "..." }`
+# on a shape, presence, or type failure, or `{ ok: true, fields: {...} }` on
+# success — `fields` mirrors the input, field for field, since normalization
+# does no coercion.
+
+to validate-identity of r:
+  if not (is-record-shaped of r):
+    give { ok: false, reason: "the record is not a record of fields" }
+  else:
+    when r is { id, kind, subkind, displayName, status, schemaVersion }:
+      bad = nothing
+      bad = check-field of bad, id, "semantic-id", "id"
+      bad = check-field of bad, kind, "identifier", "kind"
+      bad = check-field of bad, subkind, "identifier", "subkind"
+      bad = check-field of bad, displayName, "text", "displayName"
+      bad = check-field of bad, status, "identifier", "status"
+      bad = check-field of bad, schemaVersion, "integer", "schemaVersion"
+      if bad is nothing:
+        give { ok: true, fields: { id: id, kind: kind, subkind: subkind, displayName: displayName, status: status, schemaVersion: schemaVersion } }
+      else:
+        give { ok: false, reason: bad }
+    else:
+      give { ok: false, reason: "the record is missing one or more required fields" }
+
+to validate-situation of r:
+  if not (is-record-shaped of r):
+    give { ok: false, reason: "the record is not a record of fields" }
+  else:
+    when r is { containingPlace, space, x, y, state, occupancy, anchorId, chunkActive, physicsRef, audioRef }:
+      bad = nothing
+      bad = check-field of bad, containingPlace, "semantic-id", "containingPlace"
+      bad = check-field of bad, space, "identifier", "space"
+      bad = check-field of bad, x, "number", "x"
+      bad = check-field of bad, y, "number", "y"
+      bad = check-field of bad, state, "identifier", "state"
+      bad = check-field of bad, occupancy, "integer", "occupancy"
+      bad = check-field of bad, anchorId, "semantic-id", "anchorId"
+      bad = check-field of bad, chunkActive, "boolean", "chunkActive"
+      bad = check-field of bad, physicsRef, "identifier", "physicsRef"
+      bad = check-field of bad, audioRef, "identifier", "audioRef"
+      if bad is nothing:
+        give { ok: true, fields: { containingPlace: containingPlace, space: space, x: x, y: y, state: state, occupancy: occupancy, anchorId: anchorId, chunkActive: chunkActive, physicsRef: physicsRef, audioRef: audioRef } }
+      else:
+        give { ok: false, reason: bad }
+    else:
+      give { ok: false, reason: "the record is missing one or more required fields" }
+
+to validate-relation of r:
+  if not (is-record-shaped of r):
+    give { ok: false, reason: "the record is not a record of fields" }
+  else:
+    when r is { relationId, relationType, fromId, toId, provenance }:
+      bad = nothing
+      bad = check-field of bad, relationId, "semantic-id", "relationId"
+      bad = check-field of bad, relationType, "identifier", "relationType"
+      bad = check-field of bad, fromId, "semantic-id", "fromId"
+      bad = check-field of bad, toId, "semantic-id", "toId"
+      bad = check-field of bad, provenance, "text", "provenance"
+      if bad is nothing:
+        give { ok: true, fields: { relationId: relationId, relationType: relationType, fromId: fromId, toId: toId, provenance: provenance } }
+      else:
+        give { ok: false, reason: bad }
+    else:
+      give { ok: false, reason: "the record is missing one or more required fields" }
+
+to validate-behavior of r:
+  if not (is-record-shaped of r):
+    give { ok: false, reason: "the record is not a record of fields" }
+  else:
+    when r is { eventPattern, transition, timerTicks, condition, stateMachine, emittedEvent, failurePath }:
+      bad = nothing
+      bad = check-field of bad, eventPattern, "identifier", "eventPattern"
+      bad = check-field of bad, transition, "identifier", "transition"
+      bad = check-field of bad, timerTicks, "integer", "timerTicks"
+      bad = check-field of bad, condition, "text", "condition"
+      bad = check-field of bad, stateMachine, "identifier", "stateMachine"
+      bad = check-field of bad, emittedEvent, "identifier", "emittedEvent"
+      bad = check-field of bad, failurePath, "identifier", "failurePath"
+      if bad is nothing:
+        give { ok: true, fields: { eventPattern: eventPattern, transition: transition, timerTicks: timerTicks, condition: condition, stateMachine: stateMachine, emittedEvent: emittedEvent, failurePath: failurePath } }
+      else:
+        give { ok: false, reason: bad }
+    else:
+      give { ok: false, reason: "the record is missing one or more required fields" }
+
+to validate-expression of r:
+  if not (is-record-shaped of r):
+    give { ok: false, reason: "the record is not a record of fields" }
+  else:
+    when r is { assetId, layer, depth, animationState, material, lightingResponse, particleIntent, colliderId, sensorId, audioAnchor, fidelityVariant, accessibleAlt }:
+      bad = nothing
+      bad = check-field of bad, assetId, "identifier", "assetId"
+      bad = check-field of bad, layer, "integer", "layer"
+      bad = check-field of bad, depth, "normalized-number", "depth"
+      bad = check-field of bad, animationState, "identifier", "animationState"
+      bad = check-field of bad, material, "identifier", "material"
+      bad = check-field of bad, lightingResponse, "identifier", "lightingResponse"
+      bad = check-field of bad, particleIntent, "identifier", "particleIntent"
+      bad = check-field of bad, colliderId, "identifier", "colliderId"
+      bad = check-field of bad, sensorId, "identifier", "sensorId"
+      bad = check-field of bad, audioAnchor, "identifier", "audioAnchor"
+      bad = check-field of bad, fidelityVariant, "identifier", "fidelityVariant"
+      bad = check-field of bad, accessibleAlt, "identifier", "accessibleAlt"
+      if bad is nothing:
+        give { ok: true, fields: { assetId: assetId, layer: layer, depth: depth, animationState: animationState, material: material, lightingResponse: lightingResponse, particleIntent: particleIntent, colliderId: colliderId, sensorId: sensorId, audioAnchor: audioAnchor, fidelityVariant: fidelityVariant, accessibleAlt: accessibleAlt } }
+      else:
+        give { ok: false, reason: bad }
+    else:
+      give { ok: false, reason: "the record is missing one or more required fields" }
+
+to validate-affordance of r:
+  if not (is-record-shaped of r):
+    give { ok: false, reason: "the record is not a record of fields" }
+  else:
+    when r is { action, precondition, valueShape, preview, inverse, authorityRequired, explanation, sourceMapTarget, fallback }:
+      bad = nothing
+      bad = check-field of bad, action, "identifier", "action"
+      bad = check-field of bad, precondition, "text", "precondition"
+      bad = check-field of bad, valueShape, "identifier", "valueShape"
+      bad = check-field of bad, preview, "identifier", "preview"
+      bad = check-field of bad, inverse, "identifier", "inverse"
+      bad = check-field of bad, authorityRequired, "identifier", "authorityRequired"
+      bad = check-field of bad, explanation, "text", "explanation"
+      bad = check-field of bad, sourceMapTarget, "source-map-path", "sourceMapTarget"
+      bad = check-field of bad, fallback, "identifier", "fallback"
+      if bad is nothing:
+        give { ok: true, fields: { action: action, precondition: precondition, valueShape: valueShape, preview: preview, inverse: inverse, authorityRequired: authorityRequired, explanation: explanation, sourceMapTarget: sourceMapTarget, fallback: fallback } }
+      else:
+        give { ok: false, reason: bad }
+    else:
+      give { ok: false, reason: "the record is missing one or more required fields" }
+
+to validate-lineage of r:
+  if not (is-record-shaped of r):
+    give { ok: false, reason: "the record is not a record of fields" }
+  else:
+    when r is { corpusSource, culturalStatus, author, origin, because, agreementFingerprint, permittedTransformations, publishingRestriction, systemBoundary }:
+      bad = nothing
+      bad = check-field of bad, corpusSource, "text", "corpusSource"
+      bad = check-field of bad, culturalStatus, "identifier", "culturalStatus"
+      bad = check-field of bad, author, "text", "author"
+      bad = check-field of bad, origin, "identifier", "origin"
+      bad = check-field of bad, because, "text", "because"
+      bad = check-field of bad, agreementFingerprint, "identifier", "agreementFingerprint"
+      bad = check-field of bad, permittedTransformations, "identifier", "permittedTransformations"
+      bad = check-field of bad, publishingRestriction, "identifier", "publishingRestriction"
+      bad = check-field of bad, systemBoundary, "identifier", "systemBoundary"
+      if bad is nothing:
+        give { ok: true, fields: { corpusSource: corpusSource, culturalStatus: culturalStatus, author: author, origin: origin, because: because, agreementFingerprint: agreementFingerprint, permittedTransformations: permittedTransformations, publishingRestriction: publishingRestriction, systemBoundary: systemBoundary } }
+      else:
+        give { ok: false, reason: bad }
+    else:
+      give { ok: false, reason: "the record is missing one or more required fields" }
+
+# ================================================================= version
+
+to describe-version of v:
+  if v is nothing:
+    give "null"
+  else:
+    if is-number-shaped of v:
+      give text of v
+    else:
+      if is-text-shaped of v:
+        give "\"" + v + "\""
+      else:
+        give "unrepresentable"
+
+to version-matches of v:
+  (v == 1) or fail as version-not-comparable: give false
+  give v == 1
+
+# =========================================================== the top level
+#
+# `parse world envelope of envelope` returns a record:
+#   refused:  { ok: false, tag: "...", detail: "...", fix: "..." }
+#   accepted: { ok: true, warnings: [...], version: 1,
+#               identity: {...}, situation: {...}, ... }   (present facets only)
+#
+# Facets are checked in world-v1.json's own order — identity, situation,
+# relation, behavior, expression, affordance, lineage — so the first
+# refusal raised is always the same one across all three implementations.
+
+to world-envelope-version of envelope:
+  if not (is-record-shaped of envelope):
+    give nothing
+  else:
+    when envelope is { version }:
+      give version
+    else:
+      give nothing
+
+to critical-missing of facet-name:
+  give { ok: false, tag: "missing-critical-record", detail: "critical record '" + facet-name + "' is missing from the world envelope", fix: "add the '" + facet-name + "' record — " + facet-name + " is a critical facet and the envelope cannot be applied without it" }
+
+to malformed-outcome of facet-name, critical, reason:
+  if critical:
+    give { ok: false, tag: "malformed-critical-record", detail: "record '" + facet-name + "' is malformed: " + reason, fix: "correct '" + facet-name + "' so every field world-v1.json declares for it is present and matches its declared type" }
+  else:
+    give { ok: false, tag: "malformed-optional-record", detail: "record '" + facet-name + "' is malformed: " + reason, fix: "correct '" + facet-name + "' so every field world-v1.json declares for it is present and matches its declared type" }
+
+to parse world envelope of envelope:
+  if not (is-record-shaped of envelope):
+    give { ok: false, tag: "malformed-world-envelope", detail: "the world envelope is not a record of fields", fix: "provide the envelope as a record whose fields are 'version' plus the world-v1 facet names" }
+  else:
+    v = world-envelope-version of envelope
+    if not (version-matches of v):
+      give { ok: false, tag: "unsupported-world-protocol-version", detail: "world envelope declares protocol version " + (describe-version of v) + ", which is not 1", fix: "regenerate the envelope with a world-v1 protocol matching this parser's version — if the envelope is newer than what this parser reads, upgrade the parser instead of regenerating the envelope" }
+    else:
+      give parse-facets of envelope
+
+to parse-facets of envelope:
+  result = { version: 1 }
+
+  when envelope is { identity }:
+    outcome = validate-identity of identity
+    when outcome is { ok: true, fields }:
+      result = result with identity: fields
+    else:
+      when outcome is { reason }:
+        give malformed-outcome of "identity", true, reason
+  else:
+    give critical-missing of "identity"
+
+  when envelope is { situation }:
+    outcome = validate-situation of situation
+    when outcome is { ok: true, fields }:
+      result = result with situation: fields
+    else:
+      when outcome is { reason }:
+        give malformed-outcome of "situation", true, reason
+  else:
+    give critical-missing of "situation"
+
+  when envelope is { relation }:
+    outcome = validate-relation of relation
+    when outcome is { ok: true, fields }:
+      result = result with relation: fields
+    else:
+      when outcome is { reason }:
+        give malformed-outcome of "relation", false, reason
+
+  when envelope is { behavior }:
+    outcome = validate-behavior of behavior
+    when outcome is { ok: true, fields }:
+      result = result with behavior: fields
+    else:
+      when outcome is { reason }:
+        give malformed-outcome of "behavior", false, reason
+
+  when envelope is { expression }:
+    outcome = validate-expression of expression
+    when outcome is { ok: true, fields }:
+      result = result with expression: fields
+    else:
+      when outcome is { reason }:
+        give malformed-outcome of "expression", false, reason
+
+  when envelope is { affordance }:
+    outcome = validate-affordance of affordance
+    when outcome is { ok: true, fields }:
+      result = result with affordance: fields
+    else:
+      when outcome is { reason }:
+        give malformed-outcome of "affordance", false, reason
+
+  when envelope is { lineage }:
+    outcome = validate-lineage of lineage
+    when outcome is { ok: true, fields }:
+      result = result with lineage: fields
+    else:
+      when outcome is { reason }:
+        give malformed-outcome of "lineage", true, reason
+  else:
+    give critical-missing of "lineage"
+
+  give result with ok: true, warnings: (unknown-record-warnings of envelope)
+
+# Unknown-record detection: this build's fixtures name the unknown record
+# directly (`annotation` is the one the conformance gate and unit fixtures
+# use), so the check is a direct field test rather than a generic "any key
+# not in this set" walk — ordinary Planes has no way to enumerate a record's
+# own field names at runtime, the same gap that rules out a data-driven
+# per-field loop above.
+to unknown-record-warnings of envelope:
+  when envelope is { annotation }:
+    give ["unknown-optional-record:annotation"]
+  else:
+    give []
+
+# ================================================ the canonical outcome string
+#
+# The cross-implementation comparison form test_world_ir_conformance.py
+# checks byte-for-byte against world_ir.py's canonical_outcome_string and
+# js/world_ir.mjs's canonicalOutcomeString. `join of` has no separator
+# argument (it concatenates directly, "".join in Python terms) — safe here
+# only because this build's fixtures never carry more than one warning; a
+# true comma-join over an arbitrary-length list is future work, noted in
+# REPORT_WORLD_V1.md.
+
+to canonical outcome string of envelope:
+  outcome = parse world envelope of envelope
+  when outcome is { ok: true }:
+    give accept-string of outcome
+  else:
+    give refuse-string of outcome
+
+to refuse-string of outcome:
+  give "world-ir-outcome: refuse" + "\ntag: " + outcome.tag + "\ndetail: " + outcome.detail + "\nfix: " + outcome.fix
+
+to accept-string of outcome:
+  head = "world-ir-outcome: accept" + "\nversion: " + (text of outcome.version) + "\nwarnings: " + (join of outcome.warnings)
+  give head + (identity-lines of outcome) + (situation-lines of outcome) + (relation-lines of outcome) + (behavior-lines of outcome) + (expression-lines of outcome) + (affordance-lines of outcome) + (lineage-lines of outcome)
+
+to identity-lines of outcome:
+  when outcome is { identity }:
+    give "\nidentity.id: " + identity.id + "\nidentity.kind: " + identity.kind + "\nidentity.subkind: " + identity.subkind + "\nidentity.displayName: " + identity.displayName + "\nidentity.status: " + identity.status + "\nidentity.schemaVersion: " + (text of identity.schemaVersion)
+  else:
+    give ""
+
+to situation-lines of outcome:
+  when outcome is { situation }:
+    give "\nsituation.containingPlace: " + situation.containingPlace + "\nsituation.space: " + situation.space + "\nsituation.x: " + (text of situation.x) + "\nsituation.y: " + (text of situation.y) + "\nsituation.state: " + situation.state + "\nsituation.occupancy: " + (text of situation.occupancy) + "\nsituation.anchorId: " + situation.anchorId + "\nsituation.chunkActive: " + (text of situation.chunkActive) + "\nsituation.physicsRef: " + situation.physicsRef + "\nsituation.audioRef: " + situation.audioRef
+  else:
+    give ""
+
+to relation-lines of outcome:
+  when outcome is { relation }:
+    give "\nrelation.relationId: " + relation.relationId + "\nrelation.relationType: " + relation.relationType + "\nrelation.fromId: " + relation.fromId + "\nrelation.toId: " + relation.toId + "\nrelation.provenance: " + relation.provenance
+  else:
+    give ""
+
+to behavior-lines of outcome:
+  when outcome is { behavior }:
+    give "\nbehavior.eventPattern: " + behavior.eventPattern + "\nbehavior.transition: " + behavior.transition + "\nbehavior.timerTicks: " + (text of behavior.timerTicks) + "\nbehavior.condition: " + behavior.condition + "\nbehavior.stateMachine: " + behavior.stateMachine + "\nbehavior.emittedEvent: " + behavior.emittedEvent + "\nbehavior.failurePath: " + behavior.failurePath
+  else:
+    give ""
+
+to expression-lines of outcome:
+  when outcome is { expression }:
+    give "\nexpression.assetId: " + expression.assetId + "\nexpression.layer: " + (text of expression.layer) + "\nexpression.depth: " + (text of expression.depth) + "\nexpression.animationState: " + expression.animationState + "\nexpression.material: " + expression.material + "\nexpression.lightingResponse: " + expression.lightingResponse + "\nexpression.particleIntent: " + expression.particleIntent + "\nexpression.colliderId: " + expression.colliderId + "\nexpression.sensorId: " + expression.sensorId + "\nexpression.audioAnchor: " + expression.audioAnchor + "\nexpression.fidelityVariant: " + expression.fidelityVariant + "\nexpression.accessibleAlt: " + expression.accessibleAlt
+  else:
+    give ""
+
+to affordance-lines of outcome:
+  when outcome is { affordance }:
+    give "\naffordance.action: " + affordance.action + "\naffordance.precondition: " + affordance.precondition + "\naffordance.valueShape: " + affordance.valueShape + "\naffordance.preview: " + affordance.preview + "\naffordance.inverse: " + affordance.inverse + "\naffordance.authorityRequired: " + affordance.authorityRequired + "\naffordance.explanation: " + affordance.explanation + "\naffordance.sourceMapTarget: " + affordance.sourceMapTarget + "\naffordance.fallback: " + affordance.fallback
+  else:
+    give ""
+
+to lineage-lines of outcome:
+  when outcome is { lineage }:
+    give "\nlineage.corpusSource: " + lineage.corpusSource + "\nlineage.culturalStatus: " + lineage.culturalStatus + "\nlineage.author: " + lineage.author + "\nlineage.origin: " + lineage.origin + "\nlineage.because: " + lineage.because + "\nlineage.agreementFingerprint: " + lineage.agreementFingerprint + "\nlineage.permittedTransformations: " + lineage.permittedTransformations + "\nlineage.publishingRestriction: " + lineage.publishingRestriction + "\nlineage.systemBoundary: " + lineage.systemBoundary
+  else:
+    give ""

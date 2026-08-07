@@ -1,0 +1,116 @@
+{
+  "name": "Planes World IR Protocol",
+  "version": 1,
+  "kind": "host-protocol",
+  "purpose": "Carries the seven-facet Planes-native world model (identity, situation, relation, behavior, expression, affordance, lineage) across the existing `show` boundary to a world-hosting performer, as typed data rather than a new effect.",
+  "ownership": {
+    "planes": ["identity", "situation", "relations", "behavior outcomes", "affordance availability", "lineage and authority"],
+    "host": ["pixels", "interpolation", "physics stepping", "audio synthesis", "input"],
+    "forbiddenHostDecisions": ["semantic state", "relation validity", "authority outcomes", "affordance availability", "provenance"]
+  },
+  "coordinates": {
+    "space": "semantic",
+    "minimum": null,
+    "maximum": null,
+    "origin": "declared per subject by the situation facet's own `space` field — this build does not fix a single world origin",
+    "numericBridge": "deferred to Phase 0 Build 3 (the fixed-point unit convention, spec §9.4). This build carries semantic positions, gains, and normalized values as exact Planes-boundary numbers with no unit quantization; Rapier/GPU numeric conversion is not yet defined."
+  },
+  "records": {
+    "identity": {
+      "critical": true,
+      "fields": [
+        { "name": "id", "type": "semantic-id" },
+        { "name": "kind", "type": "identifier" },
+        { "name": "subkind", "type": "identifier" },
+        { "name": "displayName", "type": "text" },
+        { "name": "status", "type": "identifier" },
+        { "name": "schemaVersion", "type": "integer" }
+      ]
+    },
+    "situation": {
+      "critical": true,
+      "fields": [
+        { "name": "containingPlace", "type": "semantic-id" },
+        { "name": "space", "type": "identifier" },
+        { "name": "x", "type": "number" },
+        { "name": "y", "type": "number" },
+        { "name": "state", "type": "identifier" },
+        { "name": "occupancy", "type": "integer" },
+        { "name": "anchorId", "type": "semantic-id" },
+        { "name": "chunkActive", "type": "boolean" },
+        { "name": "physicsRef", "type": "identifier" },
+        { "name": "audioRef", "type": "identifier" }
+      ]
+    },
+    "relation": {
+      "critical": false,
+      "fields": [
+        { "name": "relationId", "type": "semantic-id" },
+        { "name": "relationType", "type": "identifier" },
+        { "name": "fromId", "type": "semantic-id" },
+        { "name": "toId", "type": "semantic-id" },
+        { "name": "provenance", "type": "text" }
+      ]
+    },
+    "behavior": {
+      "critical": false,
+      "fields": [
+        { "name": "eventPattern", "type": "identifier" },
+        { "name": "transition", "type": "identifier" },
+        { "name": "timerTicks", "type": "integer" },
+        { "name": "condition", "type": "text" },
+        { "name": "stateMachine", "type": "identifier" },
+        { "name": "emittedEvent", "type": "identifier" },
+        { "name": "failurePath", "type": "identifier" }
+      ]
+    },
+    "expression": {
+      "critical": false,
+      "fields": [
+        { "name": "assetId", "type": "identifier" },
+        { "name": "layer", "type": "integer" },
+        { "name": "depth", "type": "normalized-number" },
+        { "name": "animationState", "type": "identifier" },
+        { "name": "material", "type": "identifier" },
+        { "name": "lightingResponse", "type": "identifier" },
+        { "name": "particleIntent", "type": "identifier" },
+        { "name": "colliderId", "type": "identifier" },
+        { "name": "sensorId", "type": "identifier" },
+        { "name": "audioAnchor", "type": "identifier" },
+        { "name": "fidelityVariant", "type": "identifier" },
+        { "name": "accessibleAlt", "type": "identifier" }
+      ]
+    },
+    "affordance": {
+      "critical": false,
+      "fields": [
+        { "name": "action", "type": "identifier" },
+        { "name": "precondition", "type": "text" },
+        { "name": "valueShape", "type": "identifier" },
+        { "name": "preview", "type": "identifier" },
+        { "name": "inverse", "type": "identifier" },
+        { "name": "authorityRequired", "type": "identifier" },
+        { "name": "explanation", "type": "text" },
+        { "name": "sourceMapTarget", "type": "source-map-path" },
+        { "name": "fallback", "type": "identifier" }
+      ]
+    },
+    "lineage": {
+      "critical": true,
+      "fields": [
+        { "name": "corpusSource", "type": "text" },
+        { "name": "culturalStatus", "type": "identifier" },
+        { "name": "author", "type": "text" },
+        { "name": "origin", "type": "identifier" },
+        { "name": "because", "type": "text" },
+        { "name": "agreementFingerprint", "type": "identifier" },
+        { "name": "permittedTransformations", "type": "identifier" },
+        { "name": "publishingRestriction", "type": "identifier" },
+        { "name": "systemBoundary", "type": "identifier" }
+      ]
+    }
+  },
+  "unsupportedVersion": "A world envelope whose declared protocol version is not this file's `version` refuses the whole envelope before any record is validated. The performer retains its last valid semantic frame and requests resynchronization — it never guesses at an unrecognized envelope shape.",
+  "unknownRecords": "Unknown optional records produce a parser warning and are ignored; the record they name is absent from the normalized output. Unknown protocol versions and malformed critical records stop envelope application. A known record with a malformed field refuses even when that record is optional — unknown and malformed are different cases.",
+  "fallback": "If a critical record is missing or malformed, the performer keeps its last valid semantic frame, pauses semantic advancement, and requests a full resynchronization rather than applying a partial critical batch."
+}
