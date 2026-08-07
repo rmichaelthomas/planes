@@ -89,6 +89,22 @@ class Host:
         The default is a no-op — the same shape as `record` above.
         """
 
+    # ---- the committed-event log (Horizon Phase 0 Build 3, §13.1-13.2) —
+    # a host capability, not a Planes list. `world_event_log.py` owns the
+    # hash chain and sequence numbering; this method is a pure durability
+    # sink for one already-built entry, the same division `record` already
+    # draws between deciding WHAT to persist and doing it. Optional,
+    # joining `record`/`snapshot` in the tier a second host does not have
+    # to implement — the required surface stays at seven (test_host.py's
+    # own count).
+
+    def append_event(self, entry):
+        """Persist one committed-event-log entry, if this host keeps one.
+
+        Optional: a host that does nothing here is still a complete host.
+        The default is a no-op — the same shape as `record`/`snapshot`.
+        """
+
     # ---- foreign resolution
 
     def resolve(self, target):
@@ -188,6 +204,7 @@ class TestHost(PythonHost):
         self.shown = []
         self.recorded = []      # the record plane's in-memory sink
         self.snapshots = {}     # the retention window's in-memory sink
+        self.events = []        # the committed-event log's in-memory sink
 
     def ask(self, url):
         r = self.responses
@@ -216,3 +233,6 @@ class TestHost(PythonHost):
 
     def snapshot(self, fingerprint, entry):
         self.snapshots[fingerprint] = entry
+
+    def append_event(self, entry):
+        self.events.append(entry)

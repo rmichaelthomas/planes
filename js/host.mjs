@@ -60,6 +60,13 @@ export class Host {
   // survive past this run is the only thing that can make that durable.
   // Required surface stays at seven (host.py's own count).
   snapshot(_fingerprint, _entry) {}
+  // The optional committed-event log capability (Horizon Phase 0 Build 3,
+  // spec §13.1-13.2) — a no-op by default, joining `record`/`snapshot` in
+  // the tier a second host does not have to implement.
+  // `js/world_event_log.mjs` owns the hash chain and sequence numbering;
+  // this method is a pure durability sink for one already-built entry.
+  // Required surface stays at seven (host.py's own count).
+  appendEvent(_entry) {}
   resolve(_target) {
     throw new HostError("resolve: not implemented on the abstract host");
   }
@@ -173,6 +180,7 @@ export class MemoryHost extends Host {
     this.shown = [];
     this.recorded = [];
     this.snapshots = {};
+    this.events = [];
     this._resolved = {};
     this._targets = sharedTargets(() => this.cwd);
   }
@@ -205,6 +213,9 @@ export class MemoryHost extends Host {
   }
   snapshot(fingerprint, entry) {
     this.snapshots[fingerprint] = entry;
+  }
+  appendEvent(entry) {
+    this.events.push(entry);
   }
   resolve(target) {
     return resolveWith(this._targets, this._resolved, target);
