@@ -851,6 +851,35 @@
         if (hasRunThisLesson) hideCoordTip();
       }
 
+      // The click-to-ask handler (below) needs this same pixel-to-coordinate
+      // transform — one function, so there is never a second copy of the
+      // rect math to drift out of sync with it.
+      function canvasPointFromEvent(event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: ((event.clientX - rect.left) / rect.width) * DIMENSIONS.width,
+          y: ((event.clientY - rect.top) / rect.height) * DIMENSIONS.height,
+        };
+      }
+
+      function showCoordTipAt(x, y) {
+        if (hasRunThisLesson) return;
+        coordTipEl.textContent = formatCoord(x, y);
+        coordTipEl.hidden = false;
+        const rect = canvas.getBoundingClientRect();
+        const scale = rect.width / DIMENSIONS.width;
+        const left = Math.max(4, Math.min(rect.width - coordTipEl.offsetWidth - 4, x * scale + 12));
+        const top = Math.max(4, Math.min(rect.height - coordTipEl.offsetHeight - 4, y * scale + 12));
+        coordTipEl.style.left = `${left}px`;
+        coordTipEl.style.top = `${top}px`;
+      }
+
+      canvas.addEventListener("pointermove", (event) => {
+        const { x, y } = canvasPointFromEvent(event);
+        showCoordTipAt(x, y);
+      });
+      canvas.addEventListener("pointerleave", hideCoordTip);
+
       // ---- lesson-aware progressive disclosure — surfaces are DECLARED by
       // each lesson (§10.4), never inferred from an index comparison. ------
 
@@ -1257,9 +1286,7 @@
       }
 
       canvas.addEventListener("click", (event) => {
-        const rect = canvas.getBoundingClientRect();
-        const x = ((event.clientX - rect.left) / rect.width) * DIMENSIONS.width;
-        const y = ((event.clientY - rect.top) / rect.height) * DIMENSIONS.height;
+        const { x, y } = canvasPointFromEvent(event);
         const found = hitTest(lastMarks, x, y, { area: DIMENSIONS });
         if (found < 0) {
           hideCard();

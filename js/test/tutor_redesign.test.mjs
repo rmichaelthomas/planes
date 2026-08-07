@@ -420,3 +420,33 @@ test("F: updateCoordHintVisibility ties both the tag and the caption to the same
   assert.match(src, /coordHintEl\.hidden = hasRunThisLesson/, "the caption's hidden state must mirror hasRunThisLesson directly");
   assert.match(src, /hideCoordTip\(\)/, "once a run succeeds, any tag still showing (pointer resting over the canvas) must be force-hidden too");
 });
+
+test("F: canvasPointFromEvent is the single source of the canvas's pixel-to-coordinate transform — the click handler no longer computes it inline", () => {
+  const html = pageSrc();
+  const fnIdx = html.indexOf("function canvasPointFromEvent(");
+  assert.ok(fnIdx >= 0, "tutor.html no longer declares canvasPointFromEvent where this suite reads it");
+  const clickStart = html.indexOf('canvas.addEventListener("click"');
+  assert.ok(clickStart >= 0, "tutor.html no longer wires the canvas click listener where this suite reads it");
+  const clickSrc = html.slice(clickStart, clickStart + 400);
+  assert.match(clickSrc, /canvasPointFromEvent\(event\)/, "the click handler must call the shared canvasPointFromEvent, not recompute the rect transform inline");
+  assert.doesNotMatch(clickSrc, /getBoundingClientRect/, "the click handler should no longer compute the rect transform itself — that duplication is exactly what canvasPointFromEvent removes");
+});
+
+test("F: hovering the stage is wired to the shared transform and to showCoordTipAt, and leaving it hides the tag", () => {
+  const html = pageSrc();
+  assert.match(
+    html,
+    /canvas\.addEventListener\("pointermove",[\s\S]{0,200}canvasPointFromEvent\(event\)[\s\S]{0,200}showCoordTipAt/,
+    "pointermove on the canvas must compute the point via canvasPointFromEvent and show the tag via showCoordTipAt",
+  );
+  assert.match(html, /canvas\.addEventListener\("pointerleave",\s*hideCoordTip\)/, "leaving the canvas must hide the coordinate tag");
+});
+
+test("F: showCoordTipAt refuses to show once orientation mode is off", () => {
+  const src = extractFunction(pageSrc(), "showCoordTipAt");
+  const guardIdx = src.indexOf("if (hasRunThisLesson) return;");
+  const textContentIdx = src.indexOf("coordTipEl.textContent");
+  assert.ok(guardIdx >= 0, "showCoordTipAt must guard on hasRunThisLesson");
+  assert.ok(textContentIdx >= 0, "showCoordTipAt must set the tag's text");
+  assert.ok(guardIdx < textContentIdx, "showCoordTipAt must bail immediately if the lesson has already been run — the tag must never reappear after a successful run just because the pointer moved");
+});
