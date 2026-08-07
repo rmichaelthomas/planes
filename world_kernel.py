@@ -25,7 +25,62 @@ first turning `advance`'s raw Traced return value into the envelope shape
 not a benchmarking artifact — excluding it would make the measured number
 optimistic in a way invariant 1 exists to prevent (failure mode #1, build
 prompt §9).
+
+RUNG 1 (Horizon Phase 1: the retention tail, build prompt §2). The
+engine-kernel spike found the tail's cause directly: CPython's cyclic
+collector pays a periodic full-collection pass over the live `Deriv`
+graph, and that pass gets more expensive every tick the graph grows,
+because a full collection traces every object in the oldest generation on
+every run, whether or not a cycle is actually present.
+
+The graph does not need that tracing at all. `interp.py`'s `Deriv.inputs`
+is populated only from nodes `mk()` already built — the interpreter's own
+monotonically increasing `_generation` counter stamps every node at
+construction, before its `inputs` are attached, so an edge can only ever
+point to a STRICTLY OLDER node. No node built later can be assigned into
+an older node's `inputs` (the only place a back-edge could live), so a
+cycle through `Deriv` alone is not merely absent by observation, it is
+unreachable by construction. Reading `Env` (`parent`-only, never a list of
+children), `Function` (its closure `env` is never itself stored back into
+that env — Planes has no first-class function values, so `self.funcs`,
+not `Env.vars`, is the only place a `Function` lives), and `Host`/
+`WorldRuntime` (neither holds a reference back to the `Interpreter`) turns
+up no other cycle either. So the cyclic collector's periodic scan of this
+graph is pure waste: refcounting alone already reclaims every `Deriv` the
+moment `_cut` drops the last reference to it (`gc.freeze()`/`gc.disable()`
+change only which objects the CYCLE detector re-scans, never whether
+plain reference counting deallocates something — an object's refcount
+reaching zero frees it immediately regardless of its freeze/generation
+state).
+
+The fix below hands collection timing to the one safe point a fixed-step
+kernel already has — between ticks, outside the timed span — instead of
+CPython's own allocation-threshold heuristic, which has no way to know a
+step is in progress and can just as easily land mid-`advance()`:
+
+  1. `gc.disable()`, once, in `__init__` — stops the automatic scheduler
+     from ever firing inside a step. This is a process-wide setting
+     (`gc` is not object- or interpreter-scoped); a `WorldKernel` is the
+     long-lived driver of a whole session, so it owning this for as long
+     as it is stepping ticks is the same shape as it owning `t0`/`elapsed`
+     below.
+  2. `gc.collect()` at the tick boundary — reclaims anything actually
+     unreachable (a real cycle, if one exists anywhere else in the
+     process) while it is still discoverable, at a point we chose rather
+     than one CPython chose.
+  3. `gc.freeze()` right after — moves everything that survived into the
+     permanent generation, so future collections (of either kind) never
+     re-scan it. Safe unconditionally, not just for the nodes a window
+     will never cut: freezing does not extend any object's lifetime or
+     change when refcounting frees it (point above), so a node `_cut`
+     later drops is reclaimed the instant that happens whether or not it
+     was ever frozen.
+
+`gc_interval` (ticks between maintenance calls, default every tick) is
+exposed so a caller — `world_tail_bench.py` among them — can measure
+whether a coarser cadence changes the trade, without a code change.
 """
+import gc
 import time
 
 from world_delta import compute_delta
@@ -54,10 +109,15 @@ class WorldKernel:
     that only holds with tracing on (R3, interp.py's own module docstring).
     """
 
-    def __init__(self, path, host=None, window=None, trace=True):
+    def __init__(self, path, host=None, window=None, trace=True, gc_interval=1):
         self.runtime = WorldRuntime(path, host=host, window=window, trace=trace)
         self.revision = 0
         self.prev_envelope = None
+        self.gc_interval = gc_interval
+        self._ticks_since_gc_maintain = 0
+        # Rung 1 (module docstring): hand collection timing to the tick
+        # boundary below, process-wide, for as long as this kernel steps.
+        gc.disable()
 
     def start(self):
         """Run `world-init` once. Not part of the per-tick measurement —
@@ -88,6 +148,15 @@ class WorldKernel:
         next_envelope, warnings = self.runtime.envelope
         delta = compute_delta(self.prev_envelope, next_envelope, self.revision)
         elapsed = time.perf_counter() - t0
+
+        # Rung 1 (module docstring): collector maintenance at the tick
+        # boundary, strictly after `elapsed` is captured — never inside
+        # t0/elapsed (build prompt invariant 2 / §6.2.D).
+        self._ticks_since_gc_maintain += 1
+        if self._ticks_since_gc_maintain >= self.gc_interval:
+            gc.collect()
+            gc.freeze()
+            self._ticks_since_gc_maintain = 0
 
         if warnings:
             raise WorldKernelError(

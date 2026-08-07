@@ -690,6 +690,26 @@ export class Interpreter {
     // wrong subgraph. This side's own `_id` never repeats a number, so it
     // would not have hit that bug, but the two implementations stay
     // structurally aligned rather than one memoizing what the other cannot.
+    //
+    // RUNG 2 (Horizon Phase 1: the retention tail, build prompt §2) —
+    // MEASURED, NOT SHIPPED, on this side. An incremental accumulator
+    // (Sha256Stream, matching interp.py's streamed hasher.update() exactly
+    // in spirit) was tried here and measured against this exact function's
+    // real ~300-line seal shape: 0.195 ms/call against sha256Hex(parts.
+    // join("\n"))'s 0.074 ms/call for the identical content — 2.6x slower,
+    // not faster. The reason is the asymmetry with the Python side:
+    // hashlib.sha256().update() is a C-extension call, so avoiding one
+    // large Python str.join()+.encode() is a clear win; sha256Hex and any
+    // streamed replacement for it are BOTH pure JavaScript here, and the
+    // per-call method-dispatch/property-access cost of many small update()
+    // calls measurably exceeds what a single large join()+one-shot-hash
+    // call saves in allocation. Confirmed at the soak level too: the
+    // windowed configuration's JS p50/p95 regressed (not improved) with
+    // the streamed version active. So this function keeps the original
+    // parts-array-then-sha256Hex shape — REPORT_RETENTION.md §6's
+    // allocation concern is real but Rung 2's fix for it does not carry
+    // over to JS the way it does to Python; recorded here rather than
+    // silently reverted.
     const order = new Map();
     const seq = [];
     const stack = [root];

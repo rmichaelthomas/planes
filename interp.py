@@ -788,6 +788,21 @@ class Interpreter:
         cost this would have saved is small and only ever paid when the
         SAME node is independently discovered stale from more than one
         surviving path — the DAG-sharing case, not the common linear one.
+
+        RUNG 2 (Horizon Phase 1: the retention tail, build prompt §2):
+        the fingerprint is hashed incrementally, one line at a time, as
+        each line is built — never collected into a `parts` list and
+        joined into one large string first. `hashlib.sha256().update()`
+        is defined to produce the identical digest whether fed as one
+        chunk or many (it is what makes it a STREAMING hash), so this is
+        the same bytes in the same order through the same algorithm —
+        the fingerprint this produces is byte-for-byte the one the old
+        list-then-join code produced, only without ever allocating the
+        list or the single large joined-and-encoded string. This is
+        `_cut`'s own per-cut-edge garbage rate under a bounded window
+        (REPORT_RETENTION.md §6, folded into this build) — a windowed
+        session calls `_seal` once per cut edge, and that list/string
+        pair was pure allocation this rewrite does not need to make.
         """
         order = {}
         seq = []
@@ -803,22 +818,25 @@ class Interpreter:
                     if id(inp) not in order:
                         stack.append(inp)
         count = 0
-        parts = []
+        hasher = hashlib.sha256()
+        first = True
         for n in seq:
+            if not first:
+                hasher.update(b"\n")
+            first = False
             if n.kind == "seal":
                 # A prior cut, absorbed rather than re-walked: its own
                 # released_count folds in, and its fingerprint stands for
                 # everything it already summarized.
                 count += n.released_count
-                parts.append(f"seal\x1f{n.generation}\x1f{n.fingerprint}")
+                hasher.update(f"seal\x1f{n.generation}\x1f{n.fingerprint}".encode())
                 continue
             count += 1
             children = ",".join(str(order[id(i)]) for i in n.inputs)
-            parts.append(
+            hasher.update(
                 f"{n.kind}\x1f{n.label}\x1f{fmt(n.value)}\x1f"
-                f"{n.origin or ''}\x1f{children}")
-        fingerprint = hashlib.sha256(
-            "\n".join(parts).encode()).hexdigest()[:12]
+                f"{n.origin or ''}\x1f{children}".encode())
+        fingerprint = hasher.hexdigest()[:12]
         seal = Deriv("seal", seal_refusal(root.generation, fingerprint),
                      root.value, [], generation=root.generation,
                      released_count=count, fingerprint=fingerprint)
