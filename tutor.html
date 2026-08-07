@@ -144,6 +144,18 @@
       #card .fromline b{color:var(--clay); font-weight:600}
       #card .exactness{font-size:10.5px; color:var(--ink-40); margin-top:8px; line-height:1.5}
 
+      /* ---------- the coordinate orientation tag + caption: on until the
+         lesson's first successful run, then off ---------- */
+      #coord-tip{
+        position:absolute; pointer-events:none; z-index:5;
+        background:var(--paper); border:1px solid var(--graphite); border-radius:8px;
+        padding:5px 10px; font-family:var(--mono); font-size:11.5px; color:var(--graphite);
+        box-shadow:var(--shadow-sm); white-space:nowrap;
+      }
+      #coord-tip[hidden]{display:none}
+      .coord-hint{font-family:var(--mono); font-size:11px; color:var(--ink-60); margin:9px 0 0}
+      .coord-hint[hidden]{display:none}
+
       /* ---------- the editor: ghost text behind a real textarea ---------- */
       .work{margin-top:14px}
       .editor-shell{background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:var(--shadow-sm)}
@@ -317,7 +329,9 @@
         <div class="stage">
           <canvas id="canvas" width="1440" height="1080" role="img" aria-label="the picture this program draws"></canvas>
           <div id="card" hidden></div>
+          <div id="coord-tip" hidden></div>
         </div>
+        <p class="coord-hint" id="coord-hint">Hover the picture to find a spot — across runs 0–480, down 0–360, from the top-left corner (0,0).</p>
         <div class="canvas-foot">
           <button id="save-svg" type="button">Save SVG ⤓</button>
           <button id="save-png" type="button">Save PNG ⤓</button>
@@ -497,6 +511,8 @@
       const keyEl = $("key");
       const swatchesEl = $("swatches");
       const capstoneEl = $("capstone");
+      const coordTipEl = $("coord-tip");
+      const coordHintEl = $("coord-hint");
       const ctx = canvas.getContext("2d");
 
       // A direction glyph reinforces a number as a DIRECTION, not just a

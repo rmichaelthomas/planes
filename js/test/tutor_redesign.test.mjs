@@ -352,3 +352,27 @@ test("F: DIRECTION_GLYPH is declared at page scope, before renderCard — not re
   assert.ok(renderCardIndex >= 0, "tutor.html no longer declares function renderCard where this suite reads it");
   assert.ok(glyphIndex < renderCardIndex, "DIRECTION_GLYPH must be hoisted to page scope, declared before renderCard, so formatCoord can share it too");
 });
+
+test("F: the coordinate tag lives inside the stage, and the orientation caption sits just under it", () => {
+  const html = pageSrc();
+  const stageOpenIdx = html.indexOf('<div class="stage">');
+  const cardIdx = html.indexOf('<div id="card" hidden></div>');
+  const tipTag = '<div id="coord-tip" hidden></div>';
+  const tipIdx = html.indexOf(tipTag);
+  // #card and #coord-tip are each self-closing on one line, so the first
+  // </div> AFTER coord-tip's own tag is .stage's real closing tag — the
+  // first </div> after cardIdx would just be #card's own immediate close.
+  const stageCloseIdx = html.indexOf("</div>", tipIdx + tipTag.length);
+  const hintIdx = html.indexOf('id="coord-hint"');
+  const canvasFootIdx = html.indexOf('class="canvas-foot"');
+  assert.ok(stageOpenIdx >= 0 && cardIdx >= 0, "tutor.html's .stage/#card markup moved where this suite doesn't expect it");
+  assert.ok(tipIdx > cardIdx && tipIdx < stageCloseIdx, "#coord-tip must live inside .stage, right alongside #card, so it can float over the canvas");
+  assert.ok(hintIdx > stageCloseIdx && hintIdx < canvasFootIdx, "#coord-hint must sit between the stage and the canvas-foot buttons, as a caption under the picture");
+});
+
+test("F: the coordinate tag ships hidden by default; the caption ships visible (orientation mode starts on)", () => {
+  const html = pageSrc();
+  assert.match(html, /<div id="coord-tip" hidden><\/div>/, "#coord-tip must ship as an empty, hidden div — same pattern as #card — since it only appears on hover");
+  const hintTagMatch = /<p class="coord-hint" id="coord-hint">[^<]+<\/p>/.exec(html);
+  assert.ok(hintTagMatch, "#coord-hint must ship with its text already in place, not hidden — a fresh lesson has not been run yet");
+});
