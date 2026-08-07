@@ -368,7 +368,7 @@
 
         <div class="swatches" id="swatches" hidden>
           <h3>your colors</h3>
-          <p>First name your sky with <code>to your words here:</code> on its own lines. Then tap a color — it writes the numbers for you, in a <code>custom-sky of</code> line right where your cursor is.</p>
+          <p>First name your sky with <code>to your sky name here:</code> on its own lines. Then tap a color — it writes the numbers for you, in a <code>custom-sky of</code> line right where your cursor is.</p>
           <div class="swatch-row" id="swatch-row"></div>
         </div>
       </div>
@@ -391,7 +391,7 @@
               <label class="filebtn" for="open-garden">Open my saved garden ▤</label>
               <input id="open-garden" type="file" accept=".planes,text/plain" style="display:none" />
             </div>
-            <p style="margin-top:9px; font-size:12px">Your teacher can call out these seeds at the front of the room — everyone's garden, one by one.</p>
+            <p style="margin-top:9px; font-size:12px">Trade seeds with anyone else growing a garden — the same seed always grows the exact same one.</p>
           </div>
           <div class="capcard wide">
             <h3><span class="ic" style="background:var(--amber)">✦</span> keep growing it</h3>
@@ -451,6 +451,7 @@
             <div class="sig"><div class="word2">planes<span class="dot">.</span></div><small>draw something, then ask it why</small></div>
             <div class="seedstamp">this garden<b id="cert-seed">——————</b></div>
           </div>
+          <p style="margin-top:14px; font-size:11.5px; color:var(--slate)">Printing? Choose “Save as PDF” instead of a printer to keep a copy you can share.</p>
         </div>
         <div class="actions"><button class="primary" id="cert-print" type="button">Print it ⤓</button><button id="cert-close2" type="button">Back to my garden</button></div>
       </div>
@@ -527,7 +528,7 @@
       const LESSONS = [
         {
           title: "place a thing",
-          lesson: "Type these lines, then press <b>Run</b>. In the last line, the first number is how far <b>across</b> (→), the second is how far <b>down</b> (↓). The key below shows every word you can use and how it's spelled.",
+          lesson: "The grey letters below are what to type — write right over them, and they'll clear as you go. Type these lines, then press <b>Run</b>. In the last line, the first number is how far <b>across</b> (→), the second is how far <b>down</b> (↓). The key below shows every word you can use and how it's spelled.",
           lines: [
             "use scene",
             "",
@@ -570,7 +571,7 @@
         },
         {
           title: "name it & why",
-          lesson: 'Give a number a name and a reason. <b>let spot = 90 because "…"</b> names the height, and the <b>because</b> is your own words for why.',
+          lesson: 'Give a number a name and a reason. <b>let spot = 90 because "…"</b> names the height, and the <b>because</b> is your own words for why. Click the flower after you run it — your reason shows up right there.',
           lines: [
             "use scene",
             "",
@@ -605,7 +606,7 @@
         },
         {
           title: "your own sky",
-          lesson: "This time you make your <b>own</b> sky. Name it with <b>to your words here:</b>, then tap a color in the panel below — it writes the numbers into a <b>custom-sky</b> line for you.",
+          lesson: "This time you make your <b>own</b> sky. Name it with <b>to your sky name here:</b>, then tap a color in the panel below — it writes the numbers into a <b>custom-sky</b> line for you.",
           lines: [
             "use scene",
             "",
@@ -1329,6 +1330,20 @@
       $("cert-close2").addEventListener("click", () => scrim.classList.remove("show"));
       $("cert-print").addEventListener("click", () => window.print());
       scrim.addEventListener("click", (e) => { if (e.target === scrim) scrim.classList.remove("show"); });
+
+      // ---- leaving with unsaved work ----------------------------------
+      //
+      // §9's save-and-reopen IS the persistence model — no localStorage, no
+      // autosave. Without this, a refresh, a closed tab, or a back-swipe
+      // loses everything typed with no warning beyond the lesson-switch
+      // confirm above, which only fires on an in-page lesson change, never
+      // on navigating away. The browser owns the prompt's wording; setting
+      // returnValue is what triggers it across engines.
+      window.addEventListener("beforeunload", (e) => {
+        if (source.value.trim() === "") return;
+        e.preventDefault();
+        e.returnValue = "";
+      });
 
       // ---- boot --------------------------------------------------------
 
