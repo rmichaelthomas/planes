@@ -1,0 +1,221 @@
+# paint/world/kernel_spike_fixture.planes — the synthetic per-tick workload
+# for Horizon Phase 1's engine-kernel spike (build prompt §1, §3).
+#
+# WHAT THIS BRACKETS. Design doc §24.1's Reso Landing cell does not exist yet
+# (that is Phase 2's Playable Ala Eriri cell). This fixture is the analytical
+# partner's synthetic stand-in, chosen to bracket that cell's named contents
+# without inventing behavior no later build can compare against: a single
+# containing place; twelve contained subjects; one water-edge subject with a
+# continuous position; weather/tide state on a short integer-tick timer; one
+# structure whose identity is static but whose occupancy changes; one living
+# ecological subject making state-machine transitions; one local activity
+# that emits a semantic event on a condition. The remaining seven of the
+# twelve are plain wanderers — bulk per-tick load with no named role, filling
+# the count out to twelve without claiming a twelfth piece of §24.1 scope.
+#
+# THE SINGLE-SUBJECT TRANSLATION, STATED WHERE THE NEXT BUILD READS IT.
+# world_ir.py / world_delta.py (read-only for this build, per invariant 6)
+# are single-subject scope by construction: one `identity.id` per envelope,
+# flat facet records, not keyed lists (see world_delta.py's own module
+# docstring). world-init/advance therefore cannot literally return twelve
+# subject envelopes — `WorldRuntime.envelope` parses whatever `advance`
+# returns as ONE world-v1 envelope, and any extra top-level key (a `subjects`
+# list, say) would surface as an `unknown-optional-record` warning, which
+# would violate this build's own "warnings empty" acceptance bar (§3). So the
+# twelve subjects are computed as real per-tick work — arithmetic, branching,
+# record construction, a list comprehension with a predicate over the seven
+# wanderers — and only ONE of them (the water-edge subject, since it is the
+# one with a genuinely continuous position) is projected through the single
+# envelope `advance` returns; the weather timer, the living subject's phase,
+# the structure's occupancy and the activity's event fold into that same
+# envelope's `behavior`/`situation` fields. The interpreter still does
+# twelve-subjects' worth of work every tick; only the emitted shape is
+# single-subject, because that is what the protocol this build is not
+# allowed to touch actually supports.
+#
+# WHY EVERY SUBJECT IS A PURE FUNCTION OF `tick` ALONE, NOT OF A PRIOR
+# SUBJECT LIST. `advance` may read no ambient clock or random (spec §8.4,
+# §23.3) — the only per-tick input is the explicit `tick` parameter — and
+# nothing in the returned envelope has anywhere to carry a hidden `subjects`
+# list across ticks without tripping the warnings-empty bar above. So each
+# subject's state at tick N is a closed-form function of N: a countdown
+# timer is `period - (cycle position within the period)`, a state machine's
+# phase is a range test on the cycle position, and so on. This is
+# semantically equivalent per-tick cost to threading real mutable state
+# through `with` — the interpreter still builds the same records and does
+# the same arithmetic and branching every tick — without inventing a second
+# state-carrying mechanism the protocol has no room for.
+#
+# WHY `floor`, NEVER `mod`. paint/math.planes's own `mod` is
+# `positive-mod`'s doubling recursion — O(log(a/b)) PLANES FRAMES per call,
+# by that file's own measurement ("500 calls of mod per frame ... 110ms a
+# tick"). This fixture needs a cycle position inside a fixed period at every
+# one of roughly twenty places a tick, across a soak where `tick` climbs into
+# the thousands — calling `mod of tick, period` there would (a) make the
+# recursion depth grow slowly with `tick` itself, biasing later-soak ticks
+# slightly slower for a reason that has nothing to do with simulated
+# complexity, and (b) make a large share of the measured step cost an
+# artifact of this fixture's own arithmetic idiom rather than the
+# interpreter's per-tick cost. `cycle-pos` below is built on `floor`
+# (O(1), via the `whole` builtin, no recursion) instead, exactly as
+# math.planes's own `part`/`floor` are, and for the same reason.
+#
+# RETENTION (build prompt invariant 3 / §3's own requirement): identity,
+# lineage and affordance are never named in an `advance`-time `with` — they
+# flow through from the previous tick's envelope unchanged, so the
+# interpreter reuses their existing derivation rather than rebuilding it.
+# Only the situation fields that actually move (x, y, occupancy) and the
+# behavior fields that actually change (transition, timerTicks,
+# stateMachine, emittedEvent) are ever named in a `with` clause — every
+# other field of every facet is left untouched on purpose.
+
+let wanderer-ids = [0, 1, 2, 3, 4, 5, 6] because "the seven unnamed contained subjects that round the fixture's twelve out past the five named roles"
+
+# ---- cycle position, without `mod`'s recursion (see header) ---------------
+#
+# `floor` inlined from paint/math.planes rather than reached via `use math`:
+# module resolution is relative to the IMPORTING file (modules.py's own
+# docstring), so `use math` from paint/world/ would look for a
+# paint/world/math.planes that does not exist — and copying math.planes
+# itself into this directory would be the second copy of a module this
+# repo's harvest discipline (paint/math.planes's own header) exists to
+# avoid. `floor`/`part` are ~10 lines; inlined here, credited, once.
+
+to part-of of x:
+  let f = x - (whole of x)
+  if f < 0:
+    give f + 1
+  else:
+    give f
+
+to floor-of of x:
+  give x - (part-of of x)
+
+to cycle-pos of tick, period:
+  give tick - period * (floor-of of (tick / period))
+
+# ---- the five named subjects, each a pure function of tick ----------------
+
+to compute-water-edge of tick:
+  # x/y round to 3 places here, matching grammar/protocols/world-v1.json's
+  # own declared `unit: "world-position", places: 3` for situation.x/y
+  # (Horizon Phase 0 Build 4's numeric bridge, spec §9.4) — via the
+  # language's own `round ... to N places`, the "REACHABLE arithmetic"
+  # world_numeric_bridge.py's module docstring names as the ordinary-Planes
+  # half of the discipline. Without it, `sine`'s approximation series can
+  # disagree with the JavaScript mirror in a low digit far past this field's
+  # declared precision, which would fail the byte-identical conformance gate
+  # for a reason with no semantic meaning at this field's own boundary scale.
+  let drift = round (tick * 0.05) to 3 places
+  let wave-angle = cycle-pos of (tick * 6), 360
+  let wave = sine of wave-angle
+  let y = round (4 + (wave / 50)) to 3 places
+  give { x: drift, y: y }
+
+to compute-weather of tick:
+  let pos = cycle-pos of tick, 24
+  if pos < 12:
+    give { timer: 12 - pos, phase: "rising" }
+  else:
+    give { timer: 24 - pos, phase: "falling" }
+
+to compute-structure of tick:
+  give { occupancy: cycle-pos of tick, 5 }
+
+to compute-living of tick:
+  let pos = cycle-pos of tick, 18
+  if pos < 8:
+    give { phase: "resting" }
+  else:
+    if pos < 14:
+      give { phase: "foraging" }
+    else:
+      give { phase: "alert" }
+
+to compute-activity of tick:
+  let pos = cycle-pos of tick, 15
+  give { active: pos < 2 }
+
+to activity-event of active:
+  if active:
+    give "activity-triggered"
+  else:
+    give "none"
+
+# ---- the seven wanderers: bulk per-tick load, no named role ---------------
+
+to compute-wanderer of wid, tick:
+  let pos = cycle-pos of (tick + wid * 5), 20
+  let leg = if-lt of pos, 10, pos, 20 - pos
+  let x = wid + (leg * 0.1)
+  let active = (cycle-pos of (tick + wid), 9) < 1
+  give { id: wid, x: x, active: active }
+
+to if-lt of a, b, when-true, when-false:
+  if a < b:
+    give when-true
+  else:
+    give when-false
+
+to compute-wanderers of tick:
+  give for each wid in wanderer-ids: compute-wanderer of wid, tick
+
+# ---- assembling a world-v1 envelope ----------------------------------------
+
+to world-init:
+  let weather = compute-weather of 0
+  let structure = compute-structure of 0
+  let living = compute-living of 0
+  let activity-subj = compute-activity of 0
+  let focus = compute-water-edge of 0
+  give {
+    version: 1,
+    identity: {
+      id: "reso-tide-walker-1", kind: "character", subkind: "wanderer",
+      displayName: "Tide-Walker", status: "canonical", schemaVersion: 1
+    },
+    situation: {
+      containingPlace: "reso-landing-cell", space: "world",
+      x: focus.x, y: focus.y, state: "standing",
+      occupancy: structure.occupancy, anchorId: "anchor-reso-1",
+      chunkActive: true, physicsRef: "phys-reso-1", audioRef: "audio-reso-1"
+    },
+    behavior: {
+      eventPattern: "tide-cycle", transition: living.phase,
+      timerTicks: weather.timer, condition: "activity-window-check",
+      stateMachine: living.phase,
+      emittedEvent: (activity-event of activity-subj.active),
+      failurePath: "none"
+    },
+    affordance: {
+      action: "wade", precondition: "standing", valueShape: "boolean",
+      preview: "highlight", inverse: "still", authorityRequired: "none",
+      explanation: "step into the tide", sourceMapTarget: "pending", fallback: "deny"
+    },
+    lineage: {
+      corpusSource: "ala-eriri", culturalStatus: "canonical", author: "studio",
+      origin: "system", because: "Horizon Phase 1 engine-kernel spike synthetic fixture",
+      agreementFingerprint: "fp-kernel-spike-1", permittedTransformations: "remix",
+      publishingRestriction: "none", systemBoundary: "immutable"
+    }
+  }
+
+# §12 item 5: pure, no ambient clock/random — the twelve subjects (five
+# named, seven wanderers) are all recomputed here as functions of `tick`;
+# see the header for why none of them is threaded through `world` itself.
+to advance of world, tick:
+  let weather = compute-weather of tick
+  let structure = compute-structure of tick
+  let living = compute-living of tick
+  let activity-subj = compute-activity of tick
+  let focus = compute-water-edge of tick
+  let wanderers = compute-wanderers of tick
+  let active-wanderers = for each w in wanderers where w.active: w
+  let wanderer-load = count of active-wanderers
+
+  let load = cycle-pos of (structure.occupancy + wanderer-load), 6
+  let new-situation = world.situation with x: focus.x, y: focus.y, occupancy: load
+  let event = (activity-event of activity-subj.active)
+  let new-behavior = world.behavior with transition: living.phase, timerTicks: weather.timer, stateMachine: living.phase, emittedEvent: event
+
+  give world with situation: new-situation, behavior: new-behavior
