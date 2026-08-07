@@ -120,6 +120,16 @@ function loadLessons() {
   return eval(`(${literal})`);
 }
 
+function loadFormatCoord() {
+  const html = pageSrc();
+  const glyphLine = html.split("\n").find((l) => l.includes("const DIRECTION_GLYPH ="));
+  assert.ok(glyphLine, "tutor.html no longer declares DIRECTION_GLYPH where this suite reads it");
+  const glyphLiteral = glyphLine.trim().replace(/^const DIRECTION_GLYPH = /, "").replace(/;$/, "");
+  const src = extractFunction(html, "formatCoord");
+  // eslint-disable-next-line no-new-func
+  return new Function(`const DIRECTION_GLYPH = ${glyphLiteral};\n${src}\nreturn formatCoord;`)();
+}
+
 // ---- D: provenance ----------------------------------------------------
 
 const STARTER_PROGRAM = `use scene
@@ -323,4 +333,22 @@ test("E: ghostFor given text shaped like a different lesson still shows a live h
   const otherGhost = ghostFor(2, typed).split("\n");
   const anyHint = otherGhost.some((l) => l.trim().length > 0);
   assert.ok(anyHint, "a mismatched lesson/text pairing shows nothing at all — the mechanism went uniformly blank");
+});
+
+// ---- F: orientation hint (hover-before-you-run coordinates) -----------
+
+test("F: formatCoord rounds to whole numbers and names both directions with their glyphs", () => {
+  const formatCoord = loadFormatCoord();
+  assert.equal(formatCoord(210, 55), "across 210 → · down 55 ↓");
+  assert.equal(formatCoord(209.6, 54.4), "across 210 → · down 54 ↓");
+  assert.equal(formatCoord(0, 0), "across 0 → · down 0 ↓");
+});
+
+test("F: DIRECTION_GLYPH is declared at page scope, before renderCard — not re-created on every card open, and shared with the coordinate tag", () => {
+  const html = pageSrc();
+  const glyphIndex = html.indexOf("const DIRECTION_GLYPH =");
+  const renderCardIndex = html.indexOf("function renderCard(");
+  assert.ok(glyphIndex >= 0, "tutor.html no longer declares DIRECTION_GLYPH where this suite reads it");
+  assert.ok(renderCardIndex >= 0, "tutor.html no longer declares function renderCard where this suite reads it");
+  assert.ok(glyphIndex < renderCardIndex, "DIRECTION_GLYPH must be hoisted to page scope, declared before renderCard, so formatCoord can share it too");
 });

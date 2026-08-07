@@ -499,6 +499,15 @@
       const capstoneEl = $("capstone");
       const ctx = canvas.getContext("2d");
 
+      // A direction glyph reinforces a number as a DIRECTION, not just a
+      // word — the why-card already established this for "across"/"down".
+      // Page scope so both the why-card and the coordinate-orientation tag
+      // (added below) read the same mapping, never two hand-kept copies.
+      const DIRECTION_GLYPH = { across: "→", down: "↓" };
+      function formatCoord(x, y) {
+        return `across ${Math.round(x)} ${DIRECTION_GLYPH.across} · down ${Math.round(y)} ${DIRECTION_GLYPH.down}`;
+      }
+
       // Everything the frame on screen was made of. Every card and highlight
       // reads THIS, never a fresh run — what makes "asking performed
       // nothing" true.
@@ -1181,7 +1190,6 @@
         // for whichever number she just changed. `how-tall` gets none: a
         // height is a size, not a position, and a left/right/up/down arrow
         // would claim a direction the number doesn't have.
-        const DIRECTION_GLYPH = { across: "→", down: "↓" };
         const numsHtml = nums.length
           ? `<div class="nums">${nums.map(([k, v]) => {
               const glyph = DIRECTION_GLYPH[k];
