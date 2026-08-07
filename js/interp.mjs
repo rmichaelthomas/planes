@@ -484,6 +484,44 @@ export class Interpreter {
     this._ids = new WeakMap();
     this._nextId = 1;
 
+    // Horizon Phase 1 (`_cut`'s per-`mk` cost, build prompt §2): a cache of
+    // every currently-known-live EDGE reachable from a verified "tip" —
+    // the most recent node `_cut` has confirmed sits at the head of an
+    // ongoing chain — as a min-heap ordered by the CHILD's generation.
+    // `_frontierTip` is `null` (or a node the next call doesn't extend)
+    // whenever nothing is cached yet; that just means the next `_cut`
+    // call falls back to the general discover-then-rebuild walk, which is
+    // BYTE-IDENTICAL to what this function always did. Ascending-
+    // generation draining gives the same "deepest first" composition the
+    // general walk's `reversed(order)` does for the common case — a
+    // node's children always have a smaller generation than the node
+    // itself (an edge can only point to a strictly older node), so they
+    // drain, and so seal, before the edge pointing AT that node does.
+    //
+    // `_frontierChildRefs` counts pending entries in the CHILD role only
+    // — the signal for real DAG sharing (a node reachable via two
+    // DIFFERENT owners' edges). Original resolves that shape atomically:
+    // whichever ONE `_cut` call's discovery first reaches a shared node
+    // processes every owner's edge to it together, in one deterministic
+    // DFS order, so one owner can see the shared node still live while a
+    // sibling owner (processed later in that SAME walk) sees it already
+    // absorbed into a seal. This cache cannot reproduce that order — it
+    // resolves edges in one GLOBAL queue keyed only by child generation —
+    // so the moment a child would get a second owner (from a fast-path
+    // extension OR a reseed's own discovery), that attempt is abandoned:
+    // the cache drops back to empty and the general walk handles that one
+    // call. Not a permanent trip — ordinary code reads a local value more
+    // than once constantly (`(x - 1) * x`) — a shared LEAF (no inputs of
+    // its own) is excluded from this check entirely, since a childless
+    // node's seal is a fixed function of its own kind/label/value/origin
+    // with nothing nested to see differently depending on discovery
+    // order, so only a shared node with its OWN history is a real hazard.
+    this._cutFrontier = [];      // min-heap: [childGen, seq, owner, idx]
+    this._frontierSeq = 0;
+    this._frontierTip = null;
+    this._frontierRefs = new Map();       // id -> pending-entry count
+    this._frontierChildRefs = new Map();  // id -> pending CHILD-role count
+
     // The tracing-off fast path (R3, checkpoint v30.0 §466-476). `trace`
     // defaults to true — HEAD behavior, exactly. false is opt-in; `mk`
     // below is the one place that reads it (Ruling 2: the toggle lives in
@@ -603,6 +641,132 @@ export class Interpreter {
     return node;
   }
 
+  // Binary min-heap helpers over `this._cutFrontier`, entries shaped
+  // `[childGeneration, seq, owner, idx]`, ordered by generation then seq
+  // (the insertion-order tiebreak — see `_registerEdges`). Plain array
+  // push/pop-from-the-end plus sift, not `Array.prototype.shift`, which
+  // is O(n) and would put the O(window) cost this cache exists to avoid
+  // right back into every drain.
+  _heapLess(a, b) {
+    return a[0] !== b[0] ? a[0] < b[0] : a[1] < b[1];
+  }
+  _heapPush(item) {
+    const heap = this._cutFrontier;
+    heap.push(item);
+    let i = heap.length - 1;
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (!this._heapLess(heap[i], heap[parent])) break;
+      [heap[i], heap[parent]] = [heap[parent], heap[i]];
+      i = parent;
+    }
+  }
+  _heapPop() {
+    const heap = this._cutFrontier;
+    const top = heap[0];
+    const last = heap.pop();
+    if (heap.length) {
+      heap[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1, r = 2 * i + 2;
+        let smallest = i;
+        if (l < heap.length && this._heapLess(heap[l], heap[smallest])) smallest = l;
+        if (r < heap.length && this._heapLess(heap[r], heap[smallest])) smallest = r;
+        if (smallest === i) break;
+        [heap[i], heap[smallest]] = [heap[smallest], heap[i]];
+        i = smallest;
+      }
+    }
+    return top;
+  }
+
+  // True if `tip` — the current frontier tip — appears in `node.inputs`
+  // exactly once. `node`'s OTHER inputs are NOT required to be leaves:
+  // any input with history of its own just gets registered (and, if
+  // needed, recursively discovered) by `_registerEdges` below, which is
+  // what makes this correct for branching inputs too, not only a pure
+  // `with`/`plus` chain. `tip` appearing more than once is left to the
+  // general walk rather than disambiguated here — rare enough not to be
+  // worth a fast path.
+  _frontierExtends(node, tip) {
+    let count = 0;
+    for (const inp of node.inputs) if (inp === tip) count++;
+    return count === 1;
+  }
+
+  // Add every one of `owner`'s edges to the frontier heap, keyed by the
+  // CHILD's generation — including its edge to the current tip (nothing
+  // exempts that edge from eventually aging out too). Returns true if any
+  // child this call registered ends up with more than one pending
+  // owner — real DAG sharing (see the constructor's own comment on
+  // `_frontierChildRefs` for why the caller must respond to that by
+  // abandoning this attempt, not just noting it).
+  //
+  // Recursion is the one place this needs care: `owner`'s edge to the tip
+  // lands the tip itself right back on the stack (the tip almost always
+  // has inputs of its own), and walking into it would re-push every edge
+  // the tip's OWN registration already pushed, cascading into the entire
+  // tracked history on every single call — the exact O(window) cost this
+  // fast path exists to avoid, just moved into the heap instead of a
+  // fresh walk. `_frontierRefs` is what a node was already registered
+  // under, checked BEFORE recursing — that's the only genuinely NEW
+  // subgraph worth discovering here; anything already tracked just gets
+  // the one new edge pointing at it, nothing beneath it re-walked.
+  //
+  // `recursed` guards ONLY that re-walk, not whether an edge gets pushed:
+  // `a + a` reads the SAME node twice, so `owner.inputs` can legitimately
+  // hold the identical child at two different indices — two real,
+  // independent edges the general walk would also seal independently
+  // (not memoized — `_seal`'s own docstring above).
+  _registerEdges(owner) {
+    let shared = false;
+    const stack = [owner];
+    const recursed = new Set();
+    while (stack.length) {
+      const n = stack.pop();
+      for (let i = 0; i < n.inputs.length; i++) {
+        const inp = n.inputs[i];
+        if (inp.kind === "seal" || this._pinned.has(this._id(inp))) continue;
+        const iid = this._id(inp);
+        const alreadyTracked = (this._frontierRefs.get(iid) ?? 0) > 0;
+        if (inp.inputs.length && (this._frontierChildRefs.get(iid) ?? 0) > 0) {
+          // A shared LEAF is provably safe regardless of discovery order
+          // (nothing nested to see live-vs-cut differently); only a
+          // shared node with its own history is a real hazard.
+          shared = true;
+        }
+        this._frontierSeq += 1;
+        this._heapPush([inp.generation, this._frontierSeq, n, i]);
+        const nid = this._id(n);
+        this._frontierRefs.set(nid, (this._frontierRefs.get(nid) ?? 0) + 1);
+        this._frontierRefs.set(iid, (this._frontierRefs.get(iid) ?? 0) + 1);
+        this._frontierChildRefs.set(iid, (this._frontierChildRefs.get(iid) ?? 0) + 1);
+        if (inp.inputs.length && !alreadyTracked && !recursed.has(iid)) {
+          recursed.add(iid);
+          stack.push(inp);
+        }
+      }
+    }
+    return shared;
+  }
+
+  // Drop one pending-entry reference to `nodeId`, removing it from
+  // `_frontierRefs` (and, when it was in the child role, from
+  // `_frontierChildRefs` too) once nothing pending mentions it anymore —
+  // the other half of `_registerEdges`'s bookkeeping, called once per
+  // heap entry as that entry is popped (see `_cut`).
+  _frontierRelease(nodeId, asChild) {
+    const remaining = this._frontierRefs.get(nodeId) - 1;
+    if (remaining <= 0) this._frontierRefs.delete(nodeId);
+    else this._frontierRefs.set(nodeId, remaining);
+    if (asChild) {
+      const remainingChildren = this._frontierChildRefs.get(nodeId) - 1;
+      if (remainingChildren <= 0) this._frontierChildRefs.delete(nodeId);
+      else this._frontierChildRefs.set(nodeId, remainingChildren);
+    }
+  }
+
   _cut(node) {
     // Apply the window to `node`'s own reachable inputs, in place.
     //
@@ -623,17 +787,64 @@ export class Interpreter {
     // never touched — so no output, effect, or static surface can differ
     // because a cut happened.
     //
-    // Iterative, not recursive: an unpinned linear chain is a Deriv graph
-    // thousands of nodes deep, and a recursive walk would exceed the call
-    // stack long before the window ever needed to cut anything. Discover
-    // the whole reachable subgraph once with an explicit stack, then
-    // rebuild each node's `inputs` deepest-first. In practice this
-    // discovers at most one window's worth of nodes before hitting a leaf,
-    // a pin, or an already-placed seal — each of which stops discovery
-    // cold — which is what keeps the per-call cost bounded rather than
-    // growing with total history.
+    // RUNG 3 (Horizon Phase 1: `_cut`'s per-`mk` cost, build prompt §2).
+    // Every call used to re-discover the WHOLE reachable subgraph from
+    // scratch — a `with`/`plus` loop rebuilds one window's worth of live
+    // nodes on every single `mk`, even though consecutive calls in that
+    // loop share all but the one new node and one new edge. The fix
+    // below is the FRONTIER fast path: `_registerEdges` builds a min-heap
+    // of every currently-live edge reachable from the tracked tip, keyed
+    // by the CHILD's generation, ONCE — updated incrementally by one
+    // node's worth of NEW edges per call from then on — instead of
+    // re-discovering that whole region from scratch every time. The
+    // frontier is re-verified fresh every call, never assumed
+    // stale-but-good: extending it requires `node` to reference the exact
+    // cached tip (`_frontierExtends`), and every popped edge is
+    // re-checked live (kind/pinned) before being sealed. A shape that
+    // doesn't extend the tip — a branch elsewhere, a rediscovered node, a
+    // pin, or simply an unrelated computation — falls straight through to
+    // the general walk below, which is BYTE-IDENTICAL to what this
+    // function always did. That walk only touches the frontier's cache
+    // afterward if its OWN discovery actually reached into the cached
+    // region; an unrelated call leaves a perfectly good frontier
+    // untouched rather than discarding it. See the constructor's own
+    // comment on `_frontierChildRefs` for what happens when a node would
+    // get a second owner (real DAG sharing) — that case is deliberately
+    // NOT handled by this fast path at all.
+    //
+    // Iterative, not recursive, in the general path: an unpinned linear
+    // chain is a Deriv graph thousands of nodes deep, and a recursive walk
+    // would exceed the call stack long before the window ever needed to
+    // cut anything. Discover the whole reachable subgraph once with an
+    // explicit stack, then rebuild each node's `inputs` deepest-first. In
+    // practice this discovers at most one window's worth of nodes before
+    // hitting a leaf, a pin, or an already-placed seal — each of which
+    // stops discovery cold.
     if (node.kind === "seal" || this._pinned.has(this._id(node))) return;
     const current = node.generation;
+
+    const tip = this._frontierTip;
+    if (tip !== null && this._frontierExtends(node, tip)) {
+      const shared = this._registerEdges(node);
+      this._frontierTip = node;
+      if (shared) {
+        this._cutFrontier = [];
+        this._frontierRefs = new Map();
+        this._frontierChildRefs = new Map();
+        this._frontierTip = null;
+      } else {
+        while (this._cutFrontier.length && current - this._cutFrontier[0][0] > this.window) {
+          const [, , owner, idx] = this._heapPop();
+          const inp = owner.inputs[idx];
+          this._frontierRelease(this._id(owner), false);
+          this._frontierRelease(this._id(inp), true);
+          if (inp.kind === "seal" || this._pinned.has(this._id(inp))) continue;
+          owner.inputs[idx] = this._seal(inp);
+        }
+        return;
+      }
+    }
+
     const order = [];
     const stack = [node];
     const seen = new Set([this._id(node)]);
@@ -665,6 +876,34 @@ export class Interpreter {
         }
       }
       if (changed) n.inputs = newInputs;
+    }
+
+    // See the docstring above: only touch the frontier cache when this
+    // call's OWN discovery actually overlapped it. `node` itself is
+    // always a fresh, unregistered node at this point, so seeding from it
+    // is always safe to ATTEMPT unconditionally when a reseed is called
+    // for at all — UNLESS that seed's own discovery immediately
+    // reproduces the same multi-owner shape the fast path exists to
+    // avoid, in which case this abandons the cache for now exactly as
+    // the fast path does.
+    const curTip = this._frontierTip;
+    let overlap = curTip === null || seen.has(this._id(curTip));
+    if (!overlap) {
+      for (const id of this._frontierRefs.keys()) {
+        if (seen.has(id)) { overlap = true; break; }
+      }
+    }
+    if (overlap) {
+      this._cutFrontier = [];
+      this._frontierRefs = new Map();
+      this._frontierChildRefs = new Map();
+      this._frontierTip = node;
+      if (this._registerEdges(node)) {
+        this._cutFrontier = [];
+        this._frontierRefs = new Map();
+        this._frontierChildRefs = new Map();
+        this._frontierTip = null;
+      }
     }
   }
 

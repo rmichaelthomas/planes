@@ -1,5 +1,6 @@
 """Planes evaluator — values, provenance, effects."""
 import hashlib
+import heapq
 import json
 import os
 import unicodedata
@@ -568,6 +569,69 @@ class Interpreter:
         self._generation = 0
         self._pinned = {}           # id(Deriv) -> Deriv, kept alive by pin()
 
+        # Horizon Phase 1 (`_cut`'s per-`mk` cost, build prompt §2): a cache
+        # of every currently-known-live EDGE reachable from a verified
+        # "tip" — the most recent node `_cut` has confirmed sits at the
+        # head of an ongoing chain — as a min-heap ordered by the CHILD's
+        # generation. `_frontier_tip` is `None` (or a node the next call
+        # doesn't extend) whenever nothing is cached yet; that just means
+        # the next `_cut` call falls back to the general discover-then-
+        # rebuild walk below, unchanged. Ascending-generation draining
+        # gives the same "deepest first" composition the general walk's
+        # `reversed(order)` does — a node's own children always have a
+        # smaller generation than the node itself (an edge can only point
+        # to a strictly older node), so they always drain, and so seal,
+        # before the edge pointing AT that node does — without re-walking
+        # anything already known. `_frontier_refs` counts, per node id
+        # (owner or child), how many CURRENTLY PENDING heap entries
+        # mention it — incremented on every push, decremented (and
+        # removed once it reaches zero) on every pop — so a general-path
+        # call can cheaply tell whether its OWN discovery touched the
+        # cached region (invalidating it) or was entirely unrelated
+        # (leaving it untouched); see `_cut`'s own docstring for why that
+        # distinction matters. A COUNT, not a set that only ever grows:
+        # `id()` is a memory address CPython is free to reuse once an
+        # object is collected — `_seal`'s own docstring names the exact
+        # same hazard — so a set that never removed a stale entry would
+        # eventually collide with an unrelated LIVE node's recycled id and
+        # force a needless reseed on nearly every call, which is exactly
+        # what an earlier version of this cache did (measured: no faster
+        # than HEAD, because it was silently paying HEAD's own full walk
+        # right back via a false-positive invalidation almost every time).
+        # `_frontier_child_refs` counts the SAME pending entries, but only
+        # in the CHILD role — the one signal for real DAG sharing (a node
+        # reachable via two DIFFERENT owners' edges). Original resolves
+        # that shape atomically: whichever ONE `_cut` call's discovery
+        # first reaches a shared node processes EVERY owner's edge to it
+        # together, in one deterministic DFS order, so one owner can see
+        # the shared node still live while a sibling owner (processed
+        # later in that SAME walk) sees it already absorbed into a seal.
+        # This cache cannot reproduce that order: it resolves edges in a
+        # single GLOBAL queue keyed only by child generation, which is
+        # right for the ordinary case (a child's own edges always drain
+        # before the edge pointing at it, since a child's generation is
+        # always smaller — see `_cut`'s docstring) but has no notion of
+        # "these two edges were discovered by the same walk, in this
+        # relative order" once TWO DIFFERENT owners reach the SAME child.
+        # So the moment a child would get a second owner — from ANY
+        # source, a fast-path extension or a reseed's own discovery — the
+        # attempt that introduced it is abandoned: the cache drops back to
+        # empty and the general walk (byte-identical to HEAD) handles that
+        # one call. Not a permanent trip — real code reads a local value
+        # more than once constantly (`(x - 1) * x`), so treating the
+        # first occurrence anywhere as a reason to stop caching for the
+        # rest of the run would silently pay HEAD's own full-walk cost
+        # right back for everything after it. Safe either way: whatever
+        # was sitting in the heap at that point is simply abandoned,
+        # unresolved — exactly HEAD's own behavior for an edge nothing
+        # has rediscovered yet, so a later call that reaches it still cuts
+        # it correctly, at whatever `current` is active then.
+        self._cut_frontier = []
+        self._frontier_seq = 0
+        self._frontier_tip = None
+        self._frontier_child_refs = {}
+        self._frontier_refs = {}
+
         # The tracing-off fast path (R3, checkpoint v30.0 §466-476). `trace`
         # defaults to True — HEAD behavior, exactly: every Deriv `mk` builds
         # is real, stamped, and (when a window is set) cut, precisely as
@@ -690,6 +754,100 @@ class Interpreter:
         self._pinned[id(node)] = node
         return node
 
+    def _frontier_extends(self, node, tip):
+        """True if `tip` — the current frontier tip — appears in
+        `node.inputs` exactly once. `node`'s OTHER inputs are NOT required
+        to be leaves: any input with history of its own just gets
+        registered (and, if needed, recursively discovered) by
+        `_register_edges` below, which is what makes this correct for
+        branching inputs too, not only a pure `with`/`plus` chain. `tip`
+        appearing more than once is left to the general walk rather than
+        disambiguated here — rare enough not to be worth a fast path.
+        """
+        return sum(1 for inp in node.inputs if inp is tip) == 1
+
+    def _register_edges(self, owner):
+        """Add every one of `owner`'s edges to the frontier heap, keyed by
+        the CHILD's generation — including its edge to the current tip
+        (nothing exempts that edge from eventually aging out too). Returns
+        True if any child this call registered ends up with more than one
+        pending owner — real DAG sharing (see `__init__`'s own comment on
+        `_frontier_child_refs` for why the caller must respond to that by
+        abandoning this attempt, not just noting it).
+
+        Recursion is the one place this needs care: `owner`'s edge to the
+        tip lands the tip itself right back on the stack (the tip almost
+        always has inputs of its own), and walking into it would re-push
+        every edge the tip's OWN registration already pushed, cascading
+        into the entire tracked history on every single call — the exact
+        O(window) cost this fast path exists to avoid, just moved into
+        the heap instead of a fresh walk. `self._frontier_refs` is what a
+        node was already registered under, checked BEFORE recursing —
+        that's the only genuinely NEW subgraph worth discovering here (a
+        branch this call just introduced, or — during a reseed — whatever
+        the general walk beneath it left live); anything already tracked
+        just gets the one new edge pointing at it, nothing beneath it
+        re-walked.
+
+        `recursed` (distinct from the edge registration itself) guards
+        ONLY that re-walk, not whether an edge gets pushed: `a + a` reads
+        the SAME node twice, so `owner.inputs` can legitimately hold the
+        identical child at two different indices — two real, independent
+        edges the general walk would also seal independently (not
+        memoized — `_seal`'s own docstring). Deduping by child identity
+        at the push step, not just the recursion step, silently dropped
+        the second edge in an earlier version of this method: one copy
+        got cut, the other sat there live forever, an aged-out edge this
+        cache had simply lost track of.
+        """
+        shared = False
+        stack = [owner]
+        recursed = set()
+        while stack:
+            n = stack.pop()
+            for i, inp in enumerate(n.inputs):
+                if inp.kind == "seal" or id(inp) in self._pinned:
+                    continue
+                already_tracked = self._frontier_refs.get(id(inp), 0) > 0
+                if inp.inputs and self._frontier_child_refs.get(id(inp), 0) > 0:
+                    # A shared LEAF (no inputs of its own) is provably safe
+                    # regardless of discovery order: `_seal`'s output for a
+                    # childless node is a fixed function of its own kind/
+                    # label/value/origin, nothing nested to see live-vs-cut
+                    # differently depending on which owner gets there
+                    # first. Only a shared node with its OWN history is a
+                    # real hazard, so only that case counts here.
+                    shared = True
+                self._frontier_seq += 1
+                heapq.heappush(self._cut_frontier,
+                               (inp.generation, self._frontier_seq, n, i))
+                self._frontier_refs[id(n)] = self._frontier_refs.get(id(n), 0) + 1
+                self._frontier_refs[id(inp)] = self._frontier_refs.get(id(inp), 0) + 1
+                self._frontier_child_refs[id(inp)] = \
+                    self._frontier_child_refs.get(id(inp), 0) + 1
+                if inp.inputs and not already_tracked and id(inp) not in recursed:
+                    recursed.add(id(inp))
+                    stack.append(inp)
+        return shared
+
+    def _frontier_release(self, node_id, as_child):
+        """Drop one pending-entry reference to `node_id`, removing it from
+        `_frontier_refs` (and, when it was in the child role, from
+        `_frontier_child_refs` too) once nothing pending mentions it
+        anymore — the other half of `_register_edges`'s bookkeeping,
+        called once per heap entry as that entry is popped (see `_cut`)."""
+        remaining = self._frontier_refs[node_id] - 1
+        if remaining <= 0:
+            del self._frontier_refs[node_id]
+        else:
+            self._frontier_refs[node_id] = remaining
+        if as_child:
+            remaining_children = self._frontier_child_refs[node_id] - 1
+            if remaining_children <= 0:
+                del self._frontier_child_refs[node_id]
+            else:
+                self._frontier_child_refs[node_id] = remaining_children
+
     def _cut(self, node):
         """Apply the window to `node`'s own reachable inputs, in place.
 
@@ -712,23 +870,72 @@ class Interpreter:
         surface can differ because a cut happened (§N+1 invariant 2's twin
         for the windowed case).
 
-        Iterative, not recursive: an unpinned linear chain — the shape a
-        long-running `with`/`plus` loop actually builds — is a Deriv graph
-        thousands of nodes deep, and a recursive walk over it would exceed
-        Python's call-stack depth long before the window ever needed to
-        cut anything. Discover the whole reachable subgraph once with an
-        explicit stack, then rebuild each node's `inputs` deepest-first,
-        so a parent's decision always sees its child's already-finished
-        result. In practice this discovers at most one window's worth of
-        nodes before hitting a leaf, a pin, or an already-placed seal —
-        each of which stops discovery cold — which is what keeps the
-        per-call cost bounded rather than growing with total history: the
-        previous call already pushed a seal in place just past the window
-        boundary.
+        RUNG 3 (Horizon Phase 1: `_cut`'s per-`mk` cost, build prompt §2).
+        Every call used to re-discover the WHOLE reachable subgraph from
+        scratch — a `with`/`plus` loop rebuilds one window's worth of live
+        nodes on every single `mk`, even though consecutive calls in that
+        loop share all but the one new node and one new edge. The fix
+        below is the FRONTIER fast path: `_register_edges` builds a
+        min-heap of every currently-live edge reachable from the tracked
+        tip, keyed by the CHILD's generation, ONCE — updated incrementally
+        by one node's worth of NEW edges per call from then on — instead
+        of re-discovering that whole region from scratch every time.
+        Draining the heap in ascending-generation order reproduces the
+        general walk's own "deepest first" composition for free: an edge
+        can only ever point to a STRICTLY OLDER node (`mk`'s own
+        generation stamp guarantees it), so a node's children always drain
+        — and, if due, seal — before the edge pointing at the node itself
+        does, exactly the order that makes a seal correctly absorb an
+        already-sealed child rather than a live one.
+
+        The frontier is re-verified fresh every call, never assumed
+        stale-but-good: extending it requires `node` to reference the
+        exact cached tip (`_frontier_link_index`), and every popped edge
+        is re-checked live (kind/pinned) before being sealed. A shape that
+        doesn't extend the tip — a branch elsewhere, a rediscovered node,
+        a pin, or simply an unrelated computation (a fresh literal for
+        some other variable entirely) — falls straight through to the
+        general walk below, which is BYTE-IDENTICAL to what this function
+        always did. That walk only touches the frontier's cache afterward
+        if its OWN discovery actually reached into the cached region
+        (`_frontier_ids` says so cheaply); an unrelated call leaves a
+        perfectly good frontier untouched rather than discarding it.
+
+        Iterative, not recursive, in the general path: an unpinned linear
+        chain is a Deriv graph thousands of nodes deep, and a recursive
+        walk over it would exceed Python's call-stack depth long before
+        the window ever needed to cut anything. Discover the whole
+        reachable subgraph once with an explicit stack, then rebuild each
+        node's `inputs` deepest-first, so a parent's decision always sees
+        its child's already-finished result. In practice this discovers at
+        most one window's worth of nodes before hitting a leaf, a pin, or
+        an already-placed seal — each of which stops discovery cold.
         """
         if node.kind == "seal" or id(node) in self._pinned:
             return
         current = node.generation
+
+        tip = self._frontier_tip
+        if tip is not None and self._frontier_extends(node, tip):
+            shared = self._register_edges(node)
+            self._frontier_tip = node
+            if shared:
+                self._cut_frontier = []
+                self._frontier_refs = {}
+                self._frontier_child_refs = {}
+                self._frontier_tip = None
+            else:
+                heap = self._cut_frontier
+                while heap and current - heap[0][0] > self.window:
+                    _, _, owner, idx = heapq.heappop(heap)
+                    inp = owner.inputs[idx]
+                    self._frontier_release(id(owner), as_child=False)
+                    self._frontier_release(id(inp), as_child=True)
+                    if inp.kind == "seal" or id(inp) in self._pinned:
+                        continue
+                    owner.inputs[idx] = self._seal(inp)
+                return
+
         order = []
         stack = [node]
         seen = {id(node)}
@@ -756,6 +963,35 @@ class Interpreter:
                     new_inputs.append(inp)
             if changed:
                 n.inputs = new_inputs
+
+        # See the docstring above: only touch the frontier cache when this
+        # call's OWN discovery actually overlapped it. The tip is checked
+        # explicitly (rather than relying on it already being a key in
+        # `_frontier_refs`, which it isn't until something later actually
+        # references it) alongside every node currently backed by a
+        # pending heap entry. `node` itself is always a fresh,
+        # unregistered node at this point, so seeding from it is always
+        # safe to ATTEMPT unconditionally when a reseed is called for at
+        # all — UNLESS that seed's own discovery immediately reproduces
+        # the same multi-owner shape the fast path exists to avoid, in
+        # which case this abandons the cache for now exactly as the fast
+        # path does, leaving it to reseed again from whatever node comes
+        # next (not a permanent trip: real code reads a local value more
+        # than once constantly — `(x - 1) * x` — and giving up on caching
+        # forever the first time that happens anywhere in a whole run
+        # would silently pay HEAD's own full-walk cost right back for the
+        # entire rest of it).
+        tip = self._frontier_tip
+        if tip is None or id(tip) in seen or (self._frontier_refs.keys() & seen):
+            self._cut_frontier = []
+            self._frontier_refs = {}
+            self._frontier_child_refs = {}
+            self._frontier_tip = node
+            if self._register_edges(node):
+                self._cut_frontier = []
+                self._frontier_refs = {}
+                self._frontier_child_refs = {}
+                self._frontier_tip = None
 
     def _seal(self, root):
         """Replace `root`'s own chain with a seal: the value at the cut,
