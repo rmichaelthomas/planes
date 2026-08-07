@@ -13,7 +13,19 @@
     "minimum": null,
     "maximum": null,
     "origin": "declared per subject by the situation facet's own `space` field — this build does not fix a single world origin",
-    "numericBridge": "deferred to Phase 0 Build 3 (the fixed-point unit convention, spec §9.4). This build carries semantic positions, gains, and normalized values as exact Planes-boundary numbers with no unit quantization; Rapier/GPU numeric conversion is not yet defined."
+    "numericBridge": {
+      "status": "defined (Horizon Phase 0 Build 4, spec §9.4) — a discipline layered on the existing to_host/from_foreign seam plus a declared fixed-point unit convention, not a new numeric mechanism inside the value model",
+      "convention": "A continuous quantity crossing to a physics/GPU host declares a fixed-point unit: a `unit` name for the quantity's boundary unit, and a `places` integer giving how many decimal places of fixed-point precision the host receives (a `places`-digit fixed point — 10^places host subdivisions per one Planes unit). A field carries `unit`/`places` only when it is such a continuous quantity; a field with neither key crosses through the existing `to_host` boundary exactly as Builds 1-3 already do, unquantized. Integer semantic ticks (`schemaVersion`, `occupancy`, `timerTicks`, and every other `integer`-typed field) never carry a unit — they are boundary-exact already and this build does not touch them. See `world_numeric_bridge.py`/`js/world_numeric_bridge.mjs` for the implementation and the `units` table below for what this build declares.",
+      "quantizeOutbound": "A value crossing outbound (Planes -> host) is rounded to its declared `places` via the language's own existing `round ... to N places` rule (planes_num.Number.round_to / world_numeric_bridge.quantize) before conversion through the existing `to_host`. The bridge invents no second rounding rule. A crossing whose rounding changes the value's rational carries an `approx` record naming the quantization as provenance, the same shape `sine`/`root` already use; a value already exact at its declared scale crosses unmarked.",
+      "quantizeInbound": "A value re-entering from the host (Planes <- host, e.g. a Rapier output) is first read back as an exact rational via the existing `from_foreign`'s shortest-round-trip decimal, then pinned to its declared `places` the same way an outbound value is, before it becomes a Planes value a program can read — a raw host float never reaches the exact-rational core claiming an exactness it does not have.",
+      "determinism": "Two runs are compared for determinism on the semantic canonical form — world_ir.canonical_outcome_string / world_delta.semantic_hash — never on host-rendered floats. A host renderer may legitimately differ in floating-point bit pattern across runs or platforms without that being a determinism failure; only a difference in the semantic canonical form is one.",
+      "units": {
+        "world-position": {
+          "places": 3,
+          "description": "situation.x / situation.y — a world-space position, quantized to the nearest 0.001 Planes world unit at the host boundary."
+        }
+      }
+    }
   },
   "records": {
     "identity": {
@@ -32,8 +44,8 @@
       "fields": [
         { "name": "containingPlace", "type": "semantic-id" },
         { "name": "space", "type": "identifier" },
-        { "name": "x", "type": "number" },
-        { "name": "y", "type": "number" },
+        { "name": "x", "type": "number", "unit": "world-position", "places": 3 },
+        { "name": "y", "type": "number", "unit": "world-position", "places": 3 },
         { "name": "state", "type": "identifier" },
         { "name": "occupancy", "type": "integer" },
         { "name": "anchorId", "type": "semantic-id" },

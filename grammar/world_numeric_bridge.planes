@@ -1,0 +1,38 @@
+# grammar/world_numeric_bridge.planes — the self-hosted mirror of the numeric
+# bridge's REACHABLE half (Horizon Phase 0 Build 4, spec §9.4).
+#
+# WHAT THIS FILE COVERS, AND WHY NOT MORE. The bridge has two parts:
+#
+#   1. the quantization ARITHMETIC — round a value to N declared decimal
+#      places via the language's own `round ... to N places`, and detect
+#      whether that rounding actually changed the value (`==`). Ordinary
+#      Planes: four operators, `round ... to N places`, `==`, records — all
+#      already reachable from source. THIS FILE covers this part.
+#
+#   2. attaching a named `Approximation` record to a lossy crossing, the
+#      same mechanism `sine`/`root` use. An Approximation is an
+#      INTERPRETER-internal marker planes_num.py/planes_num.mjs attach at a
+#      fixed handful of host-implemented builtin call sites — there is no
+#      Planes-level operation that constructs one from source, the same way
+#      there is no Planes-level operation that fabricates a
+#      sine-flavoured approximation without calling `sine`. THIS FILE DOES
+#      NOT AND CANNOT cover this part — it is Python
+#      (world_numeric_bridge.py) and JavaScript (js/world_numeric_bridge.mjs)
+#      only, by design, named here rather than left silently uncovered
+#      (build prompt §N+2 failure mode S2).
+#
+# test_world_numeric_bridge_conformance.py holds this file's arithmetic to
+# actual byte-identical agreement with world_numeric_bridge.py's
+# `quantize_outcome`/`canonical_quantize_outcome_string` and
+# js/world_numeric_bridge.mjs's `quantizeOutcome`/
+# `canonicalQuantizeOutcomeString` — exactly the discipline
+# grammar/world_ir.planes already establishes for the World IR validator's
+# own arithmetic, without needing a WorldIRError class of its own.
+
+to quantize-outcome of value, n:
+  rounded = round value to n places
+  give { rounded: rounded, lossy: not (rounded == value) }
+
+to canonical quantize outcome string of value, n:
+  outcome = quantize-outcome of value, n
+  give "quantize-outcome: value=" + (text of value) + " places=" + (text of n) + " quantized=" + (text of outcome.rounded) + " lossy=" + (text of outcome.lossy)
