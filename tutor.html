@@ -536,6 +536,7 @@
       let currentLesson = 0;
       let ghostHidden = false; // view state only — resets to false on every setLesson
       let keyHidden = false; // view state only — resets to false on every setLesson
+      let hasRunThisLesson = false; // orientation mode: on until this lesson's first successful run
       let seedTicket = null; // decorative save ticket, §7.2/§9 — never fed back into the program
 
       const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -837,6 +838,19 @@
         applyKeyVisibility();
       });
 
+      // ---- orientation mode: a live coordinate before there is a picture
+      // to ask about. On until the current lesson's first successful run,
+      // then off — the stage is either a space to find a spot in, or a
+      // picture to click and ask about, never both at once. ---------------
+
+      function hideCoordTip() {
+        coordTipEl.hidden = true;
+      }
+      function updateCoordHintVisibility() {
+        coordHintEl.hidden = hasRunThisLesson;
+        if (hasRunThisLesson) hideCoordTip();
+      }
+
       // ---- lesson-aware progressive disclosure — surfaces are DECLARED by
       // each lesson (§10.4), never inferred from an index comparison. ------
 
@@ -864,6 +878,7 @@
         source.value = "";
         ghostHidden = false;
         keyHidden = false;
+        hasRunThisLesson = false;
         const lesson = LESSONS[currentLesson];
         for (const btn of document.querySelectorAll("#lessons button")) {
           btn.setAttribute("aria-pressed", String(Number(btn.dataset.lesson) === currentLesson));
@@ -871,6 +886,7 @@
         lessonNEl.textContent = String(currentLesson + 1);
         lessonSayEl.innerHTML = lesson.lesson;
         applyKeyVisibility();
+        updateCoordHintVisibility();
         swatchesEl.hidden = !lesson.surfaces.swatches;
         capstoneEl.hidden = !lesson.surfaces.capstone;
         ghostToggleEl.hidden = !lesson.surfaces.ghostToggle;
@@ -936,6 +952,8 @@
           showOops(stale || `something in this program's drawing didn't match what the renderer expected: ${errors.map((e) => e.message).join("; ")}`);
           return;
         }
+        hasRunThisLesson = true;
+        updateCoordHintVisibility();
       }
 
       // A typo must not blank her work (§4.2): the last good picture stays

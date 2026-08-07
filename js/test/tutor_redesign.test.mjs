@@ -53,7 +53,25 @@ function extractFunction(html, name) {
   const marker = `function ${name}(`;
   const start = html.indexOf(marker);
   assert.ok(start >= 0, `tutor.html no longer declares function ${name} where this suite reads it`);
-  let i = html.indexOf("{", start);
+  // The body's opening "{" is the first one AFTER the parameter list's own
+  // matching ")" — not just the first "{" anywhere after the name. A
+  // destructured-default parameter like `{ pushUrl = true } = {}`
+  // (setLesson's own signature) has its own "{"/"}" pair INSIDE the
+  // parameter list, before the body even starts; naively taking the first
+  // "{" after the marker would stop at that pair instead.
+  let parenDepth = 0;
+  let j = start + marker.length - 1; // at the opening "("
+  for (; j < html.length; j++) {
+    if (html[j] === "(") parenDepth++;
+    else if (html[j] === ")") {
+      parenDepth--;
+      if (parenDepth === 0) {
+        j++;
+        break;
+      }
+    }
+  }
+  let i = html.indexOf("{", j);
   let depth = 0;
   for (; i < html.length; i++) {
     if (html[i] === "{") depth++;
@@ -375,4 +393,30 @@ test("F: the coordinate tag ships hidden by default; the caption ships visible (
   assert.match(html, /<div id="coord-tip" hidden><\/div>/, "#coord-tip must ship as an empty, hidden div — same pattern as #card — since it only appears on hover");
   const hintTagMatch = /<p class="coord-hint" id="coord-hint">[^<]+<\/p>/.exec(html);
   assert.ok(hintTagMatch, "#coord-hint must ship with its text already in place, not hidden — a fresh lesson has not been run yet");
+});
+
+test("F: setLesson resets orientation mode on every lesson switch, alongside the ghost/key reset", () => {
+  const src = extractFunction(pageSrc(), "setLesson");
+  const ghostResetIdx = src.indexOf("ghostHidden = false;");
+  const runResetIdx = src.indexOf("hasRunThisLesson = false;");
+  assert.ok(ghostResetIdx >= 0, "setLesson no longer resets ghostHidden where this suite expects it");
+  assert.ok(runResetIdx >= 0, "setLesson must reset hasRunThisLesson to false — a freshly-entered lesson has not been run yet");
+  const visibilityCallIdx = src.indexOf("updateCoordHintVisibility();");
+  assert.ok(visibilityCallIdx >= 0, "setLesson must call updateCoordHintVisibility() so the caption/tag reflect the fresh, not-yet-run state");
+});
+
+test("F: run() only turns off orientation mode on the genuine success path, after every early-return guard", () => {
+  const src = extractFunction(pageSrc(), "run");
+  const lastReturnIdx = src.lastIndexOf("return;");
+  const setTrueIdx = src.indexOf("hasRunThisLesson = true;");
+  assert.ok(setTrueIdx >= 0, "run() must set hasRunThisLesson = true on success — otherwise orientation mode never turns off");
+  assert.ok(setTrueIdx > lastReturnIdx, "hasRunThisLesson = true must come after every early-return guard, so a failed run leaves orientation mode on");
+  const visibilityCallIdx = src.indexOf("updateCoordHintVisibility();", setTrueIdx);
+  assert.ok(visibilityCallIdx > setTrueIdx, "run() must call updateCoordHintVisibility() right after flipping hasRunThisLesson, so the tag/caption actually update");
+});
+
+test("F: updateCoordHintVisibility ties both the tag and the caption to the same hasRunThisLesson flag", () => {
+  const src = extractFunction(pageSrc(), "updateCoordHintVisibility");
+  assert.match(src, /coordHintEl\.hidden = hasRunThisLesson/, "the caption's hidden state must mirror hasRunThisLesson directly");
+  assert.match(src, /hideCoordTip\(\)/, "once a run succeeds, any tag still showing (pointer resting over the canvas) must be force-hidden too");
 });
