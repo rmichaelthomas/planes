@@ -1,0 +1,324 @@
+# paint/reso_walk.planes — the first movement slice (Inception v2.0 §514-§520):
+# walk the boy a few steps down the Reso Landing dock and touch one thing, the
+# market stall.
+#
+# A NEW FIXTURE, NOT AN EXTENSION OF a_crossing.planes (decision 1). The
+# crossing stays intact as the civics cell; this file reuses its Reso render
+# vocabulary (wave-lines/terrace-lines/market-canopies, the dock/market/kordas
+# draw shapes, the scene-intent line grammar and the events-batch
+# first-matching-kind idiom) without importing it — Planes `use` is
+# module-level, and this is a sibling fixture, not a dependent of the
+# crossing's own phase machine.
+#
+# HELD-KEY MOVEMENT IS RESOLVED AT THE SEAM, NOT HELD IN THE PROGRAM
+# (decision 2). The page tracks keydown/keyup and sends one {kind:"move",
+# dir} event per tick a direction is held; `advance` below adds a fixed step
+# per `move` event found in the batch and nothing else. There is no
+# "moving"/"is-walking" field anywhere in the world record — position is a
+# pure function of (prior world, this tick's events), so a dropped event
+# costs one 33ms tick and self-corrects, never a stuck walk (invariant 3).
+#
+# THE STEP ITSELF IS TRACED (decision 3). `next-boy-x` is bound with a
+# `because` naming the input that produced it — moved east, moved west,
+# clamped at an edge while still held, or unchanged because nothing was
+# held — and `why next-boy-x` (this file's own use of the engine's existing
+# why/because machinery, not a hand-rolled rationale field) appends a
+# legible sentence to this tick's output. `why` only resolves a `because`
+# for a bare-name target (js/interp.mjs's `Why` statement: `this.annotations
+# .get(stmt.expr.name)`, only when the expression is a plain Var) — a
+# record field access like `next.boy-x` would NOT carry it, which is why the
+# traced local is `why`'d directly, before it is folded into the returned
+# record. Confirmed against the reference interpreter before writing this:
+# `why next-boy-x` after a because-annotated reassignment inside `advance`
+# reproduces correctly, tick after tick, across the persistent kernel.
+#
+# ONE INTERACTABLE: THE MARKET (decision 4). `near-market` is recomputed
+# every tick from `boy-x` alone (never trusted from the page) — a `touch`
+# event only does something when the program's own range check agrees the
+# body is close enough, belt and suspenders, keeping the program the source
+# of truth. The market's `state` (untouched/greeted) and the response
+# `scene action`/`audio cue` are the entire interaction: no dialogue, no
+# inventory, no state beyond `touched`.
+#
+# EASED CAMERA FOLLOW (decision 5): `camera-x` is carried in the world
+# record and moved a fixed fraction toward `boy-x` each tick — a pure
+# function of the current world, so it stays exactly as deterministic as
+# everything else here, just lagged. camera-y and the dock's own y are
+# fixed; zoom gentles in when the body is near the market.
+#
+# ONE CLAMPED DOCK STRIP, NO TRAVERSAL (decision 6): `boy-x` clamps to
+# [dock-min, dock-max] and the clamp is itself part of the traced value
+# (see decision 3 above) — there is no camera pan beyond the follow and no
+# second screen.
+#
+# A REAL, DISCLOSED RENDERING GAP (confirmed this session, not this file's
+# problem to fix — see the PR description). `parseSceneIntent` (js/scene/
+# ir.mjs) only ever reads "scene "/"audio " lines; the draw block below is
+# real, honest, reused-vocabulary drawing code — kept for the same reason
+# a_crossing.planes's own draw block is kept post-port — but nothing on the
+# live engine path (js/world/performers/pixi_performer.mjs) currently
+# renders it: every scene subject other than the crossing's own hardcoded
+# hydrofoil id renders as a generic colored, labeled circle badge, and the
+# environment is one fixed static image regardless of what a program's own
+# "scene environment ..." line names. This is the exact disconnect
+# a_crossing.planes already has on today's engine path (its own `draw`
+# block has had no live consumer since a-crossing.html's retirement, PR
+# #95) — not new brokenness this fixture introduces, and not fixable here
+# without editing pixi_performer.mjs, which is locked substrate this build
+# does not touch (invariant 1).
+
+use draw
+use sound
+use math
+
+to no-stroke:
+  stroke of 0, 0, 0, 0
+
+to no-blur:
+  blur of 0
+
+# ---- reused Reso render vocabulary (a_crossing.planes's own idioms) ------
+
+to wave-lines of i, total, lift, tick:
+  if i < total:
+    let yy = 360 + i * 17 + (sine of (tick * 5 + i * 29)) * (2 + lift)
+    stroke of (0.77 + i * 0.006), 0.07, (205 + i * 2), (0.20 + i * 0.018)
+    width of (1 + mod of i, 3)
+    shape
+    vertex of 0, yy
+    curve of 150, (yy - 10), 250, (yy + 12), 390, yy
+    curve of 540, (yy - 12), 690, (yy + 10), 960, (yy - 2)
+    end
+    wave-lines of (i + 1), total, lift, tick
+
+to terrace-lines of i, total, x, y, span:
+  if i < total:
+    stroke of (0.72 + i * 0.018), 0.08, 92, 0.75
+    width of 2
+    line of (x - span + i * 7), (y + i * 17), (x + span - i * 5), (y + i * 17)
+    terrace-lines of (i + 1), total, x, y, span
+
+to market-canopies of i, total:
+  if i < total:
+    let hue = 28 + (mod of (i * 47), 5) * 48
+    fill of 0.70, 0.17, hue, 0.98
+    rect of (92 + i * 28), (323 + (mod of i, 2) * 4), 24, 11, 2
+    market-canopies of (i + 1), total
+
+# ---- the walking figure — genuinely new draw code (§3.5): a few shape/
+# curve/fill calls, flipped on facing, legs swinging only while `moving`. ---
+
+to walking-figure of x, y, tick, facing, moving:
+  push
+  translate of x, y
+  if facing == "west":
+    scale of -1, 1
+  let leg-swing = 0
+  if moving:
+    leg-swing = (sine of (tick * 22)) * 6
+  no-stroke
+  fill of 0.60, 0.10, 250, 1
+  rect of (-4 + leg-swing / 6), 8, 4, 15, 2
+  rect of (4 - leg-swing / 6), 8, 4, 15, 2
+  fill of 0.64, 0.16, 22, 1
+  shape
+  vertex of -9, -15
+  curve of -10, -3, -10, 6, -6, 11
+  curve of 0, 14, 6, 11, 7, 6
+  curve of 10, -3, 10, -13, 9, -15
+  close
+  end
+  fill of 0.90, 0.05, 45, 1
+  circle of 0, -21, 7
+  pop
+
+# ---- the input-event seam: first-matching-kind extraction ----------------
+# The batch's own analogue of a_crossing.planes's select-subject-for/
+# choice-for: `give` inside a `for each ... where ...:` body short-circuits
+# the ENCLOSING function, so this reads the FIRST matching event of its own
+# kind and nothing more.
+
+to move-dir-for of events, fallback:
+  for each e in events where e.kind == "move":
+    give e.dir
+  give fallback
+
+to has-touch-event of events:
+  for each e in events where e.kind == "touch":
+    give true
+  give false
+
+to market-state-of of touched:
+  if touched:
+    give "greeted"
+  else:
+    give "untouched"
+
+# ---- the dock's fixed geometry (inferred, tunable for feel — HANDLING
+# AMBIGUITY §: none of these are architectural) -----------------------------
+
+let market-x = 0.12 because "matches the market's own position in the Reso Landing showcase crossing"
+let market-y = 0.67 because "matches the market's own position in the Reso Landing showcase crossing"
+# RETUNED, NOT THE ORIGINAL INFERRED RANGE (found in this build's own §9.3
+# visual check, fixed in the same turn — self-run-gate-check-and-fix, not
+# just flagged). The first pass clamped boy-x to [0.08, 0.80], reusing the
+# crossing's own full Reso-to-Nkwo-Eriri channel width — but
+# pixi_performer.mjs's shared environment image is one fixed wide
+# establishing shot of the WHOLE passage (the disclosed rendering gap, see
+# this file's header), and only its own x=~0.05-0.20 band actually shows
+# recognizable dock/market imagery; the rest is open channel water. At the
+# original boy-start-x=0.62, the resting camera framed the body floating
+# in open water with no dock in view at all — legible only once the
+# near-market zoom happened to crop back onto Reso. Narrowing the whole
+# strip to stay inside the band that visibly IS the dock fixes this without
+# touching pixi_performer.mjs: the walk now always reads against the same
+# real Reso/market imagery the crossing itself shows there.
+let dock-min = 0.05 because "just west of reso-landing/kordas' own anchor (0.08), still inside the image's own dock band"
+let dock-max = 0.24 because "short of where the shared environment image's dock imagery gives way to open channel water"
+let boy-y = 0.70 because "the dock's own fixed horizontal strip, a few steps south of the market"
+let boy-start-x = 0.20 because "a few real steps east of the market, inside the dock band, so walking to it is a genuine short traversal that never leaves recognizable Reso imagery"
+let camera-y = 0.60 because "centered between the dock's own activity and a little open sky"
+let step = 0.003 because "about a second and a half of held movement crosses the narrowed dock band at 30 ticks per second"
+let touch-range = 0.015 because "close enough to read as arm's reach within the narrowed band, not merely nearby"
+let camera-ease = 0.15 because "the crossing's own camera-easing constant, reused for the same settle-not-snap feel"
+
+# ---- the scene/audio/draw emission, shared by world-init and advance -----
+# `moving` is passed in, not carried in the world record: it is this-tick-
+# only render data (did a move event arrive THIS tick), never persisted —
+# keeping the "no moving field in the world" guarantee (decision 2) exactly
+# as true for rendering as it already is for position.
+
+to render-reso-walk of next, tick, moving:
+  show "decision " + next.revision
+
+  let camera-zoom = 1
+  if next.near-market:
+    camera-zoom = 1.05
+
+  show "scene protocol 1"
+  show "scene camera reso-walk " + text of next.camera-x + " " + text of camera-y + " " + text of camera-zoom
+  show "scene environment bright-passage afternoon reso-dock"
+  show "scene subject reso-landing reso-landing 0.08 0.60 1 visible dock"
+  show "scene subject kordas kordas 0.08 0.49 1 visible dock"
+  show "scene subject market market " + text of market-x + " " + text of market-y + " 1 visible " + market-state-of of next.touched
+  show "scene subject boy boy " + text of next.boy-x + " " + text of next.boy-y + " 1 visible " + next.facing
+  if next.near-market and not next.touched:
+    show "scene action market touch approach Touch-the-market primary"
+  show "scene cue " + next.cue + " " + text of next.serial
+  show "audio bed channel-day 0.14 center"
+  if next.cue == "market-greet":
+    show "audio cue bell-double 0.15 market " + text of next.serial
+
+  show "draw protocol 3"
+  clear
+  no-stroke
+
+  # sky
+  gradient of "mid", 0.58, 0, 0, 0, 350, 0.85, 0.08, 210, 1, 0.93, 0.06, 185, 1, 0.96, 0.04, 100, 1
+  rect of 0, 0, 960, 350, 0
+  fill of 0.92, 0.14, 80, 0.24
+  blur of 16
+  circle of 200, 80, 60
+  no-blur
+  fill of 0.94, 0.15, 80, 0.96
+  circle of 200, 80, 32
+
+  # sea, close against the dock
+  gradient of "mid", 0.48, 0, 310, 0, 640, 0.61, 0.13, 205, 1, 0.48, 0.16, 220, 1, 0.33, 0.12, 235, 1
+  rect of 0, 310, 960, 330, 0
+  wave-lines of 0, 15, 3, tick
+
+  # Reso, close and inhabited — the same landmass shape a_crossing.planes
+  # draws, at a nearer framing befitting a dock-level walk.
+  fill of 0.28, 0.10, 145, 1
+  shape
+  vertex of 0, 175
+  curve of 90, 150, 160, 168, 230, 226
+  curve of 280, 262, 300, 300, 330, 374
+  vertex of 0, 374
+  close
+  end
+  fill of 0.43, 0.14, 132, 1
+  shape
+  vertex of 0, 220
+  curve of 105, 205, 175, 228, 280, 330
+  vertex of 0, 350
+  close
+  end
+
+  terrace-lines of 0, 6, 130, 210, 100
+  market-canopies of 0, 5
+  fill of 0.78, 0.07, 46, 1
+  rect of 72, 337, 168, 15, 1
+  fill of 0.92, 0.03, 77, 1
+  rect of 45, 287, 18, 34, 2
+  rect of 68, 276, 22, 45, 2
+  rect of 95, 291, 20, 30, 2
+  rect of 120, 270, 26, 51, 2
+
+  let figure-x = 60 + (next.boy-x - dock-min) * (860 / (dock-max - dock-min))
+  let figure-y = 340
+  walking-figure of figure-x, figure-y, tick, next.facing, moving
+
+  show "sound protocol 1"
+
+# ---- persistent-kernel calling convention ---------------------------------
+
+to world-init:
+  let next = { boy-x: boy-start-x, boy-y: boy-y, facing: "west", camera-x: boy-start-x, touched: false, near-market: false, serial: 0, cue: "dock-open", revision: "the body arrived at the dock, a few steps east of the market" }
+  render-reso-walk of next, 0, false
+  give next
+
+to advance of world, tick, events:
+  let dir = move-dir-for of events, "none"
+  let touch-requested = has-touch-event of events
+
+  let next-facing = world.facing
+  let next-boy-x = world.boy-x
+  if dir == "east":
+    next-boy-x = world.boy-x + step because "the body stepped east because east was held on this tick"
+    next-facing = "east"
+    if next-boy-x > dock-max:
+      next-boy-x = dock-max because "the body reached the dock's eastern edge and the clamp held it there, though east was held"
+  else:
+    if dir == "west":
+      next-boy-x = world.boy-x - step because "the body stepped west because west was held on this tick"
+      next-facing = "west"
+      if next-boy-x < dock-min:
+        next-boy-x = dock-min because "the body reached the dock's western edge and the clamp held it there, though west was held"
+    else:
+      next-boy-x = world.boy-x because "no movement key was held on this tick, so the body's position carried forward unchanged"
+
+  why next-boy-x
+
+  let dx = next-boy-x - market-x
+  let near = false
+  if dx < touch-range and dx > (0 - touch-range):
+    near = true
+
+  let next-touched = world.touched
+  let next-serial = world.serial
+  let next-cue = "dock-quiet"
+  let next-revision = world.revision
+  if dir == "east":
+    next-revision = "the body stepped east along the dock"
+  if dir == "west":
+    next-revision = "the body stepped west along the dock"
+
+  if touch-requested and near and not world.touched:
+    next-touched = true
+    next-serial = world.serial + 1
+    next-cue = "market-greet"
+    next-revision = "the body reached the market and it answered"
+  else:
+    if touch-requested and near and world.touched:
+      next-revision = "the market has already been greeted"
+    else:
+      if touch-requested and not near:
+        next-revision = "the touch reached nothing; the body is not close enough to the market"
+
+  let next-camera-x = world.camera-x + (next-boy-x - world.camera-x) * camera-ease because "the camera eases toward the body rather than snapping to it"
+
+  let next = { boy-x: next-boy-x, boy-y: boy-y, facing: next-facing, camera-x: next-camera-x, touched: next-touched, near-market: near, serial: next-serial, cue: next-cue, revision: next-revision }
+  render-reso-walk of next, tick, (dir != "none")
+  give next

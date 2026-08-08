@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#133e51">
+  <link rel="icon" href="data:,">
+  <title>Reso Walk — the first movement slice</title>
+  <!--
+    reso-walk.html — Horizon's first controllable-character slice (Inception
+    v2.0 §514-§520): walk the boy a few steps down the Reso Landing dock and
+    touch the market. A sibling of horizon-crossing.html, not a fork of its
+    civics UI — this page clones that page's boot/save/replay wiring
+    (Horizon Phase 2 Build 1's input seam, Build 2's scene-intent lifecycle)
+    and replaces the crossing's need/route/power/radio choice tray with a
+    held-key movement loop and a single touch affordance.
+
+    The fixture URL is constructed directly (new URL("./paint/reso_walk
+    .planes", import.meta.url)) rather than through a new worker.mjs export
+    — the worker's own "boot" message already accepts an arbitrary
+    fixtureUrl (Build 2's own addition), and adding a second named export
+    parallel to CROSSING_FIXTURE_URL would be an edit to locked substrate
+    for no reason the seam doesn't already cover (§4.1).
+
+    A DISCLOSED VISUAL GAP (confirmed this session, see the PR description
+    and paint/reso_walk.planes's own header for the full account):
+    js/world/performers/pixi_performer.mjs — a shared file this build does
+    not touch — renders every scene subject other than its one hardcoded
+    hydrofoil id as a generic colored, labeled circle badge, never reads a
+    subject's own `state` field, and always loads one fixed environment
+    image regardless of what a program's "scene environment ..." line
+    names. So the boy renders as the same kind of badge every unstyled
+    crossing subject (kordas, clinic-beacon, ...) already does, over the
+    crossing's own wide passage image — not a close Reso dock plate, not a
+    rendered walking figure. Movement, the eased camera, the traced
+    position, and the touch interaction are all fully real underneath that
+    badge; this page surfaces the market's response and the touch prompt
+    through the HUD/DOM (reading parseSceneIntent's own output directly),
+    since Pixi does not carry it visually today.
+
+    Served over http://, never file:// — this page imports ES modules and
+    spawns a module Worker.
+  -->
+  <style>
+    @font-face{font-family:"Red Hat";src:url("./identity/fonts/red-hat-display.woff2") format("woff2");font-display:swap}
+    @font-face{font-family:"Martian";src:url("./identity/fonts/martian-mono.woff2") format("woff2");font-display:swap}
+    :root{--paper:#f3ead7;--ink:#1d292b;--indigo:#16224c;--ivory:#f4efe2;--gold:#e0a93b;--coral:#d9683f;--sea:#0d8197;--ease:cubic-bezier(.16,1,.3,1);--display:"Red Hat",sans-serif;--mono:"Martian",monospace}
+    *{box-sizing:border-box}
+    html,body{width:100%;height:100%;overflow:hidden;background:#092f42}
+    body{margin:0;color:var(--ink);font-family:var(--display);text-rendering:optimizeLegibility}
+    button{font:inherit;color:inherit}
+    button:focus-visible{outline:3px solid #fff4bc;outline-offset:4px}
+
+    .play-stage{position:relative;isolation:isolate;width:100%;min-height:100svh;overflow:hidden;background:linear-gradient(#8bd4dd,#0c7390)}
+    #walk-stage{position:absolute;inset:0;width:100%;height:100%}
+    #walk-stage canvas{display:block}
+
+    .world-title{position:absolute;z-index:10;left:clamp(18px,3vw,46px);top:clamp(18px,3vw,42px);display:flex;align-items:flex-start;gap:14px;color:#fff8e9;text-shadow:0 2px 18px #092c3a8c}
+    .world-home{display:block;flex:0 0 auto;border-radius:4px}
+    .world-title img{width:32px;height:32px;filter:drop-shadow(0 2px 8px #092c3a80)}
+    .world-title p{margin:0 0 3px;font:600 10px/1.2 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:#ffe2a4}
+    .world-title h1{margin:0;font:760 clamp(24px,3.4vw,44px)/.9 var(--display);letter-spacing:-.04em}
+    .world-title small{display:block;margin-top:6px;font:500 10px/1.2 var(--mono);letter-spacing:.05em}
+
+    .world-tools{position:absolute;z-index:11;top:clamp(15px,2vw,30px);right:clamp(14px,2vw,30px);display:flex;align-items:center;gap:8px}
+    .tool{width:44px;height:44px;border:1px solid #fff3d89e;background:#153946b8;color:#fff9e8;backdrop-filter:blur(10px);border-radius:50%;display:grid;place-items:center;cursor:pointer;box-shadow:0 8px 24px #062c3d38;transition:background .2s,transform .2s var(--ease)}
+    .tool:hover{background:#f7edd7;color:#1c3438;transform:translateY(-2px)}
+    .tool[aria-pressed="true"]{background:#f0c358;color:#1b3340}
+    .tool svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+    .walk-hud{position:absolute;z-index:9;left:clamp(18px,3vw,46px);top:clamp(122px,16vh,164px);width:min(250px,calc(100vw - 36px));padding:14px 16px 15px;background:linear-gradient(145deg,#fff9e9ef,#eee0c7e8);border:1px solid #fff7e6;box-shadow:0 18px 42px #092f4040;clip-path:polygon(0 0,97% 0,100% 8%,100% 100%,3% 100%,0 92%)}
+    .hud-kicker{font:700 9px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:#8b522e}
+    .hud-status{display:block;margin-top:7px;font:560 13.5px/1.35 var(--display);color:#1d292b}
+    .hud-hint{display:block;margin-top:6px;padding-top:6px;border-top:1px solid #8e7c6250;font:500 9px var(--mono);letter-spacing:.04em;color:#4b5e5d}
+
+    .touch-tray{position:absolute;z-index:12;left:50%;bottom:clamp(20px,4vh,42px);transform:translateX(-50%);width:min(760px,calc(100vw - 28px));display:grid;justify-items:center;gap:9px;pointer-events:none}
+    .prompt{margin:0;color:#fff9e9;text-shadow:0 2px 14px #052a3e;font:650 clamp(16px,2vw,22px) var(--display);letter-spacing:-.02em}
+    .touch-button{min-height:44px;border:1px solid #f9c5a9;background:#e26c3d;color:#fffaf0;padding:10px 22px;cursor:pointer;font:650 12.5px var(--mono);letter-spacing:.02em;box-shadow:0 16px 38px #0628375c;transition:transform .18s var(--ease),background .18s;pointer-events:auto}
+    .touch-button:hover,.touch-button:focus-visible{background:#bb4f2c;transform:translateY(-2px)}
+    .touch-button[hidden]{display:none}
+
+    .lifecycle-panel{position:absolute;z-index:11;right:clamp(14px,2vw,30px);top:clamp(70px,10vh,110px);width:min(230px,calc(100vw - 34px));padding:10px 12px;background:#132d38d0;border:1px solid #fff1cc55;color:#f4efe2;font:10.5px var(--mono);line-height:1.5;backdrop-filter:blur(8px)}
+    .lifecycle-panel strong{display:block;font:700 9px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:#ffe2a4;margin-bottom:4px}
+
+    .truth-note{position:absolute;z-index:8;right:18px;bottom:14px;color:#f5ecd8c7;font:8px var(--mono);letter-spacing:.06em;text-shadow:0 1px 8px #062c3d;max-width:300px;text-align:right}
+
+    .loading-veil{position:absolute;inset:0;z-index:30;display:grid;place-items:center;background:#f3ead7;color:#1d292b;transition:opacity .8s var(--ease),visibility .8s}
+    .loading-veil[hidden]{display:grid;opacity:0;visibility:hidden}
+    .loading-inner{text-align:center}
+    .loading-inner img{width:50px}
+    .loading-inner p{font:650 10px var(--mono);letter-spacing:.18em;text-transform:uppercase}
+    .loading-line{width:160px;height:2px;background:#c8b797;overflow:hidden}
+    .loading-line:after{content:"";display:block;width:60%;height:100%;background:#d9683f;animation:loading 1.2s ease-in-out infinite alternate}
+    @keyframes loading{to{transform:translateX(68%)}}
+
+    @media(max-width:760px){
+      .world-title{left:16px;top:16px}.world-title h1{font-size:26px}.world-title small{display:none}
+      .world-tools{top:12px;right:10px}.tool{width:38px;height:38px}
+      .walk-hud{left:14px;top:88px;width:200px;padding:11px}
+      .lifecycle-panel{display:none}
+    }
+  </style>
+</head>
+<body>
+  <main class="play-stage" aria-label="Reso Walk — the boy on the Reso Landing dock, driven by the persistent kernel">
+    <div id="walk-stage" aria-label="Playable view of the Reso Landing dock"></div>
+
+    <header class="world-title" aria-label="Reso Walk">
+      <a class="world-home" href="./index.html" aria-label="Back to Planes showcases"><img src="./identity/planes-mark-on-dark.svg" alt="Planes"></a>
+      <div><p>Reso Landing · Ala Eriri · Engine path</p><h1>Reso Walk</h1><small>a body, not yet a role</small></div>
+    </header>
+
+    <nav class="world-tools" aria-label="Walk controls">
+      <button class="tool" id="pause-walk" aria-label="Pause" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+      <button class="tool" id="sound-walk" aria-label="Sound off" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 14h4l5 4V6L8 10H4Zm12-4q3 2 0 4m2-7q6 5 0 10"/></svg></button>
+      <button class="tool" id="save-walk" aria-label="Save a snapshot"><svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5Zm3 0v6h8V4M8 14h8v6H8Z"/></svg></button>
+      <button class="tool" id="replay-walk" aria-label="Verify replay against the saved snapshot"><svg viewBox="0 0 24 24"><path d="M5 8V4l-3 3 3 3V8a8 8 0 1 1-1 6"/></svg></button>
+    </nav>
+
+    <section id="walk-hud" class="walk-hud" aria-live="polite">
+      <span class="hud-kicker">Reso dock</span>
+      <span class="hud-status" id="hud-status">Arriving at the dock.</span>
+      <span class="hud-hint" id="hud-hint">Hold ← → (or A/D) to walk. Space to touch.</span>
+    </section>
+
+    <aside class="lifecycle-panel" aria-live="polite">
+      <strong>Lifecycle</strong>
+      <span id="lifecycle-readout">Idle. Save a snapshot, then verify replay.</span>
+    </aside>
+
+    <div class="touch-tray" aria-label="Touch affordance">
+      <p class="prompt" id="touch-prompt" hidden>The market is within reach.</p>
+      <button class="touch-button" id="touch-market" hidden>Touch the market (Space)</button>
+    </div>
+
+    <p class="truth-note">A local deterministic simulation, on the engine path. No real place or person is depicted.</p>
+
+    <div id="loading-veil" class="loading-veil"><div class="loading-inner"><img src="./identity/planes-mark-on-light.svg" alt=""><p>Setting the dock</p><div class="loading-line"></div></div></div>
+  </main>
+
+  <script type="module">
+    import { boot } from "./js/world/runtime/main.mjs";
+    import { createCrossingAudio } from "./js/scene/a_crossing_audio.mjs";
+    import { WorldEventLog } from "./js/world_event_log.mjs";
+    import {
+      replayCrossing, eventsByTickFromLog, verifyCrossingSnapshot,
+    } from "./js/world/runtime/crossing_persistence.mjs";
+
+    const $ = (id) => document.getElementById(id);
+
+    // Same fixtureUrl-construction shape worker.mjs itself already uses for
+    // CROSSING_FIXTURE_URL — the worker's own "boot" message accepts an
+    // arbitrary fixtureUrl, so no new export is needed for a second fixture
+    // (§4.1: not a substrate edit).
+    const RESO_WALK_FIXTURE_URL = new URL("./paint/reso_walk.planes", import.meta.url).href;
+
+    // The HUD/touch-prompt channel: WorldClient has no generic pub/sub of
+    // its own — this page reads its public `lastSceneIntent` on a short
+    // poll, the same pattern horizon-crossing.html already uses (there:
+    // HUD_POLL_MS = 60, well above the worker's 30Hz/33ms tick, so no tick
+    // is perceptibly missed).
+    const HUD_POLL_MS = 60;
+
+    const HUD_STATUS = {
+      "dock-open": "Arriving at the dock.",
+      "dock-quiet": "Walking the dock.",
+      "market-greet": "The market answers.",
+    };
+
+    function subjectState(intent, id) {
+      return intent.subjects.find((s) => s.id === id)?.state ?? null;
+    }
+
+    const audio = createCrossingAudio();
+    const eventLog = new WorldEventLog();
+    let soundOn = false;
+    let paused = false;
+    let lastSnapshot = null;
+    let lastAppliedRevision = -1;
+    let touchPromptShown = false;
+
+    function renderHud(lines, intent) {
+      const marketState = subjectState(intent, "market");
+      // The market's own `state` PERSISTS once greeted; the `scene cue`
+      // line ("market-greet") is true for exactly the one tick the touch
+      // landed on and reverts the very next tick — at the 60ms HUD poll
+      // rate against the worker's ~33ms tick, keying the status text off
+      // the cue alone let the poll step right over it (found live in this
+      // build's own visual check: a touch registered, `market.state`
+      // correctly read "greeted", and the HUD still read "Walking the
+      // dock." because the transient cue had already moved on by the time
+      // this polled). Keying off the persistent state instead makes the
+      // response legible for as long as it stays true, not just the one
+      // tick it fired on.
+      if (marketState === "greeted") {
+        $("hud-status").textContent = HUD_STATUS["market-greet"];
+      } else {
+        const cueLine = [...lines].reverse().find((l) => l.startsWith("scene cue "));
+        const cue = cueLine ? cueLine.split(" ")[2] : null;
+        $("hud-status").textContent = HUD_STATUS[cue] ?? "Walking the dock.";
+      }
+      const nearMarket = intent.actions.some((a) => a.subject === "market" && a.kind === "touch" && a.choice === "approach");
+      const promptVisible = nearMarket && marketState !== "greeted";
+      $("touch-prompt").hidden = !promptVisible;
+      $("touch-market").hidden = !promptVisible;
+      touchPromptShown = promptVisible;
+      $("hud-hint").textContent = marketState === "greeted"
+        ? "The market has been greeted."
+        : "Hold ← → (or A/D) to walk. Space to touch.";
+    }
+
+    const { client } = await boot({
+      pixiContainer: $("walk-stage"),
+      fixtureUrl: RESO_WALK_FIXTURE_URL,
+      protocol: "scene-intent",
+    });
+    window.__resoWalkClient = client;
+
+    function logAppliedEvent(event, tick) {
+      const subject = event.kind === "move" ? "boy" : "market";
+      eventLog.append(
+        { tick, actor: "player", affectedSubjects: [subject], rationale: `${event.kind}:${event.dir ?? "touch"}`, delta: null, event },
+        new Date().toISOString(),
+      );
+    }
+
+    function pollAndRender() {
+      const si = client.lastSceneIntent;
+      if (!si || si.revision === lastAppliedRevision) return;
+      lastAppliedRevision = si.revision;
+      renderHud(si.lines, si.intent);
+      audio.apply(si.intent.audio);
+    }
+    setInterval(pollAndRender, HUD_POLL_MS);
+
+    // ---- held-key movement (decision 2, Option A): the page tracks
+    // keydown/keyup and sends one {kind:"move", dir} event per animation
+    // frame a direction is held; `advance` owns the actual step. Releasing
+    // a key only clears heldDir if that key is the one currently held, so
+    // holding both arrows and releasing one keeps the other's hold active
+    // rather than stopping the body. -------------------------------------
+
+    const WEST_KEYS = new Set(["ArrowLeft", "a", "A"]);
+    const EAST_KEYS = new Set(["ArrowRight", "d", "D"]);
+    let heldDir = "none";
+    let heldKey = null;
+
+    window.addEventListener("keydown", (event) => {
+      if (event.repeat) return;
+      if (WEST_KEYS.has(event.key)) {
+        heldDir = "west";
+        heldKey = event.key;
+      } else if (EAST_KEYS.has(event.key)) {
+        heldDir = "east";
+        heldKey = event.key;
+      } else if (event.code === "Space") {
+        event.preventDefault();
+        if (touchPromptShown) {
+          client.sendInput({ kind: "touch" }).then(({ tick }) => logAppliedEvent({ kind: "touch" }, tick));
+        }
+      }
+    });
+
+    window.addEventListener("keyup", (event) => {
+      if (event.key === heldKey) {
+        heldDir = "none";
+        heldKey = null;
+      }
+    });
+
+    $("touch-market").addEventListener("click", () => {
+      client.sendInput({ kind: "touch" }).then(({ tick }) => logAppliedEvent({ kind: "touch" }, tick));
+    });
+
+    // At most one `move` send per animation frame while a direction is
+    // held; nothing is sent while heldDir is "none" (§4.2). The worker
+    // drains per tick and de-dupes by applying the whole batch, so a
+    // slightly-faster-than-30Hz send rate (rAF typically ~60Hz) is drained
+    // cleanly, exactly as the crossing's own taps already are.
+    function driveMovement() {
+      if (heldDir !== "none") {
+        const event = { kind: "move", dir: heldDir };
+        client.sendInput(event).then(({ tick }) => logAppliedEvent(event, tick));
+      }
+      requestAnimationFrame(driveMovement);
+    }
+    requestAnimationFrame(driveMovement);
+
+    $("pause-walk").addEventListener("click", () => {
+      paused = !paused;
+      client.worker.postMessage({ type: paused ? "cancel" : "resume" });
+      $("pause-walk").setAttribute("aria-pressed", String(paused));
+      $("pause-walk").setAttribute("aria-label", paused ? "Resume" : "Pause");
+    });
+
+    $("sound-walk").addEventListener("click", async () => {
+      soundOn = !soundOn;
+      if (soundOn) await audio.unlock();
+      audio.setMuted(!soundOn);
+      $("sound-walk").setAttribute("aria-pressed", String(soundOn));
+      $("sound-walk").setAttribute("aria-label", soundOn ? "Sound on" : "Sound off");
+    });
+
+    $("save-walk").addEventListener("click", async () => {
+      $("lifecycle-readout").textContent = "Saving…";
+      lastSnapshot = await client.saveSnapshot();
+      $("lifecycle-readout").textContent =
+        `Saved at tick ${lastSnapshot.tick} (${lastSnapshot.hash.slice(0, 12)}…). Replay verifies against this.`;
+    });
+
+    $("replay-walk").addEventListener("click", async () => {
+      if (!lastSnapshot) {
+        $("lifecycle-readout").textContent = "Save a snapshot first, then verify replay.";
+        return;
+      }
+      $("lifecycle-readout").textContent = "Replaying from tick 0…";
+      try {
+        verifyCrossingSnapshot(lastSnapshot);
+        const eventsByTick = eventsByTickFromLog(eventLog.events());
+        const replayed = await replayCrossing(RESO_WALK_FIXTURE_URL, eventsByTick, lastSnapshot.tick);
+        if (replayed.hash === lastSnapshot.hash) {
+          $("lifecycle-readout").textContent = `Replay verified: byte-identical at tick ${lastSnapshot.tick}.`;
+        } else {
+          $("lifecycle-readout").textContent = `Replay MISMATCH at tick ${lastSnapshot.tick} — see console.`;
+          console.error("reso walk replay mismatch", { saved: lastSnapshot, replayed });
+        }
+      } catch (err) {
+        $("lifecycle-readout").textContent = `Replay failed: ${err.message}`;
+      }
+    });
+
+    $("loading-veil").hidden = true;
+  </script>
+</body>
+</html>
