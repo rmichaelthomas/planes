@@ -6,46 +6,51 @@
     <title>the gardener — till your own garden</title>
     <meta
       name="description"
-      content="A hands-on Planes editor: till your own garden line by line, watch it grow, and click any part to ask where it came from. paint/scene.planes is the starter vocabulary; the picture is the hero. No build step — this page runs the real .planes source."
+      content="A hands-on Planes editor: type one line of real Planes at a time, watch the garden paint itself line by line, and click any part to ask where it came from. No Run button — a correct line runs itself."
     />
     <!--
-      SERVING THIS PAGE. This page fetches paint/scene.planes and
-      paint/draw.planes and imports js/*.mjs as ES modules — both requests,
-      from a file:// origin, are opaque-origin and refused by the browser
-      (this is not Chrome-specific; it applies wherever this page is opened
-      from disk). Serve the repo root and load this page over http:
+      SERVING THIS PAGE. This page fetches paint/scene.planes and imports
+      js/*.mjs as ES modules — both requests, from a file:// origin, are
+      opaque-origin and refused by the browser. Serve the repo root and load
+      this page over http:
 
         cd <repo> && python3 -m http.server 8000
 
-      then open http://localhost:8000/tutor.html. No install, no build step:
-      this is a static file server, nothing more.
+      then open http://localhost:8000/tutor.html. No install, no build step.
 
-      THIS IS THE v27.0 REDESIGN (checkpoint "the page a child grows",
-      build prompt planes_build_prompt_tutor_redesign.md — shipped here as
-      "the gardener", generalized for a general audience rather than a
-      child specifically). The engine underneath —
-      runProgramGraph/analyseProgramGraph, the mark walk, hitTest, the card
-      builder in js/paint/why.mjs — is UNCHANGED from #71-73; what changed
-      is this shell (hero-first layout, structured ghost-text authoring, a
-      read-only generated vocabulary key, the reflection card's
-      because-first/because-invite redesign, lesson-aware progressive
-      disclosure, and a final capstone + certificate) and the richer
-      paint/scene.planes it points at.
+      THIS IS THE v35.0 REDESIGN (checkpoint "the typing became the play",
+      build prompt "Tutor Redesign: Goal-Driven, Line-Live Typing"). The
+      engine underneath — runProgramGraph/analyseProgramGraph, why.mjs's
+      card(), hit.mjs's hitTest, scene_vocab.mjs, paint/scene.planes — is
+      UNCHANGED. What changed is the interaction spine: the old blank
+      textarea + ghost text + Run button is gone. In its place, a single
+      goal-live loop — one line of real Planes is asked for at a time, and
+      the instant the typed text matches, that line is assembled into the
+      program so far, run through the real engine, and painted. There is no
+      way to "run" a wrong line: a mismatch is a no-op, not an error.
 
-      LESSONS, NOT WEEKS: the teaching unit is an ordered LESSONS array, not
-      a fixed week count — see the LESSONS declaration below. Adding,
-      cutting, or reordering a lesson is a data edit, not a shell rebuild.
+      LESSONS is still an ordered array, not a fixed count — LESSONS.length
+      is the only lesson count anywhere below. Each lesson is now expressed
+      as `items`: an ordered list of `frame` lines (given, pre-settled,
+      never typed — "use scene", "start") and `slot` lines (goal-targeted,
+      typed by the learner, accepted by one of five match kinds — see
+      testStep() below). Lesson 7 carries no goal-live steps of its own: it
+      is the capstone, and every one of its lines is `frame` — the finished
+      garden paints itself the instant the lesson loads, and a free-form
+      editor underneath is where "keep growing it" actually happens.
     -->
     <style>
-      /* The identity tokens, shared verbatim with garden.html and every
-         other page on this site. One appearance: paper. No dark-mode block
-         — a page that changes its clothes with the viewer's OS is two
-         designs neither of which was drawn. */
+      /* Direction D: garden-as-material. The finished-garden aesthetic —
+         soft light, warm gradients, glow — becomes the UI material itself.
+         Still the real Planes identity tokens: paper/graphite/clay, Red Hat
+         Display + Martian Mono, the four-plane mark. One appearance: paper.
+         No dark-mode block. */
       :root {
         --paper:#F7F2E9; --graphite:#211D19; --line:#D6C9B4; --clay:#A65A2E;
         --slate:#4A5B68; --amber:#F59E0B; --blue:#3B82F6; --teal:#14B8A6; --violet:#8B5CF6;
         --ink-60:rgba(33,29,25,.62); --ink-40:rgba(33,29,25,.40);
         --shadow-sm:0 1px 2px rgba(33,29,25,.04), 0 2px 8px rgba(33,29,25,.05);
+        --shadow-lg:0 20px 50px rgba(33,29,25,.14);
         --display:"Red Hat Display",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
         --mono:"Martian Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
       }
@@ -61,19 +66,23 @@
       *{box-sizing:border-box}
       html,body{margin:0}
       body{
-        background:var(--paper); color:var(--graphite); font-family:var(--display);
+        background:
+          radial-gradient(1200px 500px at 15% -10%, color-mix(in oklab, var(--amber) 10%, transparent), transparent 60%),
+          radial-gradient(900px 480px at 100% 0%, color-mix(in oklab, var(--blue) 8%, transparent), transparent 60%),
+          var(--paper);
+        color:var(--graphite); font-family:var(--display);
         font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
-        padding:16px 16px 44px;
+        padding:18px 18px 48px;
       }
-      .wrap{max-width:980px; margin:0 auto}
+      .wrap{max-width:1080px; margin:0 auto}
 
-      header{display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:16px}
+      header{display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:20px}
       .brand{display:flex; align-items:center; gap:11px}
-      .brand img{width:38px; height:38px; display:block; flex:0 0 38px}
-      .brand h1{font-weight:900; font-size:20px; letter-spacing:-.02em; margin:0; line-height:1}
+      .brand img{width:36px; height:36px; display:block; flex:0 0 36px}
+      .brand h1{font-weight:900; font-size:19px; letter-spacing:-.02em; margin:0; line-height:1}
       .brand .tag{font-family:var(--mono); font-size:10px; color:var(--ink-60); margin-top:3px}
       .brand .tag a{color:var(--clay)}
-      .lessons{display:flex; gap:4px; background:#fff; border:1px solid var(--line); border-radius:10px; padding:4px; flex-wrap:wrap}
+      .lessons{display:flex; gap:4px; background:rgba(255,255,255,.6); backdrop-filter:blur(6px); border:1px solid var(--line); border-radius:11px; padding:4px; flex-wrap:wrap}
       .lessons button{
         font-family:var(--display); font-weight:700; font-size:12px; border:0; background:none;
         color:var(--ink-60); padding:6px 11px; border-radius:7px; cursor:pointer; line-height:1.1;
@@ -82,39 +91,78 @@
       .lessons button[aria-pressed="true"]{background:var(--graphite); color:var(--paper)}
       .lessons button[aria-pressed="true"] small{color:rgba(247,242,233,.7)}
       .lessons button:focus-visible{outline:2px solid var(--clay); outline-offset:2px}
+      @media (max-width:620px){.lessons button{padding:6px 8px; font-size:11px}.lessons button small{display:none}}
 
-      .lesson{
-        background:color-mix(in oklab, var(--amber) 16%, var(--paper));
-        border:1px solid color-mix(in oklab, var(--amber) 40%, var(--line));
-        border-radius:12px; padding:13px 16px; margin-bottom:14px;
-        display:flex; gap:12px; align-items:flex-start;
-      }
-      .lesson .n{
-        flex:0 0 auto; width:26px; height:26px; border-radius:50%; background:var(--clay);
-        color:#fff; font-weight:900; font-size:13px; display:flex; align-items:center; justify-content:center;
-      }
-      .lesson .say{font-size:14.5px; line-height:1.5}
+      /* ---------- the lesson lead: prose, not a card ---------- */
+      .lead{margin-bottom:18px}
+      .lead h2{font-weight:900; font-size:26px; letter-spacing:-.025em; margin:0 0 6px; line-height:1.08}
+      .lead p{font-size:14px; color:var(--ink-60); margin:0; max-width:70ch; line-height:1.6}
+      .lead p b{color:var(--graphite)}
+      .lead p code{font-family:var(--mono); font-size:12.5px; background:color-mix(in oklab, var(--clay) 10%, #fff); color:var(--clay); padding:1px 5px; border-radius:4px}
 
-      /* ---------- the hero: the picture, first and large ---------- */
-      .hero{position:relative}
-      .stage{
-        position:relative; border:1px solid var(--line); border-radius:16px; overflow:hidden;
-        aspect-ratio:4/3; background:#0B1026; box-shadow:var(--shadow-sm);
-      }
-      canvas{display:block; width:100%; height:100%; cursor:pointer}
-      .canvas-foot{display:flex; gap:8px; margin-top:10px}
+      /* ---------- the worked example: a quiet inline strip ---------- */
+      .example{display:flex; align-items:center; gap:16px; margin-bottom:20px; padding-bottom:18px; border-bottom:1px solid var(--line)}
+      .example .exlabel{font-family:var(--mono); font-size:9.5px; color:var(--blue); flex:0 0 auto; max-width:90px; line-height:1.5; text-transform:uppercase; letter-spacing:.04em}
+      .ex-code{font-family:var(--mono); font-size:11px; line-height:19px; color:var(--ink-40); flex:1; white-space:pre}
+      .ex-code .lit{color:var(--slate)}
+      .ex-pic{width:112px; height:84px; border-radius:10px; overflow:hidden; position:relative; flex:0 0 auto; box-shadow:0 1px 6px rgba(33,29,25,.14); background:#0B1026}
+      .ex-pic canvas{width:100%; height:100%; display:block}
+
+      /* ---------- the working surface: stage + rail ---------- */
+      .work{display:grid; grid-template-columns:1fr 340px; gap:22px; align-items:start}
+      @media (max-width:900px){.work{grid-template-columns:1fr}}
+
+      .stage{position:relative; border:1px solid var(--line); border-radius:18px; overflow:hidden; aspect-ratio:4/3; background:#0B1026; box-shadow:var(--shadow-lg)}
+      canvas#canvas{display:block; width:100%; height:100%; cursor:pointer}
+      .stage-foot{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px; flex-wrap:wrap}
+      .coord-hint{font-family:var(--mono); font-size:11px; color:var(--ink-60); margin:0}
+      .coord-hint[hidden]{display:none}
+      .canvas-foot{display:flex; gap:8px}
       .canvas-foot button{
         font-family:var(--mono); font-size:10.5px; font-weight:500; padding:6px 11px;
         border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink-60); cursor:pointer;
       }
       .canvas-foot button:hover{background:var(--line); color:var(--graphite)}
-      .canvas-foot button.primary{border-color:var(--clay); color:var(--clay)}
-      .canvas-foot button.primary:hover{background:var(--clay); color:#fff}
 
-      /* ---------- the reflection card ---------- */
+      /* reveal: stream-draw-into-settle-pulse (§6, checkpoint §498) */
+      .reveal-wipe{
+        position:absolute; background:var(--paper); pointer-events:none; z-index:4;
+        clip-path:inset(0 0 0 0%); transition:clip-path .6s cubic-bezier(.16,1,.3,1);
+      }
+      .reveal-wipe.done{clip-path:inset(0 0 0 100%)}
+      .reveal-pulse{
+        position:absolute; pointer-events:none; z-index:4; border-radius:50%;
+        background:radial-gradient(circle, rgba(245,158,11,.55), rgba(245,158,11,0) 70%);
+        opacity:0; animation:pulse-glow .7s ease-out forwards;
+      }
+      @keyframes pulse-glow{
+        0%{opacity:0; transform:scale(.82)}
+        30%{opacity:.6}
+        100%{opacity:0; transform:scale(1.4)}
+      }
+      .reveal-fade{position:absolute; pointer-events:none; z-index:4; background:var(--paper); opacity:1; transition:opacity .2s linear}
+      .reveal-fade.in{opacity:0}
+      @media (prefers-reduced-motion:reduce){
+        .reveal-wipe{transition:none !important}
+        .reveal-pulse{animation:none !important; display:none !important}
+        .reveal-fade{transition:opacity .12s linear}
+      }
+
+      /* ---------- the coordinate orientation tag ---------- */
+      #coord-tip{
+        position:absolute; pointer-events:none; z-index:5;
+        background:var(--paper); border:1px solid var(--graphite); border-radius:8px;
+        padding:5px 10px; font-family:var(--mono); font-size:11.5px; color:var(--graphite);
+        box-shadow:var(--shadow-sm); white-space:nowrap;
+      }
+      #coord-tip[hidden]{display:none}
+
+      /* ---------- the reflection card (why.mjs-driven) ---------- */
       #card{
-        position:absolute; width:270px; max-width:calc(100% - 20px); background:var(--paper);
-        border:1px solid var(--graphite); border-radius:12px; box-shadow:0 14px 34px rgba(0,0,0,.34);
+        position:absolute; width:264px; max-width:calc(100% - 20px);
+        background:color-mix(in oklab, var(--paper) 88%, transparent);
+        backdrop-filter:blur(10px);
+        border:1px solid var(--graphite); border-radius:13px; box-shadow:0 16px 38px rgba(0,0,0,.36);
         padding:15px 15px 14px; z-index:6; max-height:calc(100% - 16px); overflow-y:auto;
         overscroll-behavior:contain;
       }
@@ -144,104 +192,109 @@
       #card .fromline b{color:var(--clay); font-weight:600}
       #card .exactness{font-size:10.5px; color:var(--ink-40); margin-top:8px; line-height:1.5}
 
-      /* ---------- the coordinate orientation tag + caption: on until the
-         lesson's first successful run, then off ---------- */
-      #coord-tip{
-        position:absolute; pointer-events:none; z-index:5;
-        background:var(--paper); border:1px solid var(--graphite); border-radius:8px;
-        padding:5px 10px; font-family:var(--mono); font-size:11.5px; color:var(--graphite);
-        box-shadow:var(--shadow-sm); white-space:nowrap;
-      }
-      #coord-tip[hidden]{display:none}
-      .coord-hint{font-family:var(--mono); font-size:11px; color:var(--ink-60); margin:9px 0 0}
-      .coord-hint[hidden]{display:none}
+      /* ---------- the goal rail ---------- */
+      .rail{display:flex; flex-direction:column; gap:16px}
+      .goal{}
 
-      /* ---------- the editor: ghost text behind a real textarea ---------- */
-      .work{margin-top:14px}
-      .editor-shell{background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:var(--shadow-sm)}
-      .editor-top{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 14px; border-bottom:1px solid var(--line)}
-      .editor-top .label{font-weight:700; font-size:13px}
-      .editor-top .run{
-        font-family:var(--display); font-weight:800; font-size:14px; border:0; border-radius:9px;
-        background:var(--clay); color:#fff; padding:8px 18px; cursor:pointer;
+      /* the growing stack of committed lines — frame furniture vs her own
+         authored work, unmistakably different (§494/§496.1) */
+      .stack{font-family:var(--mono); font-size:12.5px; line-height:24px; margin-bottom:2px}
+      .stack .sl{display:block; padding:0 6px; border-radius:4px; white-space:pre}
+      .stack .sl.frame{color:var(--ink-40)}
+      .stack .sl.authored{color:var(--graphite); font-weight:600}
+      .stack .sl.gap{margin-top:12px}
+      .stack .sl.lit{background:color-mix(in oklab, var(--amber) 22%, transparent)}
+
+      .step-count{font-family:var(--mono); font-size:9.5px; color:var(--clay); letter-spacing:.06em; margin:10px 0 6px; text-transform:uppercase}
+      .g{font-weight:900; font-size:18px; letter-spacing:-.01em; line-height:1.25; margin:0 0 12px}
+      .g code{font-family:var(--mono); font-size:14px; background:color-mix(in oklab, var(--clay) 10%, #fff); color:var(--clay); padding:0 4px; border-radius:4px}
+
+      /* THE CUE: distinct "type this here" treatment — clay, boxed, and
+         visually joined to the input beneath it. Not grey furniture. */
+      .cue{
+        font-family:var(--mono); font-size:12.5px; line-height:1.5; color:var(--clay); font-weight:600;
+        background:color-mix(in oklab,var(--clay) 9%,var(--paper)); border:1px dashed color-mix(in oklab,var(--clay) 45%,var(--line));
+        border-bottom:0; border-radius:9px 9px 0 0; padding:8px 11px 7px; display:flex; align-items:center; gap:7px;
       }
-      .editor-top .run:hover{background:color-mix(in oklab, var(--clay) 85%, black)}
-      .editor-top .run:focus-visible{outline:2px solid var(--graphite); outline-offset:2px}
-      .editor-top .ghost-toggle{
-        font-family:var(--mono); font-size:10.5px; font-weight:600; padding:5px 10px;
-        border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink-60); cursor:pointer;
+      .cue .tag{font-family:var(--display); font-weight:800; font-size:8.5px; letter-spacing:.06em; color:#fff; background:var(--clay); padding:2px 6px; border-radius:5px; text-transform:uppercase; flex:0 0 auto}
+      .cue .cuetext{white-space:pre-wrap}
+      textarea#type{
+        width:100%; border:1px solid color-mix(in oklab,var(--clay) 45%,var(--line)); border-top:0; border-radius:0 0 9px 9px;
+        background:#fff; resize:none; font-family:var(--mono); font-size:13px; line-height:22px; color:var(--graphite);
+        caret-color:var(--clay); outline:none; padding:9px 11px; min-height:42px;
       }
-      .editor-top .ghost-toggle:hover{background:var(--line); color:var(--graphite)}
-      .editor-top .ghost-toggle[hidden]{display:none}
-      .editor-wrap{position:relative}
-      .code-surface{
-        display:block; width:100%; margin:0; padding:12px 14px; border:0;
-        font-family:var(--mono); font-size:13.5px; line-height:26px; white-space:pre-wrap;
-        word-break:break-word;
-      }
-      #ghost{position:absolute; inset:0; color:var(--ink-40); pointer-events:none; overflow:hidden}
-      textarea#source{
-        position:relative; background:transparent; color:var(--graphite);
-        min-height:15rem; caret-color:var(--clay);
-      }
-      textarea#source:focus-visible{outline:2px solid var(--clay); outline-offset:-1px}
-      #line-highlight{
-        position:absolute; left:1px; right:1px; background:rgba(245,158,11,.24);
-        pointer-events:none; display:none; border-radius:2px;
-      }
-      .oops{display:flex; align-items:flex-start; gap:9px; padding:10px 14px; border-top:1px solid rgba(166,90,46,.3); background:rgba(166,90,46,.08); font-size:13px; color:color-mix(in oklab,var(--clay) 80%,var(--graphite))}
+      textarea#type:focus{border-color:var(--clay); box-shadow:0 0 0 3px color-mix(in oklab, var(--clay) 18%, transparent)}
+      .prog{display:flex; gap:5px; margin-top:12px}
+      .prog i{flex:1; height:4px; border-radius:2px; background:var(--line)}
+      .prog i.on{background:var(--clay)}
+      .oops{display:flex; align-items:flex-start; gap:8px; margin-top:9px; padding:9px 11px; border-radius:8px; background:rgba(166,90,46,.08); font-size:12.5px; color:color-mix(in oklab,var(--clay) 80%,var(--graphite))}
       .oops[hidden]{display:none}
       .oops .i{flex:0 0 auto; font-weight:900}
 
-      /* ---------- the read-only key: a quiet strip under the editor ---------- */
-      .key{background:color-mix(in oklab, var(--slate) 5%, #fff); border:1px solid var(--line); border-radius:14px; padding:14px 16px 15px; margin-top:12px}
+      .complete{font-weight:800; font-size:15px; color:var(--teal); line-height:1.4; margin-top:6px}
+      .complete[hidden]{display:none}
+      .ask-hint{font-family:var(--mono); font-size:11px; color:var(--ink-60); margin:9px 0 0}
+      .ask-hint[hidden]{display:none}
+
+      /* ---------- the read-only key ---------- */
+      .key{border-top:1px solid var(--line); padding-top:14px}
       .key[hidden]{display:none}
-      .key-head{display:flex; align-items:baseline; gap:10px; margin-bottom:12px; flex-wrap:wrap}
-      .key-head h3{font-weight:800; font-size:13px; margin:0; letter-spacing:.02em}
-      .key-head .subtitle{font-size:11.5px; color:var(--ink-60); margin:0}
+      .key-head{display:flex; align-items:baseline; gap:8px; margin-bottom:11px; flex-wrap:wrap}
+      .key-head h3{font-weight:800; font-size:11.5px; margin:0; letter-spacing:.03em; color:var(--ink-60)}
+      .key-head .subtitle{font-size:10.5px; color:var(--ink-40); margin:0; flex-basis:100%}
       .key-head .key-toggle{
-        font-family:var(--mono); font-size:10.5px; font-weight:600; padding:4px 9px;
+        font-family:var(--mono); font-size:10px; font-weight:600; padding:4px 8px;
         border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink-60); cursor:pointer;
       }
-      .key-head .key-toggle:hover{background:var(--line); color:var(--graphite)}
       .key-head .key-toggle[hidden]{display:none}
-      .key-cols{display:grid; grid-template-columns:repeat(4, 1fr); gap:18px}
-      @media (max-width:760px){.key-cols{grid-template-columns:repeat(2,1fr); gap:14px}}
-      @media (max-width:420px){.key-cols{grid-template-columns:1fr}}
-      .key .grp{min-width:0}
       .key .grp[hidden]{display:none}
-      .key .grp .lbl{font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-40); margin-bottom:7px}
-      /* The typed word and its argument labels sit on separate lines, on
-         purpose: a row that reads left-to-right as "sun  across, down"
-         looks exactly like a line of program. Stacking the grey "needs:"
-         caption underneath, in the UI font rather than mono, breaks that
-         resemblance so a row can never be copied straight onto a program
-         line (§6 of the graduated-key build). */
-      .word{padding:4px 0}
-      .word .w{font-family:var(--mono); font-weight:700; font-size:12.5px; color:var(--clay); display:block}
-      .word .needs{font-family:var(--display); font-weight:500; font-size:10px; color:var(--ink-40); display:block; margin-top:1px}
-      .choices{display:flex; flex-direction:column; gap:3px; margin:5px 0 2px 2px}
-      .choice{font-family:var(--mono); font-size:11px; color:var(--slate); display:flex; align-items:center; gap:7px; line-height:1.3}
-      .choice .sw{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
+      .key .lbl{font-size:9px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-40); margin:11px 0 6px}
+      .key .lbl:first-child{margin-top:0}
+      .word{padding:3px 0}
+      .word .w{font-family:var(--mono); font-weight:700; font-size:11.5px; color:var(--clay); display:block}
+      .word .needs{font-family:var(--display); font-weight:500; font-size:9.5px; color:var(--ink-40); display:block; margin-top:1px}
+      .choices{display:flex; flex-direction:column; gap:3px; margin:2px 0}
+      .choice{font-family:var(--mono); font-size:10px; color:var(--slate); display:flex; align-items:center; gap:6px; line-height:1.85}
+      .choice .sw{width:8px; height:8px; border-radius:50%; flex:0 0 auto}
       .choice .q{color:var(--ink-40)}
-      .key .mini{font-size:11px; color:var(--ink-60); line-height:1.5; margin:13px 0 0; padding-top:11px; border-top:1px solid var(--line)}
+      .key .mini{font-size:10.5px; color:var(--ink-60); line-height:1.5; margin:12px 0 0; padding-top:10px; border-top:1px solid var(--line)}
 
-      /* ---------- the your-own-sky lesson: unlabeled colour swatches ---------- */
-      .swatches{margin-top:12px; border:1px solid var(--line); border-radius:14px; padding:14px 16px; background:#fff}
+      /* ---------- lesson 6: unlabeled colour swatches ---------- */
       .swatches[hidden]{display:none}
-      .swatches h3{font-weight:800; font-size:13px; margin:0 0 4px}
-      .swatches p{font-size:11.5px; color:var(--ink-60); margin:0 0 10px; line-height:1.5}
-      .swatch-row{display:flex; gap:10px; flex-wrap:wrap}
+      .swatches h3{font-weight:800; font-size:12px; margin:0 0 4px}
+      .swatches p{font-size:11px; color:var(--ink-60); margin:0 0 9px; line-height:1.5}
+      .swatch-row{display:flex; gap:9px; flex-wrap:wrap}
       .swatch{
-        width:34px; height:34px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px var(--line);
+        width:30px; height:30px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px var(--line);
         cursor:pointer; padding:0;
       }
       .swatch:hover{box-shadow:0 0 0 2px var(--clay)}
       .swatch:focus-visible{outline:2px solid var(--graphite); outline-offset:2px}
 
-      /* ---------- the final-lesson capstone + certificate ---------- */
-      .capstone{margin-top:16px}
+      /* ---------- the through-line strip ---------- */
+      .surface-strip{display:flex; align-items:center; gap:10px; margin-top:22px; padding:12px 0; font-size:12.5px; color:color-mix(in oklab,var(--violet) 56%,var(--graphite))}
+      .surface-strip svg{width:17px; height:17px; flex:0 0 auto}
+      .surface-strip b{font-weight:800}
+
+      /* ---------- the final-lesson capstone + freeplay + certificate ---------- */
+      .capstone{margin-top:18px}
       .capstone[hidden]{display:none}
+      .freeplay-shell{background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:var(--shadow-sm); margin-bottom:14px}
+      .freeplay-top{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 14px; border-bottom:1px solid var(--line)}
+      .freeplay-top .label{font-weight:700; font-size:13px}
+      .freeplay-top .toggles{display:flex; gap:6px}
+      .freeplay-top button{
+        font-family:var(--mono); font-size:10.5px; font-weight:600; padding:5px 10px;
+        border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink-60); cursor:pointer;
+      }
+      .freeplay-top button:hover{background:var(--line); color:var(--graphite)}
+      textarea#freeplay{
+        display:block; width:100%; margin:0; padding:12px 14px; border:0; background:transparent;
+        font-family:var(--mono); font-size:13.5px; line-height:26px; white-space:pre; color:var(--graphite);
+        min-height:11rem; caret-color:var(--clay); resize:vertical;
+      }
+      textarea#freeplay:focus-visible{outline:2px solid var(--clay); outline-offset:-1px}
+      #freeplay-oops[hidden]{display:none}
       .capgrid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
       @media (max-width:640px){.capgrid{grid-template-columns:1fr}}
       .capcard{background:#fff; border:1px solid var(--line); border-radius:14px; padding:15px 16px}
@@ -295,16 +348,6 @@
       .cert .actions button{font-family:var(--display); font-weight:700; font-size:13px; border:1px solid var(--line); background:#fff; border-radius:9px; padding:9px 16px; cursor:pointer}
       .cert .actions button.primary{background:var(--clay); color:#fff; border-color:var(--clay)}
       .cert .x{position:absolute; top:14px; right:16px; border:0; background:none; font-size:18px; color:var(--ink-40); cursor:pointer; z-index:2}
-      /* Printing the certificate. Three defects a real print showed
-         (not caught on screen, since screen rendering never suppresses
-         either): (1) Chrome/Safari drop CSS background colours, gradients
-         and SVG fills by default when printing — `print-color-adjust`
-         forces them through, on every element, since the mark's four
-         polygons, the rainbow band and the four chips are all colour. (2)
-         `.cert .x`/`.cert .actions` (the ✕ and the two buttons) are inside
-         `.scrim`, so hiding everything OUTSIDE it left them printing too.
-         (3) `.scrim`'s on-screen flex-centering is lost once it goes
-         static, so the cert has to centre itself. */
       @media print{
         *{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important}
         body > *:not(.scrim){display:none !important}
@@ -321,15 +364,14 @@
       .lesson-confirm .actions button.primary{background:var(--clay); color:#fff; border-color:var(--clay)}
       .lesson-confirm .actions button.cancel{border-color:transparent; background:none; color:var(--ink-40)}
 
-      footer{margin-top:24px; font-family:var(--mono); font-size:10px; color:var(--ink-40); line-height:1.7; max-width:700px}
-      @media (max-width:620px){.lessons button{padding:6px 8px; font-size:11px}.lessons button small{display:none}}
+      footer{margin-top:26px; font-family:var(--mono); font-size:10px; color:var(--ink-40); line-height:1.7; max-width:700px}
     </style>
   </head>
   <body>
     <div class="wrap">
       <header>
         <div class="brand">
-          <img src="identity/planes-small-on-light.svg" alt="Planes" width="38" height="38" />
+          <img src="identity/planes-small-on-light.svg" alt="Planes" width="36" height="36" />
           <div>
             <h1>Planes</h1>
             <div class="tag">draw something, then ask it where it came from · <a href="./index.html">all of Planes</a></div>
@@ -338,44 +380,55 @@
         <div class="lessons" id="lessons" role="group" aria-label="lesson"></div>
       </header>
 
-      <div class="lesson"><div class="n" id="lesson-n">1</div><div class="say" id="lesson-say"></div></div>
+      <div class="lead">
+        <h2 id="lesson-title"></h2>
+        <p id="lesson-say"></p>
+      </div>
 
-      <div class="hero">
-        <div class="stage">
-          <canvas id="canvas" width="1440" height="1080" role="img" aria-label="the picture this program draws"></canvas>
-          <div id="card" hidden></div>
-          <div id="coord-tip" hidden></div>
-        </div>
-        <p class="coord-hint" id="coord-hint">Hover the picture to find a spot — across runs 0–480, down 0–360, from the top-left corner (0,0).</p>
-        <p class="coord-hint" id="ask-hint" hidden>Click anything in your picture to ask where it came from.</p>
-        <div class="canvas-foot">
-          <button id="save-svg" type="button">Save SVG ⤓</button>
-          <button id="save-png" type="button">Save PNG ⤓</button>
-        </div>
+      <div class="example" id="example">
+        <div class="exlabel">where you're headed →</div>
+        <pre class="ex-code" id="ex-code"></pre>
+        <div class="ex-pic"><canvas id="ex-canvas" width="480" height="360"></canvas></div>
       </div>
 
       <div class="work">
-        <div class="editor-shell">
-          <div class="editor-top">
-            <span class="label">your program</span>
-            <button class="ghost-toggle" id="ghost-toggle" type="button" hidden aria-pressed="false">hide hints</button>
-            <button class="run" id="run" type="button">Run ▸</button>
+        <div>
+          <div class="stage" id="stage">
+            <canvas id="canvas" width="1440" height="1080" role="img" aria-label="the picture this program draws"></canvas>
+            <div id="card" hidden></div>
+            <div id="coord-tip" hidden></div>
           </div>
-          <div class="editor-wrap">
-            <div id="line-highlight"></div>
-            <pre id="ghost" class="code-surface" aria-hidden="true"></pre>
-            <textarea id="source" class="code-surface" spellcheck="false" aria-label="your program"></textarea>
+          <div class="stage-foot">
+            <p class="coord-hint" id="coord-hint">Hover the picture to find a spot — across runs 0–480, down 0–360, from the top-left corner (0,0).</p>
+            <p class="coord-hint" id="ask-hint2" hidden>Click anything in your picture to ask where it came from.</p>
+            <div class="canvas-foot">
+              <button id="save-svg" type="button">Save SVG ⤓</button>
+              <button id="save-png" type="button">Save PNG ⤓</button>
+            </div>
           </div>
-          <div class="oops" id="oops" hidden><span class="i">!</span><span id="oops-text"></span></div>
         </div>
 
-        <aside class="key" id="key">
-          <div class="key-head">
-            <h3>words you can use</h3>
-            <button class="key-toggle" id="key-toggle" type="button" hidden aria-pressed="false">hide key</button>
-            <p class="subtitle">Type the <b>word</b>. The grey part just tells you what numbers it needs — you don't type that.</p>
+        <div class="rail">
+          <div class="goal" id="goal">
+            <div class="stack" id="stack"></div>
+            <div id="active-step">
+              <div class="step-count" id="step-count"></div>
+              <p class="g" id="goal-text"></p>
+              <div class="cue" id="cue"><span class="tag">type</span><span class="cuetext" id="cue-text"></span></div>
+              <textarea id="type" spellcheck="false" rows="1" aria-label="type this line"></textarea>
+              <div class="oops" id="step-oops" hidden><span class="i">!</span><span id="step-oops-text"></span></div>
+              <div class="prog" id="prog"></div>
+            </div>
+            <p class="complete" id="complete-msg" hidden></p>
+            <p class="ask-hint" id="ask-hint" hidden>Click anything in your picture to ask where it came from.</p>
           </div>
-          <div class="key-cols">
+
+          <aside class="key" id="key">
+            <div class="key-head">
+              <h3>words this lesson uses</h3>
+              <button class="key-toggle" id="key-toggle" type="button" hidden aria-pressed="false">hide key</button>
+              <p class="subtitle">Type the <b>word</b>. The grey part just tells you what numbers it needs — you don't type that.</p>
+            </div>
             <div class="grp">
               <div class="lbl">things you can place</div>
               <div id="key-placeables"></div>
@@ -392,18 +445,34 @@
               <div class="lbl">name it &amp; say why</div>
               <div id="key-naming"></div>
             </div>
-          </div>
-          <p class="mini" id="key-note"></p>
-        </aside>
+            <p class="mini" id="key-note"></p>
+          </aside>
 
-        <div class="swatches" id="swatches" hidden>
-          <h3>your colors</h3>
-          <p>First name your sky with <code>to your sky name here:</code> on its own lines. Then tap a color — it writes the numbers for you, in a <code>custom-sky of</code> line right where your cursor is.</p>
-          <div class="swatch-row" id="swatch-row"></div>
+          <div class="swatches" id="swatches" hidden>
+            <h3>your colors</h3>
+            <p>Tap a color — it writes the numbers for you, right into the line you're typing.</p>
+            <div class="swatch-row" id="swatch-row"></div>
+          </div>
         </div>
       </div>
 
+      <div class="surface-strip" id="through-line">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6z"/></svg>
+        <div><b>What can this program do?</b> <span id="through-line-text">computing…</span></div>
+      </div>
+
       <div class="capstone" id="capstone" hidden>
+        <div class="freeplay-shell">
+          <div class="freeplay-top">
+            <span class="label">your garden — keep growing it</span>
+            <div class="toggles">
+              <button class="hints-toggle" id="hints-toggle" type="button" aria-pressed="false">hide hints</button>
+              <button class="key-toggle2" id="key-toggle2" type="button" aria-pressed="false">hide key</button>
+            </div>
+          </div>
+          <textarea id="freeplay" spellcheck="false" aria-label="your garden, editable"></textarea>
+          <div class="oops" id="freeplay-oops" hidden><span class="i">!</span><span id="freeplay-oops-text"></span></div>
+        </div>
         <div class="capgrid">
           <div class="capcard">
             <h3><span class="ic" style="background:var(--teal)">✓</span> your garden is honest</h3>
@@ -425,7 +494,7 @@
           </div>
           <div class="capcard wide">
             <h3><span class="ic" style="background:var(--amber)">✦</span> keep growing it</h3>
-            <p>Take your drive home. Open your garden on any computer and try:</p>
+            <p>Edit the garden above. Try:</p>
             <div class="try">
               <code>two-flowers of 380, spot</code> — another pair, way over on the right<br />
               <code>sky of "just before dark"</code> — a different time of day<br />
@@ -442,14 +511,14 @@
 
       <footer>
         <p>
-          Serving: this page fetches <code>paint/scene.planes</code> and <code>paint/draw.planes</code> and
+          Serving: this page fetches <code>paint/scene.planes</code> and
           imports <code>js/*.mjs</code> as ES modules, so it needs a static server
           (<code>python3 -m http.server 8000</code>) and no network beyond it.
         </p>
         <p>
-          <strong>The editor is the source pane.</strong> Clicking a mark on the picture marks the line in the
-          box above that drew it. <strong>Asking performs nothing:</strong> a question reads the last successful
-          Run — it never runs your program again.
+          <strong>No Run button.</strong> The instant a typed line matches, it paints itself.
+          <strong>Asking performs nothing:</strong> clicking anything in the picture reads the last
+          line that painted it — it never runs your program again.
         </p>
       </footer>
     </div>
@@ -506,7 +575,8 @@
       import { downloadSvg, downloadPng, downloadBlob, exportFilename } from "./js/paint/export.mjs";
       import { walk as walkDrawing, HIGHEST_VERSION } from "./js/paint/stream.mjs";
       import { markSink } from "./js/paint/marks.mjs";
-      import { hitTest } from "./js/paint/hit.mjs";
+      import { hitTest, invert, containsPoint, outlineOf, marksForLine } from "./js/paint/hit.mjs";
+      import { applyMatrix } from "./js/paint/marks.mjs";
       import { card } from "./js/paint/why.mjs";
       import { BrowserModuleLoader } from "./js/module_loader_browser.mjs";
       import { rgbHex } from "./js/paint/color.mjs";
@@ -514,8 +584,8 @@
         PLACEABLES, SKY_PHRASES, GROUND_PHRASES, NAMING_WORDS, COORDINATE_NOTE,
       } from "./js/scene_vocab.mjs";
 
-      // `use scene` and `use draw` resolve relative to this base — the
-      // paint/ directory this page lives beside.
+      // `use scene` resolves relative to this base — the paint/ directory
+      // this page lives beside.
       const BASE = new URL("paint/", location.href).href;
       const LOAD_TOKEN = String(Date.now());
       const loader = new BrowserModuleLoader({ base: BASE, cacheBust: LOAD_TOKEN });
@@ -524,229 +594,319 @@
       // same mechanism garden.html and paint.html's PNG export both use.
       const CANVAS_SCALE = 3;
       const DIMENSIONS = { width: 480, height: 360, background: "#ffffff", scale: CANVAS_SCALE };
+      // The worked-example thumbnail is a small, separate canvas whose own
+      // backing store is 1:1 with the program's coordinate space (never
+      // supersampled the way the main stage is) — using DIMENSIONS' scale:3
+      // here would have paint() draw as if onto a 1440×1080 store while the
+      // thumbnail's real store is 480×360, scaling everything 3x too large
+      // and pushing the ground/sun rects outside the visible canvas.
+      const EXAMPLE_DIMENSIONS = { width: 480, height: 360, background: "#ffffff", scale: 1 };
 
       const $ = (id) => document.getElementById(id);
-      const source = $("source");
-      const ghostEl = $("ghost");
-      const runBtn = $("run");
+      const stageEl = $("stage");
       const canvas = $("canvas");
       const cardEl = $("card");
-      const oopsEl = $("oops");
-      const oopsTextEl = $("oops-text");
-      const highlightEl = $("line-highlight");
-      const lessonNEl = $("lesson-n");
-      const lessonSayEl = $("lesson-say");
-      const keyEl = $("key");
-      const swatchesEl = $("swatches");
-      const capstoneEl = $("capstone");
       const coordTipEl = $("coord-tip");
       const coordHintEl = $("coord-hint");
       const askHintEl = $("ask-hint");
+      const askHint2El = $("ask-hint2");
+      const stackEl = $("stack");
+      const activeStepEl = $("active-step");
+      const stepCountEl = $("step-count");
+      const goalTextEl = $("goal-text");
+      const cueEl = $("cue");
+      const cueTextEl = $("cue-text");
+      const typeEl = $("type");
+      const stepOopsEl = $("step-oops");
+      const stepOopsTextEl = $("step-oops-text");
+      const progEl = $("prog");
+      const completeMsgEl = $("complete-msg");
+      const keyEl = $("key");
+      const swatchesEl = $("swatches");
+      const capstoneEl = $("capstone");
+      const freeplayEl = $("freeplay");
+      const freeplayOopsEl = $("freeplay-oops");
+      const freeplayOopsTextEl = $("freeplay-oops-text");
+      const lessonTitleEl = $("lesson-title");
+      const lessonSayEl = $("lesson-say");
       const ctx = canvas.getContext("2d");
+      const exCanvas = $("ex-canvas");
+      const exCtx = exCanvas.getContext("2d");
 
       // A direction glyph reinforces a number as a DIRECTION, not just a
-      // word — the why-card already established this for "across"/"down".
-      // Page scope so both the why-card and the coordinate-orientation tag
-      // (added below) read the same mapping, never two hand-kept copies.
+      // word — the why-card, the key, and the coordinate tip all read this
+      // one mapping, never a second hand-kept copy.
       const DIRECTION_GLYPH = { across: "→", down: "↓" };
       function formatCoord(x, y) {
         return `across ${Math.round(x)} ${DIRECTION_GLYPH.across} · down ${Math.round(y)} ${DIRECTION_GLYPH.down}`;
       }
 
-      // Everything the frame on screen was made of. Every card and highlight
-      // reads THIS, never a fresh run — what makes "asking performed
-      // nothing" true.
-      let lastLines = [];
-      let lastTrace = [];
-      let lastAnnotations = {};
-      let lastMarks = [];
-      let lastSourceLines = [];
-      let litLine = -1;
-      let currentLesson = 0;
-      let ghostHidden = false; // view state only — resets to false on every setLesson
-      let keyHidden = false; // view state only — resets to false on every setLesson
-      let hasRunThisLesson = false; // orientation mode: on until this lesson's first successful run
-      let seedTicket = null; // decorative save ticket, §7.2/§9 — never fed back into the program
-
       const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      function prefersReducedMotion() {
+        return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+      }
 
-      // ---- the lesson set: an ORDERED ARRAY, not a fixed week count. Each
-      // lesson declares its own title, target program, lesson text, and
-      // which surfaces it shows (§408/T-Q4: "a lesson is a session, not a
-      // document"). The count is never a constant anywhere below — every
-      // reader goes through LESSONS.length and LESSONS[i]. ONE object drives
-      // both the target program and its structured ghost (§425) — the ghost
-      // is built from `lines`, never a second hand-kept copy. ------------
-
-      const BLANK = "…";
+      // ==========================================================================
+      // LESSONS — an ORDERED ARRAY, not a fixed count. Every reader below goes
+      // through LESSONS.length and LESSONS[i]; nothing hardcodes 7 (§8).
+      //
+      // Each lesson carries `items`: an ordered list of physical program lines.
+      // `role: "frame"` lines are given furniture — pre-settled, never typed,
+      // auto-committed the instant the sequence reaches them. `role: "slot"`
+      // lines are goal-targeted: the learner types into the one live input,
+      // and `testStep()` below decides whether what they typed completes it
+      // (§4). `gap` marks a line that had a blank line before it in the
+      // original curriculum — a purely visual grouping cue in the rendered
+      // stack, carrying no weight in the assembled program (blank lines are
+      // not Planes statements and are never sent to the engine).
+      //
+      // Lesson 6's "your own sky" definition (§4's "multiline" case) is
+      // expressed as two consecutive slot items that share one `bindAs` key:
+      // a "name-binding-def" item records whatever identifier she chooses,
+      // and a "name-binding-use" item later in the SAME or a LATER lesson
+      // position accepts only that recorded name. This is the same
+      // acceptance behaviour the build prompt's "multiline" kind describes,
+      // without a second parallel representation of "two lines that are
+      // really one step" — the goal loop already advances through items one
+      // physical line at a time, frame or slot, and neither of these two
+      // slot lines paints anything on its own (paints: null) until the
+      // use-site line actually calls the function.
+      // ==========================================================================
 
       const LESSONS = [
         {
           title: "place a thing",
-          lesson: "The grey letters below are what to type — write right over them, and they'll clear as you go. Type these lines, then press <b>Run</b>. In the last line, the first number is how far <b>across</b> (→), the second is how far <b>down</b> (↓). The key below shows every word you can use and how it's spelled.",
-          lines: [
-            "use scene",
-            "",
-            "start",
-            'sky of "middle of the afternoon"',
-            'ground of "wet grass"',
-            "",
-            "sun of 240, 70",
+          say: "Type each line exactly as the cue box shows it. The instant it's right, it paints itself — no button, nothing else to press.",
+          items: [
+            { role: "frame", text: "use scene" },
+            { role: "frame", text: "start", gap: true },
+            { role: "slot", match: "exact", text: 'sky of "middle of the afternoon"',
+              goal: 'Give your garden a <b>sky</b>.', paints: "sky" },
+            { role: "slot", match: "exact", text: 'ground of "wet grass"',
+              goal: 'Now the <b>ground</b>.', paints: "ground" },
+            { role: "slot", match: "exact", text: "sun of 240, 70", gap: true,
+              goal: 'Last — a <b>sun</b>, up high. The first number is how far <b>across</b> →, the second how far <b>down</b> ↓.', paints: "sun" },
           ],
-          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
+          surfaces: { key: true, swatches: false, capstone: false, toggles: false },
         },
         {
           title: "across & down",
-          lesson: "Put one <b>bee</b> in the sky with <b>bee of 300, 150</b>. The first number is how far <b>across</b> (→), the second is how far <b>down</b> (↓). Run it, then change 300 to 400 and run again — watch it slide across.",
-          lines: [
-            "use scene",
-            "",
-            "start",
-            'sky of "middle of the afternoon"',
-            'ground of "wet grass"',
-            "",
-            "bee of 300, 150",
+          say: "One more shape — a bee — and a feel for what those two numbers mean.",
+          items: [
+            { role: "frame", text: "use scene" },
+            { role: "frame", text: "start", gap: true },
+            { role: "slot", match: "exact", text: 'sky of "middle of the afternoon"',
+              goal: 'Give it a <b>sky</b>.', paints: "sky" },
+            { role: "slot", match: "exact", text: 'ground of "wet grass"',
+              goal: 'Now the <b>ground</b>.', paints: "ground" },
+            { role: "slot", match: "exact", text: "bee of 300, 150", gap: true,
+              goal: 'Put one <b>bee</b> in the sky. First number is <b>across</b> →, second is <b>down</b> ↓.', paints: "bee" },
           ],
-          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
+          surfaces: { key: true, swatches: false, capstone: false, toggles: false },
         },
         {
           title: "day → night",
-          lesson: 'Build the same garden at night. It\'s almost the same program — the sky is <b>"the middle of the night"</b>, and it\'s a <b>moon</b> and a <b>firefly</b> instead of a sun and a bee.',
-          lines: [
-            "use scene",
-            "",
-            "start",
-            'sky of "the middle of the night"',
-            'ground of "wet grass"',
-            "",
-            "moon of 240, 70",
-            "firefly of 300, 150",
+          say: 'Build the same garden at night. It’s almost the same program — the sky is <b>“the middle of the night”</b>, and it’s a <b>moon</b> and a <b>firefly</b> instead of a sun and a bee.',
+          items: [
+            { role: "frame", text: "use scene" },
+            { role: "frame", text: "start", gap: true },
+            { role: "slot", match: "exact", text: 'sky of "the middle of the night"',
+              goal: 'Give it a <b>sky</b> — a night one, this time.', paints: "sky" },
+            { role: "slot", match: "exact", text: 'ground of "wet grass"',
+              goal: 'Same <b>ground</b> as before.', paints: "ground" },
+            { role: "slot", match: "exact", text: "moon of 240, 70", gap: true,
+              goal: 'Instead of a sun, put up a <b>moon</b>.', paints: "moon" },
+            { role: "slot", match: "exact", text: "firefly of 300, 150",
+              goal: 'And one <b>firefly</b>, nearby.', paints: "firefly" },
           ],
-          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
+          surfaces: { key: true, swatches: false, capstone: false, toggles: false },
         },
         {
           title: "name it & why",
-          lesson: 'Give a number a name and a reason. <b>let spot = 90 because "…"</b> names the height, and the <b>because</b> is your own words for why. Click the flower after you run it — your reason shows up right there.',
-          lines: [
-            "use scene",
-            "",
-            "start",
-            'sky of "middle of the afternoon"',
-            'ground of "wet grass"',
-            "",
-            "sun of 240, 70",
-            "",
-            'let spot = 90 because "it\'s the tallest in the yard"',
-            "two-flowers of 120, spot",
+          say: 'Give a number a <b>name</b> and a <b>reason</b>. The reason is your own words — nothing here checks WHAT you write, only that you wrote something.',
+          items: [
+            { role: "frame", text: "use scene" },
+            { role: "frame", text: "start", gap: true },
+            { role: "slot", match: "exact", text: 'sky of "middle of the afternoon"',
+              goal: 'Give it a <b>sky</b>.', paints: "sky" },
+            { role: "slot", match: "exact", text: 'ground of "wet grass"',
+              goal: 'Now the <b>ground</b>.', paints: "ground" },
+            { role: "slot", match: "exact", text: "sun of 240, 70", gap: true,
+              goal: 'And a <b>sun</b>.', paints: "sun" },
+            { role: "slot", match: "shape-because", name: "spot", number: 90, gap: true,
+              goal: 'Name a height and say why — <code>let spot = 90 because "…"</code>, the reason in your own words.', paints: null },
+            { role: "slot", match: "exact", text: "two-flowers of 120, spot",
+              goal: 'Now plant the <b>flowers</b> at that height.', paints: "flowers" },
           ],
-          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
+          surfaces: { key: true, swatches: false, capstone: false, toggles: false },
         },
         {
           title: "two, their own height",
-          lesson: "This garden has <b>two</b> pairs of flowers, each with its own <b>let … because</b> line, sitting at different heights. Try moving just one.",
-          lines: [
-            "use scene",
-            "",
-            "start",
-            'sky of "middle of the afternoon"',
-            'ground of "wet grass"',
-            "sun of 240, 70",
-            "",
-            'let spot = 90 because "it\'s the tallest in the yard"',
-            "two-flowers of 120, spot",
-            'let shady = 44 because "these never get past the fence shadow"',
-            "two-flowers of 300, shady",
+          say: "This garden has two pairs of flowers, each with its own name, height, and reason.",
+          items: [
+            { role: "frame", text: "use scene" },
+            { role: "frame", text: "start", gap: true },
+            { role: "slot", match: "exact", text: 'sky of "middle of the afternoon"',
+              goal: 'Give it a <b>sky</b>.', paints: "sky" },
+            { role: "slot", match: "exact", text: 'ground of "wet grass"',
+              goal: 'Now the <b>ground</b>.', paints: "ground" },
+            { role: "slot", match: "exact", text: "sun of 240, 70",
+              goal: 'And a <b>sun</b>.', paints: "sun" },
+            { role: "slot", match: "shape-because", name: "spot", number: 90, gap: true,
+              goal: 'One pair, tall — name its height and say why.', paints: null },
+            { role: "slot", match: "exact", text: "two-flowers of 120, spot",
+              goal: 'Plant them.', paints: "flowers" },
+            { role: "slot", match: "shape-because", name: "shady", number: 44,
+              goal: 'A second pair — its own height, its own reason.', paints: null },
+            { role: "slot", match: "exact", text: "two-flowers of 300, shady",
+              goal: 'Plant this pair too.', paints: "flowers" },
           ],
-          surfaces: { key: true, swatches: false, capstone: false, ghostToggle: false, keyToggle: false },
+          surfaces: { key: true, swatches: false, capstone: false, toggles: false },
         },
         {
           title: "your own sky",
-          lesson: "This time you make your <b>own</b> sky. Name it with <b>to your sky name here:</b>, then tap a color in the panel below — it writes the numbers into a <b>custom-sky</b> line for you.",
-          lines: [
-            "use scene",
-            "",
-            "to your sky name here:",
-            "  custom-sky of 0.78, 0.14, 55",
-            "",
-            "start",
-            "your sky name here",
-            'ground of "wet grass"',
-            "",
-            "sun of 240, 70",
-            "",
-            'let spot = 90 because "it\'s the tallest in the yard"',
-            "two-flowers of 120, spot",
+          say: "This time you make your own sky. Name it in your own words, then give it a color.",
+          items: [
+            { role: "frame", text: "use scene" },
+            { role: "slot", match: "name-binding-def", bindAs: "skyName", text: "to your sky name here:", gap: true,
+              goal: 'Name your own sky — any words you like, ending with a colon.', paints: null },
+            { role: "slot", match: "shape-custom-sky",
+              goal: 'Now give it a color — tap a swatch below, or type your own three numbers.', paints: null },
+            { role: "frame", text: "start", gap: true },
+            { role: "slot", match: "name-binding-use", bindAs: "skyName",
+              goal: 'Now use your own sky — type the name you gave it.', paints: "sky" },
+            { role: "slot", match: "exact", text: 'ground of "wet grass"',
+              goal: 'Now the <b>ground</b>.', paints: "ground" },
+            { role: "slot", match: "exact", text: "sun of 240, 70", gap: true,
+              goal: 'And a <b>sun</b>.', paints: "sun" },
+            { role: "slot", match: "shape-because", name: "spot", number: 90, gap: true,
+              goal: 'Name a height and say why.', paints: null },
+            { role: "slot", match: "exact", text: "two-flowers of 120, spot",
+              goal: 'Plant the flowers.', paints: "flowers" },
           ],
-          surfaces: { key: true, swatches: true, capstone: false, ghostToggle: false, keyToggle: false },
+          surfaces: { key: true, swatches: true, capstone: false, toggles: false },
         },
         {
           title: "it's yours now",
-          lesson: "Your garden is done. See what it can do, share it, and get your certificate. Want to keep going? Turn off the hints and the garden is yours to grow however you like.",
-          lines: [
-            "use scene",
-            "",
-            "start",
-            'sky of "middle of the afternoon"',
-            'ground of "wet grass"',
-            "",
-            "sun of 240, 70",
-            "two-bees of 300, 150",
-            "",
-            'let spot = 90 because "it\'s the tallest in the yard"',
-            "two-flowers of 120, spot",
+          say: "Your garden is already grown — every line here is one you typed in the lessons before this one. See what it can do, share it, and get your certificate. The garden below is yours to edit however you like.",
+          items: [
+            { role: "frame", text: "use scene" },
+            { role: "frame", text: "start", gap: true },
+            { role: "frame", text: 'sky of "middle of the afternoon"' },
+            { role: "frame", text: 'ground of "wet grass"' },
+            { role: "frame", text: "sun of 240, 70", gap: true },
+            { role: "frame", text: "two-bees of 300, 150" },
+            { role: "frame", text: 'let spot = 90 because "it\'s the tallest in the yard"', gap: true },
+            { role: "frame", text: "two-flowers of 120, spot" },
           ],
-          // The key stays available on the final lesson too — Rob's call:
-          // toggleable like the hints, not removed outright.
-          surfaces: { key: true, swatches: false, capstone: true, ghostToggle: true, keyToggle: true },
+          surfaces: { key: true, swatches: false, capstone: true, toggles: true },
         },
       ];
 
-      // A ghost line replaces every number and every quoted phrase with a
-      // blank — the word itself (`sky of`, `let`, `because`) stays, since
-      // that is the spelling she is meant to read off the key and type
-      // herself. A `to <name>:` header (the "your own sky" lesson's own sky
-      // name) has neither a number nor a quote to blank, so it is shown
-      // whole, as an example of the shape rather than a fill-in-the-blank.
-      function ghostLine(line) {
-        return line
-          .replace(/"[^"]*"/g, `"${BLANK}"`)
-          .replace(/-?\d+(\.\d+)?/g, BLANK);
+      // ---- the acceptance model (§4): a slot step declares `match`, one of
+      // five kinds. Each tester returns { committed, bind? } on success (the
+      // CANONICAL text to commit into the assembled program — never her raw
+      // keystrokes for a fixed line, always her own words for a free one) or
+      // null on no match. Nothing here ever partially accepts — a step is
+      // either fully satisfied or the input is left alone.
+
+      const IDENT_WORD = "[A-Za-z_][A-Za-z0-9_-]*";
+      const IDENT = `${IDENT_WORD}(?:\\s+${IDENT_WORD})*`;
+
+      function normSpace(s) {
+        return s.trim().replace(/\s+/g, " ");
       }
 
-      // The part of a target line she has not reached yet — padded with
-      // spaces to the length of what she has already typed on that line, so
-      // it lines up (same monospace grid as the textarea sitting in front of
-      // it) starting exactly where her cursor will land next, and never
-      // sits underneath a character she has already typed. This is what
-      // makes it safe to show CONTINUOUSLY rather than only before her first
-      // keystroke: her real text and the ghost text never occupy the same
-      // cell at the same time, so nothing garbles as she types through it.
-      function ghostSuffix(targetLine, typedLine) {
-        if (typedLine.length >= targetLine.length) return "";
-        return " ".repeat(typedLine.length) + targetLine.slice(typedLine.length);
+      // ADDITION beyond strict literal exactness (§4 explicitly allows this):
+      // interior whitespace is normalised before comparing, which is kinder
+      // to an extra space than a byte-exact match and never accepts a wrong
+      // line — only a differently-spaced RIGHT one.
+      function testExact(step, typed) {
+        if (normSpace(typed) !== normSpace(step.text)) return null;
+        return { committed: step.text };
       }
 
-      function ghostFor(lessonIndex, typedText) {
-        const target = LESSONS[lessonIndex].lines;
-        const typedLines = typedText.split("\n");
-        const n = Math.max(target.length, typedLines.length);
-        const out = [];
-        for (let i = 0; i < n; i++) {
-          out.push(ghostSuffix(ghostLine(target[i] ?? ""), typedLines[i] ?? ""));
+      function testShapeBecause(step, typed) {
+        const t = typed.trim();
+        const re = new RegExp(
+          `^let\\s+${escapeRegex(step.name)}\\s*=\\s*${escapeRegex(String(step.number))}\\s+because\\s+"([^"]+)"\\s*$`,
+        );
+        const m = re.exec(t);
+        if (!m || !m[1].trim()) return null;
+        return { committed: `let ${step.name} = ${step.number} because "${m[1]}"` };
+      }
+
+      function testShapeCustomSky(_step, typed) {
+        const t = typed.trim();
+        const re = /^custom-sky of\s+(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/;
+        const m = re.exec(t);
+        if (!m) return null;
+        return { committed: `  custom-sky of ${m[1]}, ${m[2]}, ${m[3]}` };
+      }
+
+      function testNameBindingDef(step, typed, boundNames) {
+        const t = typed.trim();
+        const re = new RegExp(`^to\\s+(${IDENT})\\s*:$`);
+        const m = re.exec(t);
+        if (!m) return null;
+        const name = normSpace(m[1]);
+        if (/\bof\b/i.test(name)) return null; // "of" would collide with call syntax
+        boundNames[step.bindAs] = name;
+        return { committed: `to ${name}:` };
+      }
+
+      function testNameBindingUse(step, typed, boundNames) {
+        const wanted = boundNames[step.bindAs];
+        if (!wanted) return null;
+        return normSpace(typed) === wanted ? { committed: wanted } : null;
+      }
+
+      function testStep(step, typed, boundNames) {
+        if (typed.trim() === "") return null;
+        switch (step.match) {
+          case "exact": return testExact(step, typed);
+          case "shape-because": return testShapeBecause(step, typed);
+          case "shape-custom-sky": return testShapeCustomSky(step, typed);
+          case "name-binding-def": return testNameBindingDef(step, typed, boundNames);
+          case "name-binding-use": return testNameBindingUse(step, typed, boundNames);
+          default: return null;
         }
-        return out.join("\n");
+      }
+
+      // The cue box's own text — what to show as "type this" for a step.
+      // For a name-binding-use step this is DYNAMIC: once she has named her
+      // own sky, the cue for using it shows exactly the name she chose, not
+      // a generic placeholder — a closed loop, her own word handed back.
+      function cueTextFor(step, boundNames) {
+        if (step.match === "name-binding-use") return boundNames[step.bindAs] || "";
+        if (step.match === "shape-because") return `let ${step.name} = ${step.number} because "…"`;
+        if (step.match === "shape-custom-sky") return "custom-sky of …, …, …";
+        return step.text;
       }
 
       // ---- what a lesson's own lines actually use, derived rather than
-      // declared: no LESSONS[i] carries a hand-kept `vocab` field, so this
-      // can never drift from what the lesson actually teaches. A placeable
-      // must appear as a call header ("<name> of") — a name mentioned only
-      // in prose text can't leak a word into the key that lesson never
-      // asks her to type. Skies/grounds match their exact quoted phrase;
-      // naming words match as whole words. --------------------------------
+      // declared — no LESSONS[i] carries a hand-kept `vocab` field, so the
+      // key can never drift from what the lesson actually teaches.
+
+      function lessonProgramText(lessonIndex) {
+        return LESSONS[lessonIndex].items
+          .map((it) => (it.role === "frame" ? it.text : cueTextForCanonical(it)))
+          .join("\n");
+      }
+      // The CANONICAL (non-learner-authored) text for a slot item — used only
+      // for vocabulary derivation and the worked example, never sent to the
+      // engine as "what she typed".
+      function cueTextForCanonical(step) {
+        if (step.match === "shape-because") return `let ${step.name} = ${step.number} because "example reason"`;
+        if (step.match === "shape-custom-sky") return "  custom-sky of 0.78, 0.14, 55";
+        if (step.match === "name-binding-def") return step.text;
+        if (step.match === "name-binding-use") return "your sky name here";
+        return step.text;
+      }
 
       function vocabForLesson(lessonIndex) {
-        const text = LESSONS[lessonIndex].lines.join("\n");
+        const text = lessonProgramText(lessonIndex);
         const placeables = PLACEABLES.filter((p) =>
           new RegExp(`(^|\\n)\\s*${p.name.replace(/-/g, "\\-")}\\s+of\\b`).test(text),
         );
@@ -756,7 +916,10 @@
         return { placeables, skies, grounds, naming };
       }
 
-      // ---- the read-only key, generated from js/scene_vocab.mjs (§420-421) --
+      function withGlyph(label) {
+        const glyph = DIRECTION_GLYPH[label];
+        return glyph ? `${label} ${glyph}` : label;
+      }
 
       function renderKey(lessonIndex) {
         const vocab = vocabForLesson(lessonIndex);
@@ -787,14 +950,6 @@
         $("key-note").textContent = COORDINATE_NOTE;
       }
 
-      // A direction glyph next to across/down in the key's own argument
-      // labels too — how-tall gets none, the same rule the why-card and the
-      // coordinate tip already follow (DIRECTION_GLYPH above).
-      function withGlyph(label) {
-        const glyph = DIRECTION_GLYPH[label];
-        return glyph ? `${label} ${glyph}` : label;
-      }
-
       // ---- the your-own-sky lesson: unlabeled colour swatches, real OKLCH -> hex --
 
       const SWATCHES = [
@@ -815,107 +970,301 @@
           btn.className = "swatch";
           btn.style.background = rgbHex(l, c, h);
           btn.setAttribute("aria-label", "a color for your sky");
-          btn.addEventListener("click", () => insertAtCursor(`custom-sky of ${l}, ${c}, ${h}\n`));
+          // The picker writes NUMBERS, never her words (the authorship
+          // boundary) — inserting a complete custom-sky line into the type
+          // field counts as completing that line the same as typing it
+          // would (§4), by simply dispatching the same input event.
+          btn.addEventListener("click", () => {
+            typeEl.value = `custom-sky of ${l}, ${c}, ${h}`;
+            typeEl.dispatchEvent(new Event("input"));
+          });
           row.appendChild(btn);
         }
       }
 
-      // The picker writes NUMBERS, never her words (§420/§424's authorship
-      // boundary): this inserts one literal line at wherever her cursor
-      // already is, and nothing else in her program is touched.
-      function insertAtCursor(text) {
-        const start = source.selectionStart;
-        const end = source.selectionEnd;
-        const before = source.value.slice(0, start);
-        const after = source.value.slice(end);
-        source.value = `${before}${text}${after}`;
-        const caret = start + text.length;
-        source.setSelectionRange(caret, caret);
-        source.focus();
-        updateGhost();
+      // ==========================================================================
+      // STATE — one lesson at a time, one slot at a time.
+      // ==========================================================================
+
+      let currentLesson = 0;
+      let items = [];
+      let itemIndex = 0;
+      let committedLines = [];
+      let committedMeta = []; // { role, paints, line, gap } parallel to committedLines
+      let boundNames = {};
+      let activeStep = null;
+      let lessonComplete = false;
+      let paintedLineFor = {}; // element key ("sky","ground",...) -> committed line number
+
+      let lastLines = [];
+      let lastTrace = [];
+      let lastAnnotations = {};
+      let lastMarks = [];
+      let lastSourceLines = [];
+      let lastMarksBySourceLine = new Map();
+      let litLine = -1;
+      let hasPaintedThisLesson = false; // orientation mode: on until this lesson's first paint
+      let keyHidden = false; // view state only — resets to false on every lesson switch
+      let hintsHidden = false; // final lesson only — view state
+      let seedTicket = null; // decorative save ticket — never fed back into the program
+
+      function buildMarksBySourceLine() {
+        const map = new Map();
+        for (const mark of lastMarks) {
+          const entry = lastTrace[mark.line];
+          if (!entry) continue;
+          const sourceLine = entry[1];
+          if (!map.has(sourceLine)) map.set(sourceLine, []);
+          map.get(sourceLine).push(mark);
+        }
+        return map;
       }
 
-      // ---- ghost text: she types OVER it, line by line, and only the part
-      // she has not reached yet keeps showing (§425). Recomputed on every
-      // keystroke against her CURRENT text, so it recedes exactly as far as
-      // she has typed on each line — never the whole block disappearing
-      // after one keystroke, and never sitting underneath what she wrote. A
-      // line she has already matched or outgrown within the current lesson
-      // naturally shows nothing more to hint.
-      function updateGhost() {
-        if (ghostHidden) {
-          ghostEl.textContent = "";
+      // ---- friendly error text (carried forward unchanged in spirit): a
+      // learner-facing softening of raw engine tags, pointing at the key. A
+      // line only ever reaches the engine after it has already matched a
+      // step's own acceptance pattern, so this fires only for a genuine
+      // engine-level problem (most commonly: a free-form reason or sky name
+      // whose text the parser cannot accept, e.g. an apostrophe Planes
+      // strings do not escape) — never for an ordinary wrong guess, which is
+      // a silent no-op long before the engine is ever asked.
+      function friendlyError(error) {
+        if (error.tag === "unknown-sky-feeling" || error.tag === "unknown-ground-feeling") {
+          const said = error.message.replace(/^[a-z-]+:\s*/, "").split(" — try one of:")[0];
+          return `${said} — try one of the skies or grounds shown in the key.`;
+        }
+        if (error.tag === "unknown-name" || error.tag === "unknown-function") {
+          const m = /no (?:name|function named) '([^']+)'/.exec(error.message || "");
+          const nameSaid = m ? m[1] : null;
+          return nameSaid
+            ? `“${nameSaid}” isn't a word this program knows yet — check it against the key.`
+            : "That's a word this program doesn't know yet — check it against the key.";
+        }
+        return error.message.replace(/^[a-z-]+:\s*/, "");
+      }
+
+      // ==========================================================================
+      // THE GOAL-LIVE LOOP (§4)
+      // ==========================================================================
+
+      function renderStack() {
+        stackEl.innerHTML = committedMeta.map((m, i) => {
+          const cls = ["sl", m.role === "frame" ? "frame" : "authored"];
+          if (m.gap) cls.push("gap");
+          return `<span class="${cls.join(" ")}" data-line="${i + 1}">${esc(committedLines[i])}</span>`;
+        }).join("\n");
+      }
+
+      function renderProgress() {
+        const slots = items.filter((it) => it.role === "slot");
+        const doneSlots = committedMeta.filter((m) => m.role === "slot").length;
+        progEl.innerHTML = slots.map((_, i) => `<i class="${i < doneSlots ? "on" : ""}"></i>`).join("");
+      }
+
+      function renderActiveGoal() {
+        if (!activeStep) {
+          activeStepEl.hidden = true;
           return;
         }
-        ghostEl.textContent = ghostFor(currentLesson, source.value);
+        activeStepEl.hidden = false;
+        const slots = items.filter((it) => it.role === "slot");
+        const doneSlots = committedMeta.filter((m) => m.role === "slot").length;
+        stepCountEl.textContent = `STEP ${doneSlots + 1} OF ${slots.length}`;
+        goalTextEl.innerHTML = activeStep.goal;
+        cueTextEl.textContent = cueTextFor(activeStep, boundNames);
+        stepOopsEl.hidden = true;
+        renderProgress();
+        swatchesEl.hidden = !(LESSONS[currentLesson].surfaces.swatches && activeStep.match === "shape-custom-sky");
       }
-      source.addEventListener("input", updateGhost);
 
-      // ---- autosize: the editor grows to fit whichever is taller, the
-      // typed text or the current lesson's ghost. A program taller than a
-      // fixed fold otherwise clips invisibly, with no signal there is more
-      // to type — the ghost <pre> is position:absolute; inset:0 inside
-      // .editor-wrap, whose only in-flow child is the textarea, so sizing
-      // the textarea sizes the ghost with it. ------------------------------
-
-      function autosizeEditor() {
-        source.style.height = "auto";
-        const minPx = 15 * parseFloat(getComputedStyle(document.documentElement).fontSize || "16");
-        const need = Math.max(source.scrollHeight, ghostEl.scrollHeight, minPx);
-        source.style.height = `${need}px`;
+      function commitItem(item, committedText) {
+        committedLines.push(committedText);
+        const meta = { role: item.role, paints: item.paints ?? null, line: committedLines.length, gap: Boolean(item.gap) };
+        committedMeta.push(meta);
+        if (meta.paints) paintedLineFor[meta.paints] = meta.line;
+        renderStack();
+        return meta.line;
       }
-      source.addEventListener("input", autosizeEditor);
 
-      // ---- the ghost-hide toggle (final lesson only): view state, not
-      // saved state — resets to shown on every setLesson. -----------------
-
-      const ghostToggleEl = $("ghost-toggle");
-      function updateGhostToggleLabel() {
-        ghostToggleEl.textContent = ghostHidden ? "show hints" : "hide hints";
-        ghostToggleEl.setAttribute("aria-pressed", String(ghostHidden));
+      // Advance past every leading FRAME item (auto-committed, never typed),
+      // stopping at the next slot or the end of the lesson.
+      function advanceFrames() {
+        while (itemIndex < items.length && items[itemIndex].role === "frame") {
+          commitItem(items[itemIndex], items[itemIndex].text);
+          itemIndex++;
+        }
+        if (itemIndex >= items.length) {
+          activeStep = null;
+          renderActiveGoal();
+          finishLesson();
+          return;
+        }
+        activeStep = items[itemIndex];
+        renderActiveGoal();
+        typeEl.value = "";
+        typeEl.disabled = false;
+        typeEl.focus();
       }
-      ghostToggleEl.addEventListener("click", () => {
-        ghostHidden = !ghostHidden;
-        updateGhostToggleLabel();
-        updateGhost();
-      });
 
-      // ---- the key-hide toggle (final lesson only, same pattern as the
-      // ghost toggle above): the key stays available, but a learner ready
-      // for a clean surface can hide it too. View state, not saved state —
-      // resets to shown on every setLesson. -------------------------------
+      async function runAndPaint() {
+        const src = committedLines.join("\n");
+        const result = await runProgramGraph(src, { base: BASE, loader });
+        if (result.error) return { ok: false, message: friendlyError(result.error) };
+        lastLines = result.output;
+        lastTrace = result.trace ?? [];
+        lastAnnotations = result.annotations ?? {};
+        lastSourceLines = committedLines.slice();
 
-      const keyToggleEl = $("key-toggle");
-      function updateKeyToggleLabel() {
-        keyToggleEl.textContent = keyHidden ? "show key" : "hide key";
-        keyToggleEl.setAttribute("aria-pressed", String(keyHidden));
+        const recorder = markSink();
+        walkDrawing(lastLines, recorder);
+        lastMarks = recorder.marks.slice();
+
+        const { errors } = paint(ctx, lastLines, DIMENSIONS);
+        if (errors.length) {
+          const stale = staleRendererWarning(errors, HIGHEST_VERSION);
+          return { ok: false, message: stale || `something in this program's drawing didn't match what the renderer expected: ${errors.map((e) => e.message).join("; ")}` };
+        }
+        lastMarksBySourceLine = buildMarksBySourceLine();
+        hasPaintedThisLesson = true;
+        updateCoordHintVisibility();
+        return { ok: true };
       }
-      function applyKeyVisibility() {
-        keyEl.hidden = !LESSONS[currentLesson].surfaces.key || keyHidden;
-      }
-      keyToggleEl.addEventListener("click", () => {
-        keyHidden = !keyHidden;
-        updateKeyToggleLabel();
-        applyKeyVisibility();
-      });
 
-      // ---- orientation mode: a live coordinate before there is a picture
-      // to ask about. On until the current lesson's first successful run,
-      // then off — the stage is either a space to find a spot in, or a
-      // picture to click and ask about, never both at once. ---------------
+      // A "name-binding-def" header (lesson 6's `to <her sky name>:`) is
+      // never valid Planes on its own — a block header with no body is a
+      // syntax error, not a program that merely draws nothing yet. That
+      // step's own body line (shape-custom-sky) always follows it
+      // immediately, so the run is deferred until the body completes —
+      // together they are the "multiline" step §4 describes, expressed as
+      // two ordinary slot items rather than a second parallel shape.
+      function stepRunsAlone(item) {
+        return item.match !== "name-binding-def";
+      }
+
+      async function onTypeInput() {
+        if (!activeStep) return;
+        const result = testStep(activeStep, typeEl.value, boundNames);
+        if (!result) return; // a wrong line is a silent no-op (§4, failure mode 4)
+
+        typeEl.disabled = true;
+        const item = activeStep;
+        const lineNumber = commitItem(item, result.committed);
+
+        if (!stepRunsAlone(item)) {
+          stepOopsEl.hidden = true;
+          itemIndex++;
+          advanceFrames();
+          return;
+        }
+
+        const outcome = await runAndPaint();
+        if (!outcome.ok) {
+          // Roll back: the pattern matched, but the engine refused it (e.g.
+          // an unescaped character in a free-form reason). The last good
+          // picture stays exactly as it was; nothing advances.
+          committedLines.pop();
+          committedMeta.pop();
+          if (item.paints && paintedLineFor[item.paints] === lineNumber) delete paintedLineFor[item.paints];
+          renderStack();
+          stepOopsEl.hidden = false;
+          stepOopsTextEl.textContent = outcome.message;
+          typeEl.disabled = false;
+          typeEl.focus();
+          return;
+        }
+        stepOopsEl.hidden = true;
+        if (item.paints) revealLine(lineNumber);
+        itemIndex++;
+        advanceFrames();
+      }
+      typeEl.addEventListener("input", onTypeInput);
+
+      function finishLesson() {
+        lessonComplete = true;
+        completeMsgEl.hidden = false;
+        completeMsgEl.innerHTML = `✓ ${esc(LESSONS[currentLesson].title)} is complete — every line typed by you.`;
+        if (hasPaintedThisLesson) {
+          askHintEl.hidden = false;
+        }
+      }
+
+      // ---- the stream-draw-into-settle-pulse reveal (§6, checkpoint §498) ---
+
+      function bboxForMarks(marks) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const m of marks) {
+          for (const [x, y] of outlineOf(m)) {
+            minX = Math.min(minX, x); minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+          }
+        }
+        if (!isFinite(minX)) return null;
+        return { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) };
+      }
+
+      function stageRectFor(bbox) {
+        const canvasRect = canvas.getBoundingClientRect();
+        const stageRect = stageEl.getBoundingClientRect();
+        const scaleX = canvasRect.width / DIMENSIONS.width;
+        const scaleY = canvasRect.height / DIMENSIONS.height;
+        const offX = canvasRect.left - stageRect.left;
+        const offY = canvasRect.top - stageRect.top;
+        const pad = 4;
+        return {
+          left: offX + bbox.x * scaleX - pad,
+          top: offY + bbox.y * scaleY - pad,
+          width: bbox.w * scaleX + pad * 2,
+          height: bbox.h * scaleY + pad * 2,
+        };
+      }
+
+      function revealLine(lineNumber) {
+        const marks = lastMarksBySourceLine.get(lineNumber) || [];
+        const bbox = bboxForMarks(marks);
+        if (!bbox) return;
+        const r = stageRectFor(bbox);
+
+        if (prefersReducedMotion()) {
+          const fade = document.createElement("div");
+          fade.className = "reveal-fade";
+          Object.assign(fade.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+          stageEl.appendChild(fade);
+          requestAnimationFrame(() => fade.classList.add("in"));
+          setTimeout(() => fade.remove(), 300);
+          return;
+        }
+
+        const wipe = document.createElement("div");
+        wipe.className = "reveal-wipe";
+        Object.assign(wipe.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+        stageEl.appendChild(wipe);
+        requestAnimationFrame(() => requestAnimationFrame(() => wipe.classList.add("done")));
+        wipe.addEventListener("transitionend", () => {
+          wipe.remove();
+          const pulse = document.createElement("div");
+          pulse.className = "reveal-pulse";
+          const pad = 14;
+          Object.assign(pulse.style, {
+            left: `${r.left - pad}px`, top: `${r.top - pad}px`,
+            width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px`,
+          });
+          stageEl.appendChild(pulse);
+          pulse.addEventListener("animationend", () => pulse.remove());
+        }, { once: true });
+      }
+
+      // ---- orientation mode: a live coordinate before there is a picture to
+      // ask about. On until this lesson's first paint, then off.
 
       function hideCoordTip() {
         coordTipEl.hidden = true;
       }
       function updateCoordHintVisibility() {
-        coordHintEl.hidden = hasRunThisLesson;
-        askHintEl.hidden = !hasRunThisLesson;
-        if (hasRunThisLesson) hideCoordTip();
+        coordHintEl.hidden = hasPaintedThisLesson;
+        askHint2El.hidden = !hasPaintedThisLesson;
+        if (hasPaintedThisLesson) hideCoordTip();
       }
 
-      // The click-to-ask handler (below) needs this same pixel-to-coordinate
-      // transform — one function, so there is never a second copy of the
-      // rect math to drift out of sync with it.
       function canvasPointFromEvent(event) {
         const rect = canvas.getBoundingClientRect();
         return {
@@ -925,7 +1274,7 @@
       }
 
       function showCoordTipAt(x, y) {
-        if (hasRunThisLesson) return;
+        if (hasPaintedThisLesson) return;
         coordTipEl.textContent = formatCoord(x, y);
         coordTipEl.hidden = false;
         const rect = canvas.getBoundingClientRect();
@@ -942,208 +1291,14 @@
       });
       canvas.addEventListener("pointerleave", hideCoordTip);
 
-      // ---- lesson-aware progressive disclosure — surfaces are DECLARED by
-      // each lesson (§10.4), never inferred from an index comparison. ------
-
-      function clampLesson(n) {
-        return Math.min(LESSONS.length - 1, Math.max(0, Number.isFinite(n) ? Math.trunc(n) : 0));
-      }
-
-      function renderLessonNav() {
-        $("lessons").innerHTML = LESSONS.map(
-          (l, i) => `<button type="button" data-lesson="${i}">${i + 1}<small>${esc(l.title)}</small></button>`,
-        ).join("");
-      }
-
-      // Switching lessons resets the editor to empty so the new lesson's
-      // ghost guides from a blank surface (carried-over text otherwise
-      // suppresses the ghost wherever it's already "long enough"). Guarded
-      // by the in-page lesson-advance dialog ONLY when there is unsaved
-      // text — an untouched lesson switches silently.
-      let pendingLessonSwitch = null; // { n, pushUrl } while the lesson-advance dialog is open
-      function setLesson(n, { pushUrl = true } = {}) {
-        if (source.value.trim() !== "") {
-          pendingLessonSwitch = { n, pushUrl };
-          lessonScrim.classList.add("show");
-          return;
-        }
-        performLessonSwitch(n, { pushUrl });
-      }
-
-      function performLessonSwitch(n, { pushUrl = true } = {}) {
-        currentLesson = clampLesson(n);
-        source.value = "";
-        ghostHidden = false;
-        keyHidden = false;
-        hasRunThisLesson = false;
-        const lesson = LESSONS[currentLesson];
-        for (const btn of document.querySelectorAll("#lessons button")) {
-          btn.setAttribute("aria-pressed", String(Number(btn.dataset.lesson) === currentLesson));
-        }
-        lessonNEl.textContent = String(currentLesson + 1);
-        lessonSayEl.innerHTML = lesson.lesson;
-        renderKey(currentLesson);
-        applyKeyVisibility();
-        updateCoordHintVisibility();
-        swatchesEl.hidden = !lesson.surfaces.swatches;
-        capstoneEl.hidden = !lesson.surfaces.capstone;
-        ghostToggleEl.hidden = !lesson.surfaces.ghostToggle;
-        updateGhostToggleLabel();
-        keyToggleEl.hidden = !lesson.surfaces.keyToggle;
-        updateKeyToggleLabel();
-        if (pushUrl) {
-          const url = new URL(location.href);
-          url.searchParams.delete("week");
-          url.searchParams.set("lesson", String(currentLesson));
-          history.replaceState(null, "", url);
-        }
-        updateGhost();
-        autosizeEditor();
-      }
-
-      $("lessons").addEventListener("click", (e) => {
-        const btn = e.target.closest("button");
-        if (btn) setLesson(Number(btn.dataset.lesson));
-      });
-
-      // ---- running ---------------------------------------------------------
-
-      function showOops(text) {
-        if (!text) {
-          oopsEl.hidden = true;
-          oopsTextEl.textContent = "";
-          return;
-        }
-        oopsEl.hidden = false;
-        oopsTextEl.textContent = text;
-      }
-
-      async function run() {
-        hideCard();
-        const src = source.value;
-        // GHOST TEXT IS UN-RUNNABLE (§425): an editor with nothing typed
-        // into it yet must not be sent to the engine at all — not "runs and
-        // draws nothing," not "throws a parser error naming line 1" —
-        // nothing happens beyond a gentle nudge.
-        if (src.trim() === "") {
-          showOops("Type something in your program, then press Run.");
-          return;
-        }
-        showOops(null);
-        const result = await runProgramGraph(src, { base: BASE, loader });
-        if (result.error) {
-          showOops(friendlyError(result.error));
-          return;
-        }
-        lastLines = result.output;
-        lastTrace = result.trace ?? [];
-        lastAnnotations = result.annotations ?? {};
-        lastSourceLines = src.split("\n");
-
-        const recorder = markSink();
-        walkDrawing(lastLines, recorder);
-        lastMarks = recorder.marks.slice();
-
-        const { errors } = paint(ctx, lastLines, DIMENSIONS);
-        if (errors.length) {
-          const stale = staleRendererWarning(errors, HIGHEST_VERSION);
-          showOops(stale || `something in this program's drawing didn't match what the renderer expected: ${errors.map((e) => e.message).join("; ")}`);
-          return;
-        }
-        hasRunThisLesson = true;
-        updateCoordHintVisibility();
-      }
-
-      // A typo must not blank her work (§4.2): the last good picture stays
-      // on screen, and the ribbon speaks in the language the key already
-      // uses rather than the raw tag.
-      function friendlyError(error) {
-        // scene.planes's own message already names the fix ("try one of:
-        // <phrases>"); stripping the raw tag prefix and pointing at the
-        // key instead of repeating the list keeps the key as the teacher,
-        // not the error (§6.3), without saying "try one of" twice.
-        if (error.tag === "unknown-sky-feeling" || error.tag === "unknown-ground-feeling") {
-          const said = error.message.replace(/^[a-z-]+:\s*/, "").split(" — try one of:")[0];
-          return `${said} — try one of the skies or grounds shown in the key below.`;
-        }
-        // interp.mjs's Env.get (a bare, unresolved name) and its function
-        // lookup (a call like "banana of 10, 10") raise two DIFFERENT tags
-        // for the same first-timer mistake — an unrecognised word — each
-        // with its own raw fix ("define it first: let <name> = ..." /
-        // "define it: to <name>: ...") that reads as machine grammar.
-        // Point at the key instead, the same discipline the sky/ground
-        // softening above follows. `let` is only offered as a next step for
-        // unknown-name — it names a NUMBER (lesson 4), not a callable, so it
-        // is not a real fix for an unrecognised call.
-        if (error.tag === "unknown-name" || error.tag === "unknown-function") {
-          const m = /no (?:name|function named) '([^']+)'/.exec(error.message || "");
-          const nameSaid = m ? m[1] : null;
-          const suffix = error.tag === "unknown-name" ? ", or name it yourself first with let." : ".";
-          return nameSaid
-            ? `“${nameSaid}” isn't a word this program knows yet — check the spelling against the key below${suffix}`
-            : `That's a word this program doesn't know yet — check it against the key below${suffix}`;
-        }
-        return error.message.replace(/^[a-z-]+:\s*/, "");
-      }
-
-      function repaintFrame() {
-        if (!lastLines.length) return;
-        paint(ctx, lastLines, DIMENSIONS);
-      }
-
-      runBtn.addEventListener("click", () => { run(); });
-      source.addEventListener("keydown", (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();
-      });
-
-      // ---- the editor's own line highlight ---------------------------------
-
-      function lineMetrics() {
-        const cs = getComputedStyle(source);
-        return { lineHeight: parseFloat(cs.lineHeight) || 26, paddingTop: parseFloat(cs.paddingTop) || 0 };
-      }
-      const measureCtx = document.createElement("canvas").getContext("2d");
-      function charCapacity() {
-        const cs = getComputedStyle(source);
-        const contentWidth = source.clientWidth - parseFloat(cs.paddingLeft || "0") - parseFloat(cs.paddingRight || "0");
-        measureCtx.font = cs.font;
-        const charWidth = measureCtx.measureText("M").width || 1;
-        return Math.max(1, Math.floor(contentWidth / charWidth));
-      }
-      function rowsForLine(text, capacity) {
-        if (capacity <= 0 || text.length === 0) return 1;
-        let rows = 1;
-        let col = 0;
-        for (const word of text.split(" ")) {
-          const piece = col === 0 ? word : ` ${word}`;
-          if (col > 0 && col + piece.length > capacity) {
-            rows += 1;
-            col = word.length;
-          } else {
-            col += piece.length;
-          }
-        }
-        return rows;
-      }
-      function positionHighlight() {
-        if (litLine < 0) {
-          highlightEl.style.display = "none";
-          return;
-        }
-        const { lineHeight, paddingTop } = lineMetrics();
-        const capacity = charCapacity();
-        let visualRow = 0;
-        for (let i = 0; i < litLine - 1; i++) visualRow += rowsForLine(lastSourceLines[i] ?? "", capacity);
-        const ownRows = rowsForLine(lastSourceLines[litLine - 1] ?? "", capacity);
-        highlightEl.style.display = "block";
-        highlightEl.style.height = `${lineHeight * ownRows}px`;
-        highlightEl.style.top = `${paddingTop + visualRow * lineHeight - source.scrollTop}px`;
-      }
-      function highlightLine(n) { litLine = n; positionHighlight(); }
-      function hideHighlight() { litLine = -1; positionHighlight(); }
-      source.addEventListener("scroll", positionHighlight);
-
-      // ---- click the picture, ask why (§417-418) ---------------------------
+      // ==========================================================================
+      // PER-ELEMENT WHY (§5) — extended to sky/ground backdrops, which
+      // hitTest deliberately refuses (isBackdrop) since they cover the whole
+      // drawing area. Answered instead from the REGION + the source line the
+      // goal loop already knows painted it — reusing hit.mjs/marks.mjs's own
+      // exported primitives (invert/containsPoint/applyMatrix), never a
+      // hardcoded horizon constant.
+      // ==========================================================================
 
       const FUNC_HEADER = /^to\s+((?:(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)(?:\s+(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)*)\s*(?:of\b|:)/;
       const CALL_HEADER = /^(?!let\b)((?:(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)(?:\s+(?!of\b)[A-Za-z_][A-Za-z0-9_-]*)*)\s*(?:of\b|$)/;
@@ -1160,34 +1315,6 @@
         return m ? m[1] : null;
       }
 
-      // The right-hand side of the line that binds `name` — inside the
-      // enclosing definition when there is one, or the program's only
-      // binding of that name otherwise (garden.html's own bindingOf).
-      function bindingOf(name, definition) {
-        const pattern = new RegExp(
-          `^\\s*(?:let\\s+)?${name.replace(/[-.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=\\s*(.+?)(?:\\s+because\\s.*)?$`,
-        );
-        const all = [];
-        let inScope = null;
-        let current = null;
-        for (const text of lastSourceLines) {
-          const def = FUNC_HEADER.exec(text);
-          if (def) current = def[1];
-          const m = pattern.exec(text);
-          if (!m) continue;
-          all.push(m[1].trim());
-          if (inScope === null && current === definition) inScope = m[1].trim();
-        }
-        if (inScope) return inScope;
-        return all.length === 1 ? all[0] : null;
-      }
-
-      // Every name reachable from this node's derivation, nearest first —
-      // used ONLY to resolve a SPECIFIC name we already know we want
-      // (parseArgs below), never to pick "interesting" names heuristically.
-      // That is what keeps an internal helper's own locals (scene.planes's
-      // `stem-top`, `petal`'s `cx`/`cy`) off the card: nothing ever asks for
-      // them by name.
       function namedNodes(node) {
         const found = [];
         const queue = [node];
@@ -1220,13 +1347,6 @@
         return null;
       }
 
-      // "call-name of a, b, c" -> { name: "call-name", args: ["a", "b", "c"] }
-      // — read straight off the SOURCE TEXT she wrote, the same discipline
-      // why.mjs's own header names ("the expression comes out of the
-      // PROGRAM'S OWN TEXT"). Not `export`ed — nothing can import from an
-      // inline module script — js/test/tutor_redesign.test.mjs extracts
-      // this function's own source text and evaluates it directly, the
-      // same convention the prior build's CALL_HEADER extraction used.
       function parseArgs(text) {
         const m = /^((?:(?!\bof\b)[A-Za-z_][A-Za-z0-9_-]*)(?:\s+(?!\bof\b)[A-Za-z_][A-Za-z0-9_-]*)*)\s+of\s+(.+)$/.exec(text.trim());
         if (!m) return null;
@@ -1263,11 +1383,14 @@
 
       const NUMBER_RE = /^-?\d+(\.\d+)?$/;
       const BARE_NAME_RE = /^[A-Za-z_][A-Za-z0-9_-]*$/;
+      const QUOTED_RE = /^"([^"]*)"$/;
 
-      // Numbers a picker writes, not a child: a friendlier fallback label
-      // set for `custom-sky`'s own three OKLCH numbers, so its card still
-      // reads as plain words rather than "value 1".
-      const CARD_LABELS = { "custom-sky": ["lightness", "richness", "hue"] };
+      // Numbers a picker writes, and phrases a lesson's own vocabulary
+      // fixes, not names her program binds: a page-local presentation map,
+      // same discipline as the original tutor's own custom-sky entry — NOT
+      // a second copy of scene_vocab.mjs, just how THIS page labels a
+      // backdrop call's own quoted argument in its why-card.
+      const CARD_LABELS = { "custom-sky": ["lightness", "richness", "hue"], sky: ["time"], ground: ["kind"] };
 
       function hideCard() {
         cardEl.hidden = true;
@@ -1275,11 +1398,19 @@
         hideHighlight();
       }
 
-      function renderCard(index, x, y) {
-        const mark = lastMarks[index];
-        const entry = lastTrace[mark.line];
-        if (!entry) return;
-        const [node, sourceLine] = entry;
+      function highlightLine(n) {
+        litLine = n;
+        for (const el of stackEl.querySelectorAll(".sl.lit")) el.classList.remove("lit");
+        if (n > 0) {
+          const el = stackEl.querySelector(`.sl[data-line="${n}"]`);
+          if (el) el.classList.add("lit");
+        }
+      }
+      function hideHighlight() {
+        highlightLine(-1);
+      }
+
+      function renderCardCore(node, sourceLine, x, y) {
         const definition = definitionAt(sourceLine);
         const sourceText = lastSourceLines[sourceLine - 1] ?? "";
         const c = card(node, { annotations: lastAnnotations, line: sourceLine, sourceText });
@@ -1287,20 +1418,20 @@
         const called = definition ? null : callAt(sourceLine);
         const subject = definition ?? called ?? `line ${sourceLine}`;
 
-        // ---- the plain-word numbers (§417: across, down, tall — never raw
-        // r/x/y) and, alongside them, HER SENTENCE if one of her own named
-        // values is among this call's own arguments. -----------------------
         const parsed = parseArgs(sourceText);
         const placeable = parsed && PLACEABLES.find((p) => p.name === parsed.name);
-        const labels = placeable ? placeable.shape : CARD_LABELS[parsed && parsed.name] || null;
+        const labels = placeable ? placeable.shape : (parsed && CARD_LABELS[parsed.name]) || null;
         const nums = [];
         let leadSentence = null;
         if (parsed && labels) {
           const chain = namedNodes(node);
           parsed.args.forEach((arg, i) => {
             const label = labels[i] ?? `number ${i + 1}`;
+            const quoted = QUOTED_RE.exec(arg);
             if (NUMBER_RE.test(arg)) {
               nums.push([label, arg]);
+            } else if (quoted) {
+              nums.push([label, quoted[1]]);
             } else if (BARE_NAME_RE.test(arg)) {
               const found = chain.find((n) => n.name === arg);
               nums.push([label, found ? found.value : arg]);
@@ -1308,20 +1439,12 @@
             }
           });
         }
-        // A sentence attached somewhere deeper in the chain (not one of
-        // this call's own immediate arguments) still leads, if there is one
-        // — why.mjs's own annotationsInChain, nearest first.
         if (!leadSentence && c.because.length) leadSentence = c.because[0].text;
 
         const midHtml = leadSentence
           ? `<div class="voice">“${esc(leadSentence)}”</div>`
           : `<div class="invite"><div class="big">this one has no reason yet.</div><div class="how">want to give it one? name its number with <code>let</code>, then add <code>because "…"</code> in your own words.</div></div>`;
 
-        // A direction glyph reinforces the label as a DIRECTION, not just a
-        // word — the click that opens this card is the confirmation moment
-        // for whichever number she just changed. `how-tall` gets none: a
-        // height is a size, not a position, and a left/right/up/down arrow
-        // would claim a direction the number doesn't have.
         const numsHtml = nums.length
           ? `<div class="nums">${nums.map(([k, v]) => {
               const glyph = DIRECTION_GLYPH[k];
@@ -1343,7 +1466,7 @@
         const rect = canvas.getBoundingClientRect();
         const scale = rect.width / DIMENSIONS.width;
         cardEl.hidden = false;
-        cardEl.style.left = `${Math.max(4, Math.min(rect.width - 286, x * scale + 12))}px`;
+        cardEl.style.left = `${Math.max(4, Math.min(rect.width - 280, x * scale + 12))}px`;
         cardEl.style.top = "0px";
         cardEl.style.maxHeight = `${Math.max(120, rect.height - 8)}px`;
         const wanted = y * scale - 8;
@@ -1354,14 +1477,56 @@
         highlightLine(sourceLine);
       }
 
+      function renderCardForMark(index, x, y) {
+        const mark = lastMarks[index];
+        const entry = lastTrace[mark.line];
+        if (!entry) return;
+        const [node, sourceLine] = entry;
+        renderCardCore(node, sourceLine, x, y);
+      }
+
+      function renderCardForSourceLine(sourceLine, x, y) {
+        const entry = lastTrace.find((e) => e && e[1] === sourceLine);
+        if (!entry) return;
+        const [node] = entry;
+        renderCardCore(node, sourceLine, x, y);
+      }
+
+      function pointInMark(mark, x, y) {
+        const inverse = invert(mark.matrix);
+        if (!inverse) return false;
+        const [lx, ly] = applyMatrix(inverse, x, y);
+        return containsPoint(mark, lx, ly, 3);
+      }
+
+      // Sky then ground would both be plausible for a point near the
+      // horizon; ground is the narrower, more specific band, so it is
+      // checked first — the same "most specific wins" rule hitTest itself
+      // applies by walking marks topmost-first.
+      function backdropLineAt(x, y) {
+        for (const key of ["ground", "sky"]) {
+          const lineNo = paintedLineFor[key];
+          if (lineNo == null) continue;
+          const marks = lastMarksBySourceLine.get(lineNo) || [];
+          for (const m of marks) if (pointInMark(m, x, y)) return lineNo;
+        }
+        return null;
+      }
+
       canvas.addEventListener("click", (event) => {
+        if (!hasPaintedThisLesson) return;
         const { x, y } = canvasPointFromEvent(event);
         const found = hitTest(lastMarks, x, y, { area: DIMENSIONS });
-        if (found < 0) {
-          hideCard();
+        if (found >= 0) {
+          renderCardForMark(found, x, y);
           return;
         }
-        renderCard(found, x, y);
+        const backdropLine = backdropLineAt(x, y);
+        if (backdropLine != null) {
+          renderCardForSourceLine(backdropLine, x, y);
+          return;
+        }
+        hideCard();
       });
 
       document.addEventListener("keydown", (event) => {
@@ -1373,108 +1538,146 @@
         hideCard();
       });
 
-      // ---- exports: a picture (SVG/PNG), and a program (save/reopen) -------
+      // ==========================================================================
+      // THE WORKED EXAMPLE (§7) — a complete, correct solution, rendered by
+      // the real engine into a small canvas beside the code, one statement
+      // per line, matching scene.planes's own source shape.
+      // ==========================================================================
 
-      $("save-svg").addEventListener("click", () => {
-        if (!lastLines.length) { showOops("nothing has been drawn yet — press Run first"); return; }
-        const { svg, errors } = toSvg(lastLines, DIMENSIONS);
-        if (errors.length) { showOops(errors.map((e) => e.message).join("; ")); return; }
-        downloadSvg(svg, "tutor-garden");
-      });
-      $("save-png").addEventListener("click", () => {
-        if (!lastLines.length) { showOops("nothing has been drawn yet — press Run first"); return; }
-        downloadPng(canvas, lastLines, DIMENSIONS, "tutor-garden");
-        canvas.width = DIMENSIONS.width * CANVAS_SCALE;
-        canvas.height = DIMENSIONS.height * CANVAS_SCALE;
-        repaintFrame();
-      });
-
-      // §9: save-and-reopen IS the persistence model — no localStorage, no
-      // sessionStorage. The file is her program's own source text, nothing
-      // more; a friend (or her own next login) opens it back into this same
-      // editor and it regrows identically, because the program is a pure
-      // function of what it says.
-      function saveGardenFile() {
-        if (source.value.trim() === "") return false;
-        seedTicket = seedTicket ?? String(Math.floor(Math.random() * 900000) + 100000);
-        $("seedbox").textContent = seedTicket;
-        $("cert-seed").textContent = seedTicket;
-        const blob = new Blob([source.value], { type: "text/plain;charset=utf-8" });
-        downloadBlob(blob, exportFilename("garden", "planes", new Date()));
-        return true;
+      async function renderWorkedExample(lessonIndex) {
+        const text = lessonProgramText(lessonIndex);
+        const codeHtml = text.split("\n").map((l) => `<span class="lit">${esc(l)}</span>`).join("\n");
+        $("ex-code").innerHTML = codeHtml;
+        try {
+          const result = await runProgramGraph(text, { base: BASE, loader });
+          if (!result.error) paint(exCtx, result.output, EXAMPLE_DIMENSIONS);
+        } catch {
+          // the worked example is illustrative only — a failure here never
+          // blocks the real lesson
+        }
       }
 
-      $("save-garden").addEventListener("click", () => {
-        if (!saveGardenFile()) { showOops("write your garden first, then save it"); return; }
-      });
+      // ---- the through-line (§7): present from lesson 1, sourced from the
+      // real effect surface, never asserted.
 
-      $("open-garden").addEventListener("change", async (e) => {
-        const file = e.target.files && e.target.files[0];
-        if (!file) return;
-        const text = await file.text();
-        source.value = text;
-        updateGhost();
-        showOops(null);
-        run();
-      });
-
-      // ---- the final-lesson capstone: the honest-garden card, derived not
-      // asserted (§424) -------------------------------------------------
-
-      async function updateHonestCard() {
-        if (!LESSONS[currentLesson].surfaces.capstone) return;
-        const src = source.value.trim() === "" ? LESSONS[currentLesson].lines.join("\n") : source.value;
-        const el = $("honest-text");
-        // A program mid-typed is routinely syntactically incomplete — that
-        // is normal, not a fault, and analyseProgramGraph's own uses_in()
-        // scan can throw on it directly (before its own try/catch even
-        // starts). This card is best-effort background text, never a
-        // question that "performs" anything a reader is waiting on, so any
-        // failure here — a real syntax error or a genuine analysis error —
-        // falls back to the same honest, generic sentence rather than
-        // surfacing as a console error.
-        let surface = null;
+      async function renderThroughLine(lessonIndex) {
+        const el = $("through-line-text");
+        el.textContent = "computing…";
         try {
-          ({ surface } = await analyseProgramGraph(src, { base: BASE, loader }));
+          const { surface } = await analyseProgramGraph(lessonProgramText(lessonIndex), { base: BASE, loader });
+          if (!surface) { el.textContent = "Only draw the picture — nothing else."; return; }
+          const boundaries = surface.boundaries();
+          const onlyPicture = boundaries.length === 1 && boundaries[0] === "console";
+          el.textContent = onlyPicture
+            ? "Only draw the picture — it can't reach the internet, open your files, or send anything anywhere, and you can prove it without even running it."
+            : `Touches: ${boundaries.join(", ")}.`;
         } catch {
-          surface = null;
+          el.textContent = "Only draw the picture — nothing else.";
         }
-        if (!surface) {
-          el.textContent = "Your garden can't secretly do anything — it can't reach the internet, open your files, or send anything anywhere.";
+      }
+
+      // ==========================================================================
+      // LESSON NAV + SWITCH (save-first dialog, never framed as loss)
+      // ==========================================================================
+
+      function clampLesson(n) {
+        return Math.min(LESSONS.length - 1, Math.max(0, Number.isFinite(n) ? Math.trunc(n) : 0));
+      }
+
+      function renderLessonNav() {
+        $("lessons").innerHTML = LESSONS.map(
+          (l, i) => `<button type="button" data-lesson="${i}">${i + 1}<small>${esc(l.title)}</small></button>`,
+        ).join("");
+      }
+
+      function hasUnsavedWork() {
+        if (LESSONS[currentLesson].surfaces.capstone) return freeplayEl.value.trim() !== "";
+        return committedMeta.some((m) => m.role === "slot");
+      }
+
+      let pendingLessonSwitch = null;
+      function setLesson(n, { pushUrl = true } = {}) {
+        if (hasUnsavedWork()) {
+          pendingLessonSwitch = { n, pushUrl };
+          lessonScrim.classList.add("show");
           return;
         }
-        const boundaries = surface.boundaries();
-        const onlyPicture = boundaries.length === 1 && boundaries[0] === "console";
-        el.textContent = onlyPicture
-          ? "Your garden touches exactly one thing outside itself — the picture. It can't reach the internet, open your files, or send anything anywhere, and you can prove it without even running it."
-          : `Your garden touches: ${boundaries.join(", ")}. You can see exactly what it can and can't do without ever running it.`;
+        performLessonSwitch(n, { pushUrl });
       }
 
-      // Debounced: the honest card is background reflection text, not
-      // something a keystroke should pay for immediately — re-analysing on
-      // every character (and, worse, re-fetching a `use` target for every
-      // partial word typed on the way to spelling it) is wasted work for a
-      // panel nobody is staring at mid-keystroke.
-      let honestCardTimer = null;
-      function scheduleHonestCard() {
-        if (!LESSONS[currentLesson].surfaces.capstone) return;
-        clearTimeout(honestCardTimer);
-        honestCardTimer = setTimeout(updateHonestCard, 500);
+      function currentProgramText() {
+        return LESSONS[currentLesson].surfaces.capstone ? freeplayEl.value : committedLines.join("\n");
       }
 
-      const scrim = $("scrim");
-      $("open-cert").addEventListener("click", () => {
-        const name = $("child-name").value.trim();
-        $("cert-name").textContent = name || "a Planes gardener";
-        if (seedTicket) $("cert-seed").textContent = seedTicket;
-        scrim.classList.add("show");
+      async function performLessonSwitch(n, { pushUrl = true } = {}) {
+        currentLesson = clampLesson(n);
+        const lesson = LESSONS[currentLesson];
+        items = lesson.items;
+        itemIndex = 0;
+        committedLines = [];
+        committedMeta = [];
+        boundNames = {};
+        activeStep = null;
+        lessonComplete = false;
+        paintedLineFor = {};
+        hasPaintedThisLesson = false;
+        keyHidden = false;
+        hintsHidden = false;
+        hideCard();
+        renderStack(); // clear the stale stack immediately — advanceFrames()
+        // (or the capstone branch below) repopulates it; the previous
+        // lesson's completed lines must not linger on screen in between.
+
+        // A fresh lesson starts from a blank stage — the previous lesson's
+        // picture must not linger behind the new goal sequence just because
+        // nothing has painted yet in this one.
+        lastLines = [];
+        lastTrace = [];
+        lastAnnotations = {};
+        lastMarks = [];
+        lastSourceLines = [];
+        lastMarksBySourceLine = new Map();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        for (const btn of document.querySelectorAll("#lessons button")) {
+          btn.setAttribute("aria-pressed", String(Number(btn.dataset.lesson) === currentLesson));
+        }
+        lessonTitleEl.textContent = lesson.title;
+        lessonSayEl.innerHTML = lesson.say;
+        renderKey(currentLesson);
+        applyKeyVisibility();
+        updateCoordHintVisibility();
+        askHintEl.hidden = true;
+        completeMsgEl.hidden = true;
+        swatchesEl.hidden = true;
+        capstoneEl.hidden = !lesson.surfaces.capstone;
+        updateHintsToggleLabel();
+        updateKeyToggle2Label();
+        renderWorkedExample(currentLesson);
+        renderThroughLine(currentLesson);
+
+        if (pushUrl) {
+          const url = new URL(location.href);
+          url.searchParams.delete("week");
+          url.searchParams.set("lesson", String(currentLesson));
+          history.replaceState(null, "", url);
+        }
+
+        if (lesson.surfaces.capstone) {
+          activeStepEl.hidden = true;
+          freeplayEl.value = lesson.items.map((it) => it.text).join("\n");
+          await runFreeplay();
+          finishLesson();
+        } else {
+          advanceFrames();
+        }
+      }
+
+      $("lessons").addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (btn) setLesson(Number(btn.dataset.lesson));
       });
-      $("cert-x").addEventListener("click", () => scrim.classList.remove("show"));
-      $("cert-close2").addEventListener("click", () => scrim.classList.remove("show"));
-      $("cert-print").addEventListener("click", () => window.print());
-      scrim.addEventListener("click", (e) => { if (e.target === scrim) scrim.classList.remove("show"); });
 
-      // ---- the lesson-advance dialog: save-first, never framed as loss ----
       const lessonScrim = $("lesson-scrim");
       function closeLessonDialog() {
         lessonScrim.classList.remove("show");
@@ -1496,16 +1699,181 @@
         if (event.key === "Escape" && lessonScrim.classList.contains("show")) closeLessonDialog();
       });
 
-      // ---- leaving with unsaved work ----------------------------------
-      //
-      // §9's save-and-reopen IS the persistence model — no localStorage, no
-      // autosave. Without this, a refresh, a closed tab, or a back-swipe
-      // loses everything typed with no warning beyond the lesson-advance
-      // dialog above, which only fires on an in-page lesson change, never
-      // on navigating away. The browser owns the prompt's wording; setting
-      // returnValue is what triggers it across engines.
+      // ---- the key-hide toggle (final lesson only): the key stays
+      // available, but a learner ready for a clean surface can hide it.
+
+      const keyToggleEl = $("key-toggle");
+      const keyToggle2El = $("key-toggle2");
+      function applyKeyVisibility() {
+        keyEl.hidden = !LESSONS[currentLesson].surfaces.key || keyHidden;
+        keyToggleEl.hidden = !LESSONS[currentLesson].surfaces.toggles;
+        keyToggleEl.setAttribute("aria-pressed", String(keyHidden));
+        keyToggleEl.textContent = keyHidden ? "show key" : "hide key";
+      }
+      function updateKeyToggle2Label() {
+        keyToggle2El.hidden = !LESSONS[currentLesson].surfaces.toggles;
+        keyToggle2El.setAttribute("aria-pressed", String(keyHidden));
+        keyToggle2El.textContent = keyHidden ? "show key" : "hide key";
+      }
+      function toggleKey() {
+        keyHidden = !keyHidden;
+        applyKeyVisibility();
+        updateKeyToggle2Label();
+      }
+      keyToggleEl.addEventListener("click", toggleKey);
+      keyToggle2El.addEventListener("click", toggleKey);
+
+      // ---- the hints-hide toggle (final lesson only): hides the lead/
+      // worked-example area for a clean surface, per §2b's preserved
+      // affordance (mapped from the old ghost-hide toggle).
+      const hintsToggleEl = $("hints-toggle");
+      function updateHintsToggleLabel() {
+        hintsToggleEl.hidden = !LESSONS[currentLesson].surfaces.toggles;
+        hintsToggleEl.setAttribute("aria-pressed", String(hintsHidden));
+        hintsToggleEl.textContent = hintsHidden ? "show hints" : "hide hints";
+      }
+      hintsToggleEl.addEventListener("click", () => {
+        hintsHidden = !hintsHidden;
+        $("example").style.display = hintsHidden ? "none" : "";
+        updateHintsToggleLabel();
+      });
+
+      // ==========================================================================
+      // EXPORTS: a picture (SVG/PNG), and a program (save/reopen)
+      // ==========================================================================
+
+      $("save-svg").addEventListener("click", () => {
+        if (!lastLines.length) return;
+        const { svg, errors } = toSvg(lastLines, DIMENSIONS);
+        if (errors.length) return;
+        downloadSvg(svg, "tutor-garden");
+      });
+      $("save-png").addEventListener("click", () => {
+        if (!lastLines.length) return;
+        downloadPng(canvas, lastLines, DIMENSIONS, "tutor-garden");
+        canvas.width = DIMENSIONS.width * CANVAS_SCALE;
+        canvas.height = DIMENSIONS.height * CANVAS_SCALE;
+        if (lastLines.length) paint(ctx, lastLines, DIMENSIONS);
+      });
+
+      function saveGardenFile() {
+        const text = currentProgramText();
+        if (text.trim() === "") return false;
+        seedTicket = seedTicket ?? String(Math.floor(Math.random() * 900000) + 100000);
+        $("seedbox").textContent = seedTicket;
+        $("cert-seed").textContent = seedTicket;
+        const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+        downloadBlob(blob, exportFilename("garden", "planes", new Date()));
+        return true;
+      }
+      $("save-garden").addEventListener("click", () => { saveGardenFile(); });
+
+      // Reopening a saved garden repopulates the goal-live state sensibly: a
+      // reopened program is, by definition, already complete, so it lands in
+      // the capstone lesson's free-form editor (the one surface built for
+      // an already-finished, further-editable garden) rather than being
+      // forced back through a goal sequence it may not even match.
+      $("open-garden").addEventListener("change", async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const text = await file.text();
+        await performLessonSwitch(LESSONS.length - 1, { pushUrl: false });
+        freeplayEl.value = text;
+        await runFreeplay();
+      });
+
+      // ==========================================================================
+      // LESSON 7 CAPSTONE: the free-form editor, the honest card, the
+      // certificate — carried forward unchanged in behaviour.
+      // ==========================================================================
+
+      function showFreeplayOops(text) {
+        if (!text) {
+          freeplayOopsEl.hidden = true;
+          freeplayOopsTextEl.textContent = "";
+          return;
+        }
+        freeplayOopsEl.hidden = false;
+        freeplayOopsTextEl.textContent = text;
+      }
+
+      async function runFreeplay() {
+        const src = freeplayEl.value;
+        if (src.trim() === "") return;
+        const result = await runProgramGraph(src, { base: BASE, loader });
+        if (result.error) {
+          showFreeplayOops(friendlyError(result.error));
+          return;
+        }
+        lastLines = result.output;
+        lastTrace = result.trace ?? [];
+        lastAnnotations = result.annotations ?? {};
+        lastSourceLines = src.split("\n");
+        const recorder = markSink();
+        walkDrawing(lastLines, recorder);
+        lastMarks = recorder.marks.slice();
+        const { errors } = paint(ctx, lastLines, DIMENSIONS);
+        if (errors.length) {
+          const stale = staleRendererWarning(errors, HIGHEST_VERSION);
+          showFreeplayOops(stale || `something in this program's drawing didn't match what the renderer expected: ${errors.map((e) => e.message).join("; ")}`);
+          return;
+        }
+        showFreeplayOops(null);
+        lastMarksBySourceLine = buildMarksBySourceLine();
+        hasPaintedThisLesson = true;
+        updateCoordHintVisibility();
+        scheduleHonestCard();
+      }
+
+      let freeplayTimer = null;
+      freeplayEl.addEventListener("input", () => {
+        clearTimeout(freeplayTimer);
+        freeplayTimer = setTimeout(runFreeplay, 400);
+      });
+
+      async function updateHonestCard() {
+        if (!LESSONS[currentLesson].surfaces.capstone) return;
+        const src = freeplayEl.value.trim() === "" ? LESSONS[currentLesson].items.map((it) => it.text).join("\n") : freeplayEl.value;
+        const el = $("honest-text");
+        let surface = null;
+        try {
+          ({ surface } = await analyseProgramGraph(src, { base: BASE, loader }));
+        } catch {
+          surface = null;
+        }
+        if (!surface) {
+          el.textContent = "Your garden can't secretly do anything — it can't reach the internet, open your files, or send anything anywhere.";
+          return;
+        }
+        const boundaries = surface.boundaries();
+        const onlyPicture = boundaries.length === 1 && boundaries[0] === "console";
+        el.textContent = onlyPicture
+          ? "Your garden touches exactly one thing outside itself — the picture. It can't reach the internet, open your files, or send anything anywhere, and you can prove it without even running it."
+          : `Your garden touches: ${boundaries.join(", ")}. You can see exactly what it can and can't do without ever running it.`;
+      }
+      let honestCardTimer = null;
+      function scheduleHonestCard() {
+        if (!LESSONS[currentLesson].surfaces.capstone) return;
+        clearTimeout(honestCardTimer);
+        honestCardTimer = setTimeout(updateHonestCard, 500);
+      }
+
+      const scrim = $("scrim");
+      $("open-cert").addEventListener("click", () => {
+        const name = $("child-name").value.trim();
+        $("cert-name").textContent = name || "a Planes gardener";
+        if (seedTicket) $("cert-seed").textContent = seedTicket;
+        scrim.classList.add("show");
+      });
+      $("cert-x").addEventListener("click", () => scrim.classList.remove("show"));
+      $("cert-close2").addEventListener("click", () => scrim.classList.remove("show"));
+      $("cert-print").addEventListener("click", () => window.print());
+      scrim.addEventListener("click", (e) => { if (e.target === scrim) scrim.classList.remove("show"); });
+
+      // ---- leaving with unsaved work: save-and-reopen IS the persistence
+      // model — no localStorage, no autosave.
       window.addEventListener("beforeunload", (e) => {
-        if (source.value.trim() === "") return;
+        if (!hasUnsavedWork()) return;
         e.preventDefault();
         e.returnValue = "";
       });
@@ -1515,23 +1883,19 @@
       renderSwatches();
       renderLessonNav();
 
-      // ?lesson=N is the only URL param this page writes; ?week=N is read
-      // as a fallback for old links (week n -> lesson n-1), never written.
       const bootParams = new URL(location.href).searchParams;
       const initialLesson = bootParams.has("lesson")
         ? Number(bootParams.get("lesson"))
         : bootParams.has("week")
           ? Number(bootParams.get("week")) - 1
           : 0;
-      setLesson(initialLesson, { pushUrl: false });
+      performLessonSwitch(initialLesson, { pushUrl: false });
 
       const stale = staleModuleWarning();
       if (stale) {
-        showOops(stale);
+        stepOopsEl.hidden = false;
+        stepOopsTextEl.textContent = stale;
       }
-      updateHonestCard();
-      source.addEventListener("input", scheduleHonestCard);
-      $("lessons").addEventListener("click", () => updateHonestCard());
     </script>
   </body>
 </html>
