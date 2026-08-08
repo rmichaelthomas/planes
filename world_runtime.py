@@ -18,8 +18,15 @@ The calling convention this build fixes (documented, not a language
 keyword, per the build prompt's explicit "do not invent a language
 keyword"): a program loaded through `WorldRuntime` must define
 
-    to world-init:              # 0 params, gives the initial world record
-    to advance of world, tick:  # 2 params, gives the next world record
+    to world-init:                      # 0 params, gives the initial world record
+    to advance of world, tick, events:  # 3 params, gives the next world record
+
+Horizon Phase 2 Build 1 (the input-event seam) extends the two-param
+`advance` convention to three: `events` is a Planes value — a list of
+typed event records, e.g. `[{ kind: "nudge" }]` — never a new language
+keyword, exactly like `world`/`tick` before it. A caller that passes
+nothing gets an empty list, which reproduces the old self-driving
+behavior byte-for-byte (see `advance()` below).
 
 `replay()` (interp.py, R3 §466-476) already establishes the shape this
 reuses: one `Interpreter`, several `run`-shaped calls against it in
@@ -28,7 +35,7 @@ sequence, `self.env`/`self.funcs` persisting across every one of them.
 `call` for every tick, instead of `run` called once per step.
 """
 import world_ir
-from interp import Interpreter, to_host
+from interp import Interpreter, from_foreign, to_host
 from planes_num import Number
 
 WORLD_INIT = "world-init"
@@ -70,7 +77,14 @@ class WorldRuntime:
         if ADVANCE not in self.itp.funcs:
             raise WorldRuntimeError(
                 f"'{path}' defines no '{ADVANCE}' function — "
-                f"a world program must declare `to {ADVANCE} of world, tick:`")
+                f"a world program must declare "
+                f"`to {ADVANCE} of world, tick, events:`")
+        advance_params = self.itp.funcs[ADVANCE].params
+        if len(advance_params) != 3:
+            raise WorldRuntimeError(
+                f"'{path}' declares '{ADVANCE}' with {len(advance_params)} "
+                f"parameter(s), not 3 — a world program must declare "
+                f"`to {ADVANCE} of world, tick, events:`")
         self.world = None
         self.tick = 0
 
@@ -85,7 +99,7 @@ class WorldRuntime:
         self.tick = 0
         return self.world
 
-    def advance(self):
+    def advance(self, events=None):
         """Call `advance` once more, producing the next world value.
 
         `self.world` is REPLACED with the new `Traced`, never mutated in
@@ -96,13 +110,25 @@ class WorldRuntime:
         this method performs. A caller holding the PREVIOUS tick's
         `Traced`/`.value` from an earlier `init()`/`advance()` return
         still has exactly what it had.
+
+        `events` is a plain host list of typed event records (e.g.
+        `[{"kind": "nudge"}]`), converted through `from_foreign` — the
+        same host-to-Planes boundary conversion `call_foreign` already
+        uses for a foreign call's return value — and handed to the
+        interpreter's own `mk_lit`, exactly as `tick` is on the line
+        below. `events=None` (the default) becomes an empty list, so a
+        caller that passes nothing reproduces the prior two-param
+        self-driving behavior byte-for-byte (build prompt invariant 1).
         """
         if self.world is None:
             raise WorldRuntimeError(
                 f"advance() called before init() — call init() once to run "
                 f"'{WORLD_INIT}' before any 'advance' batch")
         tick_traced = self.itp.mk_lit(Number.of(self.tick))
-        self.world = self.itp.call(ADVANCE, [self.world, tick_traced], self.itp.env, 0)
+        events_traced = self.itp.mk_lit(from_foreign([] if events is None else events),
+                                        label="events")
+        self.world = self.itp.call(
+            ADVANCE, [self.world, tick_traced, events_traced], self.itp.env, 0)
         self.tick += 1
         return self.world
 

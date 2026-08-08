@@ -134,17 +134,24 @@ class WorldKernel:
         self.prev_envelope = envelope
         self.revision = 0
 
-    def step(self):
+    def step(self, events=None):
         """Advance one tick. Returns `(delta, elapsed_seconds)` — the
         caller is responsible for handing both to a sink AFTER this
         returns, so the timed span above never includes sink cost (§4,
         §8 invariant 1). Raises `WorldKernelError` if `start()` was never
-        called, or if the tick's envelope carries a warning."""
+        called, or if the tick's envelope carries a warning.
+
+        `events` (default: none, i.e. the empty batch) is per-tick
+        production work — the input-event seam's own marshalling — and so
+        stays inside the timed span below exactly like the envelope
+        conversion already does (build prompt §3.3 / invariant 5); it is
+        passed straight through to `WorldRuntime.advance`, which is where
+        the host-to-Planes conversion actually happens."""
         if self.prev_envelope is None:
             raise WorldKernelError("start() must be called before step()")
 
         t0 = time.perf_counter()
-        self.runtime.advance()
+        self.runtime.advance(events)
         next_envelope, warnings = self.runtime.envelope
         delta = compute_delta(self.prev_envelope, next_envelope, self.revision)
         elapsed = time.perf_counter() - t0

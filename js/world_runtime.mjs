@@ -7,7 +7,7 @@
 // to a browser world host, which is out of this build's scope (§32 —
 // Phase 1+).
 
-import { Interpreter, toHost } from "./interp.mjs";
+import { Interpreter, fromForeign, toHost } from "./interp.mjs";
 import { PlanesNumber } from "./planes_num.mjs";
 import { runFile } from "./run_file.mjs";
 import { parseWorldEnvelope } from "./world_ir.mjs";
@@ -44,7 +44,15 @@ export class WorldRuntime {
     if (!this.itp.funcs.has(ADVANCE)) {
       throw new WorldRuntimeError(
         `'${this.path}' defines no '${ADVANCE}' function — a world program `
-          + `must declare \`to ${ADVANCE} of world, tick:\``,
+          + `must declare \`to ${ADVANCE} of world, tick, events:\``,
+      );
+    }
+    const advanceParams = this.itp.funcs.get(ADVANCE).params;
+    if (advanceParams.length !== 3) {
+      throw new WorldRuntimeError(
+        `'${this.path}' declares '${ADVANCE}' with ${advanceParams.length} `
+          + `parameter(s), not 3 — a world program must declare `
+          + `\`to ${ADVANCE} of world, tick, events:\``,
       );
     }
     this._loaded = true;
@@ -58,7 +66,13 @@ export class WorldRuntime {
     return this.world;
   }
 
-  advance() {
+  // `events` (default: []) is a plain host list of typed event records,
+  // converted through fromForeign — the same host-to-Planes boundary
+  // conversion call_foreign already uses for a foreign call's return value
+  // — and handed to mkLit, exactly as tick is on the line below. Passing
+  // nothing reproduces the prior two-param self-driving behavior
+  // byte-for-byte (build prompt invariant 1).
+  advance(events = []) {
     this._requireLoaded();
     if (this.world === null) {
       throw new WorldRuntimeError(
@@ -67,7 +81,9 @@ export class WorldRuntime {
       );
     }
     const tickTraced = this.itp.mkLit(PlanesNumber.of(this.tick));
-    this.world = this.itp.call(ADVANCE, [this.world, tickTraced], this.itp.env, 0);
+    const eventsTraced = this.itp.mkLit(fromForeign(events), "events");
+    this.world = this.itp.call(
+      ADVANCE, [this.world, tickTraced, eventsTraced], this.itp.env, 0);
     this.tick += 1;
     return this.world;
   }

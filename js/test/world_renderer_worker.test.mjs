@@ -170,6 +170,38 @@ test("SimulationWorkerHandle: an 'input' message is acknowledged on the next del
   });
 });
 
+// Horizon Phase 2 Build 1 (the input-event seam), graduating build prompt
+// §6.2 check D from scripts/verify-input-seam.mjs (deleted per
+// test_gate.py's C6/Ruling 3 — a verification script graduates into a
+// suite this gate runs or is deleted when its build merges): an "input"
+// message that carries a real typed event payload (not just a bare
+// sequence, the case the test above already covers) must actually steer
+// the next tick — "acknowledged" now means "applied on this tick".
+test("SimulationWorkerHandle: an 'input' message WITH an event payload changes the next delta's payload deterministically", async () => {
+  await withStubbedFixtureFetch(async () => {
+    const posted = [];
+    const handle = new SimulationWorkerHandle({ post: (m) => posted.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 });
+    await handle.boot();
+    handle.receive({ type: "input", sequence: 42, event: { kind: "nudge" } });
+    await waitUntil(() => posted.filter((m) => m.type === "delta").length >= 1);
+    handle.receive({ type: "cancel" });
+    const firstDelta = posted.find((m) => m.type === "delta");
+    assert.equal(firstDelta.acknowledgedInputSequence, 42);
+
+    const freshPosted = [];
+    const freshHandle = new SimulationWorkerHandle({ post: (m) => freshPosted.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 });
+    await freshHandle.boot();
+    await waitUntil(() => freshPosted.filter((m) => m.type === "delta").length >= 1);
+    freshHandle.receive({ type: "cancel" });
+    const freshFirstDelta = freshPosted.find((m) => m.type === "delta");
+
+    assert.notEqual(
+      firstDelta.delta.semanticHash, freshFirstDelta.delta.semanticHash,
+      "a nudge event's semantic hash must differ from a poke-free run — the event did not apply",
+    );
+  });
+});
+
 // Graduated from this build's own scripts/verify-renderer-pipeline.mjs
 // (check B2) before that script was deleted per test_gate.py's retirement
 // rule — durable assertions move into a suite the gate runs; everything

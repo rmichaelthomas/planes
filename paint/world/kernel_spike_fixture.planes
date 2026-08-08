@@ -68,6 +68,16 @@
 # behavior fields that actually change (transition, timerTicks,
 # stateMachine, emittedEvent) are ever named in a `with` clause — every
 # other field of every facet is left untouched on purpose.
+#
+# THE INPUT-EVENT SEAM (Horizon Phase 2 Build 1). `advance` gains a third
+# `events` parameter: a Planes list of typed event records, e.g.
+# `[{ kind: "nudge" }]` — a documented calling-convention value, not a new
+# keyword (world_runtime.py's own module docstring makes the same point).
+# This fixture recognizes exactly one event kind, "nudge", and reacts with
+# exactly one field change: `situation.x` gets a fixed, deterministic
+# `NUDGE_OFFSET` added on top of the tick-driven drift. An empty `events`
+# batch (the byte-identical-to-HEAD case, invariant 1) makes `nudge-offset`
+# below always 0, so nothing here perturbs the self-driving path.
 
 let wanderer-ids = [0, 1, 2, 3, 4, 5, 6] because "the seven unnamed contained subjects that round the fixture's twelve out past the five named roles"
 
@@ -142,6 +152,17 @@ to activity-event of active:
   else:
     give "none"
 
+# ---- the input-event seam: one recognized kind, one field change --------
+
+let nudge-offset-amount = 0.5 because "a small, fixed, exact-arithmetic offset — no sine/round precision concern, no cross-implementation drift risk (see the numeric-bridge note above compute-water-edge)"
+
+to nudge-offset of events:
+  let nudges = for each e in events where e.kind == "nudge": e
+  if (count of nudges) > 0:
+    give nudge-offset-amount
+  else:
+    give 0
+
 # ---- the seven wanderers: bulk per-tick load, no named role ---------------
 
 to compute-wanderer of wid, tick:
@@ -203,7 +224,10 @@ to world-init:
 # §12 item 5: pure, no ambient clock/random — the twelve subjects (five
 # named, seven wanderers) are all recomputed here as functions of `tick`;
 # see the header for why none of them is threaded through `world` itself.
-to advance of world, tick:
+# `events` is the third parameter the input-event seam adds (see the header
+# section above) — read, never threaded into `world` itself, for the same
+# reason `tick` isn't: every subject stays a pure function of its inputs.
+to advance of world, tick, events:
   let weather = compute-weather of tick
   let structure = compute-structure of tick
   let living = compute-living of tick
@@ -214,7 +238,8 @@ to advance of world, tick:
   let wanderer-load = count of active-wanderers
 
   let load = cycle-pos of (structure.occupancy + wanderer-load), 6
-  let new-situation = world.situation with x: focus.x, y: focus.y, occupancy: load
+  let x = focus.x + (nudge-offset of events)
+  let new-situation = world.situation with x: x, y: focus.y, occupancy: load
   let event = (activity-event of activity-subj.active)
   let new-behavior = world.behavior with transition: living.phase, timerTicks: weather.timer, stateMachine: living.phase, emittedEvent: event
 

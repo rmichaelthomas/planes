@@ -10,6 +10,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { WorldRuntime, WorldRuntimeError } from "../world_runtime.mjs";
 import {
   formatSourceMapPath,
@@ -201,5 +203,39 @@ test("many ticks stay valid world-v1 envelopes", async () => {
     const { normalized, warnings } = rt.envelope();
     assert.deepEqual(warnings, []);
     assert.equal(normalized.situation.x, i);
+  }
+});
+
+// ---- Horizon Phase 2 Build 1: the input-event seam ---------------------
+
+test("advance() with no events matches advance([]) with an explicit empty list", async () => {
+  // The durable, forward-looking form of build prompt invariant 1: the
+  // events=[] default must always agree with an explicit empty list, not
+  // just on this PR's own before/after comparison.
+  const rt1 = new WorldRuntime(DEMO, { host: new TestHost() });
+  await rt1.load();
+  rt1.init();
+  const rt2 = new WorldRuntime(DEMO, { host: new TestHost() });
+  await rt2.load();
+  rt2.init();
+  for (let i = 0; i < 10; i++) {
+    rt1.advance();
+    rt2.advance([]);
+    assert.deepEqual(rt1.envelope(), rt2.envelope());
+  }
+});
+
+test("a program declaring advance with the wrong arity refuses at load", async () => {
+  const src = "to world-init:\n  give { x: 0 }\nto advance of world, tick:\n  give world\n";
+  const dir = path.dirname(fileURLToPath(import.meta.url));
+  const repoRoot = path.resolve(dir, "../..");
+  const tmpName = `tmp-wrong-arity-${process.pid}-${Date.now()}.planes`;
+  const tmpPath = path.join(repoRoot, tmpName);
+  fs.writeFileSync(tmpPath, src);
+  try {
+    const rt = new WorldRuntime(tmpName, { host: new TestHost() });
+    await assert.rejects(() => rt.load(), WorldRuntimeError);
+  } finally {
+    fs.unlinkSync(tmpPath);
   }
 });

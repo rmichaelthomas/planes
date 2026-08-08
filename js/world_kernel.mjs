@@ -76,13 +76,19 @@ export class WorldKernel {
   // Advance one tick. Returns { delta, elapsedSeconds } — the caller hands
   // both to a sink AFTER this returns, so sink cost is never inside the
   // timed span below (build prompt §4, §8 invariant 1).
-  step() {
+  //
+  // `events` (default: [], the empty batch) is per-tick production work —
+  // the input-event seam's own marshalling — and so stays inside the timed
+  // span below exactly like the envelope conversion already does (build
+  // prompt §3.3 / invariant 5); passed straight through to
+  // WorldRuntime.advance, which does the host-to-Planes conversion.
+  step(events = []) {
     if (this.prevEnvelope === null) {
       throw new WorldKernelError("start() must be called before step()");
     }
 
     const t0 = performance.now();
-    this.runtime.advance();
+    this.runtime.advance(events);
     const { normalized: nextEnvelope, warnings } = this.runtime.envelope();
     const delta = computeDelta(this.prevEnvelope, nextEnvelope, this.revision);
     const elapsedSeconds = (performance.now() - t0) / 1000;

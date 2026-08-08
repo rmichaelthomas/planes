@@ -29,7 +29,7 @@ import time
 REPO = os.path.dirname(os.path.abspath(__file__))
 
 READ_ONLY_CORE = (
-    "world_runtime.py", "world_ir.py", "world_delta.py",
+    "world_ir.py", "world_delta.py",
     "grammar/protocols/world-v1.json",
 )
 # `interp.py` was here through Horizon Phase 1's engine-kernel spike (this
@@ -41,6 +41,17 @@ READ_ONLY_CORE = (
 # successor guard: not "never changes" but "changes only inside `_seal`" —
 # a narrower, more precise invariant for exactly this file going forward,
 # not a loosening of the protection this list exists to provide.
+#
+# `world_runtime.py` was here through Phase 1 (no reason to touch it).
+# Horizon Phase 2 Build 1 (the input-event seam) has a named, in-scope
+# reason — §2 of that build prompt lists it as a file to modify, extending
+# `advance` from two params to three — so a blanket "untouched" assertion
+# would now fail an explicitly authorized build rather than catch scope
+# creep. No narrower successor guard is needed the way `interp.py` got one:
+# this build's own invariant 1 (empty-batch byte-identity,
+# test_world_runtime_conformance.py) already protects the property this
+# list existed to protect — that `advance`'s self-driving path is
+# unperturbed — more precisely than a blanket diff-emptiness check ever did.
 RESULTS_MD = os.path.join(REPO, "horizon-kernel-spike-results.md")
 KERNEL_SOURCE = os.path.join(REPO, "world_kernel.py")
 
@@ -112,7 +123,7 @@ def test_b_the_timed_span_in_step_never_calls_a_sink_by_static_inspection():
     changes."""
     with open(KERNEL_SOURCE, encoding="utf-8") as fh:
         src = fh.read()
-    step_body = src[src.index("def step(self):"):]
+    step_body = src[src.index("def step(self, events=None):"):]
     rest = step_body[1:]
     end = rest.index("\n    def ") + 1 if "\n    def " in rest else len(step_body)
     step_body = step_body[:end]
