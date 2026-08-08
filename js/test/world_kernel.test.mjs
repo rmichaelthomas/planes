@@ -73,3 +73,47 @@ test("identity and lineage never appear in a facet-patch", async () => {
     }
   }
 });
+
+// ---- Horizon Phase 2 Build 1: the input-event seam ---------------------
+
+test("step() with no events matches step([]) with an explicit empty list", async () => {
+  const k1 = await kernel();
+  const k2 = await kernel();
+  for (let i = 0; i < 20; i++) {
+    const { delta: d1 } = k1.step();
+    const { delta: d2 } = k2.step([]);
+    assert.deepEqual(d1, d2);
+  }
+});
+
+test("a nudge event changes exactly situation.x, deterministically", async () => {
+  const without = await kernel();
+  for (let i = 0; i < 10; i++) without.step();
+  const envWithout = without.prevEnvelope;
+
+  async function withNudge() {
+    const k = await kernel();
+    for (let i = 0; i < 9; i++) k.step();
+    k.step([{ kind: "nudge" }]);
+    return k;
+  }
+  const withA = await withNudge();
+  const withB = await withNudge();
+  assert.deepEqual(withA.prevEnvelope, withB.prevEnvelope, "the nudge reaction is not deterministic");
+
+  const envWith = withA.prevEnvelope;
+  const topDiffs = Object.keys(envWithout).filter(
+    (k) => JSON.stringify(envWithout[k]) !== JSON.stringify(envWith[k]),
+  );
+  assert.deepEqual(topDiffs, ["situation"], `expected only situation to differ, got: ${topDiffs}`);
+  const situationDiffs = Object.keys(envWithout.situation).filter(
+    (k) => envWithout.situation[k] !== envWith.situation[k],
+  );
+  assert.deepEqual(situationDiffs, ["x"], `expected only situation.x to differ, got: ${situationDiffs}`);
+
+  // A true one-tick effect: an empty batch on the very next tick shows no
+  // lingering influence from the nudge.
+  withA.step([]);
+  without.step([]);
+  assert.equal(withA.prevEnvelope.situation.x, without.prevEnvelope.situation.x);
+});

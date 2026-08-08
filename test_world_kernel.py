@@ -111,6 +111,60 @@ def test_the_percentile_table_is_never_average_only():
         assert key in p
 
 
+# =============================== Horizon Phase 2 Build 1: the input-event seam
+
+def test_step_with_no_events_matches_step_with_an_explicit_empty_list():
+    """The durable, forward-looking form of build prompt invariant 1: the
+    events=[] default must always agree with an explicit empty list, not
+    just on this PR's own before/after comparison against HEAD."""
+    k1, k2 = _kernel(), _kernel()
+    k1.start()
+    k2.start()
+    for _ in range(20):
+        d1, _ = k1.step()
+        d2, _ = k2.step([])
+        assert d1 == d2
+
+
+def test_a_nudge_event_changes_exactly_situation_x_deterministically():
+    """Build prompt §3.2 acceptance: one recognized event kind ("nudge"),
+    one observable field change (situation.x), deterministic across two
+    fresh runs — and the change disappears the instant the batch is empty
+    again on the following tick."""
+    without = _kernel()
+    without.start()
+    for _ in range(10):
+        without.step()
+    env_without = without.prev_envelope
+
+    def with_nudge():
+        k = _kernel()
+        k.start()
+        for _ in range(9):
+            k.step()
+        k.step([{"kind": "nudge"}])
+        return k
+
+    with_a = with_nudge()
+    with_b = with_nudge()
+    assert with_a.prev_envelope == with_b.prev_envelope, "the nudge reaction is not deterministic"
+
+    env_with = with_a.prev_envelope
+    diffs = {k: (env_without[k], env_with[k]) for k in env_without
+             if env_without[k] != env_with[k]}
+    assert list(diffs.keys()) == ["situation"], f"expected only situation to differ, got: {diffs.keys()}"
+    situation_diffs = {k: v for k, v in env_without["situation"].items()
+                       if v != env_with["situation"][k]}
+    assert list(situation_diffs.keys()) == ["x"], (
+        f"expected only situation.x to differ, got: {situation_diffs.keys()}")
+
+    # And the reaction is a true one-tick effect: an empty batch on the
+    # very next tick shows no lingering influence from the nudge.
+    with_a.step([])
+    without.step([])
+    assert with_a.prev_envelope["situation"]["x"] == without.prev_envelope["situation"]["x"]
+
+
 if __name__ == "__main__":
     fails = []
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]

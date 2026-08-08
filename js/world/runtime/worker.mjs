@@ -35,17 +35,20 @@
 // placeholder scene will show exactly one moving placeholder — that is this
 // protocol's real shape, not a shortcut this build took.
 //
-// NO INPUT-EVENT PARAMETER, HONESTLY CARRIED THROUGH. advance(world, tick)
-// takes no third "events" argument today — world_runtime.mjs's advance()
-// only ever passes (world, tick). This worker still implements the real
-// message-contract machinery for inbound input (§11.5: "typed events"): an
-// "input" message is received, sequenced, and acknowledged on the next
-// outgoing delta message — proving the plumbing — but it cannot yet steer
-// the simulation, because the language/runtime contract has no parameter
-// for it to steer through. That is a real, disclosed Phase-2-relevant gap
-// (design doc §12 item 5 names "fixed-step input/event batches" as the
-// target shape advance should eventually take), not something this build
-// silently papers over.
+// THE INPUT-EVENT SEAM (Horizon Phase 2 Build 1). advance(world, tick,
+// events) now takes a third argument — a Planes list of typed event
+// records — and this worker's "input" message branch buffers each
+// message's event payload (message.event, if present) rather than only
+// recording its sequence. _runOneTick() drains the whole buffer into
+// this._kernel.step(events) and clears it, so acknowledgedInputSequence on
+// the next outgoing delta reports the highest sequence actually DRAINED
+// into that step — "acknowledged" now means "applied on this tick", not
+// merely "received" (world_runtime.py/world_runtime.mjs's own module
+// docstrings state the same three-param convention). An "input" message
+// with no event payload (just a bare sequence) still gets drained — and
+// still advances acknowledgedInputSequence — but contributes nothing to
+// the events list, so it is a true no-op on the semantic tick, exactly as
+// it was before this build.
 //
 // FIXED-STEP RATE. 30 Hz, matching the kernel-spike build's own driver
 // (build prompt §1's kernel-spike precedent) and design doc §15's "never
@@ -61,7 +64,7 @@
 // gate failing for a reason that has nothing to do with the renderer
 // pipeline this build is actually proving. Recorded, not silently chosen.
 
-import { Interpreter, toHost } from "../../interp.mjs";
+import { Interpreter, fromForeign, toHost } from "../../interp.mjs";
 import { PlanesNumber } from "../../planes_num.mjs";
 import { BrowserHost } from "../../host_browser.mjs";
 import { BrowserModuleLoader } from "../../module_loader_browser.mjs";
@@ -113,6 +116,14 @@ export class BrowserWorldRuntime {
         `'${this.location}' defines no '${ADVANCE}' function`,
       );
     }
+    const advanceParams = this.itp.funcs.get(ADVANCE).params;
+    if (advanceParams.length !== 3) {
+      throw new WorkerKernelError(
+        `'${this.location}' declares '${ADVANCE}' with ${advanceParams.length} `
+          + `parameter(s), not 3 — a world program must declare `
+          + `\`to ${ADVANCE} of world, tick, events:\``,
+      );
+    }
     this._loaded = true;
     return this;
   }
@@ -131,13 +142,19 @@ export class BrowserWorldRuntime {
     return this.world;
   }
 
-  advance() {
+  // `events` (default: []) is a plain host list of typed event records,
+  // converted through fromForeign and handed to mkLit exactly as tick is —
+  // see js/world_runtime.mjs's BrowserWorldRuntime sibling for the same
+  // shape (build prompt §3.4).
+  advance(events = []) {
     this._requireLoaded();
     if (this.world === null) {
       throw new WorkerKernelError("advance() called before init()");
     }
     const tickTraced = this.itp.mkLit(PlanesNumber.of(this.tick));
-    this.world = this.itp.call(ADVANCE, [this.world, tickTraced], this.itp.env, 0);
+    const eventsTraced = this.itp.mkLit(fromForeign(events), "events");
+    this.world = this.itp.call(
+      ADVANCE, [this.world, tickTraced, eventsTraced], this.itp.env, 0);
     this.tick += 1;
     return this.world;
   }
@@ -182,12 +199,14 @@ export class BrowserWorldKernel {
     return normalized;
   }
 
-  step() {
+  // `events` (default: [], build prompt §3.3/invariant 5: stays inside the
+  // timed span below, exactly like the envelope conversion already does).
+  step(events = []) {
     if (this.prevEnvelope === null) {
       throw new WorkerKernelError("start() must be called before step()");
     }
     const t0 = performance.now();
-    this.runtime.advance();
+    this.runtime.advance(events);
     const { normalized: nextEnvelope, warnings } = this.runtime.envelope();
     const delta = computeDelta(this.prevEnvelope, nextEnvelope, this.revision);
     const elapsedSeconds = (performance.now() - t0) / 1000;
@@ -229,6 +248,12 @@ export class SimulationWorkerHandle {
     this._timer = null;
     this._fingerprint = null;
     this._latestInputSequence = 0;
+    // Buffered "input" messages awaiting the next tick's drain — a fixed-
+    // step kernel can accumulate more than one input between ticks (build
+    // prompt §1's disclosed inference: events is a BATCH), so this is an
+    // array, not a single slot. Each entry is { sequence, event }; `event`
+    // is null for a bare-sequence message (no typed event payload).
+    this._pendingInputs = [];
     this._nextTickAt = null;
     this._boundTick = () => this._runOneTick();
   }
@@ -274,12 +299,15 @@ export class SimulationWorkerHandle {
       return;
     }
     if (message.type === "input") {
-      // Acknowledged, not applied — see the module header's "no input-event
-      // parameter" note. Recording the highest sequence seen is enough to
-      // prove the inbound half of the message contract without pretending
-      // this fixture's advance() can react to it.
-      if (typeof message.sequence === "number" && message.sequence > this._latestInputSequence) {
-        this._latestInputSequence = message.sequence;
+      // Buffered, not applied yet — see the module header's "input-event
+      // seam" note. _runOneTick() drains this into the next kernel.step(),
+      // which is where "acknowledged" actually becomes "applied".
+      // message.event is optional: a bare-sequence message (no typed event
+      // payload) still gets buffered and drained, so its sequence still
+      // advances acknowledgedInputSequence, but it contributes nothing to
+      // the events list handed to advance() — a true no-op on the tick.
+      if (typeof message.sequence === "number") {
+        this._pendingInputs.push({ sequence: message.sequence, event: message.event ?? null });
       }
       return;
     }
@@ -306,9 +334,19 @@ export class SimulationWorkerHandle {
   _runOneTick() {
     this._timer = null;
     if (this._cancelled) return;
+    // Drain the whole buffer into this one step — every input received
+    // since the last tick is applied together, in arrival order (build
+    // prompt §1: events is a per-tick BATCH). Cleared immediately so a
+    // message arriving mid-step is held for the NEXT tick, never this one.
+    const drained = this._pendingInputs;
+    this._pendingInputs = [];
+    const events = drained.filter((i) => i.event !== null).map((i) => i.event);
+    for (const i of drained) {
+      if (i.sequence > this._latestInputSequence) this._latestInputSequence = i.sequence;
+    }
     let stepped;
     try {
-      stepped = this._kernel.step();
+      stepped = this._kernel.step(events);
     } catch (err) {
       this._emit({ type: "error", message: describeError(err) });
       this._cancelled = true;

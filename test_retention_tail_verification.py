@@ -211,7 +211,7 @@ def test_d_no_gc_call_between_the_two_perf_counter_reads_in_step():
     with open(KERNEL_SOURCE, encoding="utf-8") as fh:
         src = fh.read()
 
-    def_idx = src.find("    def step(self):")
+    def_idx = src.find("    def step(self, events=None):")
     assert def_idx != -1, "step() not found in world_kernel.py"
     next_def_idx = src.find("\n    def ", def_idx + 1)
     body = src[def_idx: next_def_idx if next_def_idx != -1 else len(src)]

@@ -7,7 +7,9 @@ new immutable value leaving tick N's value unchanged; the graph is loaded
 exactly once.
 """
 import copy
+import os
 import sys
+import tempfile
 
 import modules
 from host import TestHost
@@ -137,6 +139,50 @@ def test_many_ticks_stay_valid_world_v1_envelopes():
         normalized, warnings = rt.envelope
         assert warnings == []
         assert normalized["situation"]["x"] == i
+
+
+# =============================== Horizon Phase 2 Build 1: the input-event seam
+
+def test_advance_with_no_events_matches_advance_with_an_explicit_empty_list():
+    """The durable, forward-looking form of build prompt invariant 1
+    (empty-batch identity): `advance()` (relying on the `events=None`
+    default) must always produce exactly what `advance(events=[])` does —
+    not just today, on this PR's own before/after comparison, but for as
+    long as this default exists. A future change to the default is exactly
+    what this guards against."""
+    rt1 = WorldRuntime(DEMO, host=TestHost())
+    rt1.init()
+    rt2 = WorldRuntime(DEMO, host=TestHost())
+    rt2.init()
+    for _ in range(10):
+        rt1.advance()
+        rt2.advance(events=[])
+        assert rt1.envelope == rt2.envelope
+
+
+def test_a_program_declaring_advance_with_the_wrong_arity_refuses_at_construction():
+    """Invariant 4: a two-param `advance` (the pre-seam convention) is
+    refused with a clear `WorldRuntimeError`, not a generic `PlanesError`
+    surfacing only once `advance()` is first called."""
+    src = (
+        "to world-init:\n"
+        "  give { x: 0 }\n"
+        "to advance of world, tick:\n"
+        "  give world\n"
+    )
+    with tempfile.NamedTemporaryFile(
+            "w", suffix=".planes", dir=os.path.dirname(os.path.abspath(__file__)),
+            delete=False) as fh:
+        fh.write(src)
+        path = os.path.basename(fh.name)
+    try:
+        try:
+            WorldRuntime(path, host=TestHost())
+            assert False, "expected a WorldRuntimeError"
+        except WorldRuntimeError as e:
+            assert "3" in str(e) and "advance" in str(e)
+    finally:
+        os.unlink(os.path.join(os.path.dirname(os.path.abspath(__file__)), path))
 
 
 if __name__ == "__main__":

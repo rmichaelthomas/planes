@@ -29,20 +29,24 @@ REPO = os.path.dirname(os.path.abspath(__file__))
 NODE = "node"
 FIXTURE = "paint/world/kernel_spike_fixture.planes"
 TICK_COUNT = 60  # >= 2 full cycles of the fixture's longest period (weather, 24)
+NUDGE_TICK = 10  # Horizon Phase 2 Build 1: when the input-event nudge lands
 DELIM = "\n===TICK===\n"
 
 
-def python_tick_outcomes(n=TICK_COUNT):
+def python_tick_outcomes(n=TICK_COUNT, nudge_at_tick=None):
     k = WorldKernel(FIXTURE, host=TestHost())
     k.start()
     lines = []
-    for _ in range(n):
-        delta, _elapsed = k.step()
+    for i in range(n):
+        events = [{"kind": "nudge"}] if i == nudge_at_tick else []
+        delta, _elapsed = k.step(events)
         lines.append(canonical_delta_string(delta))
     return DELIM.join(lines)
 
 
-_JS_TICKS_SCRIPT = f"""
+def _js_ticks_script(n=TICK_COUNT, nudge_at_tick=None):
+    nudge_at = "null" if nudge_at_tick is None else str(nudge_at_tick)
+    return f"""
 import {{ WorldKernel }} from "./js/world_kernel.mjs";
 import {{ canonicalDeltaString }} from "./js/world_delta.mjs";
 import {{ TestHost }} from "./js/host.mjs";
@@ -50,17 +54,20 @@ import {{ TestHost }} from "./js/host.mjs";
 const k = new WorldKernel({json.dumps(FIXTURE)}, {{ host: new TestHost() }});
 await k.start();
 const lines = [];
-for (let i = 0; i < {TICK_COUNT}; i++) {{
-  const {{ delta }} = k.step();
+const nudgeAtTick = {nudge_at};
+for (let i = 0; i < {n}; i++) {{
+  const events = i === nudgeAtTick ? [{{ kind: "nudge" }}] : [];
+  const {{ delta }} = k.step(events);
   lines.push(canonicalDeltaString(delta));
 }}
 process.stdout.write(lines.join({json.dumps(DELIM)}));
 """
 
 
-def js_tick_outcomes():
+def js_tick_outcomes(n=TICK_COUNT, nudge_at_tick=None):
+    script = _js_ticks_script(n=n, nudge_at_tick=nudge_at_tick)
     r = subprocess.run(
-        [NODE, "--input-type=module", "-e", _JS_TICKS_SCRIPT],
+        [NODE, "--input-type=module", "-e", script],
         capture_output=True, text=True, cwd=REPO)
     if r.returncode != 0:
         raise AssertionError(f"js kernel script exited {r.returncode}: {r.stderr}")
@@ -86,6 +93,22 @@ def test_the_final_semantic_hash_matches_across_implementations():
     py_hash = [line for line in py_last.splitlines() if line.startswith("semantic-hash:")][0]
     js_hash = [line for line in js_last.splitlines() if line.startswith("semantic-hash:")][0]
     assert py_hash == js_hash
+
+
+def test_python_and_js_agree_on_a_kernel_soak_with_a_nudge_event():
+    """Horizon Phase 2 Build 1, graduating build prompt §6.2 check C: the
+    same fixture, seed, and a non-empty event batch (one "nudge" event at
+    NUDGE_TICK) must still produce byte-identical canonical delta strings
+    across Python and JS — the input-event seam extends the existing
+    determinism guarantee, it does not carve out an exception to it."""
+    py = python_tick_outcomes(n=NUDGE_TICK + 5, nudge_at_tick=NUDGE_TICK)
+    js = js_tick_outcomes(n=NUDGE_TICK + 5, nudge_at_tick=NUDGE_TICK)
+    py_ticks = py.split(DELIM)
+    js_ticks = js.split(DELIM)
+    assert len(py_ticks) == NUDGE_TICK + 5
+    assert len(js_ticks) == NUDGE_TICK + 5
+    for i, (p, j) in enumerate(zip(py_ticks, js_ticks)):
+        assert p == j, f"tick {i} diverges:\n--- python ---\n{p}\n--- js ---\n{j}"
 
 
 def test_the_gate_is_capable_of_failing():

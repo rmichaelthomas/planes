@@ -49,8 +49,13 @@ to world-init:
 
 # §12 item 5: a named advance function, called per fixed-step batch. Pure —
 # no ambient clock or random (spec §8.4) — and returns a NEW world record
-# via `with`, never mutating the one it was given (§12 item 6).
-to advance of world, tick:
+# via `with`, never mutating the one it was given (§12 item 6). `events`
+# (Horizon Phase 2 Build 1's input-event seam) is accepted per the
+# three-param calling convention world_runtime.py/js now require of every
+# loaded program, but this fixture's job is protocol conformance and
+# emission, not proving event reactions (paint/world/kernel_spike_fixture
+# .planes does that) — so it is read by no expression below, deliberately.
+to advance of world, tick, events:
   let situation = world.situation
   let new-situation = situation with x: situation.x + 1, state: "standing"
   give world with situation: new-situation
