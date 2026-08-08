@@ -223,14 +223,20 @@
       $("choice-prompt").textContent = PHASE_PROMPTS[phase] ?? "The landing holds its decision.";
     }
 
-    // Appended once an input's own sendInput() promise resolves — i.e.
-    // once the worker has ACKNOWLEDGED it (applied on that tick, per
-    // worker.mjs's own header) and client.lastSceneIntent.revision has
-    // therefore already advanced to the tick it applied on. delta: null
-    // (world_event_log.mjs's own optional field — no facet-patch delta
-    // exists for the scene-intent protocol, see that module's header).
-    function logAppliedEvent(event) {
-      const tick = client.lastSceneIntent?.revision ?? 0;
+    // `tick` comes from sendInput()'s own resolved value — the EXACT
+    // Planes-level tick the event was applied at, sourced by main.mjs
+    // directly from the worker message that acknowledged it. Earlier
+    // versions of this page read client.lastSceneIntent.revision here
+    // instead, AFTER the sendInput() promise resolved — a real bug (found
+    // live: a saved-snapshot replay diverged after a long session): by the
+    // time the two-rAF resolution delay elapses, the worker's own 30 Hz
+    // ticker can have already moved lastSceneIntent on to a LATER tick, so
+    // the logged tick was too high (sometimes by more than one), and every
+    // replayed event applied late or, once, past the snapshot's own tick,
+    // not at all. See main.mjs's _resolvePendingInputs for the fix.
+    // delta: null (world_event_log.mjs's own optional field — no
+    // facet-patch delta exists for the scene-intent protocol).
+    function logAppliedEvent(event, tick) {
       const subject = event.subject ?? event.choice ?? "crossing";
       eventLog.append(
         { tick, actor: "player", affectedSubjects: [subject], rationale: `${event.kind}:${event.choice ?? event.subject}`, delta: null, event },
@@ -240,7 +246,8 @@
 
     const onSelect = (id) => {
       selected = id;
-      client.sendInput({ kind: "select", subject: id }).then(() => logAppliedEvent({ kind: "select", subject: id }));
+      const event = { kind: "select", subject: id };
+      client.sendInput(event).then(({ tick }) => logAppliedEvent(event, tick));
     };
 
     const { client } = await boot({
@@ -265,8 +272,8 @@
       const button = event.target.closest("[data-kind]");
       if (!button) return;
       const applied = { kind: button.dataset.kind, choice: button.dataset.choice };
-      await client.sendInput(applied);
-      logAppliedEvent(applied);
+      const { tick } = await client.sendInput(applied);
+      logAppliedEvent(applied, tick);
     });
 
     $("pause-passage").addEventListener("click", () => {
