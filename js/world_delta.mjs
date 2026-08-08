@@ -3,9 +3,13 @@
 // docstring for the full single-subject-scope rationale and the
 // determinism/hashing discipline. test_world_delta_conformance.py (Python)
 // holds the two to actual byte-identical agreement.
+//
+// Browser-safe since Horizon Phase 1 (renderer pipeline): the only Node-only
+// pieces were node:path/node:url, used solely by the CLI-mode guard at the
+// bottom, now imported dynamically there (see world_ir.mjs's docstring for
+// the matching fix and why). computeDelta/canonicalDeltaString/semanticHash
+// themselves never touched Node.
 
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { sha256Hex } from "./sha256.mjs";
 import { FACET_ORDER, FIELD_ORDER, canonicalOutcomeString } from "./world_ir.mjs";
 
@@ -122,12 +126,21 @@ export function canonicalDeltaString(delta) {
 // CLI mode — `node js/world_delta.mjs < {"prev":...,"next":...,"revision":N}`
 // — so test_world_delta_conformance.py (Python) can shell out to this
 // implementation exactly as test_world_ir_conformance.py does for world_ir.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const chunks = [];
-  process.stdin.on("data", (c) => chunks.push(c));
-  process.stdin.on("end", () => {
-    const payload = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
-    const result = computeDelta(payload.prev, payload.next, payload.revision);
-    process.stdout.write(canonicalDeltaString(result));
-  });
+//
+// node:path/node:url are imported dynamically, only inside this Node-only
+// branch — see world_ir.mjs's matching CLI-mode block for why.
+if (typeof process !== "undefined" && process.argv[1]) {
+  const [{ default: path }, { fileURLToPath }] = await Promise.all([
+    import("node:path"),
+    import("node:url"),
+  ]);
+  if (path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    const chunks = [];
+    process.stdin.on("data", (c) => chunks.push(c));
+    process.stdin.on("end", () => {
+      const payload = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+      const result = computeDelta(payload.prev, payload.next, payload.revision);
+      process.stdout.write(canonicalDeltaString(result));
+    });
+  }
 }

@@ -11,15 +11,21 @@
 //
 // No coercion at the type boundary: a field whose value fails its declared
 // type refuses, never converts.
+//
+// BROWSER-SAFE SINCE HORIZON PHASE 1 (renderer pipeline). This file used to
+// read world-v1.json via node:fs at module load, which made it Node-only —
+// invisible until the first build that needed a real browser (main thread or
+// worker) to import it. The protocol is now a JSON module import, the same
+// mechanism browser_main.mjs already uses for vocabulary.json/amber.json/
+// core.json; PROTOCOL/SUPPORTED_VERSION/RECORDS hold the identical values
+// this always produced under Node. Only the CLI mode at the bottom of this
+// file (`node js/world_ir.mjs < envelope.json`, test_world_ir_conformance.py's
+// shell-out target) still needs node:path/node:url, imported dynamically
+// there so the static import list here stays browser-clean.
 
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import PROTOCOL from "../grammar/protocols/world-v1.json" with { type: "json" };
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const PROTOCOL_PATH = path.join(REPO_ROOT, "grammar", "protocols", "world-v1.json");
-
-export const PROTOCOL = JSON.parse(fs.readFileSync(PROTOCOL_PATH, "utf-8"));
+export { PROTOCOL };
 export const SUPPORTED_VERSION = PROTOCOL.version;
 export const RECORDS = PROTOCOL.records;
 
@@ -199,11 +205,23 @@ export function canonicalOutcomeString(envelope) {
 // test_world_ir_conformance.py (Python) can shell out to this
 // implementation exactly as the existing test_js_*.py suites shell out to
 // js/cli.mjs.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const chunks = [];
-  process.stdin.on("data", (c) => chunks.push(c));
-  process.stdin.on("end", () => {
-    const envelope = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
-    process.stdout.write(canonicalOutcomeString(envelope));
-  });
+//
+// node:path/node:url are imported dynamically, only inside this Node-only
+// branch — a static top-level import of either would fail module resolution
+// in a browser regardless of whether this branch ever runs (see the module
+// docstring). `typeof process !== "undefined"` is false in every browser, so
+// the dynamic imports are never even attempted there.
+if (typeof process !== "undefined" && process.argv[1]) {
+  const [{ default: path }, { fileURLToPath }] = await Promise.all([
+    import("node:path"),
+    import("node:url"),
+  ]);
+  if (path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    const chunks = [];
+    process.stdin.on("data", (c) => chunks.push(c));
+    process.stdin.on("end", () => {
+      const envelope = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+      process.stdout.write(canonicalOutcomeString(envelope));
+    });
+  }
 }

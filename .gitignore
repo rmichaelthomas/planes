@@ -44,3 +44,9 @@ mockups/the-living-garden.html
 # from past builds, which this does not untrack. This only keeps FUTURE
 # scratch drops out of `git status`.
 docs/superpowers/
+
+# playwright-cli session artifacts (snapshots, console/network logs) from
+# live-verifying a build in a real browser (Horizon Phase 1's renderer
+# pipeline being the first to use it here) — reproducible on demand, not
+# something any build carries forward.
+.playwright-cli/

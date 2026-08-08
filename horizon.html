@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Horizon — renderer pipeline (placeholder)</title>
+    <meta
+      name="description"
+      content="Horizon Phase 1: the renderer pipeline. Worker-simulated world deltas driving a Pixi performer, proven with deliberate placeholder art — not the visual target."
+    />
+    <link rel="canonical" href="https://github.com/rmichaelthomas/planes" />
+    <!--
+      THIS PAGE IS A PLUMBING DIAGNOSTIC, NOT A GAME SCREEN.
+
+      Horizon Phase 1 (design doc docs/superpowers/specs/2026-08-01-horizon-
+      living-passage-game-engine-design.md, §10-§11, §15-§16, §24.4) proves
+      that a world delta produced by the simulation kernel in a Worker
+      becomes a rendered frame on the main thread through PixiJS, without
+      losing determinism, and that the frame-time gates hold under a
+      sustained delta stream. It does not attempt Reso Landing. §24.4
+      explicitly forbids placeholder art lowering the visual-acceptance bar
+      or being read as evidence of how Horizon looks — the banner below and
+      every sprite's own debug label exist so a capture of this page can
+      never be mistaken for that gate. Visual acceptance is untouched here
+      and owed to Phase 2.
+    -->
+    <style>
+      :root {
+        --paper: #f7f2e9;
+        --graphite: #211d19;
+        --line: #d6c9b4;
+        --clay: #a65a2e;
+        --alarm: #b3261e;
+        --ink-70: rgba(33, 29, 25, 0.74);
+        --ink-45: rgba(33, 29, 25, 0.45);
+        --display: "Red Hat Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --mono: "Martian Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      }
+      @font-face {
+        font-family: "Red Hat Display";
+        font-style: normal;
+        font-weight: 700 900;
+        font-display: swap;
+        src: url("identity/fonts/red-hat-display.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "Martian Mono";
+        font-style: normal;
+        font-weight: 400 500;
+        font-display: swap;
+        src: url("identity/fonts/martian-mono.woff2") format("woff2");
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: var(--graphite);
+        color: var(--paper);
+        font-family: var(--mono);
+        font-size: 12.5px;
+        line-height: 1.5;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .placeholder-banner {
+        flex: 0 0 auto;
+        background: var(--alarm);
+        color: #fff8f0;
+        font-family: var(--display);
+        font-weight: 900;
+        font-size: 13px;
+        letter-spacing: 0.01em;
+        padding: 10px 16px;
+        text-align: center;
+        border-bottom: 3px solid #7a150f;
+      }
+      .placeholder-banner small {
+        display: block;
+        font-family: var(--mono);
+        font-weight: 400;
+        font-size: 10.5px;
+        opacity: 0.92;
+        margin-top: 2px;
+        letter-spacing: normal;
+      }
+
+      .stage-row {
+        flex: 1 1 auto;
+        display: flex;
+        min-height: 0;
+      }
+
+      .stage {
+        position: relative;
+        flex: 1 1 auto;
+        background:
+          repeating-linear-gradient(45deg, #26221d, #26221d 12px, #221e19 12px, #221e19 24px);
+        min-width: 0;
+      }
+      #horizon-pixi-root,
+      #horizon-safe-harbor {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      #horizon-pixi-root canvas { display: block; }
+
+      .sidebar {
+        flex: 0 0 280px;
+        max-width: 40vw;
+        border-left: 1px solid #3a332a;
+        background: #1a1713;
+        padding: 12px;
+        overflow-y: auto;
+      }
+      .sidebar h2 {
+        font-family: var(--display);
+        font-size: 13px;
+        margin: 0 0 8px;
+        color: var(--paper);
+      }
+      .sidebar h3 {
+        font-family: var(--display);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--ink-45);
+        margin: 16px 0 6px;
+      }
+      .tier-controls { display: flex; gap: 6px; flex-wrap: wrap; }
+      .tier-controls button,
+      .poke-button {
+        font-family: var(--mono);
+        font-size: 11px;
+        background: #2b2620;
+        color: var(--paper);
+        border: 1px solid #4a4136;
+        border-radius: 4px;
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+      .tier-controls button[aria-pressed="true"] {
+        background: var(--clay);
+        border-color: var(--clay);
+        color: #fff;
+      }
+      .tier-controls button:focus-visible,
+      .poke-button:focus-visible,
+      #horizon-dom-mirror :focus-visible {
+        outline: 2px solid #ffd27a;
+        outline-offset: 2px;
+      }
+      #metrics-readout {
+        white-space: pre-wrap;
+        font-size: 10.5px;
+        color: var(--ink-70);
+        background: #100e0b;
+        border: 1px solid #3a332a;
+        border-radius: 4px;
+        padding: 8px;
+        margin-top: 6px;
+      }
+
+      /* The DOM mirror (§10.4): a secondary, accessible layer over the
+         world, deliberately not the visually dominant surface — the world-
+         first interface direction (design doc §24.4) means play stays
+         dominant; this is the inspection/accessibility rail beside it. */
+      #horizon-dom-mirror {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .world-subject-mirror {
+        border: 1px solid #4a4136;
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-size: 10.5px;
+      }
+      .world-subject-mirror::before {
+        content: attr(data-subject-id);
+        display: block;
+        font-family: var(--display);
+        font-size: 11px;
+        color: var(--paper);
+        margin-bottom: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="placeholder-banner">
+      PLACEHOLDER RENDER — not the visual target
+      <small>
+        Flat colored rectangles at semantic positions, proving the worker → Pixi pipeline only.
+        Reso Landing and visual acceptance (design doc §24.4) are Phase 2.
+      </small>
+    </div>
+
+    <div class="stage-row">
+      <div class="stage">
+        <div id="horizon-pixi-root" role="presentation"></div>
+        <canvas id="horizon-safe-harbor" hidden width="1280" height="720" aria-label="Safe Harbor fallback view"></canvas>
+      </div>
+      <aside class="sidebar">
+        <h2>Horizon — pipeline diagnostics</h2>
+
+        <h3>Fidelity ladder (§15)</h3>
+        <div class="tier-controls" id="tier-controls" role="group" aria-label="Fidelity tier">
+          <button type="button" data-tier="sun" aria-pressed="true">Sun</button>
+          <button type="button" data-tier="breeze" aria-pressed="false">Breeze</button>
+          <button type="button" data-tier="harbor" aria-pressed="false">Harbor</button>
+        </div>
+
+        <h3>Input round trip (§4)</h3>
+        <button type="button" class="poke-button" id="poke-button">Poke subject</button>
+        <div id="metrics-readout">booting…</div>
+
+        <h3>Semantic DOM mirror (§10.4)</h3>
+        <div id="horizon-dom-mirror"></div>
+      </aside>
+    </div>
+
+    <script type="module">
+      import { boot } from "./js/world/runtime/main.mjs";
+      import { FrameBench } from "./js/world/performers/frame_bench.mjs";
+
+      const readout = document.getElementById("metrics-readout");
+      const tierButtons = [...document.querySelectorAll("#tier-controls button")];
+      const pokeButton = document.getElementById("poke-button");
+
+      boot({
+        pixiContainer: document.getElementById("horizon-pixi-root"),
+        domMirrorContainer: document.getElementById("horizon-dom-mirror"),
+        safeHarborCanvas: document.getElementById("horizon-safe-harbor"),
+      }).then(({ client, usingPixi }) => {
+        window.__horizonClient = client;
+        // The bench/verification handle: an external driver (this build's
+        // own capture used playwright-cli — see scripts/world_renderer_bench.mjs)
+        // reads window.__horizonBench.report() after a soak, and can drive
+        // window.__horizonClient.fidelityController.setTier(...) /
+        // .pokeSubject() directly. Not part of the placeholder scene itself
+        // — a diagnostic seam, on the same page for the same reason the
+        // sidebar's own metrics readout is.
+        window.__horizonBench = new FrameBench({ client });
+        window.__horizonBench.start();
+        document.body.dataset.performer = usingPixi ? "pixi" : "safe-harbor";
+
+        if (!usingPixi) {
+          for (const button of tierButtons) button.disabled = true;
+        }
+
+        for (const button of tierButtons) {
+          button.addEventListener("click", () => {
+            if (!client.fidelityController) return;
+            client.fidelityController.setTier(button.dataset.tier);
+            for (const b of tierButtons) b.setAttribute("aria-pressed", String(b === button));
+          });
+        }
+
+        pokeButton.addEventListener("click", async () => {
+          pokeButton.disabled = true;
+          const ms = await client.pokeSubject();
+          pokeButton.disabled = false;
+          pokeButton.title = `last input→visible: ${ms.toFixed(1)} ms`;
+        });
+
+        setInterval(() => {
+          const tier = client.fidelityController?.current();
+          // Read the live attribute, not the closure's usingPixi — a
+          // context-loss fallback can switch performers well after this
+          // boot().then() callback already ran once (see main.mjs's
+          // attachSafeHarbor, which is what actually keeps this current).
+          readout.textContent = [
+            `performer: ${document.body.dataset.performer}`,
+            `tier: ${tier ? `${tier.name} (scale ${tier.renderScale}, particles ${tier.particleDensity})` : "n/a"}`,
+            `subjects: ${client.performer.spriteCount?.() ?? "?"}`,
+            `snapshots applied: ${client.metrics.snapshotsApplied}`,
+            `deltas applied: ${client.metrics.deltasApplied}`,
+            `messages discarded: ${client.metrics.discarded}`,
+            `errors: ${client.metrics.errors.length}`,
+          ].join("\n");
+        }, 500);
+      });
+    </script>
+  </body>
+</html>
