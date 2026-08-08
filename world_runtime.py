@@ -150,3 +150,27 @@ class WorldRuntime:
         native = to_host(self.world.value)
         normalized, warnings = world_ir.parse_world_envelope(native)
         return normalized, warnings
+
+    def take_output(self):
+        """Horizon Phase 2 Build 2's own gap-fix: `envelope` above is the
+        only channel this class exposed onto a call's output, and it is
+        world-v1-envelope-specific by construction (`parse_world_envelope`
+        raises on any other shape). A program under the scene-intent
+        protocol (grammar/protocols/scene-v1.json) instead emits its
+        per-call output as `show "scene ..."`/`show "audio ..."` lines —
+        and those lines were always reachable (`self.itp.output`/`.trace`
+        are public, and accumulate identically whether `show` runs at top
+        level or inside a called function; interp.py's own `Show` handling
+        makes no such distinction), just with no drain method of its own.
+
+        Returns `(lines, trace)` produced since the LAST call to this
+        method (or since `init()`, the first time it is called) and clears
+        both lists — a long-running session's output/trace never grows
+        unbounded across ticks this way; a caller that wants a call's
+        lines reads them once, right after that call, same as `envelope`
+        reads that call's world value once."""
+        lines = self.itp.output[:]
+        trace = self.itp.trace[:]
+        self.itp.output.clear()
+        self.itp.trace.clear()
+        return lines, trace

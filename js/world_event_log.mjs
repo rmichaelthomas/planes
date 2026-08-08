@@ -20,6 +20,20 @@ export class WorldEventLogError extends Error {
   }
 }
 
+// Deterministic, cross-implementation-stable text form of a plain
+// JSON-shaped value: sorted object keys, no whitespace — mirrors Python's
+// `json.dumps(value, sort_keys=True, separators=(",", ":"))` exactly (see
+// world_event_log.py's own `_canonical_event_string`), so an identical
+// logical event produces an identical string, and therefore an identical
+// hash, in either implementation regardless of the two languages' own
+// differing object/dict key-insertion-order conventions.
+function canonicalEventString(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalEventString).join(",")}]`;
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalEventString(value[k])}`).join(",")}}`;
+}
+
 // Deterministic text form of everything in `entry` EXCEPT its own `hash`
 // field — the hash is computed FROM this string. Reuses
 // canonicalDeltaString for the payload's `delta` sub-object.
@@ -41,6 +55,23 @@ function canonicalEntryString(entry) {
   } else {
     lines.push("delta:");
     for (const line of canonicalDeltaString(p.delta).split("\n")) lines.push(`  ${line}`);
+  }
+  // OPTIONAL, ADDITIVE (Horizon Phase 2 Build 2's own gap-fix). A world-v1
+  // caller's payload always carries a real `delta` and never sets `event` —
+  // for those payloads this line never appears, so their canonical string
+  // and every hash it feeds is BYTE IDENTICAL to before this field existed.
+  // The gap this closes: a scene-intent crossing's applied input has no
+  // facet-patch delta to log (see main.mjs's own scene-intent path — there
+  // is no fold, the program re-emits its full scene every tick), but replay
+  // still needs the real typed event object back, not just a human-
+  // readable rationale string, to feed the correct per-tick events batch
+  // into `advance`. `event`, when present, is arbitrary JSON-shaped data
+  // the caller controls the key order of — this is not a general
+  // canonicalizer, callers must construct their event objects with a
+  // consistent field order (as a_crossing.planes's own UI events already
+  // do) for the hash to be reproducible across an identical event.
+  if (p.event !== null && p.event !== undefined) {
+    lines.push(`event: ${canonicalEventString(p.event)}`);
   }
   return lines.join("\n");
 }

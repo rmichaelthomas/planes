@@ -77,14 +77,35 @@ import { loadGraphInto } from "../../browser_main.mjs";
 import { parseWorldEnvelope, SUPPORTED_VERSION } from "../../world_ir.mjs";
 import { computeDelta } from "../../world_delta.mjs";
 import { sha256Hex } from "../../sha256.mjs";
+// Consumed, never reimplemented (invariant 3) — the same validation the
+// scene-intent performer path (main.mjs/pixi_performer.mjs) runs on this
+// worker's own emitted lines, run once more here so a malformed scene
+// refuses at its source instead of reaching the main thread silently.
+import { parseSceneIntent } from "../../scene/ir.mjs";
+import { canonicalJSON } from "./canonical_json.mjs";
 
 const WORLD_INIT = "world-init";
 const ADVANCE = "advance";
 const TICK_HZ = 30;
 const TICK_MS = 1000 / TICK_HZ;
 const RETENTION_WINDOW = 300;
+// UNCHANGED from Phase 1: the zero-config default, still the kernel-spike
+// fixture — horizon.html's own boot() call passes neither fixtureUrl nor
+// protocol, so it must keep getting exactly what it always got. Horizon
+// Phase 2 Build 2 adds a SECOND named fixture (below) rather than
+// repointing this one, precisely so horizon.html's own diagnostic purpose
+// (proving the world-v1 kernel-spike pipeline, not the crossing) survives
+// this build untouched — see the self.postMessage wiring at the bottom of
+// this file for how a page picks which fixture/protocol it actually gets.
 const FIXTURE_URL = new URL(
   "../../../paint/world/kernel_spike_fixture.planes",
+  import.meta.url,
+).href;
+// Horizon Phase 2 Build 2 (build prompt §3.2): the crossing's own fixture,
+// named so a page can ask for it explicitly via the "boot" configuring
+// message below — horizon-crossing.html does; horizon.html does not.
+export const CROSSING_FIXTURE_URL = new URL(
+  "../../../paint/a_crossing.planes",
   import.meta.url,
 ).href;
 
@@ -167,6 +188,19 @@ export class BrowserWorldRuntime {
     return parseWorldEnvelope(native);
   }
 
+  // Horizon Phase 2 Build 2's own gap-fix, mirrored from js/world_runtime.mjs
+  // (see that method's own header for the full rationale): `envelope()`
+  // above is world-v1-specific and throws on a scene-intent program's
+  // return value (a_crossing.planes's `next` record has no identity/
+  // situation/behavior shape at all). The scene-intent protocol's real
+  // per-call output is its `show "scene ..."`/`show "audio ..."` lines,
+  // already public on `this.itp.output`/`.trace` — this just drains them.
+  takeOutput() {
+    const lines = this.itp.output.splice(0, this.itp.output.length);
+    const trace = this.itp.trace.splice(0, this.itp.trace.length);
+    return { lines, trace };
+  }
+
   _requireLoaded() {
     if (!this._loaded) {
       throw new WorkerKernelError("load() must be awaited before init()/advance()");
@@ -222,6 +256,51 @@ export class BrowserWorldKernel {
   }
 }
 
+// The scene-intent sibling of BrowserWorldKernel (Horizon Phase 2 Build 2,
+// build prompt §3.2). A crossing's `advance` return value is not a world-v1
+// envelope at all (a_crossing.planes's `next` is a flat status/route/phase
+// record with none of identity/situation/behavior) — BrowserWorldKernel's
+// own start()/step() call runtime.envelope(), which would throw on it. This
+// class reuses BrowserWorldRuntime UNCHANGED (same load()/init()/advance()
+// calls, same timed-span discipline) and reads the program's real per-call
+// output through takeOutput() instead: the `show "scene ..."`/`show
+// "audio ..."` lines the scene-intent protocol (grammar/protocols/
+// scene-v1.json) actually carries. `parseSceneIntent` validates that output
+// at the same boundary BrowserWorldKernel validates world-v1 warnings at —
+// a malformed scene refuses the tick with a named error, not a silent bad
+// frame — WITHOUT this class ever re-deriving or reimplementing what
+// parseSceneIntent already does (invariant 3: consumed, not reimplemented).
+export class BrowserSceneKernel {
+  constructor(location, opts = {}) {
+    this.runtime = new BrowserWorldRuntime(location, opts);
+    this.revision = 0;
+    this._started = false;
+  }
+
+  async start() {
+    await this.runtime.load();
+    this.runtime.init();
+    const { lines, trace } = this.runtime.takeOutput();
+    parseSceneIntent(lines);
+    this.revision = 0;
+    this._started = true;
+    return { lines, trace };
+  }
+
+  step(events = []) {
+    if (!this._started) {
+      throw new WorkerKernelError("start() must be called before step()");
+    }
+    const t0 = performance.now();
+    this.runtime.advance(events);
+    const { lines, trace } = this.runtime.takeOutput();
+    parseSceneIntent(lines);
+    const elapsedSeconds = (performance.now() - t0) / 1000;
+    this.revision += 1;
+    return { lines, trace, elapsedSeconds };
+  }
+}
+
 // ---- message-contract plumbing (design doc §11.5) --------------------------
 //
 // Every outgoing message carries protocolVersion (world-v1's own version —
@@ -236,11 +315,24 @@ export class BrowserWorldKernel {
 // this file is the only part that touches `self`.
 
 export class SimulationWorkerHandle {
-  constructor({ post, fixtureUrl = FIXTURE_URL, tickMs = TICK_MS, window = RETENTION_WINDOW } = {}) {
+  // `protocol`: "world-v1" (default, unchanged from Phase 1 — every
+  // existing test constructs a handle with no `protocol` at all and gets
+  // exactly the kernel-spike behavior it always got) or "scene-intent"
+  // (Horizon Phase 2 Build 2 — a_crossing.planes's own protocol, build
+  // prompt §3.2). Chooses BrowserWorldKernel vs BrowserSceneKernel and the
+  // matching message-payload shape; every other field of the §11.5
+  // envelope (protocolVersion, worldFingerprint, sequence,
+  // cancellationToken) and the input-buffering/scheduling machinery below
+  // is identical either way.
+  constructor({
+    post, fixtureUrl = FIXTURE_URL, tickMs = TICK_MS, window = RETENTION_WINDOW,
+    protocol = "world-v1",
+  } = {}) {
     this._post = post;
     this._fixtureUrl = fixtureUrl;
     this._tickMs = tickMs;
     this._window = window;
+    this._protocol = protocol;
     this._kernel = null;
     this._sequence = 0;
     this._cancellationToken = "unset";
@@ -263,24 +355,55 @@ export class SimulationWorkerHandle {
   // "Initial load produces a complete World IR snapshot"). Ticking begins
   // immediately afterward unless a "cancel" message arrives first.
   async boot() {
-    this._kernel = new BrowserWorldKernel(this._fixtureUrl, { window: this._window, trace: true });
-    const normalized = await this._kernel.start();
-    this._fingerprint = sha256Hex(this._kernel.runtime.sourceText() ?? this._fixtureUrl);
-    this._emit({
-      type: "snapshot",
-      envelope: normalized,
-      revision: this._kernel.revision,
-    });
+    if (this._protocol === "scene-intent") {
+      this._kernel = new BrowserSceneKernel(this._fixtureUrl, { window: this._window, trace: true });
+      const { lines, trace } = await this._kernel.start();
+      this._fingerprint = sha256Hex(this._kernel.runtime.sourceText() ?? this._fixtureUrl);
+      this._emit({
+        type: "snapshot",
+        protocol: "scene-intent",
+        lines,
+        trace,
+        linesHash: sha256Hex(lines.join("\n")),
+        revision: this._kernel.revision,
+      });
+    } else {
+      this._kernel = new BrowserWorldKernel(this._fixtureUrl, { window: this._window, trace: true });
+      const normalized = await this._kernel.start();
+      this._fingerprint = sha256Hex(this._kernel.runtime.sourceText() ?? this._fixtureUrl);
+      this._emit({
+        type: "snapshot",
+        envelope: normalized,
+        revision: this._kernel.revision,
+      });
+    }
     this._cancelled = false;
     this._scheduleTick();
   }
 
-  // "cancel"/"resume"/"input" — the three inbound message shapes this
-  // worker understands. Anything else is ignored rather than throwing: a
-  // forward-compatible worker does not crash on a message a newer main
-  // thread might one day send that this build doesn't know about yet.
+  // "cancel"/"resume"/"input"/"save" — the four inbound message shapes
+  // this worker understands. Anything else is ignored rather than
+  // throwing: a forward-compatible worker does not crash on a message a
+  // newer main thread might one day send that this build doesn't know
+  // about yet.
   receive(message) {
     if (!message || typeof message !== "object") return;
+    if (message.type === "save") {
+      // Horizon Phase 2 Build 2 (build prompt §3.4): only this worker's
+      // live kernel holds the current Traced world value — main.mjs never
+      // sees it (invariant 3), so "save" has to happen here, not in
+      // js/world/runtime/crossing_persistence.mjs (which owns REPLAY
+      // instead — see that module's own header for why). A no-op before
+      // boot() has produced a kernel at all.
+      if (this._kernel === null || this._kernel.runtime.world === null) return;
+      const world = toHost(this._kernel.runtime.world.value);
+      const hash = sha256Hex(canonicalJSON(world));
+      this._emit({
+        type: "snapshot-saved",
+        snapshot: { revision: this._kernel.revision, tick: this._kernel.runtime.tick, world, hash },
+      });
+      return;
+    }
     if (message.type === "cancel") {
       this._cancelled = true;
       this._nextTickAt = null;
@@ -352,13 +475,26 @@ export class SimulationWorkerHandle {
       this._cancelled = true;
       return;
     }
-    this._emit({
-      type: "delta",
-      delta: stepped.delta,
-      stepMs: stepped.elapsedSeconds * 1000,
-      revision: this._kernel.revision,
-      acknowledgedInputSequence: this._latestInputSequence,
-    });
+    if (this._protocol === "scene-intent") {
+      this._emit({
+        type: "delta",
+        protocol: "scene-intent",
+        lines: stepped.lines,
+        trace: stepped.trace,
+        linesHash: sha256Hex(stepped.lines.join("\n")),
+        stepMs: stepped.elapsedSeconds * 1000,
+        revision: this._kernel.revision,
+        acknowledgedInputSequence: this._latestInputSequence,
+      });
+    } else {
+      this._emit({
+        type: "delta",
+        delta: stepped.delta,
+        stepMs: stepped.elapsedSeconds * 1000,
+        revision: this._kernel.revision,
+        acknowledgedInputSequence: this._latestInputSequence,
+      });
+    }
     this._scheduleTick();
   }
 
@@ -382,17 +518,44 @@ function describeError(err) {
 // ---- the actual Worker wiring — the only part of this file that touches
 // `self`. Guarded so the rest of this module stays importable (and every
 // class above unit-testable) under plain `node --test`, which has no `self`.
+//
+// WAITS FOR A "boot" MESSAGE, RATHER THAN AUTO-BOOTING. A module Worker's
+// top-level script has no constructor-argument channel of its own — the
+// only way the main thread tells it anything is a postMessage after
+// construction. Two real pages share this one worker.mjs file today
+// (horizon.html: the Phase 1 world-v1 kernel-spike diagnostic;
+// horizon-crossing.html: Horizon Phase 2 Build 2's own crossing, scene-
+// intent) and need DIFFERENT fixtures/protocols — an eager, hardcoded
+// auto-boot can only ever be right for one of them. main.mjs's boot()
+// posts `{type:"boot", fixtureUrl, protocol}` immediately after
+// constructing the Worker; nothing else is accepted (or has any effect)
+// until that first message configures and starts a real
+// SimulationWorkerHandle. Both fields are optional — an absent
+// `fixtureUrl` reproduces FIXTURE_URL's own kernel-spike default,
+// horizon.html's byte-identical Phase 1 behavior.
 if (typeof self !== "undefined" && typeof self.postMessage === "function") {
-  const handle = new SimulationWorkerHandle({ post: (msg) => self.postMessage(msg) });
-  self.addEventListener("message", (event) => handle.receive(event.data));
-  handle.boot().catch((err) => {
-    self.postMessage({
-      type: "error",
-      message: describeError(err),
-      sequence: 0,
-      protocolVersion: SUPPORTED_VERSION,
-      worldFingerprint: null,
-      cancellationToken: "unset",
-    });
+  let handle = null;
+  self.addEventListener("message", (event) => {
+    const message = event.data;
+    if (handle === null) {
+      if (!message || message.type !== "boot") return;
+      handle = new SimulationWorkerHandle({
+        post: (msg) => self.postMessage(msg),
+        fixtureUrl: message.fixtureUrl ?? FIXTURE_URL,
+        protocol: message.protocol ?? "world-v1",
+      });
+      handle.boot().catch((err) => {
+        self.postMessage({
+          type: "error",
+          message: describeError(err),
+          sequence: 0,
+          protocolVersion: SUPPORTED_VERSION,
+          worldFingerprint: null,
+          cancellationToken: "unset",
+        });
+      });
+      return;
+    }
+    handle.receive(message);
   });
 }

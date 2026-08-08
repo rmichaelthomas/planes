@@ -23,6 +23,9 @@ import { createPixiPerformer } from "../performers/pixi_performer.mjs";
 import { SafeHarborPerformer, webglAvailable } from "../performers/safe_harbor.mjs";
 import { DomMirror } from "../performers/dom_mirror.mjs";
 import { FidelityController } from "../performers/fidelity_controller.mjs";
+// Consumed, never reimplemented (invariant 3) — the scene-intent boundary
+// a crossing's messages carry (Horizon Phase 2 Build 2, build prompt §3.3).
+import { parseSceneIntent } from "../../scene/ir.mjs";
 
 // ---- message discipline (§11.5) --------------------------------------------
 //
@@ -91,8 +94,15 @@ export class WorldClient {
     if (!worker || typeof worker.postMessage !== "function") {
       throw new TypeError("WorldClient requires a worker-like object with postMessage");
     }
-    if (!performer || typeof performer.applyEnvelope !== "function") {
-      throw new TypeError("WorldClient requires a performer with applyEnvelope");
+    // A performer must support at least one of the two protocols this
+    // client can receive: applyEnvelope (world-v1) or applySceneIntent
+    // (scene-intent, Horizon Phase 2 Build 2). Most performers only ever
+    // see one protocol in practice, so neither is required alone.
+    if (!performer || (typeof performer.applyEnvelope !== "function"
+        && typeof performer.applySceneIntent !== "function")) {
+      throw new TypeError(
+        "WorldClient requires a performer with applyEnvelope and/or applySceneIntent",
+      );
     }
     this.worker = worker;
     this.performer = performer;
@@ -100,8 +110,12 @@ export class WorldClient {
     this.fidelityController = fidelityController;
     this.gate = new MessageGate();
     this.envelopes = new Map();
+    // Scene-intent's own latest-applied cache (world-v1 uses `envelopes`
+    // above instead) — see setPerformer's re-hydration and _applySceneIntent.
+    this.lastSceneIntent = null;
     this.pendingInputs = new Map();
     this.inputSequence = 0;
+    this._pendingSave = null;
     // stepMsSamples: the worker's own per-tick elapsedSeconds (renamed
     // stepMs on the wire), one entry per admitted delta — this is the
     // "simulation step (worker)" distribution build prompt §16/§6.2.G asks
@@ -111,10 +125,16 @@ export class WorldClient {
 
   // Swap the active visual performer (Pixi -> Safe Harbor on a lost cause,
   // per design doc §22). Re-hydrates the new performer with every envelope
-  // already known, so the fallback does not start blank.
+  // already known (world-v1) and/or the latest scene intent (scene-intent),
+  // so the fallback does not start blank under either protocol.
   setPerformer(performer) {
     this.performer = performer;
-    for (const envelope of this.envelopes.values()) this.performer.applyEnvelope(envelope);
+    for (const envelope of this.envelopes.values()) this.performer.applyEnvelope?.(envelope);
+    if (this.lastSceneIntent) {
+      this.performer.applySceneIntent?.(this.lastSceneIntent.intent, {
+        lines: this.lastSceneIntent.lines, trace: this.lastSceneIntent.trace,
+      });
+    }
   }
 
   handleWorkerMessage(message) {
@@ -127,7 +147,13 @@ export class WorldClient {
       this.metrics.discarded += 1;
       return;
     }
-    if (message.type === "snapshot") {
+    if (message.type === "snapshot-saved") {
+      this._resolvePendingSave(message.snapshot);
+      return;
+    }
+    if (message.protocol === "scene-intent") {
+      this._applySceneIntent(message);
+    } else if (message.type === "snapshot") {
       this.envelopes.set(message.envelope.identity.id, message.envelope);
       this._applyToPerformers(message.envelope);
       this.metrics.snapshotsApplied += 1;
@@ -137,6 +163,58 @@ export class WorldClient {
       if (typeof message.stepMs === "number") this.metrics.stepMsSamples.push(message.stepMs);
     }
     this._resolvePendingInputs(message.acknowledgedInputSequence);
+  }
+
+  // Horizon Phase 2 Build 2 (build prompt §3.4): asks the worker to
+  // capture the current world value (worker.mjs's own "save"/
+  // "snapshot-saved" message pair — see that file's "save" branch for why
+  // it has to happen there). Returns a Promise resolving with the plain
+  // snapshot object ({revision, tick, world, hash}) once it arrives — the
+  // caller persists it however it likes (localStorage, download, ...);
+  // this class owns transport, not storage policy.
+  saveSnapshot() {
+    return new Promise((resolve) => {
+      this._pendingSave = resolve;
+      this.worker.postMessage({ type: "save" });
+    });
+  }
+
+  _resolvePendingSave(snapshot) {
+    if (!this._pendingSave) return;
+    const resolve = this._pendingSave;
+    this._pendingSave = null;
+    resolve(snapshot);
+  }
+
+  // Scene-intent messages (Horizon Phase 2 Build 2, build prompt §3.3) carry
+  // a COMPLETE scene description every message — the Planes program re-emits
+  // every "scene ..." line unconditionally each call — so there is no
+  // facet-patch fold to perform here, unlike world-v1's _applyDelta below:
+  // parse once (invariant 3: consumed, never reimplemented) and hand the
+  // result straight to the performer/DOM mirror. `message.type` is still
+  // either "snapshot" (the first message) or "delta" (every tick after),
+  // which is why the metrics counters below still branch on it — that
+  // distinction is about WHEN the message arrived, not about how its
+  // payload is applied.
+  _applySceneIntent(message) {
+    let intent;
+    try {
+      intent = parseSceneIntent(message.lines);
+    } catch (err) {
+      this.metrics.errors.push(err.message);
+      return;
+    }
+    this.lastSceneIntent = {
+      intent, lines: message.lines, trace: message.trace ?? [], revision: message.revision,
+    };
+    this.performer.applySceneIntent?.(intent, { lines: message.lines, trace: message.trace });
+    this.domMirror?.applySceneIntent?.(intent);
+    if (message.type === "snapshot") {
+      this.metrics.snapshotsApplied += 1;
+    } else {
+      this.metrics.deltasApplied += 1;
+      if (typeof message.stepMs === "number") this.metrics.stepMsSamples.push(message.stepMs);
+    }
   }
 
   _applyDelta(delta) {
@@ -178,15 +256,34 @@ export class WorldClient {
 
   // The build prompt §4 "input to visible response" measurement: a
   // synthetic direct-manipulation poke, sent to the worker, resolved once
-  // the worker's ACKNOWLEDGMENT (not application — see worker.mjs's header
-  // on why advance() cannot yet be steered) has been admitted by the
-  // message gate and the browser has painted a frame after that. Returns a
-  // Promise<milliseconds>.
+  // the worker's ACKNOWLEDGMENT has been admitted by the message gate and
+  // the browser has painted a frame after that. Returns a
+  // Promise<milliseconds>. A bare poke (no `event`) — see sendInput below
+  // for a poke that actually carries a typed event and steers the program.
   pokeSubject() {
+    return this._sendInput(null);
+  }
+
+  // Horizon Phase 2 Build 2 (build prompt §3.5): the real input seam — a UI
+  // event (subject select, need/route/power/radio choice) becomes an
+  // "input" worker message carrying the typed event the crossing's own
+  // `advance` matches (`{kind:"select",subject}` / `{kind:"need",
+  // choice:"care"}` / etc.), acknowledged and timed exactly like
+  // pokeSubject's diagnostic poke — this IS what "acknowledged" meant all
+  // along (worker.mjs's own header: "acknowledged now means applied on
+  // this tick"), just with a caller that cares what was applied, not only
+  // that something was. Returns a Promise<milliseconds>.
+  sendInput(event) {
+    return this._sendInput(event);
+  }
+
+  _sendInput(event) {
     this.inputSequence += 1;
     const sequence = this.inputSequence;
     const sentAt = performance.now();
-    this.worker.postMessage({ type: "input", sequence, sentAt });
+    const message = { type: "input", sequence, sentAt };
+    if (event !== null) message.event = event;
+    this.worker.postMessage(message);
     return new Promise((resolve) => {
       this.pendingInputs.set(sequence, { resolve, sentAt });
     });
@@ -214,7 +311,17 @@ export class WorldClient {
 // pattern so this module stays importable (and WorldClient/MessageGate/
 // foldDelta unit-testable) under plain `node --test`.
 
-export async function boot({ pixiContainer, domMirrorContainer, safeHarborCanvas } = {}) {
+// fixtureUrl/protocol: Horizon Phase 2 Build 2's own addition — forwarded
+// as the worker's configuring "boot" message (see worker.mjs's own header
+// on why a module Worker has to be configured this way). Both default to
+// undefined/"world-v1", reproducing horizon.html's exact prior call
+// (`boot({ pixiContainer, domMirrorContainer, safeHarborCanvas })`, no
+// fixture/protocol at all) byte-for-byte. onSelect: forwarded to
+// createPixiPerformer — a scene subject's click/tap, unused by the
+// world-v1 placeholder path.
+export async function boot({
+  pixiContainer, domMirrorContainer, safeHarborCanvas, fixtureUrl, protocol, onSelect,
+} = {}) {
   let performer;
   let usingPixi = webglAvailable();
   let pixiHandle = null;
@@ -243,6 +350,7 @@ export async function boot({ pixiContainer, domMirrorContainer, safeHarborCanvas
             client.fidelityController = null;
           }
         },
+        onSelect,
       });
       performer = pixiHandle.performer;
       if (safeHarborCanvas) safeHarborCanvas.hidden = true;
@@ -259,6 +367,7 @@ export async function boot({ pixiContainer, domMirrorContainer, safeHarborCanvas
   const worker = new Worker(new URL("./worker.mjs", import.meta.url), { type: "module" });
   const client = new WorldClient({ worker, performer, domMirror, fidelityController });
   worker.addEventListener("message", (event) => client.handleWorkerMessage(event.data));
+  worker.postMessage({ type: "boot", fixtureUrl, protocol });
 
   return { client, pixiApp: pixiHandle?.app ?? null, usingPixi };
 }

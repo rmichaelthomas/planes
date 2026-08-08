@@ -100,6 +100,26 @@ export class WorldRuntime {
     return parseWorldEnvelope(native);
   }
 
+  // Horizon Phase 2 Build 2's own gap-fix: `envelope()` above is the only
+  // channel this class exposed onto a call's output, and it is world-v1-
+  // envelope-specific by construction (parseWorldEnvelope throws on any
+  // other shape). A program under the scene-intent protocol (grammar/
+  // protocols/scene-v1.json) instead emits its per-call output as
+  // `show "scene ..."`/`show "audio ..."` lines — and those lines were
+  // always reachable (`this.itp.output`/`.trace` are public, and accumulate
+  // identically whether `show` runs at top level or inside a called
+  // function; paint/draw.planes's own stroke/fill/rect/etc. already prove
+  // this, each one a `to ...:` whose entire body is a single `show`), just
+  // with no drain method of its own. Splices rather than copies so a long-
+  // running session's output/trace never grows unbounded across ticks — a
+  // caller that wants a call's lines reads them once, right after that
+  // call, same as `envelope()` reads that call's world value once.
+  takeOutput() {
+    const lines = this.itp.output.splice(0, this.itp.output.length);
+    const trace = this.itp.trace.splice(0, this.itp.trace.length);
+    return { lines, trace };
+  }
+
   _requireLoaded() {
     if (!this._loaded) {
       throw new WorldRuntimeError("load() must be awaited before init()/advance()");
