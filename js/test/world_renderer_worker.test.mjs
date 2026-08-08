@@ -35,6 +35,25 @@ const FIXTURE_SOURCE = fs.readFileSync(
   "utf-8",
 );
 
+// Every SimulationWorkerHandle this file creates registers itself here
+// (via registerHandle()) so withStubbedFixtureFetch's own finally block
+// can guarantee it gets "cancel"led on the way out. A handle's own tick
+// loop is a self-rescheduling setTimeout chain (worker.mjs's own
+// _scheduleTick) that runs forever once boot()ed until something sends
+// "cancel" — every test below already did that on its own happy path,
+// but none wrapped it in try/finally, so a thrown assertion left the
+// handle ticking indefinitely in a process node --test had already
+// reported done and moved on from. Found live (not theoretical) in
+// js/test/crossing_port.test.mjs — a deliberately-failing run there left
+// two orphaned processes pinned near 100% CPU for 40+ minutes; this file
+// shares the exact same gap, so it gets the exact same fix.
+const openHandles = [];
+
+function registerHandle(handle) {
+  openHandles.push(handle);
+  return handle;
+}
+
 function withStubbedFixtureFetch(fn) {
   const real = globalThis.fetch;
   globalThis.fetch = async (url) => {
@@ -45,6 +64,13 @@ function withStubbedFixtureFetch(fn) {
   };
   return fn().finally(() => {
     globalThis.fetch = real;
+    for (const handle of openHandles.splice(0)) {
+      try {
+        handle.receive({ type: "cancel" });
+      } catch {
+        // Best-effort — see the comment above openHandles.
+      }
+    }
   });
 }
 
@@ -97,11 +123,11 @@ test("BrowserWorldKernel.step() before start() refuses with a named error, not a
 test("SimulationWorkerHandle.boot() posts a full snapshot first, then a strictly-increasing sequence of deltas, all sharing one worldFingerprint", async () => {
   await withStubbedFixtureFetch(async () => {
     const posted = [];
-    const handle = new SimulationWorkerHandle({
+    const handle = registerHandle(new SimulationWorkerHandle({
       post: (m) => posted.push(m),
       fixtureUrl: FIXTURE_URL,
       tickMs: 5,
-    });
+    }));
     await handle.boot();
     await waitUntil(() => posted.filter((m) => m.type === "delta").length >= 3);
     handle.receive({ type: "cancel" });
@@ -123,7 +149,7 @@ test("SimulationWorkerHandle.boot() posts a full snapshot first, then a strictly
 test("SimulationWorkerHandle: 'cancel' stops ticking, and 'resume' with a new token restarts under that token", async () => {
   await withStubbedFixtureFetch(async () => {
     const posted = [];
-    const handle = new SimulationWorkerHandle({ post: (m) => posted.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 });
+    const handle = registerHandle(new SimulationWorkerHandle({ post: (m) => posted.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 }));
     await handle.boot();
     await waitUntil(() => posted.filter((m) => m.type === "delta").length >= 2);
     handle.receive({ type: "cancel" });
@@ -147,7 +173,7 @@ test("SimulationWorkerHandle: 'cancel' stops ticking, and 'resume' with a new to
 test("SimulationWorkerHandle: an 'input' message is acknowledged on the next delta's acknowledgedInputSequence, without altering the semantic tick", async () => {
   await withStubbedFixtureFetch(async () => {
     const posted = [];
-    const handle = new SimulationWorkerHandle({ post: (m) => posted.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 });
+    const handle = registerHandle(new SimulationWorkerHandle({ post: (m) => posted.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 }));
     await handle.boot();
     handle.receive({ type: "input", sequence: 77 });
     await waitUntil(() => posted.filter((m) => m.type === "delta").length >= 5);
@@ -158,7 +184,7 @@ test("SimulationWorkerHandle: an 'input' message is acknowledged on the next del
     // determinism is untouched: the sequence of semantic hashes must match a
     // fresh, poke-free run over the same number of ticks.
     const freshPosted = [];
-    const freshHandle = new SimulationWorkerHandle({ post: (m) => freshPosted.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 });
+    const freshHandle = registerHandle(new SimulationWorkerHandle({ post: (m) => freshPosted.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 }));
     await freshHandle.boot();
     await waitUntil(() => freshPosted.filter((m) => m.type === "delta").length >= 5);
     freshHandle.receive({ type: "cancel" });
@@ -180,7 +206,7 @@ test("SimulationWorkerHandle: an 'input' message is acknowledged on the next del
 test("SimulationWorkerHandle: an 'input' message WITH an event payload changes the next delta's payload deterministically", async () => {
   await withStubbedFixtureFetch(async () => {
     const posted = [];
-    const handle = new SimulationWorkerHandle({ post: (m) => posted.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 });
+    const handle = registerHandle(new SimulationWorkerHandle({ post: (m) => posted.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 }));
     await handle.boot();
     handle.receive({ type: "input", sequence: 42, event: { kind: "nudge" } });
     await waitUntil(() => posted.filter((m) => m.type === "delta").length >= 1);
@@ -189,7 +215,7 @@ test("SimulationWorkerHandle: an 'input' message WITH an event payload changes t
     assert.equal(firstDelta.acknowledgedInputSequence, 42);
 
     const freshPosted = [];
-    const freshHandle = new SimulationWorkerHandle({ post: (m) => freshPosted.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 });
+    const freshHandle = registerHandle(new SimulationWorkerHandle({ post: (m) => freshPosted.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 }));
     await freshHandle.boot();
     await waitUntil(() => freshPosted.filter((m) => m.type === "delta").length >= 1);
     freshHandle.receive({ type: "cancel" });
@@ -218,7 +244,7 @@ test("SimulationWorkerHandle: an 'input' message WITH an event payload changes t
 test("switching every fidelity tier mid-run never changes the worker's own semantic hash sequence", async () => {
   await withStubbedFixtureFetch(async () => {
     const baseline = [];
-    const baselineHandle = new SimulationWorkerHandle({ post: (m) => baseline.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 });
+    const baselineHandle = registerHandle(new SimulationWorkerHandle({ post: (m) => baseline.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5 }));
     await baselineHandle.boot();
     await waitUntil(() => baseline.filter((m) => m.type === "delta").length >= 12);
     baselineHandle.receive({ type: "cancel" });
@@ -227,14 +253,14 @@ test("switching every fidelity tier mid-run never changes the worker's own seman
     const tiered = [];
     const recordingPerformer = { setRenderScale() {}, setParticleDensity() {} };
     const controller = new FidelityController({ performer: recordingPerformer });
-    const tieredHandle = new SimulationWorkerHandle({
+    const tieredHandle = registerHandle(new SimulationWorkerHandle({
       post: (m) => {
         tiered.push(m);
         if (m.type === "delta") controller.setTier(TIER_NAMES[tiered.length % TIER_NAMES.length]);
       },
       fixtureUrl: FIXTURE_URL,
       tickMs: 5,
-    });
+    }));
     await tieredHandle.boot();
     await waitUntil(() => tiered.filter((m) => m.type === "delta").length >= 12);
     tieredHandle.receive({ type: "cancel" });

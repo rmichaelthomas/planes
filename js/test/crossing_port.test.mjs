@@ -50,6 +50,7 @@ import {
 } from "../world/runtime/crossing_persistence.mjs";
 import { WorldEventLog } from "../world_event_log.mjs";
 import { toHost } from "../interp.mjs";
+import { WorldClient } from "../world/runtime/main.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const FIXTURE_URL = "https://example.test/paint/a_crossing.planes";
@@ -69,6 +70,17 @@ test("CROSSING_FIXTURE_URL names the real paint/a_crossing.planes file", () => {
   assert.ok(CROSSING_FIXTURE_URL.endsWith("/paint/a_crossing.planes"));
 });
 
+// Every SimulationWorkerHandle this file creates registers itself here
+// (via registerHandle()) so withStubbedFixtureFetch's own finally block
+// can guarantee cleanup — see that function's own comment for why this
+// exists.
+const openHandles = [];
+
+function registerHandle(handle) {
+  openHandles.push(handle);
+  return handle;
+}
+
 function withStubbedFixtureFetch(fn) {
   const real = globalThis.fetch;
   globalThis.fetch = async (url) => {
@@ -78,6 +90,30 @@ function withStubbedFixtureFetch(fn) {
   };
   return fn().finally(() => {
     globalThis.fetch = real;
+    // Found live (not theoretical): a SimulationWorkerHandle's own tick
+    // loop is a self-rescheduling setTimeout chain (worker.mjs's own
+    // _scheduleTick) that runs FOREVER once boot()ed, until something
+    // sends it "cancel" — nothing stops it on its own. Every test below
+    // sends "cancel" on its own happy path, but NONE of them wrapped that
+    // in try/finally, so a thrown assertion (or, worse, a deliberately
+    // failing run — exactly what confirming this file's own regression
+    // test's failure mode against pre-fix code did) skips the cancel and
+    // leaves the handle ticking at its full tickMs rate, indefinitely, in
+    // a process `node --test` has no reason to think is still working —
+    // observed as a genuine runaway (two orphaned processes pinned near
+    // 100% CPU for 40+ minutes after a test run had already reported its
+    // result and returned). registerHandle() below is every handle this
+    // file creates registering itself here; every test that goes through
+    // withStubbedFixtureFetch (all of them) gets its handles cancelled on
+    // the way out regardless of how the test itself ended.
+    for (const handle of openHandles.splice(0)) {
+      try {
+        handle.receive({ type: "cancel" });
+      } catch {
+        // Best-effort — a handle that already threw during boot() has
+        // nothing left to cancel; cleanup must never mask the real error.
+      }
+    }
   });
 }
 
@@ -93,9 +129,9 @@ async function waitUntil(predicate, { timeoutMs = 5000, pollMs = 5 } = {}) {
 
 function bootHandle(overrides = {}) {
   const posted = [];
-  const handle = new SimulationWorkerHandle({
+  const handle = registerHandle(new SimulationWorkerHandle({
     post: (m) => posted.push(m), fixtureUrl: FIXTURE_URL, tickMs: 5, protocol: "scene-intent", ...overrides,
-  });
+  }));
   return { handle, posted };
 }
 
@@ -242,6 +278,70 @@ test("a saved snapshot self-verifies, and event-log-driven replay reproduces it 
   });
 });
 
+function withFakeRaf(fn) {
+  const real = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 0);
+  return fn().finally(() => {
+    globalThis.requestAnimationFrame = real;
+  });
+}
+
+// Regression test for a real bug found live (reported against
+// horizon-crossing.html after a long play session, replay mismatch at
+// tick 464): the page built its event log from `client.lastSceneIntent
+// .revision`, read AFTER a `sendInput()` promise resolved — a stale,
+// racy read (worker.mjs's own 30 Hz ticker can advance `lastSceneIntent`
+// past the acknowledging tick during the two-rAF resolution delay) that
+// was ALSO off by one even without the race (`revision` is one past the
+// Planes-level `tick` `advance` was actually called with — see
+// BrowserSceneKernel.step's own `revision += 1` timing). Fixed by having
+// `WorldClient.sendInput()` itself resolve with the exact tick, sourced
+// synchronously from the acknowledging message
+// (`_resolvePendingInputs`). This test drives the full WorldClient path
+// (not the worker directly, unlike the test above) — the same code path
+// the page actually uses — and asserts the SPECIFIC failure mode: an
+// event applied, then many self-driving ticks later, must still replay
+// to the exact same world value.
+test("sendInput()'s reported tick is exact — an event logged from it replays byte-identically after many further ticks (regression: stale revision read caused a real replay mismatch)", async () => {
+  await withStubbedFixtureFetch(() => withFakeRaf(async () => {
+    const posted = [];
+    const performer = { applySceneIntent() {}, removeSubject() {} };
+    // worker.postMessage feeds the handle; the handle's own post feeds
+    // both `posted` (this test's own record) and the client's message
+    // handler — exactly the loop main.mjs's real boot() wires via
+    // `worker.addEventListener("message", ...)`.
+    const client = new WorldClient({ worker: { postMessage: (m) => boundHandle.receive(m) }, performer });
+    const boundHandle = registerHandle(new SimulationWorkerHandle({
+      post: (m) => { posted.push(m); client.handleWorkerMessage(m); },
+      fixtureUrl: FIXTURE_URL, tickMs: 5, protocol: "scene-intent",
+    }));
+    await boundHandle.boot();
+
+    const eventLog = new WorldEventLog();
+    await waitUntil(() => (client.lastSceneIntent?.revision ?? 0) >= 2);
+    const { tick } = await client.sendInput({ kind: "route", choice: "depart" });
+    eventLog.append(
+      { tick, actor: "test", affectedSubjects: ["hydrofoil"], rationale: "route:depart", delta: null, event: { kind: "route", choice: "depart" } },
+      "2026-01-01T00:00:00Z",
+    );
+
+    // Many further self-driving ticks — long enough that a one-or-two-
+    // tick logging error compounds into a different `progress` at save
+    // time, which is exactly the shape of bug this test exists to catch.
+    await waitUntil(() => (client.lastSceneIntent?.revision ?? 0) >= tick + 60);
+    boundHandle.receive({ type: "save" });
+    await waitUntil(() => posted.some((m) => m.type === "snapshot-saved"));
+    boundHandle.receive({ type: "cancel" });
+    const { snapshot } = posted.find((m) => m.type === "snapshot-saved");
+
+    const eventsByTick = eventsByTickFromLog(eventLog.events());
+    const replayed = await replayCrossing(FIXTURE_URL, eventsByTick, snapshot.tick);
+    assert.equal(replayed.hash, snapshot.hash,
+      `replay diverged — logged tick ${tick}, saved world.started ${snapshot.world.started}, `
+      + `replayed world.started ${replayed.world.started}`);
+  }));
+});
+
 test("save/restore round-trips: a snapshot's own world value, re-hashed, matches what the live runtime held at that tick", async () => {
   await withStubbedFixtureFetch(async () => {
     const { handle, posted } = bootHandle();
@@ -269,13 +369,13 @@ test("switching every fidelity tier mid-run never changes the worker's own scene
     const tiered = [];
     const recordingPerformer = { setRenderScale() {}, setParticleDensity() {} };
     const controller = new FidelityController({ performer: recordingPerformer });
-    const tieredHandle = new SimulationWorkerHandle({
+    const tieredHandle = registerHandle(new SimulationWorkerHandle({
       post: (m) => {
         tiered.push(m);
         if (m.type === "delta") controller.setTier(TIER_NAMES[tiered.length % TIER_NAMES.length]);
       },
       fixtureUrl: FIXTURE_URL, tickMs: 5, protocol: "scene-intent",
-    });
+    }));
     await tieredHandle.boot();
     await waitUntil(() => tiered.filter((m) => m.type === "delta").length >= 12);
     tieredHandle.receive({ type: "cancel" });

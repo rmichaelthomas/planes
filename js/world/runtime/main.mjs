@@ -162,7 +162,7 @@ export class WorldClient {
       this.metrics.deltasApplied += 1;
       if (typeof message.stepMs === "number") this.metrics.stepMsSamples.push(message.stepMs);
     }
-    this._resolvePendingInputs(message.acknowledgedInputSequence);
+    this._resolvePendingInputs(message.acknowledgedInputSequence, message.revision);
   }
 
   // Horizon Phase 2 Build 2 (build prompt §3.4): asks the worker to
@@ -258,10 +258,12 @@ export class WorldClient {
   // synthetic direct-manipulation poke, sent to the worker, resolved once
   // the worker's ACKNOWLEDGMENT has been admitted by the message gate and
   // the browser has painted a frame after that. Returns a
-  // Promise<milliseconds>. A bare poke (no `event`) — see sendInput below
+  // Promise<milliseconds> — pokeSubject's own, pre-existing contract,
+  // preserved exactly (unpacked from _sendInput's richer resolution below,
+  // not returned directly). A bare poke (no `event`) — see sendInput below
   // for a poke that actually carries a typed event and steers the program.
   pokeSubject() {
-    return this._sendInput(null);
+    return this._sendInput(null).then(({ ms }) => ms);
   }
 
   // Horizon Phase 2 Build 2 (build prompt §3.5): the real input seam — a UI
@@ -272,7 +274,12 @@ export class WorldClient {
   // pokeSubject's diagnostic poke — this IS what "acknowledged" meant all
   // along (worker.mjs's own header: "acknowledged now means applied on
   // this tick"), just with a caller that cares what was applied, not only
-  // that something was. Returns a Promise<milliseconds>.
+  // that something was. Returns a Promise<{ms, tick}> — `tick` is the
+  // exact Planes-level tick the event was applied at (see
+  // _resolvePendingInputs's own comment for why this must come from the
+  // acknowledging message itself, not be reconstructed by a caller reading
+  // a mutable field later — a caller building a replayable event log
+  // needs this exact value, not an approximation).
   sendInput(event) {
     return this._sendInput(event);
   }
@@ -289,17 +296,32 @@ export class WorldClient {
     });
   }
 
-  _resolvePendingInputs(acknowledgedInputSequence) {
+  // `revision` comes from the SAME message that carried
+  // `acknowledgedInputSequence` — captured here, synchronously, in the
+  // closure below, before ANY further worker message can arrive. This
+  // matters: found live (a real replay-mismatch report against
+  // horizon-crossing.html) that a caller reading `client.lastSceneIntent
+  // .revision` AFTER a sendInput() promise resolves gets a STALE value —
+  // the two nested rAFs below (~2 frames) are enough real wall-clock time
+  // for the worker's own 30 Hz ticker to have advanced `lastSceneIntent`
+  // past the tick that actually acknowledged this input, and even without
+  // that race, `revision` itself is one past the Planes-level `tick`
+  // `advance` was actually called with (worker.mjs's BrowserSceneKernel
+  // increments `revision` AFTER stepping) — resolving with `revision - 1`
+  // here, sourced from this exact message, is correct on both counts.
+  _resolvePendingInputs(acknowledgedInputSequence, revision) {
     if (typeof acknowledgedInputSequence !== "number") return;
+    const tick = typeof revision === "number" ? revision - 1 : null;
     for (const [sequence, pending] of [...this.pendingInputs.entries()]) {
       if (sequence > acknowledgedInputSequence) continue;
       this.pendingInputs.delete(sequence);
       // Two nested rAFs: the first fires before the browser paints this
       // frame's changes, the second after — "visible" should mean painted,
-      // not merely applied to a scene graph.
+      // not merely applied to a scene graph. `tick` above is captured
+      // BEFORE this delay, not read fresh when it fires.
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          pending.resolve(performance.now() - pending.sentAt);
+          pending.resolve({ ms: performance.now() - pending.sentAt, tick });
         });
       });
     }
