@@ -6,6 +6,21 @@
 // (§4). ghostFor/ghostLine/ghostSuffix and the empty-editor Run guard are
 // gone from tutor.html and gone from this suite with them.
 //
+// Extended for "Tutor Refinements (post-v35.0 merge)" (group H, below): ten
+// review items against the shipped v35.0 shell — full-width stage, the
+// Next-lesson button, the capstone rebalance, public-facing copy cleanup,
+// lesson 6's concrete example name, lesson 7 as a graduation sandbox
+// (conditional completion copy, full-vocabulary key, Reset), and the
+// narrowed save-first dialog. These assertions are graduated straight into
+// this file rather than a scripts/verify-*.mjs one-off — see
+// js/test/crossing_port.test.mjs's own header for why this repo's
+// test_gate.py forbids that category outright. The real-browser capture
+// (screenshots, click-through) for the same ten items lives in
+// tutor-refinements-verification.md, agent-performed via playwright-cli
+// against a locally served tutor.html, for the same reason
+// js/test/crossing_port.test.mjs's check F does: no playwright/jsdom
+// dependency exists in this repo to drive a DOM from `node --test`.
+//
 // Still-true coverage carried forward unchanged in substance: provenance
 // reaching a because-annotated binding (group D — this is an ENGINE
 // property, not a shell property, so runProgramGraph/card()/PLACEABLES are
@@ -540,3 +555,185 @@ test("invariant: no rendered code surface compresses two Planes statements onto 
   const lessonProgramTextSrc = extractFunction(html, "lessonProgramText");
   assert.match(lessonProgramTextSrc, /\.join\("\\n"\)/, "lessonProgramText must join items with a real newline per item, one statement per line");
 });
+
+// ---- H: "Tutor Refinements (post-v35.0 merge)" — the ten review items ----
+
+test("H §2: the stage widens on desktop — .wrap raised to ~1280px, the rail stays fixed at 340px so the extra width flows to the stage", () => {
+  const html = pageSrc();
+  assert.match(html, /\.wrap\{max-width:1280px; margin:0 auto\}/, "wrap must be raised to ~1280px");
+  assert.match(html, /\.work\{display:grid; grid-template-columns:1fr 340px/, "the rail must stay fixed at 340px");
+});
+
+test("H §2: card positioning and the coordinate tag both re-derive the canvas rect on every call, so widening the stage cannot leave them stale", () => {
+  const html = pageSrc();
+  const cardSrc = extractFunction(html, "renderCardCore");
+  assert.match(cardSrc, /canvas\.getBoundingClientRect\(\)/, "renderCardCore must recompute the canvas rect rather than caching it");
+  const tipSrc = extractFunction(html, "showCoordTipAt");
+  assert.match(tipSrc, /canvas\.getBoundingClientRect\(\)/, "showCoordTipAt must recompute the canvas rect rather than caching it");
+});
+
+test("H §3: a 'Next lesson' button ships hidden in the goal rail, and finishLesson gates it on LESSONS.length — never a literal count", () => {
+  const html = pageSrc();
+  assert.match(html, /<button class="next-lesson" id="next-lesson" type="button" hidden>Next lesson/, "the button must ship hidden by default, so it never shows before a lesson completes");
+  const finishSrc = extractFunction(html, "finishLesson");
+  assert.match(finishSrc, /nextLessonEl\.hidden = currentLesson >= LESSONS\.length - 1;/, "the button must be gated on LESSONS.length, not a hardcoded 7 (§9 invariant)");
+  assert.match(html, /nextLessonEl\.addEventListener\("click", \(\) => setLesson\(currentLesson \+ 1\)\)/, "the button must advance exactly one lesson, through setLesson (so the save-first gate still applies)");
+});
+
+test("H §4: the honest-garden claim is a single-line strip above the grid, not its own two-paragraph capcard — the share card is untouched", () => {
+  const html = pageSrc();
+  const honestIdx = html.indexOf('<p class="honest-strip">');
+  const capgridIdx = html.indexOf('<div class="capgrid">');
+  assert.ok(honestIdx >= 0 && capgridIdx >= 0, "the honest-strip and capgrid markup moved where this suite doesn't expect it");
+  assert.ok(honestIdx < capgridIdx, "the honest strip must sit above the grid, not inside it as a grid cell");
+  const certOpenIdx = html.indexOf('<div class="cert-open">');
+  assert.ok(certOpenIdx > capgridIdx, "the cert-open block moved where this suite doesn't expect it");
+  const gridHtml = html.slice(capgridIdx, certOpenIdx);
+  assert.doesNotMatch(gridHtml, /your garden is honest/, "the honest-garden claim must no longer be its own capcard heading inside the grid");
+  assert.match(gridHtml, /share your garden/);
+  assert.match(gridHtml, /id="save-garden"/);
+  assert.match(gridHtml, /id="seedbox"/);
+  assert.match(gridHtml, /id="open-garden"/);
+});
+
+test("H §4: the keep-growing card is a substantive send-off drawn from real, checkable vocabulary — not the old three-line stub", () => {
+  const html = pageSrc();
+  const idx = html.indexOf('keep growing it</h3>');
+  assert.ok(idx >= 0, "the keep-growing capcard's own heading moved where this suite doesn't expect it");
+  const cardHtml = html.slice(idx, idx + 1700);
+  for (const phrase of [
+    'sky of "the middle of the night"',
+    "moon of 240, 70",
+    "firefly of 300, 150",
+    "two-flowers of 380, spot",
+    "two-bees of 150, 220",
+  ]) {
+    assert.ok(cardHtml.includes(phrase), `keep-growing card must mention real vocabulary: ${phrase}`);
+  }
+  assert.match(cardHtml, /index\.html/, "keep-growing must point forward to the rest of Planes, one line, not a pitch");
+});
+
+test("H §4 vocabulary check: every placeable/phrase the keep-growing card suggests is real scene_vocab.mjs vocabulary, not invented", () => {
+  const suggested = [
+    { name: "moon", args: ["240", "70"] },
+    { name: "firefly", args: ["300", "150"] },
+    { name: "two-flowers", args: ["380", "spot"] },
+    { name: "two-bees", args: ["150", "220"] },
+  ];
+  for (const s of suggested) {
+    const p = PLACEABLES.find((p) => p.name === s.name);
+    assert.ok(p, `${s.name} is not a real placeable in scene_vocab.mjs`);
+    assert.equal(s.args.length, p.shape.length, `${s.name} needs ${p.shape.length} argument(s)`);
+  }
+  const html = pageSrc();
+  assert.match(html, /the middle of the night/, "the suggested night sky phrase must be one of scene_vocab.mjs's real SKY_PHRASES");
+});
+
+test("H §5: no serving/build instructions render in the visible footer text — only inside HTML comments", () => {
+  const html = pageSrc();
+  const footerIdx = html.indexOf("<footer>");
+  const footerEnd = html.indexOf("</footer>");
+  assert.ok(footerIdx >= 0 && footerEnd > footerIdx, "tutor.html no longer has a <footer> where this suite reads it");
+  const footerText = html.slice(footerIdx, footerEnd);
+  assert.doesNotMatch(footerText, /python3 -m http\.server/, "the visible footer must not carry serving instructions");
+  assert.doesNotMatch(footerText, /Serving:/, "the visible footer must not carry serving instructions");
+});
+
+test("H §5: both taglines were replaced away from 'draw something', and the meta description already leads with typing", () => {
+  const html = pageSrc();
+  assert.doesNotMatch(html, /draw something/, "no 'draw something' tagline should remain anywhere on the page");
+  assert.match(html, /<div class="tag">write a line, watch it grow, ask it why/, "the header tag must reflect typing, not drawing");
+  assert.match(html, /<small>write a line, ask it why<\/small>/, "the certificate signature line must match the header tag's replacement");
+  assert.match(html, /content="A hands-on Planes editor: type one line of real Planes/, "the meta description must lead with typing, not drawing");
+});
+
+test("H §6: lesson 6's own-sky cue shows a concrete example name, and cueTextFor's name-binding-def branch reads it instead of the literal placeholder text", () => {
+  const LESSONS = loadLessons();
+  const defItem = LESSONS[5].items.find((it) => it.match === "name-binding-def");
+  assert.equal(defItem.example, "to my morning glow:", "lesson 6's def item must carry a concrete example name");
+  assert.match(defItem.goal, /to my morning glow:/, "the goal copy must show the same concrete example");
+  const cueTextFor = loadCueTextFor();
+  assert.equal(cueTextFor(defItem, {}), "to my morning glow:", "the cue must show the concrete example, not the literal 'to your sky name here:' text");
+});
+
+test("H §6: the example changes nothing mechanically — testNameBindingDef still accepts any own name, example or not", () => {
+  const { testNameBindingDef } = loadMatchers();
+  const bound1 = {};
+  assert.deepEqual(testNameBindingDef({ bindAs: "skyName" }, "to my morning glow:", bound1), { committed: "to my morning glow:" }, "the example itself must still be accepted");
+  const bound2 = {};
+  assert.deepEqual(testNameBindingDef({ bindAs: "skyName" }, "to a quiet dusk:", bound2), { committed: "to a quiet dusk:" }, "a learner's own, different name must still be accepted");
+  assert.equal(bound2.skyName, "a quiet dusk");
+});
+
+test("H §7.6: finishLesson's completion copy is conditional on whether the lesson has any slot items — the capstone never claims a line was typed by you", () => {
+  const html = pageSrc();
+  const finishSrc = extractFunction(html, "finishLesson");
+  assert.match(finishSrc, /hasSlots/, "finishLesson must branch on whether the lesson carries any slot items");
+  assert.match(finishSrc, /every line typed by you/, "lessons with slots must keep the original claim");
+  assert.match(finishSrc, /now it's yours to change/, "the capstone must get a true completion message instead");
+  const LESSONS = loadLessons();
+  assert.ok(LESSONS[6].items.every((it) => it.role === "frame"), "the capstone must still carry no slot items — the branch above is reachable");
+});
+
+test("H §7.3: renderKey renders the FULL imported vocabulary for the capstone, sourced from scene_vocab.mjs — never a lesson-scoped subset or a second hand-kept list", () => {
+  const html = pageSrc();
+  const renderKeySrc = extractFunction(html, "renderKey");
+  assert.match(renderKeySrc, /LESSONS\[lessonIndex\]\.surfaces\.capstone \? fullVocab\(\) : vocabForLesson\(lessonIndex\)/, "renderKey must branch to the full vocabulary only for the capstone surface");
+  const fullVocabSrc = extractFunction(html, "fullVocab");
+  assert.match(fullVocabSrc, /placeables: PLACEABLES/);
+  assert.match(fullVocabSrc, /skies: SKY_PHRASES/);
+  assert.match(fullVocabSrc, /grounds: GROUND_PHRASES/);
+  assert.match(fullVocabSrc, /naming: NAMING_WORDS/);
+  // moon/firefly are real PLACEABLES the capstone's own items never mention —
+  // the assertion that matters is that the full imported list, not the
+  // lesson-scoped derivation, is what's wired in for the capstone.
+  const l7Text = LessonsProgramTextFor(html, 6);
+  assert.ok(!/\bmoon\b/.test(l7Text) && !/\bfirefly\b/.test(l7Text), "this check is only meaningful if the capstone's OWN items really do omit moon/firefly");
+  assert.ok(PLACEABLES.some((p) => p.name === "moon") && PLACEABLES.some((p) => p.name === "firefly"), "moon/firefly must be real PLACEABLES for the full-vocab claim to mean anything");
+});
+
+test("H §7.7: a Reset control exists in the freeplay toggles row and restores the lesson's own starting garden text, then re-runs it", () => {
+  const html = pageSrc();
+  assert.match(html, /<button class="reset-freeplay" id="reset-freeplay" type="button">Reset garden<\/button>/, "a plainly-labelled Reset control must exist in .freeplay-top");
+  const wireIdx = html.indexOf('$("reset-freeplay").addEventListener');
+  assert.ok(wireIdx >= 0, "tutor.html no longer wires #reset-freeplay where this suite reads it");
+  const wireSrc = html.slice(wireIdx, wireIdx + 400);
+  assert.match(wireSrc, /startingGardenText\(\)/, "Reset must restore the lesson's own item text via the shared helper, not a hardcoded literal");
+  assert.match(wireSrc, /runFreeplay\(\)/, "Reset must re-run and repaint after restoring the text");
+  const startingSrc = extractFunction(html, "startingGardenText");
+  assert.match(startingSrc, /LESSONS\[currentLesson\]\.items\.map\(\(it\) => it\.text\)\.join\("\\n"\)/, "startingGardenText must derive from LESSONS data, matching the build prompt's own definition of 'starting garden'");
+});
+
+test("H §8: hasUnsavedWork is narrowed to only the capstone's genuinely-edited free-play text — lessons 1-6 never count as unsaved, so switching among them never nags or downloads a file", () => {
+  const html = pageSrc();
+  const src = extractFunction(html, "hasUnsavedWork");
+  assert.match(src, /if \(!LESSONS\[currentLesson\]\.surfaces\.capstone\) return false;/, "a non-capstone lesson must never report unsaved work — it rebuilds deterministically from its items");
+  assert.match(src, /freeplayEl\.value !== startingGardenText\(\)/, "the capstone must only count edits that actually differ from the garden it started with, not mere non-emptiness");
+});
+
+test("H §8: beforeunload stays gated on the same narrowed hasUnsavedWork — no separate, un-narrowed check was left behind", () => {
+  const html = pageSrc();
+  const idx = html.indexOf('window.addEventListener("beforeunload"');
+  assert.ok(idx >= 0, "tutor.html no longer wires beforeunload where this suite reads it");
+  const src = html.slice(idx, idx + 200);
+  assert.match(src, /if \(!hasUnsavedWork\(\)\) return;/, "beforeunload must defer entirely to hasUnsavedWork, the same function the lesson-switch dialog uses");
+});
+
+test("H §8: actual file-saving stays reachable only from the capstone dialog path — a lesson-switch save option was replaced, not left dangling as dead UI", () => {
+  const html = pageSrc();
+  assert.match(html, /Save your garden first\?/, "the dialog copy must describe the actual (capstone-only) trigger, not a generic 'start the next lesson' framing that no longer matches when it fires");
+  assert.doesNotMatch(html, /Each lesson is its own garden/, "the old lesson-switch framing must be gone");
+  const saveWireIdx = html.indexOf('$("lesson-confirm-save").addEventListener');
+  assert.ok(saveWireIdx >= 0);
+  assert.match(html.slice(saveWireIdx, saveWireIdx + 100), /proceedLessonSwitch\(true\)/, "the save button must still route through the one saveGardenFile() call site");
+});
+
+// Small local helper: the canonical (non-learner-authored) program text for a
+// given lesson index, evaluated the same way loadLessons()'s own LESSONS
+// literal is — used only to state, and check, the precondition a "full
+// vocabulary" claim depends on (that the capstone's OWN lines don't already
+// mention the word being asserted as evidence of the full-vs-scoped branch).
+function LessonsProgramTextFor(html, lessonIndex) {
+  const LESSONS = loadLessons();
+  return LESSONS[lessonIndex].items.map((it) => it.text ?? "").join("\n");
+}
