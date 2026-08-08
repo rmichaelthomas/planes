@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Horizon — Reso Landing Look Development</title>
+  <style>
+    @font-face { font-family: "Red Hat Display"; src: url("../identity/fonts/red-hat-display.woff2") format("woff2"); font-display: swap; }
+    @font-face { font-family: "Martian Mono"; src: url("../identity/fonts/martian-mono.woff2") format("woff2"); font-display: swap; }
+
+    :root {
+      color-scheme: dark;
+      --paper: #f7f0df;
+      --paper-dim: #d8cfb7;
+      --graphite: #182b2d;
+      --graphite-soft: rgba(19, 40, 42, .88);
+      --teal: #1f7f84;
+      --sea: #24a7b5;
+      --amber: #f2c660;
+      --coral: #e37855;
+      --line: rgba(247, 240, 223, .34);
+      --ease: cubic-bezier(.22, 1, .36, 1);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body {
+      display: grid;
+      place-items: center;
+      background: #0d1b1d;
+      font-family: "Red Hat Display", sans-serif;
+      color: var(--paper);
+    }
+
+    button { font: inherit; }
+
+    .game {
+      position: relative;
+      width: min(100vw, 177.7778vh);
+      height: min(100vh, 56.25vw);
+      overflow: hidden;
+      container-type: size;
+      isolation: isolate;
+      background: #157d8d;
+      box-shadow: 0 0 0 1px rgba(245, 232, 196, .28), 0 28px 90px rgba(0, 0, 0, .42);
+    }
+
+    .world,
+    .world::before,
+    .world::after {
+      position: absolute;
+      inset: -1.25%;
+    }
+
+    .world {
+      z-index: 0;
+      background: url("../docs/superpowers/specs/assets/2026-08-01-horizon-reso-landing-look-development-v1.png") center / cover no-repeat;
+      transform: translate3d(calc(var(--mx, 0) * -5px), calc(var(--my, 0) * -3px), 0) scale(1.026);
+      transition: filter 420ms var(--ease), transform 700ms var(--ease);
+      will-change: transform, filter;
+    }
+
+    .world::before {
+      content: "";
+      z-index: 1;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse at 66% 69%, rgba(227, 252, 240, .22) 0 3%, transparent 19%),
+        repeating-linear-gradient(101deg, transparent 0 24px, rgba(233, 255, 244, .13) 26px, transparent 31px 57px);
+      background-size: 100% 100%, 135% 30%;
+      background-position: center, 62% 76%;
+      mix-blend-mode: screen;
+      mask-image: linear-gradient(to bottom, transparent 0 45%, #000 58% 100%);
+      opacity: .56;
+      animation: water-light 7s linear infinite;
+    }
+
+    .world::after {
+      content: "";
+      z-index: 2;
+      pointer-events: none;
+      inset: 0;
+      background:
+        linear-gradient(180deg, rgba(15, 32, 33, .06), transparent 30%, transparent 68%, rgba(8, 24, 25, .14)),
+        radial-gradient(circle at 55% 48%, transparent 40%, rgba(9, 24, 25, .22) 110%);
+      transition: background 380ms var(--ease), opacity 380ms var(--ease);
+    }
+
+    @keyframes water-light {
+      from { background-position: center, 20% 76%; }
+      to { background-position: center, 150% 76%; }
+    }
+
+    .atmosphere {
+      position: absolute;
+      z-index: 1;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .wind-thread {
+      position: absolute;
+      width: 8cqw;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(247, 240, 223, .64), transparent);
+      opacity: 0;
+      transform: translate3d(-14cqw, 0, 0) rotate(-4deg);
+      animation: wind 8s var(--delay, 0s) linear infinite;
+    }
+
+    .wind-thread:nth-child(1) { top: 20%; left: 8%; --delay: -1s; }
+    .wind-thread:nth-child(2) { top: 31%; left: 24%; --delay: -5.2s; width: 5cqw; }
+    .wind-thread:nth-child(3) { top: 17%; left: 58%; --delay: -3.7s; width: 10cqw; }
+    .wind-thread:nth-child(4) { top: 43%; left: 76%; --delay: -6.4s; width: 6cqw; }
+
+    @keyframes wind {
+      0%, 12% { opacity: 0; transform: translate3d(-13cqw, 0, 0) rotate(-4deg); }
+      26% { opacity: .5; }
+      68% { opacity: .18; }
+      82%, 100% { opacity: 0; transform: translate3d(35cqw, -2cqh, 0) rotate(-4deg); }
+    }
+
+    .chrome {
+      position: absolute;
+      z-index: 20;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .brand {
+      position: absolute;
+      top: 3.1cqh;
+      left: 2.3cqw;
+      display: flex;
+      align-items: center;
+      gap: .8cqw;
+      text-shadow: 0 2px 16px rgba(5, 20, 22, .7);
+    }
+
+    .brand img { width: clamp(17px, 2.1cqw, 34px); height: auto; }
+    .brand-copy { display: grid; gap: .12cqh; }
+    .eyebrow {
+      font-family: "Martian Mono", monospace;
+      font-size: clamp(6px, .63cqw, 11px);
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--amber);
+    }
+
+    .brand strong {
+      font-size: clamp(12px, 1.6cqw, 28px);
+      line-height: 1;
+      font-weight: 650;
+      letter-spacing: -.025em;
+    }
+
+    .top-controls {
+      position: absolute;
+      top: 2.4cqh;
+      right: 2.1cqw;
+      display: flex;
+      gap: .55cqw;
+      pointer-events: auto;
+    }
+
+    .icon-button,
+    .mode-button,
+    .lens-action,
+    .world-node {
+      border: 1px solid rgba(247, 240, 223, .52);
+      color: var(--paper);
+      background: rgba(17, 41, 43, .76);
+      backdrop-filter: blur(12px) saturate(1.1);
+      box-shadow: 0 10px 30px rgba(4, 18, 20, .18);
+      cursor: pointer;
+      transition: transform 220ms var(--ease), background 220ms var(--ease), color 220ms var(--ease), opacity 260ms var(--ease), border-color 220ms var(--ease);
+    }
+
+    .icon-button {
+      width: clamp(26px, 3cqw, 50px);
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      font-size: clamp(10px, 1cqw, 17px);
+    }
+
+    .icon-button:hover,
+    .mode-button:hover,
+    .lens-action:hover,
+    .world-node:hover { transform: translateY(-2px); background: rgba(20, 57, 58, .92); }
+    .icon-button:active,
+    .mode-button:active,
+    .lens-action:active,
+    .world-node:active { transform: scale(.97); }
+
+    .objective {
+      position: absolute;
+      left: 2.25cqw;
+      bottom: 3.4cqh;
+      width: min(24cqw, 410px);
+      min-width: 190px;
+      padding: clamp(10px, 1.25cqw, 20px) clamp(12px, 1.4cqw, 24px);
+      border-left: clamp(2px, .24cqw, 4px) solid var(--amber);
+      background: linear-gradient(100deg, rgba(18, 43, 44, .94), rgba(18, 43, 44, .73));
+      box-shadow: 0 18px 50px rgba(4, 18, 20, .26);
+      backdrop-filter: blur(14px) saturate(1.06);
+      transition: transform 420ms var(--ease), opacity 300ms var(--ease);
+    }
+
+    .objective strong {
+      display: block;
+      margin-top: .55cqh;
+      font-size: clamp(11px, 1.25cqw, 21px);
+      line-height: 1.15;
+      font-weight: 640;
+    }
+
+    .objective p {
+      margin: .65cqh 0 0;
+      max-width: 29em;
+      font-size: clamp(8px, .72cqw, 13px);
+      line-height: 1.45;
+      color: var(--paper-dim);
+    }
+
+    .objective .progress {
+      display: flex;
+      gap: .4cqw;
+      margin-top: 1.2cqh;
+    }
+
+    .objective .progress i { width: 2.1cqw; min-width: 14px; height: 2px; background: rgba(247, 240, 223, .24); }
+    .objective .progress i:first-child { background: var(--amber); }
+
+    .mode-rail {
+      position: absolute;
+      right: 2cqw;
+      top: 50%;
+      transform: translateY(-50%);
+      display: grid;
+      gap: .4cqh;
+      padding: .42cqw;
+      border: 1px solid rgba(247, 240, 223, .45);
+      border-radius: 999px;
+      background: rgba(16, 39, 41, .72);
+      backdrop-filter: blur(14px) saturate(1.1);
+      pointer-events: auto;
+    }
+
+    .mode-button {
+      width: clamp(38px, 4.5cqw, 74px);
+      min-height: clamp(29px, 3.3cqw, 54px);
+      padding: .45cqw;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      box-shadow: none;
+      font-family: "Martian Mono", monospace;
+      font-size: clamp(6px, .55cqw, 10px);
+      letter-spacing: .08em;
+    }
+
+    .mode-button[aria-pressed="true"] { background: var(--paper); color: var(--graphite); }
+
+    .move-hint {
+      position: absolute;
+      left: 50%;
+      bottom: 3.25cqh;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: .7cqw;
+      padding: .65cqh .95cqw;
+      border-radius: 999px;
+      background: rgba(19, 43, 44, .75);
+      border: 1px solid rgba(247, 240, 223, .3);
+      backdrop-filter: blur(12px);
+      font-size: clamp(7px, .65cqw, 11px);
+      color: var(--paper-dim);
+      transition: opacity 280ms var(--ease), transform 380ms var(--ease);
+    }
+
+    .key {
+      display: inline-grid;
+      place-items: center;
+      min-width: 1.6em;
+      height: 1.6em;
+      padding: 0 .35em;
+      border-radius: .38em;
+      background: var(--paper);
+      color: var(--graphite);
+      font-family: "Martian Mono", monospace;
+      font-weight: 700;
+    }
+
+    .lens-layer {
+      position: absolute;
+      z-index: 12;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 360ms var(--ease);
+    }
+
+    .lens-wash {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 28% 31% at 61% 58%, transparent 0 54%, rgba(7, 27, 29, .33) 76%, rgba(7, 27, 29, .56) 130%),
+        linear-gradient(rgba(8, 29, 31, .16), rgba(8, 29, 31, .16));
+      backdrop-filter: saturate(.78);
+    }
+
+    .focus-ring {
+      position: absolute;
+      left: 39.5%;
+      top: 39%;
+      width: 43.5%;
+      height: 33%;
+      border: clamp(1px, .16cqw, 3px) solid rgba(248, 207, 104, .88);
+      border-radius: 48% 52% 45% 55% / 55% 46% 54% 45%;
+      box-shadow: 0 0 0 1px rgba(23, 65, 67, .48), 0 0 42px rgba(244, 204, 95, .26), inset 0 0 28px rgba(244, 204, 95, .12);
+      transform: rotate(2deg) scale(.96);
+      transition: transform 520ms var(--ease);
+    }
+
+    .focus-ring::after {
+      content: "HYDROFOIL · VEHICLE · CHILD-REMIXABLE";
+      position: absolute;
+      right: 2%;
+      bottom: -2.2cqh;
+      padding: .45cqh .58cqw;
+      border-radius: 999px;
+      background: var(--paper);
+      color: var(--graphite);
+      font-family: "Martian Mono", monospace;
+      font-size: clamp(5px, .48cqw, 9px);
+      letter-spacing: .06em;
+      white-space: nowrap;
+    }
+
+    .world-node {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      gap: .5cqw;
+      padding: .55cqh .72cqw;
+      border-radius: 999px;
+      font-family: "Martian Mono", monospace;
+      font-size: clamp(5px, .5cqw, 9px);
+      letter-spacing: .05em;
+      pointer-events: auto;
+      opacity: 0;
+      transform: translateY(8px);
+    }
+
+    .world-node::before { content: ""; width: .55cqw; min-width: 5px; aspect-ratio: 1; border: 1px solid var(--amber); border-radius: 50%; box-shadow: 0 0 0 4px rgba(243, 198, 96, .15); }
+    .world-node[data-node="market"] { left: 15%; top: 37%; transition-delay: 80ms; }
+    .world-node[data-node="child"] { left: 26%; top: 73%; transition-delay: 130ms; }
+    .world-node[data-node="water"] { right: 12%; top: 72%; transition-delay: 180ms; }
+    .world-node[data-node="passage"] { left: 55%; top: 26%; transition-delay: 230ms; }
+
+    .lens-actions {
+      position: absolute;
+      left: 61%;
+      top: 57%;
+      width: 24cqw;
+      height: 24cqh;
+      transform: translate(-50%, -50%);
+    }
+
+    .lens-action {
+      position: absolute;
+      min-width: clamp(40px, 5.4cqw, 90px);
+      padding: .72cqh .7cqw;
+      border-radius: 999px;
+      font-family: "Martian Mono", monospace;
+      font-size: clamp(6px, .55cqw, 10px);
+      letter-spacing: .08em;
+      pointer-events: auto;
+      opacity: 0;
+      transform: scale(.82);
+    }
+
+    .lens-action[data-action="move"] { left: 4%; top: 0; }
+    .lens-action[data-action="change"] { right: 0; top: 34%; background: rgba(222, 168, 66, .92); color: #213536; border-color: var(--paper); }
+    .lens-action[data-action="behave"] { left: 12%; bottom: 0; }
+
+    .lens-card {
+      position: absolute;
+      left: 2.25cqw;
+      bottom: 3.4cqh;
+      width: min(25cqw, 430px);
+      min-width: 205px;
+      padding: clamp(10px, 1.25cqw, 20px) clamp(12px, 1.4cqw, 24px);
+      background: rgba(246, 238, 218, .95);
+      color: var(--graphite);
+      box-shadow: 0 18px 60px rgba(4, 18, 20, .3);
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity 300ms var(--ease), transform 440ms var(--ease);
+    }
+
+    .lens-card strong { display: block; margin-top: .55cqh; font-size: clamp(11px, 1.2cqw, 20px); line-height: 1.15; }
+    .lens-card p { margin: .6cqh 0 0; font-size: clamp(7px, .68cqw, 12px); line-height: 1.45; color: #445456; }
+    .lens-card .eyebrow { color: #8c5d12; }
+
+    .game[data-mode="lens"] .world { filter: saturate(.88) brightness(.88); }
+    .game[data-mode="lens"] .lens-layer { opacity: 1; pointer-events: auto; }
+    .game[data-mode="lens"] .focus-ring { transform: rotate(2deg) scale(1); }
+    .game[data-mode="lens"] .world-node { opacity: 1; transform: translateY(0); }
+    .game[data-mode="lens"] .lens-action { opacity: 1; transform: scale(1); transition-delay: 150ms; }
+    .game[data-mode="lens"] .lens-card { opacity: 1; transform: translateY(0); }
+    .game[data-mode="lens"] .objective { opacity: 0; transform: translateY(16px); }
+    .game[data-mode="lens"] .move-hint { opacity: 0; transform: translate(-50%, 10px); }
+
+    .toast {
+      position: absolute;
+      z-index: 40;
+      left: 50%;
+      top: 8%;
+      max-width: 38cqw;
+      transform: translate(-50%, -12px);
+      padding: .85cqh 1cqw;
+      border-radius: 999px;
+      background: var(--paper);
+      color: var(--graphite);
+      font-size: clamp(7px, .7cqw, 12px);
+      box-shadow: 0 14px 40px rgba(5, 19, 21, .28);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 220ms var(--ease), transform 320ms var(--ease);
+    }
+
+    .toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+
+    .truth {
+      position: absolute;
+      z-index: 50;
+      inset: auto 2.1cqw 2.8cqh auto;
+      width: min(31cqw, 520px);
+      padding: 1.4cqw;
+      color: var(--graphite);
+      background: rgba(247, 240, 223, .96);
+      box-shadow: 0 24px 80px rgba(4, 18, 20, .38);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(14px);
+      transition: opacity 260ms var(--ease), transform 360ms var(--ease);
+    }
+
+    .truth.is-open { opacity: 1; pointer-events: auto; transform: translateY(0); }
+    .truth strong { font-size: clamp(11px, 1.25cqw, 20px); }
+    .truth p { margin: .7cqh 0 0; font-size: clamp(7px, .68cqw, 12px); line-height: 1.5; color: #455759; }
+
+    @container (max-width: 700px) {
+      .objective { min-width: 0; width: 31cqw; padding: 1.1cqw 1.35cqw; }
+      .objective p, .objective .progress, .move-hint { display: none; }
+      .brand-copy .eyebrow { display: none; }
+      .top-controls .icon-button:nth-child(2) { display: none; }
+      .lens-card { min-width: 0; width: 32cqw; padding: 1.2cqw; }
+      .lens-card p { display: none; }
+      .truth { width: 45cqw; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="game" data-mode="play" aria-label="Horizon game look-development mockup">
+    <div class="world" aria-hidden="true"></div>
+    <div class="atmosphere" aria-hidden="true">
+      <i class="wind-thread"></i><i class="wind-thread"></i><i class="wind-thread"></i><i class="wind-thread"></i>
+    </div>
+
+    <section class="lens-layer" aria-label="Living Lens">
+      <div class="lens-wash"></div>
+      <div class="focus-ring"></div>
+      <button class="world-node" data-node="market" type="button">MARKET · PLACE</button>
+      <button class="world-node" data-node="child" type="button">YOU · PLAYER</button>
+      <button class="world-node" data-node="water" type="button">PASSAGE · WATER</button>
+      <button class="world-node" data-node="passage" type="button">NKWO ERIRI · PLACE</button>
+      <div class="lens-actions" aria-label="Hydrofoil actions">
+        <button class="lens-action" data-action="move" type="button">MOVE</button>
+        <button class="lens-action" data-action="change" type="button">CHANGE</button>
+        <button class="lens-action" data-action="behave" type="button">BEHAVE</button>
+      </div>
+      <article class="lens-card">
+        <span class="eyebrow">Living Lens · Touch</span>
+        <strong>The hydrofoil is holding for the tide.</strong>
+        <p>Its route, behavior and relationship to the landing can be explored without leaving the world.</p>
+      </article>
+    </section>
+
+    <div class="chrome">
+      <header class="brand">
+        <img src="../identity/planes-mark-on-dark.svg" alt="Planes">
+        <div class="brand-copy">
+          <span class="eyebrow">Horizon · Ala Eriri</span>
+          <strong>The Living Passage</strong>
+        </div>
+      </header>
+
+      <nav class="top-controls" aria-label="World controls">
+        <button class="icon-button" id="pause" type="button" aria-label="Pause world">Ⅱ</button>
+        <button class="icon-button" id="sound" type="button" aria-label="Sound is off">♩</button>
+        <button class="icon-button" id="info" type="button" aria-label="Prototype truth">i</button>
+      </nav>
+
+      <article class="objective">
+        <span class="eyebrow">The world is changing</span>
+        <strong>High tide reaches Reso soon.</strong>
+        <p>Follow the dock to the arriving hydrofoil, or open the Living Lens to discover what can change.</p>
+        <div class="progress" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      </article>
+
+      <div class="move-hint"><span class="key">WASD</span> explore <span class="key">L</span> Living Lens</div>
+
+      <nav class="mode-rail" aria-label="View mode">
+        <button class="mode-button" data-mode="play" type="button" aria-pressed="true">PLAY</button>
+        <button class="mode-button" data-mode="lens" type="button" aria-pressed="false">LENS</button>
+      </nav>
+    </div>
+
+    <div class="toast" role="status" aria-live="polite"></div>
+
+    <aside class="truth" aria-label="Prototype truth">
+      <strong>What is real in this proof</strong>
+      <p>The world, character and hydrofoil are now one art-directed image rather than mismatched cutouts. The UI composition and Lens transition are interactive. Water light and atmosphere are live effects. Production still requires this painting to be segmented into independent depth planes, animation rigs and semantic hit regions before PixiJS can move each part separately.</p>
+    </aside>
+  </main>
+
+  <script>
+    const game = document.querySelector('.game');
+    const modes = [...document.querySelectorAll('[data-mode].mode-button')];
+    const toast = document.querySelector('.toast');
+    const truth = document.querySelector('.truth');
+    const pause = document.querySelector('#pause');
+    const sound = document.querySelector('#sound');
+    let toastTimer;
+    let paused = false;
+
+    function setMode(mode) {
+      game.dataset.mode = mode;
+      modes.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === mode)));
+    }
+
+    function say(message) {
+      toast.textContent = message;
+      toast.classList.add('is-visible');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('is-visible'), 1800);
+    }
+
+    modes.forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
+
+    document.querySelectorAll('.world-node').forEach(button => {
+      button.addEventListener('click', () => say(`${button.textContent.trim()} selected through the Living Lens.`));
+    });
+
+    document.querySelectorAll('.lens-action').forEach(button => {
+      button.addEventListener('click', () => say(`${button.textContent.trim()} opens the next authoring depth.`));
+    });
+
+    document.querySelector('#info').addEventListener('click', () => truth.classList.toggle('is-open'));
+
+    pause.addEventListener('click', () => {
+      paused = !paused;
+      game.style.setProperty('--motion-state', paused ? 'paused' : 'running');
+      document.querySelectorAll('.wind-thread').forEach(el => el.style.animationPlayState = paused ? 'paused' : 'running');
+      pause.textContent = paused ? '▶' : 'Ⅱ';
+      pause.setAttribute('aria-label', paused ? 'Resume world' : 'Pause world');
+      say(paused ? 'The world is holding.' : 'The world is moving again.');
+    });
+
+    sound.addEventListener('click', () => say('Structured harbor audio is intentionally silent in this visual proof.'));
+
+    window.addEventListener('keydown', event => {
+      if (event.key.toLowerCase() === 'l') setMode(game.dataset.mode === 'lens' ? 'play' : 'lens');
+      if (event.key === 'Escape') { setMode('play'); truth.classList.remove('is-open'); }
+    });
+
+    game.addEventListener('pointermove', event => {
+      const rect = game.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width - .5) * 2;
+      const y = ((event.clientY - rect.top) / rect.height - .5) * 2;
+      game.style.setProperty('--mx', x.toFixed(3));
+      game.style.setProperty('--my', y.toFixed(3));
+    });
+
+    game.addEventListener('pointerleave', () => {
+      game.style.setProperty('--mx', 0);
+      game.style.setProperty('--my', 0);
+    });
+  </script>
+</body>
+</html>

@@ -50,3 +50,11 @@ docs/superpowers/
 # pipeline being the first to use it here) — reproducible on demand, not
 # something any build carries forward.
 .playwright-cli/
+
+# The superpowers:brainstorming skill's local preview-server working
+# directory (per-session server pid/instance-id state, plus the draft pages
+# and images served while shaping a design before it's promoted). Same
+# reasoning as .playwright-cli/ above: reproducible on demand, and anything
+# worth keeping gets promoted into mockups/, docs/superpowers/specs/, or
+# assets/ as its own commit rather than living here.
+.superpowers/

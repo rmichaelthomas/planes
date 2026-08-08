@@ -744,6 +744,8 @@ Every transformation preserves status and provenance. The agent receives only ex
 
 The first slice uses the supplied corpus and existing visual assets as authoritative inputs. New art must be produced through a Planes-directed asset-compositor pipeline that records source assets, transformations, generated derivatives, masks, pivots, depth maps, normal maps, animation rigs, audio anchors, and permissions. A generated plate without object segmentation and semantic registration is not an engine-ready world asset.
 
+The approved Reso Landing look-development frame at [`assets/2026-08-01-horizon-reso-landing-look-development-v1.png`](assets/2026-08-01-horizon-reso-landing-look-development-v1.png) is the canonical visual target for the first slice. It is a derived, non-canonical depiction of canonical inputs: it governs production art direction but does not add facts to the Ala Eriri corpus. Its child, hydrofoil, architecture, geography, activity, palette, and atmosphere must therefore be traced to their source references or explicitly marked as derivative interpretation before they enter an engine asset pack.
+
 ## 21. Accessibility and sensory design
 
 The first slice supports:
@@ -911,6 +913,30 @@ The slice succeeds only if it proves all six:
 4. **Agent-native making** — a model can propose valid, bounded Planes while the child remains author.
 5. **Learning** — cause, rationale, source, provenance, and AI receipt become understandable through play.
 6. **Engine future** — the same seed, IR, saves, and protocols can expand beyond the district and Pixi renderer.
+
+### 24.4 Canonical visual acceptance artifact
+
+The following frame is the approved production-intent visual target for Horizon's first playable cell:
+
+![Horizon — Reso Landing unified look-development frame](assets/2026-08-01-horizon-reso-landing-look-development-v1.png)
+
+The preserved interactive PLAY/LENS composition is [`mockups/horizon-reso-landing-look-development-v1.html`](../../../mockups/horizon-reso-landing-look-development-v1.html).
+
+This artifact is authoritative for:
+
+- one coherent painterly language across environment, people, vehicles, water, architecture, foliage, light, and atmosphere;
+- a warm, contemporary Atlantic and Caribbean-island spirit grounded in the supplied Ala Eriri corpus;
+- a human-scale third-person camera with a navigable foreground, active landing, passage, and distant islands;
+- believable scale, perspective, contact, shadow, reflection, and color exchange between the child, hydrofoil, dock, and water;
+- foreground, playable-ground, midground, distant-land, water, and sky planes that can be separated for premium 2.5D staging;
+- a world-first interface in which PLAY remains visually dominant and the Living Lens appears progressively over the world;
+- the target emotional register: curious, joyful, alive, rigorous, and beautiful enough for children and adults rather than toy-like or visually juvenile.
+
+It is not evidence that the scene is already engine-ready. The approved frame remains a unified painting. Production must still derive and register independent depth planes, occlusion masks, pivots, collision shapes, semantic hit regions, normal and displacement data where useful, character and vehicle rigs, water and weather effects, and fidelity-tier variants.
+
+The earlier runtime-resolved collage is explicitly rejected as a visual reference. Its environment plate, isolated hydrofoil cutout, and simplified CSS child appeared to belong to different games. It may be consulted only for discarded UX experiments; no implementation agent may use it to lower the visual acceptance bar or justify mismatched placeholder art in a review capture.
+
+Visual acceptance requires an actual renderer capture at the target aspect ratio. A prose description, isolated concept plate, wireframe, or composition containing style-mismatched placeholders cannot satisfy this gate. Before Phase 2 is accepted, the Pixi performer must reproduce the approved frame's coherence in motion while retaining deterministic semantic behavior and the fidelity ladder.
 
 ## 25. Delivery decomposition
 
@@ -1154,8 +1180,11 @@ The user explicitly approved:
 - seven-facet World IR and structured `show` boundary;
 - persistent runtime and performance architecture;
 - agent/tutor/trust architecture;
-- Horizon — The Living Passage as the first vertical slice.
+- Horizon — The Living Passage as the first vertical slice;
+- the unified Reso Landing look-development frame as the canonical production-intent visual target;
+- the PLAY/LENS composition as the approved world-first interface direction;
+- rejection of the earlier collage-like runtime mockup as a visual reference.
 
 ## 32. Next gate
 
-After written-spec approval, invoke the writing-plans process for **Phase 0 — Language and protocol substrate only**. Do not begin Pixi integration, world art production, or agent integration until Phase 0 has its own reviewed implementation plan and passes its conformance gates.
+The program specification and its canonical visual acceptance artifact are approved. The next planning task is **Phase 0 — Language and protocol substrate only**. Do not begin Pixi integration, production asset segmentation, world art production, or agent integration until Phase 0 has its own reviewed implementation plan and passes its conformance gates.
