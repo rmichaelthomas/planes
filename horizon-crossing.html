@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#133e51">
+  <link rel="icon" href="data:,">
+  <title>A Crossing — the engine path</title>
+  <!--
+    horizon-crossing.html — Horizon Phase 2 Build 2 (build prompt §3.5).
+
+    A Crossing, ported onto the persistent kernel and the Pixi performer:
+    the same game the showcase path (formerly a-crossing.html) used to run
+    via stepGraph re-composing and re-running the whole Planes source every
+    tick (design doc §12), now driven by the worker/kernel through the
+    Build 1 input seam instead. paint/a_crossing.planes's own single-pass
+    top-level shape could not be ported to world-init/advance AND keep
+    driving stepGraph's prelude-injected state/event/tick at the same
+    time — the persistent-kernel loader runs every top-level statement
+    immediately, with no prelude, so any code straddling both conventions
+    breaks the engine path instead. a-crossing.html was retired (deleted)
+    for this reason, not left running against a file whose calling
+    convention it no longer speaks; this page is its replacement. This
+    page never reaches into the worker's internal world value — everything
+    it renders and reads comes from js/scene/ir.mjs's parseSceneIntent
+    output (invariant 3), the same boundary the SVG stage
+    (js/scene/a_crossing_stage.mjs, still used by nothing now that
+    a-crossing.html is gone, but left in place — not this build's file to
+    delete) used to consume.
+
+    Served over http://, never file:// — this page imports ES modules and
+    spawns a module Worker.
+  -->
+  <style>
+    @font-face{font-family:"Red Hat";src:url("./identity/fonts/red-hat-display.woff2") format("woff2");font-display:swap}
+    @font-face{font-family:"Martian";src:url("./identity/fonts/martian-mono.woff2") format("woff2");font-display:swap}
+    :root{--paper:#f3ead7;--ink:#1d292b;--indigo:#16224c;--ivory:#f4efe2;--gold:#e0a93b;--coral:#d9683f;--sea:#0d8197;--ease:cubic-bezier(.16,1,.3,1);--display:"Red Hat",sans-serif;--mono:"Martian",monospace}
+    *{box-sizing:border-box}
+    html,body{width:100%;height:100%;overflow:hidden;background:#092f42}
+    body{margin:0;color:var(--ink);font-family:var(--display);text-rendering:optimizeLegibility}
+    button{font:inherit;color:inherit}
+    button:focus-visible{outline:3px solid #fff4bc;outline-offset:4px}
+
+    .play-stage{position:relative;isolation:isolate;width:100%;min-height:100svh;overflow:hidden;background:linear-gradient(#8bd4dd,#0c7390)}
+    #crossing-stage{position:absolute;inset:0;width:100%;height:100%}
+    #crossing-stage canvas{display:block}
+
+    .world-title{position:absolute;z-index:10;left:clamp(18px,3vw,46px);top:clamp(18px,3vw,42px);display:flex;align-items:flex-start;gap:14px;color:#fff8e9;text-shadow:0 2px 18px #092c3a8c}
+    .world-home{display:block;flex:0 0 auto;border-radius:4px}
+    .world-title img{width:32px;height:32px;filter:drop-shadow(0 2px 8px #092c3a80)}
+    .world-title p{margin:0 0 3px;font:600 10px/1.2 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:#ffe2a4}
+    .world-title h1{margin:0;font:760 clamp(24px,3.4vw,44px)/.9 var(--display);letter-spacing:-.04em}
+    .world-title small{display:block;margin-top:6px;font:500 10px/1.2 var(--mono);letter-spacing:.05em}
+
+    .world-tools{position:absolute;z-index:11;top:clamp(15px,2vw,30px);right:clamp(14px,2vw,30px);display:flex;align-items:center;gap:8px}
+    .tool{width:44px;height:44px;border:1px solid #fff3d89e;background:#153946b8;color:#fff9e8;backdrop-filter:blur(10px);border-radius:50%;display:grid;place-items:center;cursor:pointer;box-shadow:0 8px 24px #062c3d38;transition:background .2s,transform .2s var(--ease)}
+    .tool:hover{background:#f7edd7;color:#1c3438;transform:translateY(-2px)}
+    .tool[aria-pressed="true"]{background:#f0c358;color:#1b3340}
+    .tool svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+    .passage-hud{position:absolute;z-index:9;left:clamp(18px,3vw,46px);top:clamp(122px,16vh,164px);width:min(250px,calc(100vw - 36px));padding:14px 16px 15px;background:linear-gradient(145deg,#fff9e9ef,#eee0c7e8);border:1px solid #fff7e6;box-shadow:0 18px 42px #092f4040;clip-path:polygon(0 0,97% 0,100% 8%,100% 100%,3% 100%,0 92%)}
+    .hud-kicker{display:flex;justify-content:space-between;gap:12px;font:700 9px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:#8b522e}
+    .passage-time{display:flex;align-items:baseline;gap:8px;margin-top:7px}
+    .passage-time strong{font:780 38px/.86 var(--display);letter-spacing:-.05em}
+    .passage-time span{font:600 11px var(--mono)}
+    .passage-need{margin:8px 0 0;padding-top:8px;border-top:1px solid #8e7c6250;font:560 12.5px/1.3 var(--display)}
+    .passage-status{display:block;margin-top:5px;font:500 9px var(--mono);letter-spacing:.07em;text-transform:uppercase;color:#4b5e5d}
+
+    .choice-tray{position:absolute;z-index:12;left:50%;bottom:clamp(20px,4vh,42px);transform:translateX(-50%);width:min(760px,calc(100vw - 28px));display:grid;justify-items:center;gap:9px;pointer-events:none}
+    .prompt{margin:0;color:#fff9e9;text-shadow:0 2px 14px #052a3e;font:650 clamp(16px,2vw,22px) var(--display);letter-spacing:-.02em}
+    .need-chooser,.action-ribbon{display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;padding:8px;background:#142f38b8;border:1px solid #fff1cc85;box-shadow:0 16px 38px #0628375c;backdrop-filter:blur(14px);pointer-events:auto}
+    .need-chooser:empty,.action-ribbon:empty{display:none}
+    .world-action{min-height:40px;border:1px solid #f8ead1a8;background:#f5ead9;color:#1b3339;padding:9px 15px;cursor:pointer;font:650 11.5px var(--mono);transition:transform .18s var(--ease),background .18s,color .18s}
+    .world-action:hover,.world-action:focus-visible{background:#173f4b;color:#fff7e6;transform:translateY(-2px)}
+    .world-action.primary{background:#e26c3d;color:#fffaf0;border-color:#f9c5a9}
+    .world-action.primary:hover{background:#bb4f2c}
+
+    .lifecycle-panel{position:absolute;z-index:11;right:clamp(14px,2vw,30px);top:clamp(70px,10vh,110px);width:min(230px,calc(100vw - 34px));padding:10px 12px;background:#132d38d0;border:1px solid #fff1cc55;color:#f4efe2;font:10.5px var(--mono);line-height:1.5;backdrop-filter:blur(8px)}
+    .lifecycle-panel strong{display:block;font:700 9px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:#ffe2a4;margin-bottom:4px}
+
+    .truth-note{position:absolute;z-index:8;right:18px;bottom:14px;color:#f5ecd8c7;font:8px var(--mono);letter-spacing:.06em;text-shadow:0 1px 8px #062c3d;max-width:300px;text-align:right}
+
+    .loading-veil{position:absolute;inset:0;z-index:30;display:grid;place-items:center;background:#f3ead7;color:#1d292b;transition:opacity .8s var(--ease),visibility .8s}
+    .loading-veil[hidden]{display:grid;opacity:0;visibility:hidden}
+    .loading-inner{text-align:center}
+    .loading-inner img{width:50px}
+    .loading-inner p{font:650 10px var(--mono);letter-spacing:.18em;text-transform:uppercase}
+    .loading-line{width:160px;height:2px;background:#c8b797;overflow:hidden}
+    .loading-line:after{content:"";display:block;width:60%;height:100%;background:#d9683f;animation:loading 1.2s ease-in-out infinite alternate}
+    @keyframes loading{to{transform:translateX(68%)}}
+
+    @media(max-width:760px){
+      .world-title{left:16px;top:16px}.world-title h1{font-size:26px}.world-title small{display:none}
+      .world-tools{top:12px;right:10px}.tool{width:38px;height:38px}
+      .passage-hud{left:14px;top:88px;width:200px;padding:11px}
+      .lifecycle-panel{display:none}
+      .choice-tray{width:calc(100vw - 18px)}.need-chooser,.action-ribbon{width:100%;overflow-x:auto;flex-wrap:nowrap;justify-content:flex-start}
+    }
+  </style>
+</head>
+<body>
+  <main class="play-stage" aria-label="A simulated Ala Eriri Passage crossing, driven by the persistent kernel">
+    <div id="crossing-stage" aria-label="Playable view from Reso across the Passage to Nkwo Eriri"></div>
+
+    <header class="world-title" aria-label="A Crossing">
+      <a class="world-home" href="./index.html" aria-label="Back to Planes showcases"><img src="./identity/planes-mark-on-dark.svg" alt="Planes"></a>
+      <div><p>Nine Landings · Ala Eriri · Engine path</p><h1>A Crossing</h1><small>driven by the persistent kernel</small></div>
+    </header>
+
+    <nav class="world-tools" aria-label="Crossing controls">
+      <button class="tool" id="pause-passage" aria-label="Pause passage" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+      <button class="tool" id="sound-passage" aria-label="Sound off" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 14h4l5 4V6L8 10H4Zm12-4q3 2 0 4m2-7q6 5 0 10"/></svg></button>
+      <button class="tool" id="save-passage" aria-label="Save a snapshot"><svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5Zm3 0v6h8V4M8 14h8v6H8Z"/></svg></button>
+      <button class="tool" id="replay-passage" aria-label="Verify replay against the saved snapshot"><svg viewBox="0 0 24 24"><path d="M5 8V4l-3 3 3 3V8a8 8 0 1 1-1 6"/></svg></button>
+    </nav>
+
+    <section id="passage-hud" class="passage-hud" aria-live="polite">
+      <div class="hud-kicker"><span>Passage</span><span id="hud-sea">sea —</span></div>
+      <div class="passage-time"><strong id="hud-minutes">—</strong><span>minutes</span></div>
+      <p class="passage-need" id="hud-need">Waiting for the condition.</p>
+      <span class="passage-status" id="hud-status">Preparing the crossing</span>
+    </section>
+
+    <aside class="lifecycle-panel" aria-live="polite">
+      <strong>Lifecycle</strong>
+      <span id="lifecycle-readout">Idle. Save a snapshot, then verify replay.</span>
+    </aside>
+
+    <section class="choice-tray" aria-label="Available Passage choices">
+      <p class="prompt" id="choice-prompt">Choose a crossing.</p>
+      <div id="need-chooser" class="need-chooser"></div>
+      <div id="action-ribbon" class="action-ribbon"></div>
+    </section>
+
+    <p class="truth-note">A local deterministic simulation, on the engine path. No real route, service, place, or person is changed.</p>
+
+    <div id="loading-veil" class="loading-veil"><div class="loading-inner"><img src="./identity/planes-mark-on-light.svg" alt=""><p>Setting the Passage</p><div class="loading-line"></div></div></div>
+  </main>
+
+  <script type="module">
+    import { boot } from "./js/world/runtime/main.mjs";
+    import { CROSSING_FIXTURE_URL } from "./js/world/runtime/worker.mjs";
+    import { createCrossingAudio } from "./js/scene/a_crossing_audio.mjs";
+    import { actionSurfaceSignature } from "./js/scene/a_crossing_controls.mjs";
+    import { crossingStatus } from "./js/paint/a_crossing.mjs";
+    import { WorldEventLog } from "./js/world_event_log.mjs";
+    import {
+      replayCrossing, eventsByTickFromLog, verifyCrossingSnapshot,
+    } from "./js/world/runtime/crossing_persistence.mjs";
+
+    const $ = (id) => document.getElementById(id);
+    const labelOf = (id) => id.replaceAll("-", " ");
+
+    // The HUD/action-ribbon channel: WorldClient (main.mjs) has no
+    // generic pub/sub of its own — this page reads its public
+    // `lastSceneIntent` on a short poll instead, the same pattern
+    // horizon.html's own sidebar already uses for `client.metrics`
+    // (there: setInterval(..., 500)). 60ms is well above the worker's
+    // 30Hz tick (33ms) so no tick is perceptibly missed, without adding
+    // any new plumbing to main.mjs for a second page to share.
+    const HUD_POLL_MS = 60;
+
+    function minutesOf(lines) {
+      for (let i = lines.length - 1; i >= 0; i -= 1) {
+        if (lines[i].startsWith("crossing ")) return lines[i].split(" ")[2] ?? null;
+      }
+      return null;
+    }
+
+    function subjectState(intent, id) {
+      return intent.subjects.find((s) => s.id === id)?.state ?? null;
+    }
+
+    const PHASE_PROMPTS = {
+      choosing: "Who needs to cross today?",
+      planning: "The Passage is listening.",
+      crossing: "The cord has taken the water.",
+      arrived: "Nkwo Eriri receives the crossing.",
+      refused: "The landing holds its decision.",
+    };
+
+    const audio = createCrossingAudio();
+    const eventLog = new WorldEventLog();
+    const actionSurfaces = { need: null, crossing: null };
+    let soundOn = false;
+    let paused = false;
+    let selected = null;
+    let lastSnapshot = null;
+    let lastAppliedRevision = -1;
+
+    function actionButton(action) {
+      const button = document.createElement("button");
+      button.className = `world-action${action.emphasis === "primary" ? " primary" : ""}`;
+      button.dataset.kind = action.kind;
+      button.dataset.choice = action.choice;
+      button.textContent = action.label;
+      return button;
+    }
+
+    function renderActions(intent) {
+      const needActions = intent.actions.filter(({ kind }) => kind === "need");
+      const crossingActions = intent.actions.filter(({ kind }) => kind !== "need");
+      const nextNeedSurface = actionSurfaceSignature(needActions);
+      const nextCrossingSurface = actionSurfaceSignature(crossingActions);
+      if (nextNeedSurface !== actionSurfaces.need) {
+        $("need-chooser").replaceChildren(...needActions.map(actionButton));
+        actionSurfaces.need = nextNeedSurface;
+      }
+      if (nextCrossingSurface !== actionSurfaces.crossing) {
+        $("action-ribbon").replaceChildren(...crossingActions.map(actionButton));
+        actionSurfaces.crossing = nextCrossingSurface;
+      }
+    }
+
+    function renderHud(lines, intent) {
+      const status = crossingStatus(lines) ?? "unknown";
+      const phase = subjectState(intent, "reso-landing") ?? "unknown";
+      $("hud-status").textContent = labelOf(status.replace("crossing-", ""));
+      $("hud-minutes").textContent = minutesOf(lines) ?? "—";
+      const sea = intent.weather.find((w) => w.kind === "swell")?.intensity;
+      $("hud-sea").textContent = `sea ${sea ?? "—"}`;
+      $("hud-need").textContent = `${subjectState(intent, "clinic-beacon") ?? "—"} · Reso to Nkwo Eriri`;
+      $("choice-prompt").textContent = PHASE_PROMPTS[phase] ?? "The landing holds its decision.";
+    }
+
+    // Appended once an input's own sendInput() promise resolves — i.e.
+    // once the worker has ACKNOWLEDGED it (applied on that tick, per
+    // worker.mjs's own header) and client.lastSceneIntent.revision has
+    // therefore already advanced to the tick it applied on. delta: null
+    // (world_event_log.mjs's own optional field — no facet-patch delta
+    // exists for the scene-intent protocol, see that module's header).
+    function logAppliedEvent(event) {
+      const tick = client.lastSceneIntent?.revision ?? 0;
+      const subject = event.subject ?? event.choice ?? "crossing";
+      eventLog.append(
+        { tick, actor: "player", affectedSubjects: [subject], rationale: `${event.kind}:${event.choice ?? event.subject}`, delta: null, event },
+        new Date().toISOString(),
+      );
+    }
+
+    const onSelect = (id) => {
+      selected = id;
+      client.sendInput({ kind: "select", subject: id }).then(() => logAppliedEvent({ kind: "select", subject: id }));
+    };
+
+    const { client } = await boot({
+      pixiContainer: $("crossing-stage"),
+      fixtureUrl: CROSSING_FIXTURE_URL,
+      protocol: "scene-intent",
+      onSelect,
+    });
+    window.__crossingClient = client;
+
+    function pollAndRender() {
+      const si = client.lastSceneIntent;
+      if (!si || si.revision === lastAppliedRevision) return;
+      lastAppliedRevision = si.revision;
+      renderHud(si.lines, si.intent);
+      renderActions(si.intent);
+      audio.apply(si.intent.audio);
+    }
+    setInterval(pollAndRender, HUD_POLL_MS);
+
+    document.querySelector(".choice-tray").addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-kind]");
+      if (!button) return;
+      const applied = { kind: button.dataset.kind, choice: button.dataset.choice };
+      await client.sendInput(applied);
+      logAppliedEvent(applied);
+    });
+
+    $("pause-passage").addEventListener("click", () => {
+      paused = !paused;
+      client.worker.postMessage({ type: paused ? "cancel" : "resume" });
+      $("pause-passage").setAttribute("aria-pressed", String(paused));
+      $("pause-passage").setAttribute("aria-label", paused ? "Resume passage" : "Pause passage");
+    });
+
+    $("sound-passage").addEventListener("click", async () => {
+      soundOn = !soundOn;
+      if (soundOn) await audio.unlock();
+      audio.setMuted(!soundOn);
+      $("sound-passage").setAttribute("aria-pressed", String(soundOn));
+      $("sound-passage").setAttribute("aria-label", soundOn ? "Sound on" : "Sound off");
+    });
+
+    $("save-passage").addEventListener("click", async () => {
+      $("lifecycle-readout").textContent = "Saving…";
+      lastSnapshot = await client.saveSnapshot();
+      $("lifecycle-readout").textContent =
+        `Saved at tick ${lastSnapshot.tick} (${lastSnapshot.hash.slice(0, 12)}…). Replay verifies against this.`;
+    });
+
+    $("replay-passage").addEventListener("click", async () => {
+      if (!lastSnapshot) {
+        $("lifecycle-readout").textContent = "Save a snapshot first, then verify replay.";
+        return;
+      }
+      $("lifecycle-readout").textContent = "Replaying from tick 0…";
+      try {
+        verifyCrossingSnapshot(lastSnapshot);
+        const eventsByTick = eventsByTickFromLog(eventLog.events());
+        const replayed = await replayCrossing(CROSSING_FIXTURE_URL, eventsByTick, lastSnapshot.tick);
+        if (replayed.hash === lastSnapshot.hash) {
+          $("lifecycle-readout").textContent = `Replay verified: byte-identical at tick ${lastSnapshot.tick}.`;
+        } else {
+          $("lifecycle-readout").textContent = `Replay MISMATCH at tick ${lastSnapshot.tick} — see console.`;
+          console.error("crossing replay mismatch", { saved: lastSnapshot, replayed });
+        }
+      } catch (err) {
+        $("lifecycle-readout").textContent = `Replay failed: ${err.message}`;
+      }
+    });
+
+    $("loading-veil").hidden = true;
+  </script>
+</body>
+</html>

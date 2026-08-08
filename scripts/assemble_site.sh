@@ -22,7 +22,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 SITE="${1:-_site}"
 rm -rf "$SITE"
-mkdir -p "$SITE/paint" "$SITE/grammar/messages" "$SITE/identity/fonts"
+mkdir -p "$SITE/paint" "$SITE/grammar" "$SITE/identity/fonts"
 
 # Every root page, not a named few.
 cp ./*.html "$SITE/"
@@ -34,7 +34,17 @@ find js -name '*.mjs' -not -path 'js/test/*' -print0 \
       cp "$f" "$SITE/$f"
     done
 
-cp paint/*.planes "$SITE/paint/"
+# Every .planes source, at any depth — a flat `paint/*.planes` glob missed
+# paint/world/kernel_spike_fixture.planes (js/world/runtime/worker.mjs's
+# own fetch target since Horizon Phase 1's renderer pipeline, PR #91):
+# invisible locally (the repo tree has the file; only the ASSEMBLED site
+# was missing it) and exactly the blind spot this script's own header
+# describes meta.html and garden.html already hitting once each.
+find paint -name '*.planes' -print0 \
+  | while IFS= read -r -d '' f; do
+      mkdir -p "$SITE/$(dirname "$f")"
+      cp "$f" "$SITE/$f"
+    done
 
 # Every authored visual asset, preserving its relative path. The tree is
 # derived rather than naming A Crossing or one asset type: future showcases
@@ -65,9 +75,18 @@ cp identity/fonts/* "$SITE/identity/fonts/"
 # self-hosted stack in the browser, so it FETCHES grammar/interp.planes and the
 # graph beneath it, and browser_main.mjs imports grammar/core.json for the
 # core-restricted mode. Globbed rather than listed, so the next page to reach
-# for a grammar file does not repeat this.
-cp grammar/*.json "$SITE/grammar/"
+# for a grammar file does not repeat this. Recursive (find, not a flat
+# `grammar/*.json` glob) for the same reason paint/*.planes above is now
+# recursive: a flat glob silently missed grammar/protocols/world-v1.json
+# (js/world_ir.mjs's own fetch target since Horizon Phase 0) — one `find`
+# pass covers grammar/*.json, grammar/messages/*.json, and
+# grammar/protocols/*.json alike, so a future grammar/ subdirectory does
+# not reopen the same gap a third time.
+find grammar -name '*.json' -print0 \
+  | while IFS= read -r -d '' f; do
+      mkdir -p "$SITE/$(dirname "$f")"
+      cp "$f" "$SITE/$f"
+    done
 cp grammar/*.planes "$SITE/grammar/"
-cp grammar/messages/*.json "$SITE/grammar/messages/"
 
 echo "assemble_site: $SITE built from the tree"

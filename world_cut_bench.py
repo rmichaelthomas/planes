@@ -357,7 +357,7 @@ def write_results_md(path, ticks, chain_steps, py_specs, node_specs, results, co
     lines = []
     a = lines.append
     a("# Horizon Phase 1 — `_cut`'s per-`mk` cost: measured results\n")
-    a(f"\n**Date:** captured at run time by this script.  ")
+    a("\n**Date:** captured at run time by this script.  ")
     a(f"\n**Commit:** `{commit}`.  ")
     a(f"\n**Fixed-step rate:** {FIXED_STEP_HZ} Hz ({FIXED_STEP_PERIOD_MS:.3f} ms tick period). "
       f"**Window:** {WINDOW} (the shippable configuration).\n")
@@ -373,7 +373,8 @@ def write_results_md(path, ticks, chain_steps, py_specs, node_specs, results, co
     a(f"\n{ticks} ticks, window={WINDOW}, both implementations — the SAME fixture and "
       "soak shape `horizon-retention-tail-results.md` used, `_cut` changed only.\n")
     a("\n### Python — after\n")
-    a("\n| min | p50 | p95 | p99 | p99.9 | max | mean | ticks |\n|---|---|---|---|---|---|---|---|\n")
+    a("\n| min | p50 | p95 | p99 | p99.9 | max | mean | ticks |\n"
+      "|---|---|---|---|---|---|---|---|\n")
     a(_row(py_f) + "\n")
     a(f"\nWall clock: {py_f['wallSeconds']:.2f} s. Chain hash: `{py_f['chainHash']}`. "
       f"Ticks over 50 ms: **{py_f['over50msCount']}**.\n")
@@ -385,7 +386,8 @@ def write_results_md(path, ticks, chain_steps, py_specs, node_specs, results, co
       f"**Over-50ms change:** {b['over50msCount']} -> {py_f['over50msCount']}.\n")
 
     a("\n### JavaScript — after\n")
-    a("\n| min | p50 | p95 | p99 | p99.9 | max | mean | ticks |\n|---|---|---|---|---|---|---|---|\n")
+    a("\n| min | p50 | p95 | p99 | p99.9 | max | mean | ticks |\n"
+      "|---|---|---|---|---|---|---|---|\n")
     a(_row(js_f) + "\n")
     a(f"\nWall clock: {js_f['wallSeconds']:.2f} s. Chain hash: `{js_f['chainHash']}`. "
       f"Ticks over 50 ms: **{js_f['over50msCount']}**.\n")
@@ -467,8 +469,10 @@ requirement, not a silent partial pass.
       f"{BEFORE_FIXTURE['python']['p95']:.3f} ms |\n")
     a(f"| real fixture, window={WINDOW} | JavaScript | {js_f['p95']*1000:.3f} ms | {gate(js_f)} | "
       f"{BEFORE_FIXTURE['js']['p95']:.3f} ms |\n")
-    a(f"| synthetic chain, window={WINDOW} | Python | {py_c['p95']*1000:.3f} ms | {gate(py_c)} | n/a |\n")
-    a(f"| synthetic chain, window={WINDOW} | JavaScript | {js_c['p95']*1000:.3f} ms | {gate(js_c)} | n/a |\n")
+    a(f"| synthetic chain, window={WINDOW} | Python | {py_c['p95']*1000:.3f} ms | "
+      f"{gate(py_c)} | n/a |\n")
+    a(f"| synthetic chain, window={WINDOW} | JavaScript | {js_c['p95']*1000:.3f} ms | "
+      f"{gate(js_c)} | n/a |\n")
     a("\n**FAIL on the real fixture, PASS on the synthetic chain — reported plainly, "
       "not smoothed over (build prompt §4 point 1/§6.2.E). See §3 for the measured "
       "reason and the named next lever.**\n")

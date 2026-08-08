@@ -28,6 +28,7 @@ Two layers:
 """
 import copy
 import hashlib
+import json
 
 from world_delta import canonical_delta_string
 
@@ -45,6 +46,24 @@ class WorldEventLogError(Exception):
         self.detail = detail
         self.fix = fix
         super().__init__(f"{tag}: {detail}")
+
+
+def _canonical_event_string(value):
+    """Deterministic, cross-implementation-stable text form of a plain
+    JSON-shaped value: sorted keys, no whitespace — mirrors
+    js/world_event_log.mjs's own `canonicalEventString` exactly, so an
+    identical logical event produces an identical string (and therefore an
+    identical hash) in either implementation regardless of the two
+    languages' own differing dict/object key-insertion-order
+    conventions."""
+    if isinstance(value, dict):
+        return "{" + ",".join(
+            f"{json.dumps(k)}:{_canonical_event_string(value[k])}"
+            for k in sorted(value.keys())
+        ) + "}"
+    if isinstance(value, list):
+        return "[" + ",".join(_canonical_event_string(v) for v in value) + "]"
+    return json.dumps(value)
 
 
 def _canonical_entry_string(entry):
@@ -69,6 +88,15 @@ def _canonical_entry_string(entry):
     else:
         lines.append("delta:")
         lines.extend(f"  {line}" for line in canonical_delta_string(payload["delta"]).splitlines())
+    # OPTIONAL, ADDITIVE (Horizon Phase 2 Build 2's own gap-fix, mirrored
+    # from js/world_event_log.mjs — see that file's own comment for the
+    # full rationale). Absent for every existing world-v1 caller, so their
+    # canonical string and hash stay byte identical to before this field
+    # existed. `.get` rather than `payload["event"]`: this key may not
+    # exist at all on an older/world-v1 payload dict, distinct from
+    # existing but None.
+    if payload.get("event") is not None:
+        lines.append(f"event: {_canonical_event_string(payload['event'])}")
     return "\n".join(lines)
 
 
