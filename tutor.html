@@ -74,7 +74,7 @@
         font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
         padding:18px 18px 48px;
       }
-      .wrap{max-width:1080px; margin:0 auto}
+      .wrap{max-width:1280px; margin:0 auto}
 
       header{display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:20px}
       .brand{display:flex; align-items:center; gap:11px}
@@ -233,6 +233,14 @@
 
       .complete{font-weight:800; font-size:15px; color:var(--teal); line-height:1.4; margin-top:6px}
       .complete[hidden]{display:none}
+      .next-lesson{
+        display:inline-flex; align-items:center; gap:6px; margin-top:12px;
+        font-family:var(--display); font-weight:800; font-size:13.5px; border:0; border-radius:10px;
+        padding:10px 17px; cursor:pointer; color:#fff; background:var(--clay); box-shadow:var(--shadow-sm);
+      }
+      .next-lesson:hover{background:color-mix(in oklab, var(--clay) 88%, black)}
+      .next-lesson:focus-visible{outline:2px solid var(--graphite); outline-offset:2px}
+      .next-lesson[hidden]{display:none}
       .ask-hint{font-family:var(--mono); font-size:11px; color:var(--ink-60); margin:9px 0 0}
       .ask-hint[hidden]{display:none}
 
@@ -295,6 +303,11 @@
       }
       textarea#freeplay:focus-visible{outline:2px solid var(--clay); outline-offset:-1px}
       #freeplay-oops[hidden]{display:none}
+      .honest-strip{
+        display:flex; align-items:center; gap:9px; margin:0 0 12px; padding:10px 14px;
+        background:#fff; border:1px solid var(--line); border-radius:10px; font-size:13px; color:var(--graphite);
+      }
+      .honest-strip .ic{width:20px; height:20px; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; color:#fff; background:var(--teal); flex:0 0 auto}
       .capgrid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
       @media (max-width:640px){.capgrid{grid-template-columns:1fr}}
       .capcard{background:#fff; border:1px solid var(--line); border-radius:14px; padding:15px 16px}
@@ -374,7 +387,7 @@
           <img src="identity/planes-small-on-light.svg" alt="Planes" width="36" height="36" />
           <div>
             <h1>Planes</h1>
-            <div class="tag">draw something, then ask it where it came from · <a href="./index.html">all of Planes</a></div>
+            <div class="tag">write a line, watch it grow, ask it why · <a href="./index.html">all of Planes</a></div>
           </div>
         </div>
         <div class="lessons" id="lessons" role="group" aria-label="lesson"></div>
@@ -420,6 +433,7 @@
               <div class="prog" id="prog"></div>
             </div>
             <p class="complete" id="complete-msg" hidden></p>
+            <button class="next-lesson" id="next-lesson" type="button" hidden>Next lesson →</button>
             <p class="ask-hint" id="ask-hint" hidden>Click anything in your picture to ask where it came from.</p>
           </div>
 
@@ -468,17 +482,14 @@
             <div class="toggles">
               <button class="hints-toggle" id="hints-toggle" type="button" aria-pressed="false">hide hints</button>
               <button class="key-toggle2" id="key-toggle2" type="button" aria-pressed="false">hide key</button>
+              <button class="reset-freeplay" id="reset-freeplay" type="button">Reset garden</button>
             </div>
           </div>
           <textarea id="freeplay" spellcheck="false" aria-label="your garden, editable"></textarea>
           <div class="oops" id="freeplay-oops" hidden><span class="i">!</span><span id="freeplay-oops-text"></span></div>
         </div>
+        <p class="honest-strip"><span class="ic">✓</span> <span id="honest-text">Your garden can't secretly do anything.</span></p>
         <div class="capgrid">
-          <div class="capcard">
-            <h3><span class="ic" style="background:var(--teal)">✓</span> your garden is honest</h3>
-            <p id="honest-text">Your garden can't secretly do anything.</p>
-            <p style="color:var(--slate)">Most apps on your phone can't say that. Yours can.</p>
-          </div>
           <div class="capcard">
             <h3><span class="ic" style="background:var(--violet)">↗</span> share your garden</h3>
             <p>Your garden is a tiny file plus your seed. Give a friend the file, and the <b>exact same</b> garden grows on their computer.</p>
@@ -494,13 +505,15 @@
           </div>
           <div class="capcard wide">
             <h3><span class="ic" style="background:var(--amber)">✦</span> keep growing it</h3>
-            <p>Edit the garden above. Try:</p>
+            <p>What you just did in these lessons is real programming: naming things, saying why, building a whole picture out of small pieces. Those are the same ideas every programming language is built from — you've been doing this the entire time.</p>
+            <p style="margin-top:10px">A few things to try, right in the garden above:</p>
             <div class="try">
-              <code>two-flowers of 380, spot</code> — another pair, way over on the right<br />
-              <code>sky of "just before dark"</code> — a different time of day<br />
-              make a <b>new sky</b> in your own words, the way the "your own sky" lesson showed you
+              <code>sky of "the middle of the night"</code>, then <code>moon of 240, 70</code> and <code>firefly of 300, 150</code> — turn it into a night scene<br />
+              <code>two-flowers of 380, spot</code> — a second pair, further over<br />
+              <code>to a quiet dusk:</code> then a <code>custom-sky of …, …, …</code> under it — a sky in your own words, the way the "your own sky" lesson showed you<br />
+              <code>two-bees of 150, 220</code> — a few more bees, wherever you like
             </div>
-            <p style="margin-top:10px">What you did here is real programming. The same ideas — naming things, saying why, building from small pieces — work in every language there is.</p>
+            <p style="margin-top:10px; font-size:12px">Planes goes further than a garden — see what else it can draw on <a href="./index.html">the other pages</a>.</p>
           </div>
         </div>
         <div class="cert-open">
@@ -509,16 +522,14 @@
         </div>
       </div>
 
+      <!-- Serving: this page fetches paint/scene.planes and imports js/*.mjs
+           as ES modules, so it needs a static server (python3 -m http.server
+           8000) and no network beyond it. See also the comment at the top
+           of <head>. -->
       <footer>
         <p>
-          Serving: this page fetches <code>paint/scene.planes</code> and
-          imports <code>js/*.mjs</code> as ES modules, so it needs a static server
-          (<code>python3 -m http.server 8000</code>) and no network beyond it.
-        </p>
-        <p>
-          <strong>No Run button.</strong> The instant a typed line matches, it paints itself.
-          <strong>Asking performs nothing:</strong> clicking anything in the picture reads the last
-          line that painted it — it never runs your program again.
+          <strong>There's no Run button.</strong> A line paints itself the moment it's right.
+          Clicking anything in the picture asks about it — it never runs your program again.
         </p>
       </footer>
     </div>
@@ -547,7 +558,7 @@
             <span class="chip" style="background:var(--violet)">made it their own</span>
           </div>
           <div class="foot">
-            <div class="sig"><div class="word2">planes<span class="dot">.</span></div><small>draw something, then ask it why</small></div>
+            <div class="sig"><div class="word2">planes<span class="dot">.</span></div><small>write a line, ask it why</small></div>
             <div class="seedstamp">this garden<b id="cert-seed">——————</b></div>
           </div>
           <p style="margin-top:14px; font-size:11.5px; color:var(--slate)">Printing? Choose “Save as PDF” instead of a printer to keep a copy you can share.</p>
@@ -557,12 +568,12 @@
     </div>
 
     <div class="scrim" id="lesson-scrim">
-      <div class="lesson-confirm" role="dialog" aria-label="start the next lesson">
-        <h2>Start the next lesson?</h2>
-        <p>Each lesson is its own garden. This one isn't saved yet — you can save it first, or just start the next one fresh.</p>
+      <div class="lesson-confirm" role="dialog" aria-label="save before leaving the sandbox">
+        <h2>Save your garden first?</h2>
+        <p>You've changed the garden in this sandbox. Save it as a file before you leave, or switch lessons and leave the changes behind.</p>
         <div class="actions">
           <button class="primary" id="lesson-confirm-save" type="button">Save my garden, then continue</button>
-          <button id="lesson-confirm-fresh" type="button">Start fresh</button>
+          <button id="lesson-confirm-fresh" type="button">Switch without saving</button>
           <button class="cancel" id="lesson-confirm-cancel" type="button">Stay here</button>
         </div>
       </div>
@@ -621,6 +632,7 @@
       const stepOopsTextEl = $("step-oops-text");
       const progEl = $("prog");
       const completeMsgEl = $("complete-msg");
+      const nextLessonEl = $("next-lesson");
       const keyEl = $("key");
       const swatchesEl = $("swatches");
       const capstoneEl = $("capstone");
@@ -769,10 +781,10 @@
           say: "This time you make your own sky. Name it in your own words, then give it a color.",
           items: [
             { role: "frame", text: "use scene" },
-            { role: "slot", match: "name-binding-def", bindAs: "skyName", text: "to your sky name here:", gap: true,
-              goal: 'Name your own sky — any words you like, ending with a colon.', paints: null },
+            { role: "slot", match: "name-binding-def", bindAs: "skyName", text: "to your sky name here:", example: "to my morning glow:", gap: true,
+              goal: 'Name your own sky, then give it a color — one move, two steps. Start with the name — like <code>to my morning glow:</code> — any words you like, then a colon.', paints: null },
             { role: "slot", match: "shape-custom-sky",
-              goal: 'Now give it a color — tap a swatch below, or type your own three numbers.', paints: null },
+              goal: 'Now the second step: color the sky you just named — tap a swatch below, or type your own three numbers.', paints: null },
             { role: "frame", text: "start", gap: true },
             { role: "slot", match: "name-binding-use", bindAs: "skyName",
               goal: 'Now use your own sky — type the name you gave it.', paints: "sky" },
@@ -789,7 +801,7 @@
         },
         {
           title: "it's yours now",
-          say: "Your garden is already grown — every line here is one you typed in the lessons before this one. See what it can do, share it, and get your certificate. The garden below is yours to edit however you like.",
+          say: "Your garden is already grown, from everything you built in the lessons before this one. This is your sandbox now — the full toolkit is in the key, and a Reset is always there if you want to start over. Explore it, share it, and get your certificate. The garden below is yours to edit however you like.",
           items: [
             { role: "frame", text: "use scene" },
             { role: "frame", text: "start", gap: true },
@@ -882,6 +894,7 @@
         if (step.match === "name-binding-use") return boundNames[step.bindAs] || "";
         if (step.match === "shape-because") return `let ${step.name} = ${step.number} because "…"`;
         if (step.match === "shape-custom-sky") return "custom-sky of …, …, …";
+        if (step.match === "name-binding-def") return step.example || step.text;
         return step.text;
       }
 
@@ -921,8 +934,15 @@
         return glyph ? `${label} ${glyph}` : label;
       }
 
+      // The capstone is the graduation sandbox: it renders the FULL imported
+      // vocabulary, not the lesson-scoped subset — open exploration gets the
+      // whole palette, never a second hand-kept list (§9 invariant).
+      function fullVocab() {
+        return { placeables: PLACEABLES, skies: SKY_PHRASES, grounds: GROUND_PHRASES, naming: NAMING_WORDS };
+      }
+
       function renderKey(lessonIndex) {
-        const vocab = vocabForLesson(lessonIndex);
+        const vocab = LESSONS[lessonIndex].surfaces.capstone ? fullVocab() : vocabForLesson(lessonIndex);
 
         const placeablesGrp = $("key-placeables").closest(".grp");
         placeablesGrp.hidden = vocab.placeables.length === 0;
@@ -1182,11 +1202,16 @@
       function finishLesson() {
         lessonComplete = true;
         completeMsgEl.hidden = false;
-        completeMsgEl.innerHTML = `✓ ${esc(LESSONS[currentLesson].title)} is complete — every line typed by you.`;
+        const hasSlots = LESSONS[currentLesson].items.some((it) => it.role === "slot");
+        completeMsgEl.innerHTML = hasSlots
+          ? `✓ ${esc(LESSONS[currentLesson].title)} is complete — every line typed by you.`
+          : `✓ This is the garden you grew across the lessons — now it's yours to change.`;
         if (hasPaintedThisLesson) {
           askHintEl.hidden = false;
         }
+        nextLessonEl.hidden = currentLesson >= LESSONS.length - 1;
       }
+      nextLessonEl.addEventListener("click", () => setLesson(currentLesson + 1));
 
       // ---- the stream-draw-into-settle-pulse reveal (§6, checkpoint §498) ---
 
@@ -1590,9 +1615,14 @@
         ).join("");
       }
 
+      // Lessons 1-6 rebuild deterministically from their items — switching
+      // away loses nothing that matters, so they never count as "unsaved."
+      // Only the capstone's free-play edits are genuinely authored,
+      // non-reconstructable content (§8) — and only when they actually
+      // differ from the starting garden the lesson loaded with.
       function hasUnsavedWork() {
-        if (LESSONS[currentLesson].surfaces.capstone) return freeplayEl.value.trim() !== "";
-        return committedMeta.some((m) => m.role === "slot");
+        if (!LESSONS[currentLesson].surfaces.capstone) return false;
+        return freeplayEl.value !== startingGardenText();
       }
 
       let pendingLessonSwitch = null;
@@ -1649,6 +1679,7 @@
         updateCoordHintVisibility();
         askHintEl.hidden = true;
         completeMsgEl.hidden = true;
+        nextLessonEl.hidden = true;
         swatchesEl.hidden = true;
         capstoneEl.hidden = !lesson.surfaces.capstone;
         updateHintsToggleLabel();
@@ -1665,7 +1696,7 @@
 
         if (lesson.surfaces.capstone) {
           activeStepEl.hidden = true;
-          freeplayEl.value = lesson.items.map((it) => it.text).join("\n");
+          freeplayEl.value = startingGardenText();
           await runFreeplay();
           finishLesson();
         } else {
@@ -1829,6 +1860,18 @@
       freeplayEl.addEventListener("input", () => {
         clearTimeout(freeplayTimer);
         freeplayTimer = setTimeout(runFreeplay, 400);
+      });
+
+      // The sandbox's safety net: whatever the learner breaks, this always
+      // gets them back to the garden they graduated with.
+      function startingGardenText() {
+        return LESSONS[currentLesson].items.map((it) => it.text).join("\n");
+      }
+      $("reset-freeplay").addEventListener("click", () => {
+        const starting = startingGardenText();
+        if (freeplayEl.value !== starting && !confirm("Reset the garden back to how it started? Your current edits will be lost.")) return;
+        freeplayEl.value = starting;
+        runFreeplay();
       });
 
       async function updateHonestCard() {
