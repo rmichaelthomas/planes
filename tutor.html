@@ -313,6 +313,14 @@
         .cert .x, .cert .actions{display:none !important}
       }
 
+      .lesson-confirm{width:min(420px,100%); background:var(--paper); border-radius:16px; padding:26px 28px 22px; box-shadow:0 30px 80px rgba(0,0,0,.4)}
+      .lesson-confirm h2{font-family:var(--display); font-weight:900; font-size:19px; color:var(--graphite); margin:0 0 10px}
+      .lesson-confirm p{font-size:13.5px; color:var(--slate); line-height:1.55; margin:0 0 20px}
+      .lesson-confirm .actions{display:flex; flex-direction:column; gap:8px}
+      .lesson-confirm .actions button{font-family:var(--display); font-weight:700; font-size:13.5px; border:1px solid var(--line); background:#fff; color:var(--graphite); border-radius:9px; padding:11px 16px; cursor:pointer}
+      .lesson-confirm .actions button.primary{background:var(--clay); color:#fff; border-color:var(--clay)}
+      .lesson-confirm .actions button.cancel{border-color:transparent; background:none; color:var(--ink-40)}
+
       footer{margin-top:24px; font-family:var(--mono); font-size:10px; color:var(--ink-40); line-height:1.7; max-width:700px}
       @media (max-width:620px){.lessons button{padding:6px 8px; font-size:11px}.lessons button small{display:none}}
     </style>
@@ -476,6 +484,18 @@
           <p style="margin-top:14px; font-size:11.5px; color:var(--slate)">Printing? Choose “Save as PDF” instead of a printer to keep a copy you can share.</p>
         </div>
         <div class="actions"><button class="primary" id="cert-print" type="button">Print it ⤓</button><button id="cert-close2" type="button">Back to my garden</button></div>
+      </div>
+    </div>
+
+    <div class="scrim" id="lesson-scrim">
+      <div class="lesson-confirm" role="dialog" aria-label="start the next lesson">
+        <h2>Start the next lesson?</h2>
+        <p>Each lesson is its own garden. This one isn't saved yet — you can save it first, or just start the next one fresh.</p>
+        <div class="actions">
+          <button class="primary" id="lesson-confirm-save" type="button">Save my garden, then continue</button>
+          <button id="lesson-confirm-fresh" type="button">Start fresh</button>
+          <button class="cancel" id="lesson-confirm-cancel" type="button">Stay here</button>
+        </div>
       </div>
     </div>
 
@@ -938,13 +958,19 @@
       // Switching lessons resets the editor to empty so the new lesson's
       // ghost guides from a blank surface (carried-over text otherwise
       // suppresses the ghost wherever it's already "long enough"). Guarded
-      // by a confirm ONLY when there is unsaved text — an untouched lesson
-      // switches silently.
+      // by the in-page lesson-advance dialog ONLY when there is unsaved
+      // text — an untouched lesson switches silently.
+      let pendingLessonSwitch = null; // { n, pushUrl } while the lesson-advance dialog is open
       function setLesson(n, { pushUrl = true } = {}) {
         if (source.value.trim() !== "") {
-          const ok = window.confirm("Switching lessons will clear what you've typed. Switch anyway?");
-          if (!ok) return;
+          pendingLessonSwitch = { n, pushUrl };
+          lessonScrim.classList.add("show");
+          return;
         }
+        performLessonSwitch(n, { pushUrl });
+      }
+
+      function performLessonSwitch(n, { pushUrl = true } = {}) {
         currentLesson = clampLesson(n);
         source.value = "";
         ghostHidden = false;
@@ -1368,13 +1394,18 @@
       // more; a friend (or her own next login) opens it back into this same
       // editor and it regrows identically, because the program is a pure
       // function of what it says.
-      $("save-garden").addEventListener("click", () => {
-        if (source.value.trim() === "") { showOops("write your garden first, then save it"); return; }
+      function saveGardenFile() {
+        if (source.value.trim() === "") return false;
         seedTicket = seedTicket ?? String(Math.floor(Math.random() * 900000) + 100000);
         $("seedbox").textContent = seedTicket;
         $("cert-seed").textContent = seedTicket;
         const blob = new Blob([source.value], { type: "text/plain;charset=utf-8" });
         downloadBlob(blob, exportFilename("garden", "planes", new Date()));
+        return true;
+      }
+
+      $("save-garden").addEventListener("click", () => {
+        if (!saveGardenFile()) { showOops("write your garden first, then save it"); return; }
       });
 
       $("open-garden").addEventListener("change", async (e) => {
@@ -1443,12 +1474,34 @@
       $("cert-print").addEventListener("click", () => window.print());
       scrim.addEventListener("click", (e) => { if (e.target === scrim) scrim.classList.remove("show"); });
 
+      // ---- the lesson-advance dialog: save-first, never framed as loss ----
+      const lessonScrim = $("lesson-scrim");
+      function closeLessonDialog() {
+        lessonScrim.classList.remove("show");
+        pendingLessonSwitch = null;
+      }
+      function proceedLessonSwitch(save) {
+        if (!pendingLessonSwitch) return;
+        if (save) saveGardenFile();
+        const { n, pushUrl } = pendingLessonSwitch;
+        lessonScrim.classList.remove("show");
+        pendingLessonSwitch = null;
+        performLessonSwitch(n, { pushUrl });
+      }
+      $("lesson-confirm-save").addEventListener("click", () => proceedLessonSwitch(true));
+      $("lesson-confirm-fresh").addEventListener("click", () => proceedLessonSwitch(false));
+      $("lesson-confirm-cancel").addEventListener("click", closeLessonDialog);
+      lessonScrim.addEventListener("click", (e) => { if (e.target === lessonScrim) closeLessonDialog(); });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && lessonScrim.classList.contains("show")) closeLessonDialog();
+      });
+
       // ---- leaving with unsaved work ----------------------------------
       //
       // §9's save-and-reopen IS the persistence model — no localStorage, no
       // autosave. Without this, a refresh, a closed tab, or a back-swipe
-      // loses everything typed with no warning beyond the lesson-switch
-      // confirm above, which only fires on an in-page lesson change, never
+      // loses everything typed with no warning beyond the lesson-advance
+      // dialog above, which only fires on an in-page lesson change, never
       // on navigating away. The browser owns the prompt's wording; setting
       // returnValue is what triggers it across engines.
       window.addEventListener("beforeunload", (e) => {

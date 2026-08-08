@@ -395,14 +395,17 @@ test("F: the coordinate tag ships hidden by default; the caption ships visible (
   assert.ok(hintTagMatch, "#coord-hint must ship with its text already in place, not hidden — a fresh lesson has not been run yet");
 });
 
-test("F: setLesson resets orientation mode on every lesson switch, alongside the ghost/key reset", () => {
-  const src = extractFunction(pageSrc(), "setLesson");
+test("F: performLessonSwitch resets orientation mode on every lesson switch, alongside the ghost/key reset", () => {
+  // setLesson only guards (deferring to the in-page lesson-advance dialog
+  // when there's unsaved text); performLessonSwitch is what actually
+  // performs the switch and is where this suite's resets live.
+  const src = extractFunction(pageSrc(), "performLessonSwitch");
   const ghostResetIdx = src.indexOf("ghostHidden = false;");
   const runResetIdx = src.indexOf("hasRunThisLesson = false;");
-  assert.ok(ghostResetIdx >= 0, "setLesson no longer resets ghostHidden where this suite expects it");
-  assert.ok(runResetIdx >= 0, "setLesson must reset hasRunThisLesson to false — a freshly-entered lesson has not been run yet");
+  assert.ok(ghostResetIdx >= 0, "performLessonSwitch no longer resets ghostHidden where this suite expects it");
+  assert.ok(runResetIdx >= 0, "performLessonSwitch must reset hasRunThisLesson to false — a freshly-entered lesson has not been run yet");
   const visibilityCallIdx = src.indexOf("updateCoordHintVisibility();");
-  assert.ok(visibilityCallIdx >= 0, "setLesson must call updateCoordHintVisibility() so the caption/tag reflect the fresh, not-yet-run state");
+  assert.ok(visibilityCallIdx >= 0, "performLessonSwitch must call updateCoordHintVisibility() so the caption/tag reflect the fresh, not-yet-run state");
 });
 
 test("F: run() only turns off orientation mode on the genuine success path, after every early-return guard", () => {
