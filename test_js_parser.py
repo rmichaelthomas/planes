@@ -190,6 +190,29 @@ def test_inline_amber_near_misses_parse_clean_and_identically():
         assert jout == py_form, f"src:\n{src}\n  divergence"
 
 
+# ============================================= F3: a reserved word in a `to` name
+
+RESERVED_WORD_IN_NAME = [
+    "to dawn and dusk:\n  give 1\n",   # reserved word in the middle
+    "to and dusk:\n  give 1\n",        # reserved word first
+    "to dawn dusk and:\n  give 1\n",   # reserved word last
+]
+
+
+def test_reserved_word_in_function_name_refuses_with_identical_message():
+    """A reserved word inside a `to` name quotes the whole name exactly as
+    written, wherever in the name it lands (F3)."""
+    for src in RESERVED_WORD_IN_NAME:
+        try:
+            parse(src)
+            raise AssertionError(f"parser.py did not refuse:\n{src}")
+        except PlanesSyntaxError as e:
+            py_msg = str(e)
+        jd = json.loads(_js_ast_src(src, None))
+        assert jd.get("error") == "PlanesSyntaxError", f"js did not refuse:\n{src}\n{jd}"
+        assert jd["message"] == py_msg, f"src:\n{src}\n  py={py_msg!r}\n  js={jd['message']!r}"
+
+
 # ======================================================= non-ASCII source: Python's semantics
 
 NON_ASCII = [

@@ -1397,13 +1397,14 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1378",
+      "source": "parser.py:1394",
       "raised_in": "prescan_funcs",
-      "template": "line {tokens[i + 1].line}: '{tokens[i + 1].value}' is a reserved word and cannot start a function name\n  reserved: {', '.join(sorted(KEYWORDS))}",
+      "template": "line {word.line}: '{word.value}' is a reserved word and cannot start the function name '{full_name}'\n  {fix}",
       "slots": [
-        "tokens[i + 1].line",
-        "tokens[i + 1].value",
-        "', '.join(sorted(KEYWORDS))"
+        "word.line",
+        "word.value",
+        "full_name",
+        "fix"
       ]
     },
     {
@@ -1411,15 +1412,14 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1386",
+      "source": "parser.py:1398",
       "raised_in": "prescan_funcs",
-      "template": "line {tokens[j].line}: '{tokens[j].value}' is a reserved word and cannot appear in the function name '{' '.join(parts)} {tokens[j].value}'\n  reserved: {', '.join(sorted(KEYWORDS))}",
+      "template": "line {word.line}: '{word.value}' is a reserved word and cannot appear in the function name '{full_name}'\n  {fix}",
       "slots": [
-        "tokens[j].line",
-        "tokens[j].value",
-        "' '.join(parts)",
-        "tokens[j].value",
-        "', '.join(sorted(KEYWORDS))"
+        "word.line",
+        "word.value",
+        "full_name",
+        "fix"
       ]
     },
     {
@@ -1870,10 +1870,10 @@
       "parser.py:1323"
     ],
     "parser.planessyntaxerror-site.prescan_funcs-1": [
-      "parser.py:1378"
+      "parser.py:1394"
     ],
     "parser.planessyntaxerror-site.prescan_funcs-2": [
-      "parser.py:1386"
+      "parser.py:1398"
     ],
     "rules.render.branch-1": [
       "rules.py:154-157"

@@ -1370,25 +1370,36 @@ def prescan_funcs(tokens):
         # one that starts a statement.
         if i > 0 and tokens[i - 1].kind not in ("EOL", "BEGIN", "END"):
             continue
-        j, parts = i + 1, []
-        while tokens[j].kind == "NAME":
-            parts.append(tokens[j].value)
+        # Collected as one span, all the way to the real end of the name --
+        # `of`, a punctuation mark, end of line, or end of file -- rather
+        # than stopping at the first non-NAME token. A reserved word can
+        # land first (`to and dusk:`), in the middle (`to dawn and
+        # dusk:`), or last (`to dawn dusk and:`); scanning past it instead
+        # of stopping there is what lets the message quote the name
+        # exactly as the author wrote it, instead of just the words seen
+        # before the reserved word turned up.
+        j = i + 1
+        span = []
+        while tokens[j].kind not in ("OF", "OP", "EOL", "EOF"):
+            span.append(tokens[j])
             j += 1
-        if not parts:
+        bad = next((k for k, tok in enumerate(span) if tok.kind != "NAME"), None)
+        if bad is not None:
+            word = span[bad]
+            full_name = " ".join(tok.value for tok in span)
+            fix = (f"join the words with a hyphen instead of a space, or "
+                   f"reword to avoid '{word.value}'") if len(span) > 1 else (
+                   f"reword the name to avoid '{word.value}'")
+            if bad == 0:
+                raise PlanesSyntaxError(
+                    f"line {word.line}: '{word.value}' is a reserved word "
+                    f"and cannot start the function name '{full_name}'\n"
+                    f"  {fix}")
             raise PlanesSyntaxError(
-                f"line {tokens[i + 1].line}: "
-                f"'{tokens[i + 1].value}' is a reserved word and cannot "
-                f"start a function name\n"
-                f"  reserved: {', '.join(sorted(KEYWORDS))}")
-        # A reserved word mid-name is the same problem, one token later:
-        # `to first thing` reads as the builtin `first`, not a name.
-        if tokens[j].kind not in ("OF", "OP", "EOL", "EOF"):
-            raise PlanesSyntaxError(
-                f"line {tokens[j].line}: "
-                f"'{tokens[j].value}' is a reserved word and cannot "
-                f"appear in the function name "
-                f"'{' '.join(parts)} {tokens[j].value}'\n"
-                f"  reserved: {', '.join(sorted(KEYWORDS))}")
+                f"line {word.line}: '{word.value}' is a reserved word and "
+                f"cannot appear in the function name '{full_name}'\n"
+                f"  {fix}")
+        parts = [tok.value for tok in span]
         arity = _param_arity(tokens, j + 1) if tokens[j].kind == "OF" else 0
         names[" ".join(parts)] = arity
     return names

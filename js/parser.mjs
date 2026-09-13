@@ -1338,29 +1338,43 @@ export function prescan_funcs(tokens) {
     }
     if (t.kind !== "TO") continue;
     if (i > 0 && !["EOL", "BEGIN", "END"].includes(tokens[i - 1].kind)) continue;
+    // Collected as one span, all the way to the real end of the name --
+    // `of`, a punctuation mark, end of line, or end of file -- rather
+    // than stopping at the first non-NAME token. A reserved word can
+    // land first (`to and dusk:`), in the middle (`to dawn and dusk:`),
+    // or last (`to dawn dusk and:`); scanning past it instead of
+    // stopping there is what lets the message quote the name exactly as
+    // the author wrote it, instead of just the words seen before the
+    // reserved word turned up.
     let j = i + 1;
-    const parts = [];
-    while (tokens[j].kind === "NAME") {
-      parts.push(tokens[j].value);
+    const span = [];
+    while (!["OF", "OP", "EOL", "EOF"].includes(tokens[j].kind)) {
+      span.push(tokens[j]);
       j += 1;
     }
-    if (parts.length === 0) {
+    const bad = span.findIndex((tok) => tok.kind !== "NAME");
+    if (bad !== -1) {
+      const word = span[bad];
+      const full_name = span.map((tok) => tok.value).join(" ");
+      const fix =
+        span.length > 1
+          ? `join the words with a hyphen instead of a space, or reword ` +
+            `to avoid '${word.value}'`
+          : `reword the name to avoid '${word.value}'`;
+      if (bad === 0) {
+        throw new PlanesSyntaxError(
+          `line ${word.line}: '${word.value}' is a reserved word and ` +
+            `cannot start the function name '${full_name}'\n` +
+            `  ${fix}`,
+        );
+      }
       throw new PlanesSyntaxError(
-        `line ${tokens[i + 1].line}: ` +
-          `'${tokens[i + 1].value}' is a reserved word and cannot ` +
-          `start a function name\n` +
-          `  reserved: ${[...keywords()].sort().join(", ")}`,
+        `line ${word.line}: '${word.value}' is a reserved word and ` +
+          `cannot appear in the function name '${full_name}'\n` +
+          `  ${fix}`,
       );
     }
-    if (!["OF", "OP", "EOL", "EOF"].includes(tokens[j].kind)) {
-      throw new PlanesSyntaxError(
-        `line ${tokens[j].line}: ` +
-          `'${tokens[j].value}' is a reserved word and cannot ` +
-          `appear in the function name ` +
-          `'${parts.join(" ")} ${tokens[j].value}'\n` +
-          `  reserved: ${[...keywords()].sort().join(", ")}`,
-      );
-    }
+    const parts = span.map((tok) => tok.value);
     const arity = tokens[j].kind === "OF" ? _param_arity(tokens, j + 1) : 0;
     names.set(parts.join(" "), arity);
   }
