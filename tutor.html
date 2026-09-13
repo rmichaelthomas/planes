@@ -492,7 +492,7 @@
         <div class="capgrid">
           <div class="capcard">
             <h3><span class="ic" style="background:var(--violet)">↗</span> share your garden</h3>
-            <p>Your garden is a tiny file plus your seed. Give a friend the file, and the <b>exact same</b> garden grows on their computer.</p>
+            <p>Your garden is a tiny file. Give a friend the file, and the <b>exact same</b> garden grows on their computer.</p>
             <div class="row">
               <span class="seedbox" id="seedbox">——————</span>
               <button class="primary" id="save-garden" type="button">Save my garden file ▣</button>
@@ -501,7 +501,7 @@
               <label class="filebtn" for="open-garden">Open my saved garden ▤</label>
               <input id="open-garden" type="file" accept=".planes,text/plain" style="display:none" />
             </div>
-            <p style="margin-top:9px; font-size:12px">Trade seeds with anyone else growing a garden — the same seed always grows the exact same one.</p>
+            <p style="margin-top:9px; font-size:12px">Trade garden files with anyone else growing a garden — the same file always grows the exact same one.</p>
           </div>
           <div class="capcard wide">
             <h3><span class="ic" style="background:var(--amber)">✦</span> keep growing it</h3>
@@ -795,7 +795,7 @@
         },
         {
           title: "it's yours now",
-          say: "Your garden is already grown, from everything you built in the lessons before this one. This is your sandbox now — the full toolkit is in the key, and a Reset is always there if you want to start over. Explore it, share it, and get your certificate. The garden below is yours to edit however you like.",
+          say: "Here's a garden grown from everything you've learned — every line in it is one you now know how to write. This is your sandbox now — the full toolkit is in the key, and a Reset is always there if you want to start over. Explore it, share it, and get your certificate. The garden below is yours to edit however you like.",
           items: [
             { role: "frame", text: "use scene" },
             { role: "frame", text: "start", gap: true },
@@ -1199,7 +1199,7 @@
         const hasSlots = LESSONS[currentLesson].items.some((it) => it.role === "slot");
         completeMsgEl.innerHTML = hasSlots
           ? `✓ ${esc(LESSONS[currentLesson].title)} is complete — every line typed by you.`
-          : `✓ This is the garden you grew across the lessons — now it's yours to change.`;
+          : `✓ Every line in this garden is one you learned to write — now it's yours to change.`;
         if (hasPaintedThisLesson) {
           askHintEl.hidden = false;
         }
