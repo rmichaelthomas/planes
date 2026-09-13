@@ -107,7 +107,9 @@ def load_vocab_sets(path=VOCAB_PATH):
 
 def _walk_source_files(exts, skip_dirs=SKIP_DIRS):
     for dirpath, dirs, files in os.walk(REPO):
-        dirs[:] = [d for d in dirs if d not in skip_dirs]
+        # Hidden directories too: agent worktrees under .claude/worktrees/ are
+        # whole repo copies, and walking them reported every site many times.
+        dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith(".")]
         for fn in files:
             if fn.endswith(exts):
                 yield os.path.join(dirpath, fn)
