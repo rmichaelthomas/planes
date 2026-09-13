@@ -73,7 +73,7 @@ public enum GrammarJSON: Sendable, Equatable {
 
     /// JSON text for a value, as `JSON.stringify` writes it, keys in order — used
     /// to name a bad value in a refusal, and by the agreement CLI to emit the
-    /// surface and rule forms (Shapes.swift's asJson and its siblings).
+    /// surface and rule forms (EffectSurface.swift's asJson and its siblings).
     public var jsonText: String {
         switch self {
         case .null: return "null"

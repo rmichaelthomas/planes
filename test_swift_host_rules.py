@@ -49,6 +49,9 @@ def _swift(rules_path, effects):
 def program_for(effects):
     """The Planes program that performs `effects`: each on the line its site
     names (its 1-based position when it names none), blank lines between."""
+    # not a vocabulary table: only the effect kinds that carry a literal
+    # destination have a program form. clock, env and random never do, so
+    # HostRules refuses them and there is no equivalent program to build.
     forms = {"ask": "ask {}", "read": "read {}", "write": "write 0 to {}", "show": "show {}"}
     lines = []
     for i, e in enumerate(effects):

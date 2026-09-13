@@ -2,7 +2,7 @@
 
 The Swift counterpart of test_js_shapes_cli.py. js runs its port as its own entry
 point, js/shapes_cli.mjs; the Swift host has one agreement CLI, so the same
-shell is its `shapes-cli` subcommand (swift/Sources/PlanesCLI/ShapesCliCommand.
+shell is its `shapes-cli` subcommand (swift/Sources/PlanesCLI/EffectSurfaceToolCommand.
 swift): --index, --search, --diff. No analysis logic lives in the shell — every
 command reads only public Surface queries and diff.
 

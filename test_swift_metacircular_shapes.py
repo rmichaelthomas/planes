@@ -1,7 +1,7 @@
 """The metacircular check, extended to the Swift analyser.
 
 The Swift counterpart of test_js_metacircular_shapes.py, with `planes-swift` in
-place of `node js/cli.mjs`: run Shapes.swift over grammar/lexer.planes,
+place of `node js/cli.mjs`: run EffectSurface.swift over grammar/lexer.planes,
 grammar/parser.planes, and grammar/interp.planes, and compare against shapes.py
 on the same files. It needs only the analyser — nothing here runs the stages.
 
@@ -47,7 +47,7 @@ def test_the_interpreter_static_surface_is_all_seven_kinds_on_both_analysers():
     sw = _swift_shapes("grammar/interp.planes")
 
     assert py["kinds"] == all_seven, f"shapes.py: {py['kinds']}"
-    assert sw["kinds"] == all_seven, f"Shapes.swift: {sw['kinds']}"
+    assert sw["kinds"] == all_seven, f"EffectSurface.swift: {sw['kinds']}"
     assert sw["kinds"] == py["kinds"], "the two analysers must agree"
 
 

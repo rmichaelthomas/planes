@@ -8,10 +8,11 @@ clean is recorded here, not omitted (§4.4).
 
 Named dict/object literals whose keys overlap >=3 with grammar/vocabulary.json's builtins, keywords, or effect_kinds.
 
-**0 finding(s), 3 site(s) examined.**
+**0 finding(s), 4 site(s) examined.**
 
 ### Sites examined
 
+- test_swift_host_rules.py -- 55 -- forms -- effect_kinds -- excluded (comment: 'not a vocabulary table: only the effect kinds that carry a literal destination have a program form. clock, env and rando')
 - test_builtin_dispatch.py -- 41 -- PROBE -- builtins -- clean (full coverage)
 - js/browser_main.mjs -- 271 -- PROBE_ARGUMENT -- builtins -- clean (full coverage)
 - js/core_restrict.mjs -- 77 -- BINOP_KEYWORDS -- keywords -- excluded (comment: '`first N of L` is the one BinOp whose operator is spelled with two reserved words. The comparison operators (<, ==, ...)')
@@ -38,7 +39,7 @@ Every root `*.html` page, and whether its prose names the highest protocol versi
 
 Every file in scope, and whether any comment claiming "never a gate" (or an equivalent phrase) is contradicted by the file's own sys.exit expression.
 
-**0 finding(s), 32 site(s) examined.**
+**0 finding(s), 34 site(s) examined.**
 
 ### Sites examined
 
@@ -73,5 +74,7 @@ Every file in scope, and whether any comment claiming "never a gate" (or an equi
 - scripts/run_corpus_selfhosted.py -- no trigger phrase in any comment
 - scripts/run_corpus_through_planes.py -- no trigger phrase in any comment
 - scripts/run_suites.py -- no trigger phrase in any comment
+- scripts/swift_grammar_gen.py -- no trigger phrase in any comment
+- scripts/swift_unicode_gen.py -- no trigger phrase in any comment
 - scripts/world_renderer_bench.mjs -- no trigger phrase in any comment
 

@@ -1,7 +1,7 @@
 """The Swift analyser, checked against shapes.py.
 
 The Swift counterpart of test_js_shapes.py, with `planes-swift` in place of
-`node js/cli.mjs`. swift/Sources/Planes/Shapes.swift is a port of shapes.py: the
+`node js/cli.mjs`. swift/Sources/Planes/EffectSurface.swift is a port of shapes.py: the
 fixed-point effect-surface computation, import following across files
 (Modules.swift), constant propagation for destinations, and the StaticDeriv
 provenance graph.
@@ -63,7 +63,7 @@ def _swift_shapes_fn(path, follow=True):
 
 
 def _py_functions(surface):
-    """The same per-function breakdown Shapes.swift's functionsBreakdown emits:
+    """The same per-function breakdown EffectSurface.swift's functionsBreakdown emits:
     sorted function name -> its (already-sorted) effects, as plain fields."""
     return {
         name: [
@@ -304,7 +304,7 @@ def test_single_file_view_reports_unresolved_identically():
 # ============================================= where shapes.py, not JavaScript, is the reference
 
 # js/shapes.mjs folds a sum of two known numbers and escapes only five characters
-# in a known list's repr; shapes.py does neither, and Shapes.swift follows it.
+# in a known list's repr; shapes.py does neither, and EffectSurface.swift follows it.
 PYTHON_REFERENCE = [
     # a sum of two known numbers widens: shapes.py's numeric test never sees a Number
     'use http\nlet n = 1 + 2\nx = ask "https://x/" + text of n\n',

@@ -1,4 +1,4 @@
-// ShapesDerivCommand.swift — `shapes-deriv <file>`, js/cli.mjs's
+// EffectSurfaceDerivationCommand.swift — `shapes-deriv <file>`, js/cli.mjs's
 // `case "shapes-deriv"`.
 //
 // The derivation + origins form, computed from this file's own source with
@@ -6,7 +6,7 @@
 // and only structure is compared.
 import Planes
 
-enum ShapesDerivCommand {
+enum EffectSurfaceDerivationCommand {
     static func run(_ rest: [String]) {
         guard let path = rest.first else { CLI.fail("shapes-deriv: expected a file") }
         do {

@@ -1,9 +1,9 @@
-// ShapesCliCommand.swift — `shapes-cli --index|--search|--diff ...`, the port of
+// EffectSurfaceToolCommand.swift — `shapes-cli --index|--search|--diff ...`, the port of
 // js/shapes_cli.mjs (shapes_cli.py's --index / --search / --diff).
 //
 // js runs this as its own entry point (`node js/shapes_cli.mjs`); here it is a
 // subcommand of the one agreement CLI. A thin shell: every line of analysis is
-// in Shapes.swift (analyseFile, the Surface queries, diff). This only enumerates
+// in EffectSurface.swift (analyseFile, the Surface queries, diff). This only enumerates
 // files, calls the engine, and prints the text the Python CLI prints, with its
 // exit code. Where js/shapes_cli.mjs approximates Python, this follows Python:
 // glob skips hidden files and understands `?` and `[...]`, file lists sort by
@@ -11,7 +11,7 @@
 import Foundation
 import Planes
 
-enum ShapesCliCommand {
+enum EffectSurfaceToolCommand {
     static func run(_ args: [String]) -> Never {
         exit(main(args))
     }

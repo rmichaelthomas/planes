@@ -12,7 +12,7 @@
 //     program which performs exactly those effects, one per line, each with a
 //     literal destination — `ask "https://…"`, `read "…"`, `write 0 to "…"`,
 //     `show "…"` — from the same `Effect`, `StaticDeriv`, `EffectSet` and sort
-//     that Shapes.swift uses. test_swift_host_rules.py holds that claim against
+//     that EffectSurface.swift uses. test_swift_host_rules.py holds that claim against
 //     Python: it writes that program, runs shapes.py's `analyse` and rules.py's
 //     `check`, and compares surface and results.
 //   * `HostRuleSet.check(_:)` is `check(rules, surface)` with no declaring file,

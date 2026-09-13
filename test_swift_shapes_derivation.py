@@ -6,7 +6,7 @@ derivation graph says WHERE a value came from — the static analogue of `why`.
 A.3 names it as one of the canonical forms: origins_of and the derivation tree,
 canonically rendered.
 
-Shapes.swift carries a StaticDeriv on every effect, mirroring shapes.py's field
+EffectSurface.swift carries a StaticDeriv on every effect, mirroring shapes.py's field
 names and meanings. This drives the same programs through both analysers with
 file=None (so a derivation's `file` field is null on both sides and only
 structure is compared) and checks, per declared effect:
@@ -40,7 +40,7 @@ def _swift_deriv(path):
 
 
 def _py_deriv_tree(node):
-    """The nested form Shapes.swift's derivTree emits — fully expanded, shared
+    """The nested form EffectSurface.swift's derivTree emits — fully expanded, shared
     nodes re-walked (the graph is an acyclic DAG built bottom-up)."""
     if node is None:
         return None

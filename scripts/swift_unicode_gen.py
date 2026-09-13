@@ -121,7 +121,7 @@ def generate() -> str:
                 if unicodedata.normalize("NFC", chr(a) + chr(b)) == ch:
                     composites.append((a, b, c))
 
-    class_ranges = []
+    class_ranges: list[list[int]] = []
     for c, cls in ccc:
         if class_ranges and class_ranges[-1][1] == c - 1 and class_ranges[-1][2] == cls:
             class_ranges[-1][1] = c

@@ -24,7 +24,7 @@ subcommands and output forms mirror `js/cli.mjs` exactly.
 | grammar data | `Grammar.swift`, `Generated/GrammarData.swift` | `test_swift_grammar_data.py` |
 | `lexer.py` | `Lexer.swift` | `test_swift_lexer.py` |
 | `parser.py` and the canonical AST form | `Nodes.swift`, `Parser.swift`, `Canonical.swift`, `CoreRestrict.swift` | `test_swift_parser.py` |
-| `shapes.py`, `shapes_cli.py` | `Shapes.swift`, `Modules.swift` | `test_swift_shapes.py`, `test_swift_shapes_derivation.py`, `test_swift_shapes_cli.py`, `test_swift_metacircular_shapes.py` |
+| `shapes.py`, `shapes_cli.py` | `EffectSurface.swift`, `Modules.swift` | `test_swift_shapes.py`, `test_swift_shapes_derivation.py`, `test_swift_shapes_cli.py`, `test_swift_metacircular_shapes.py` |
 | `rules.py`, rule rendering | `Rules.swift`, `Render.swift` | `test_swift_rules.py` |
 | Python's Unicode tables | `PythonUnicode.swift`, `Generated/PythonUnicodeData.swift` | `test_swift_unicode_data.py` |
 

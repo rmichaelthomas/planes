@@ -1,4 +1,6 @@
-// Shapes.swift — the Planes static effect analyser, ported from shapes.py.
+// EffectSurface.swift — the Planes static effect analyser, ported from shapes.py.
+// Named for the capability, not the tool: the capitalized product name is
+// retired (planes v1.1 §29), and a Swift file name is capitalized.
 //
 // The Swift counterpart of js/shapes.mjs (and js/shapes_node.mjs's analyseFile),
 // keeping its structure and names. Computes a program's total effect surface

@@ -1,7 +1,7 @@
 // Rules.swift — the rule-plane checker, ported from rules.py.
 //
 // The Swift counterpart of js/rules.mjs, keeping its structure and names.
-// Permits, exception resolution, and fingerprinting. Shapes.swift computes a
+// Permits, exception resolution, and fingerprinting. EffectSurface.swift computes a
 // program's effect surface; this only consumes it, through the public Surface
 // queries (declared, originsOf). Matching is static and structural — a rule is
 // never triggered; it is only ever checked against a surface computed without
