@@ -59,7 +59,20 @@ Two rules that look like exceptions and are not:
     entry points instead, which is what makes the plain answer defensible.
 """
 import re
+import sys
 from fractions import Fraction
+
+# Planes numbers are exact at any size, so the reference must read and print an
+# integer of any length. CPython 3.11+ (and 3.10.7+) refuses int<->str
+# conversion past 4300 digits by default, a guard against quadratic-time
+# parsing of untrusted input. Left on, a 5000-digit literal raised ValueError
+# here while the JS and Swift hosts computed it, so the three implementations
+# disagreed. MAX_DENOMINATOR below is the language's own bound on the cost of
+# exactness, and it refuses visibly; this guard was an interpreter default
+# nobody chose. Turned off for the whole process, which is the only scope the
+# setting has.
+if hasattr(sys, "set_int_max_str_digits"):
+    sys.set_int_max_str_digits(0)
 
 # Roughly 4,000 bits. Chosen empirically: summing 1/1 .. 1/2000 stays under
 # it, and arithmetic at that size is still fast. A program that exceeds it
