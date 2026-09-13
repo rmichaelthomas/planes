@@ -308,12 +308,19 @@ def test_single_file_view_reports_unresolved_identically():
 # ===================================================== where this port once parted from shapes.py
 
 # js/shapes.mjs folded a sum of two known numbers and escaped only five characters
-# in a known list's repr; shapes.py does neither.
+# in a known list's repr; shapes.py does neither. `text of`'s own entries below
+# no longer read as Python's repr on either side (the F2 follow-up: `text of` on
+# a known list/record now reads exactly as interp.py's `canonical_value` would,
+# matching the runtime the moment the analyser can prove every part of it exact
+# -- see textOfKnown in shapes.py/js/shapes.mjs) -- `lower of`/`upper of` still
+# do, unchanged, since this item is `text of` only.
 PYTHON_REFERENCE = [
     # a sum of two known numbers widens: shapes.py's numeric test never sees a Number
     'use http\nlet n = 1 + 2\nx = ask "https://x/" + text of n\n',
     'use http\nx = ask "https://x/" + text of (2 + 0.5)\n',
-    # a known list reads as Python's repr, every non-printable escaped
+    # a known list of text -- non-printable characters pass through unescaped,
+    # canonical_value's own escaping (`escape_string_literal`) needs only the
+    # four that break Planes' own literal syntax
     ('use http\nx = ask text of ["a\\tb", "c\u00a0d", "\u200b\u2028\U000e0001", "it\'s", '
      '"\\"q\\"", "\\\\"]\n'),
     'use http\nx = ask text of { k: "\u0085", n: 2, b: true, l: [1, "\U0010ffff"] }\n',
@@ -331,6 +338,87 @@ def test_the_analyser_follows_shapes_py_where_it_once_did_not():
             js = _js_shapes(p, follow=False)
             assert js == py, (f"src:\n{src}\n  py={json.dumps(py)}\n"
                               f"  js={json.dumps(js)}")
+
+
+# ===================================================== the F2 follow-up oracle
+#
+# The gap this closes: shapes.py described a `text of` target the runtime
+# never actually produced (Python's own repr, not any Planes host's). This
+# checks the fix from both directions at once -- for a url built with `text
+# of` a known list/record, the STATIC surface's target must equal the
+# RUNTIME effect's target exactly, in both Python and JS, and the two
+# static surfaces (and, in test_swift_shapes.py, Swift's) must equal each
+# other. Agreement alone (as above) would not have caught the original bug:
+# js/shapes.mjs already matched shapes.py's Python-repr assumption, so both
+# sides agreed with each other while both disagreed with every host's
+# actual `text of`.
+TEXT_OF_ORACLE = [
+    'use http\nx = ask "https://api/" + text of [1, 2, 3]\n',
+    'use http\nx = ask "https://api/" + text of [1, [2, 3], { a: "y" }]\n',
+    'use http\nx = ask "https://api/" + text of [true, false]\n',
+    'use http\nx = ask "https://api/" + text of { a: 1, b: "x" }\n',
+    'use http\nx = ask "https://api/" + text of ["it\'s", "a\\\\b", "\\"q\\""]\n',
+]
+
+
+def _js_run(path, cfg):
+    r = subprocess.run([NODE, "js/cli.mjs", "run", path, json.dumps(cfg)],
+                       cwd=REPO, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise AssertionError(f"node run {path} failed: {r.stderr}")
+    return json.loads(r.stdout)
+
+
+def test_oracle_text_of_a_known_list_or_record_matches_across_hosts():
+    from host import TestHost
+    from interp import Interpreter
+
+    with tempfile.TemporaryDirectory() as d:
+        for src in TEXT_OF_ORACLE:
+            p = _src_to_tmp(src, d)
+            py_surface = as_json(analyse_file(p, follow=False), p)
+            js_surface = _js_shapes(p, follow=False)
+            assert js_surface == py_surface, (src, py_surface, js_surface)
+
+            py_target = py_surface["effects"][0]["target"]
+            assert not py_surface["effects"][0]["computed"], (src, py_surface)
+
+            host = TestHost(responses={py_target: "{}"})
+            itp = Interpreter(host=host)
+            itp.run(src)
+            py_runtime = itp.effects[0][1]
+            assert py_runtime == py_target, (src, py_runtime, py_target)
+
+            js_run = _js_run(p, {"responses": {py_target: "{}"}})
+            js_runtime = js_run["effects"][0][1]
+            assert js_runtime == py_target, (src, js_runtime, py_target)
+
+
+def test_oracle_text_of_a_list_containing_nothing_widens_on_both_hosts():
+    """The one case that cannot be described exactly (`nothing` has no
+    constant form) -- both static surfaces honestly widen to the SAME
+    `{...}` pattern, and both runtimes still agree with each other on the
+    real target."""
+    from host import TestHost
+    from interp import Interpreter
+
+    src = 'use http\nx = ask "https://api/" + text of [1, nothing, 3]\n'
+    with tempfile.TemporaryDirectory() as d:
+        p = _src_to_tmp(src, d)
+        py_surface = as_json(analyse_file(p, follow=False), p)
+        js_surface = _js_shapes(p, follow=False)
+        assert js_surface == py_surface, (py_surface, js_surface)
+        assert py_surface["effects"][0]["computed"]
+        assert py_surface["effects"][0]["target"] == "https://api/{...}"
+
+        host = TestHost(responses={"https://api/[1, nothing, 3]": "{}"})
+        itp = Interpreter(host=host)
+        itp.run(src)
+        py_runtime = itp.effects[0][1]
+        assert py_runtime == "https://api/[1, nothing, 3]"
+
+        js_run = _js_run(p, {"responses": {py_runtime: "{}"}})
+        assert js_run["effects"][0][1] == py_runtime
 
 
 NON_ASCII = [
