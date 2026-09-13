@@ -78,6 +78,45 @@ def fmt(v):
     return str(v)
 
 
+def canonical_value(v):
+    """The full-content text of a value — a list or record rendered out,
+    not the `[N items]`/`{record}` shape `fmt` gives (F2).
+
+    `text of` used to call `fmt` for every kind, so `text of [1, 2, 3]` gave
+    the placeholder instead of the list's contents — silently, since the
+    result still typechecks as text. This is what `text of` calls instead
+    for a list or record; a scalar still goes through `fmt`, unchanged, so
+    `text of "x"` stays bare and `show` (which wants the placeholder — its
+    own `fmt` call is untouched) is unaffected.
+
+    Nested text is quoted and escaped (`escape_string_literal`, the same
+    four escapes every canonical rendering in this file uses) so a list of
+    text and a list mixing text with other kinds both read back
+    unambiguously; nested numbers, booleans and nothing render the same way
+    `fmt` renders them at top level. The algorithm is `grammar/interp.planes`'s
+    `canonical-of-value` — already the metacircular test's oracle form for a
+    full value, and already agreement-tested against it — promoted here to
+    production and reused by `text of`, rather than a fourth rendering
+    invented for the occasion; `js/interp.mjs`'s `canonicalValue` is the
+    same function again.
+    """
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if v is None:
+        return "nothing"
+    if isinstance(v, Number):
+        return v.text()
+    if isinstance(v, (int, float)):
+        return Number.of(v).text()
+    if isinstance(v, str):
+        return '"' + escape_string_literal(v) + '"'
+    if isinstance(v, list):
+        return "[" + ", ".join(canonical_value(x) for x in v) + "]"
+    if isinstance(v, dict):
+        return "{" + ", ".join(f"{k}: {canonical_value(x)}" for k, x in v.items()) + "}"
+    return str(v)
+
+
 def equal(a, b, path=None):
     """Sameness, guarded. Cross-type comparison is an error, not `false`.
 
@@ -93,13 +132,18 @@ def equal(a, b, path=None):
     path = path if path is not None else []
 
     if a is None or b is None:
+        if path:
+            raise PlanesError(
+                "cannot-compare",
+                "nothing cannot be compared with ==",
+                "the path names which value is nothing — test that inner "
+                "value with `is nothing` directly rather than rewriting "
+                "the whole comparison",
+                path=path)
         raise PlanesError(
             "cannot-compare",
             "nothing cannot be compared with ==",
-            "test for absence with `is nothing` — if the nothing is inside "
-            "a compared list or record rather than the whole value (the "
-            "path names which), test that inner value with `is nothing` "
-            "directly rather than rewriting the whole comparison",
+            "test for absence with `is nothing`",
             path=path)
 
     if is_num(a) and is_num(b):
@@ -1862,7 +1906,12 @@ class Interpreter:
             return Traced(n, self.mk("op", "root of", n, [arg.node]))
 
         if node.name == "text":
-            v = fmt(arg.value)
+            # F2: a list or record gets its full contents (canonical_value),
+            # not fmt's `[N items]`/`{record}` placeholder -- everything
+            # else is unaffected, fmt already gives the right, unplaceholdered
+            # thing for a scalar.
+            is_collection = isinstance(arg.value, (list, dict))
+            v = canonical_value(arg.value) if is_collection else fmt(arg.value)
             return Traced(v, self.mk("op", "text of", v, [arg.node]))
         if node.name == "normalize":
             require_text("normalize", "normalize", arg.value)
@@ -2203,10 +2252,7 @@ def membership(a, b):
             raise PlanesError(
                 "not-text", f"cannot look for {detail_value(a)} in text {detail_value(b)}",
                 "`in` over text looks for text — wrap the left side with "
-                "`text of`, but only when it is a number, yes/no value, "
-                "or nothing; if it is a list or record, `text of` gives "
-                "an opaque placeholder, not its contents, so the search "
-                "will not find what was probably intended")
+                "`text of`")
         return a in b
     if isinstance(b, dict):
         # A record's field names are text, so a candidate that is not text is

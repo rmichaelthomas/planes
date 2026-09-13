@@ -149,7 +149,8 @@ ASSESSED_THIS_BUILD = frozenset({
     # `interp.not-text.membership` above already carry this build's fix
     # (independently found by both audits) and are not repeated here.
     "interp.cannot-compare.equal-1",      # nothing: the nested-path case
-    "interp.cannot-compare.equal-3",      # equal(): list/record, not just num/text
+    "interp.cannot-compare.equal-2",      # nothing: the whole-value case
+    "interp.cannot-compare.equal-4",      # equal(): list/record, not just num/text
     "interp.not-a-yes-no.condition",      # and/or/not/where, not just `if`
     "interp.unrecognized-record-format.records_from_json",  # which side is stale
     "interp.write-failed.eval",           # OSError has more causes than ENOENT/EACCES
@@ -157,10 +158,10 @@ ASSESSED_THIS_BUILD = frozenset({
     "interp.not-a-number.builtin-4",      # sine: not itself wrong, made complete
     "lexer.grammar-data-missing._load_vocabulary-3",  # same stale-side question as above
     # Read alongside them and confirmed correct as written, not changed:
-    # compare()'s guard (`<` `>` `<=` `>=`) shares equal-3's old text, but
-    # only numbers and text are ever orderable, same-typed or not — so the
-    # audit's fix belongs to equal() only, and this site is assessed and
-    # left alone, same as C2's own precedent above.
+    # compare()'s guard (`<` `>` `<=` `>=`) shares equal-4's old (pre-F7-split)
+    # text, but only numbers and text are ever orderable, same-typed or not —
+    # so the audit's fix belongs to equal() only, and this site is assessed
+    # and left alone, same as C2's own precedent above.
     "interp.cannot-compare.compare",
 })
 

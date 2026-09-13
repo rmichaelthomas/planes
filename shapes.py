@@ -20,6 +20,7 @@ from typing import Any, Optional
 
 from lexer import *
 from parser import BUILTIN_NAMES, parse
+from planes_num import Number
 from planes_text import escape_string_literal
 
 # ================================================================ effect kinds
@@ -411,6 +412,51 @@ def called_names(node, out):
         for x in node:
             called_names(x, out)
     return out
+
+
+def _text_of_known(v):
+    """`text of`'s own runtime rendering of a fully-known list or record,
+    if every part of it is one this can prove renders byte-identically to
+    interp.py's `canonical_value` (js/interp.mjs's `canonicalValue`,
+    grammar/interp.planes's `canonical-of-value`) -- `None` if any part is
+    not, so the caller widens the whole target to UNKNOWN rather than
+    describe an effect destination the program can never actually reach.
+
+    Before this, `as_text` fell through to plain `str(v)` for a list or
+    record, which reads as PYTHON's own repr -- `True`/`False`, single- or
+    double-quoted text, non-printable characters escaped -- something no
+    Planes host's `text of` has ever produced, not even before F2 fixed
+    `text of`'s placeholder. This closes that: the same six-way case split
+    as `canonical_value`, minus number's raw-float/int corner (this
+    analyser's own literals are always a `Number`, whose `.text()` a Planes
+    host's `text of` always matches exactly; a value that somehow is not
+    stays refused rather than guessed).
+    """
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if v is None:
+        return "nothing"
+    if isinstance(v, Number):
+        return v.text()
+    if isinstance(v, str):
+        return '"' + escape_string_literal(v) + '"'
+    if isinstance(v, list):
+        parts = []
+        for x in v:
+            t = _text_of_known(x)
+            if t is None:
+                return None
+            parts.append(t)
+        return "[" + ", ".join(parts) + "]"
+    if isinstance(v, dict):
+        parts = []
+        for k, x in v.items():
+            t = _text_of_known(x)
+            if t is None:
+                return None
+            parts.append(f"{k}: {t}")
+        return "{" + ", ".join(parts) + "}"
+    return None
 
 
 # ================================================================ analyser
@@ -1162,6 +1208,13 @@ class Analyser:
             if v is UNKNOWN:
                 return UNKNOWN, StaticDeriv("unknown", "text of",
                                             inputs=(vn,), file=self.current_file)
+            if isinstance(v, (list, dict)):
+                exact = _text_of_known(v)
+                if exact is None:
+                    return UNKNOWN, StaticDeriv("unknown", "text of",
+                                                inputs=(vn,), file=self.current_file)
+                return exact, StaticDeriv("op", "text of", inputs=(vn,),
+                                          file=self.current_file)
             return self.as_text(v), StaticDeriv("op", "text of", inputs=(vn,),
                                                 file=self.current_file)
 
@@ -1193,6 +1246,13 @@ class Analyser:
             return UNKNOWN, StaticDeriv("unknown", label, inputs=(n,),
                                         file=self.current_file)
         if node.name == "text":
+            if isinstance(v, (list, dict)):
+                exact = _text_of_known(v)
+                if exact is None:
+                    return UNKNOWN, StaticDeriv("unknown", label, inputs=(n,),
+                                                file=self.current_file)
+                return exact, StaticDeriv("op", label, inputs=(n,),
+                                          file=self.current_file)
             return self.as_text(v), StaticDeriv("op", label, inputs=(n,),
                                                 file=self.current_file)
         if node.name == "lower":

@@ -264,6 +264,68 @@ def test_text_of_a_known_number_is_known():
     assert not e.computed
 
 
+def test_text_of_a_known_list_or_record_reads_its_full_contents():
+    """The F2 follow-up: `text of` on a known list/record used to fall
+    through `as_text` to Python's own `str(v)` -- `True`/`False`, escaped
+    non-printables -- something no Planes host's `text of` has ever
+    produced. It now reads exactly as interp.py's `canonical_value` would,
+    so a surface built on it names a destination the program can actually
+    reach."""
+    cases = [
+        ('text of [1, 2, 3]', "[1, 2, 3]"),
+        ('text of [1, [2, 3], { a: "y" }]', '[1, [2, 3], {a: "y"}]'),
+        ('text of [true, false]', "[true, false]"),
+        ('text of { a: 1, b: "x" }', '{a: 1, b: "x"}'),
+        # a quote and a backslash, both of the four escapes text of's own
+        # rendering (escape_string_literal) has to re-escape
+        ('text of ["it\'s", "a\\\\b", "\\"q\\""]',
+         '["it\'s", "a\\\\b", "\\"q\\""]'),
+    ]
+    for expr, want in cases:
+        s = analyse(f'use http\nx = ask "https://api/" + {expr}\n')
+        e = s.at("network")[0]
+        assert e.target == "https://api/" + want, (expr, e.target)
+        assert not e.computed, (expr, e.target)
+
+
+def test_text_of_a_known_list_containing_nothing_widens_instead_of_guessing():
+    """`nothing` has no constant form this analyser folds to (a Nothing
+    literal is UNKNOWN here, the same as an unresolved call) -- so a list
+    holding one widens as a whole, honestly, rather than describe a
+    destination with a guessed or missing element."""
+    s = analyse('use http\nx = ask "https://api/" + text of [1, nothing, 3]\n')
+    e = s.at("network")[0]
+    assert e.computed, e.target
+    assert e.target == "https://api/{...}", e.target
+
+
+def test_oracle_text_of_a_known_list_or_record():
+    """The runtime effect target and the static surface's target must be
+    the SAME text, not just both non-crashing -- the soundness this whole
+    file's `check_oracle` exists for, exercised on the exact construct F2's
+    follow-up closed: `ask` a url built with `text of` a known list/record."""
+    exact = [
+        'use http\nx = ask "https://api/" + text of [1, 2, 3]\n',
+        'use http\nx = ask "https://api/" + text of [1, [2, 3], { a: "y" }]\n',
+        'use http\nx = ask "https://api/" + text of [true, false]\n',
+        'use http\nx = ask "https://api/" + text of { a: 1, b: "x" }\n',
+        'use http\nx = ask "https://api/" + text of ["it\'s", "a\\\\b", "\\"q\\""]\n',
+    ]
+    for src in exact:
+        surface, i = check_oracle(src, http=lambda url: "{}")
+        target = surface.at("network")[0].target
+        assert not surface.at("network")[0].computed, (src, target)
+        assert i.effects[0][1] == target, (src, i.effects[0][1], target)
+
+    # nothing has no constant form: the static side honestly widens to a
+    # {...} pattern rather than guess, and check_oracle's own chunk-matching
+    # confirms the runtime target still starts with the known prefix.
+    nothing_src = 'use http\nx = ask "https://api/" + text of [1, nothing, 3]\n'
+    surface, i = check_oracle(nothing_src, http=lambda url: "{}")
+    assert surface.at("network")[0].computed
+    assert i.effects[0][1] == "https://api/[1, nothing, 3]", i.effects
+
+
 def test_constant_folding_does_not_loop_on_recursion():
     """A recursive value-returning function must not hang the analyser."""
     s = analyse('use http\n'

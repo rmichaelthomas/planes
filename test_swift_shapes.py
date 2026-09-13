@@ -306,11 +306,19 @@ def test_single_file_view_reports_unresolved_identically():
 
 # js/shapes.mjs folded a sum of two known numbers and escaped only five characters
 # in a known list's repr; shapes.py does neither, and EffectSurface.swift follows it.
+# `text of`'s own entries below no longer read as Python's repr on any side (the
+# F2 follow-up: `text of` on a known list/record now reads exactly as
+# interp.py's `canonical_value` would, matching the runtime the moment the
+# analyser can prove every part of it exact -- see textOfKnown in shapes.py/
+# js/shapes.mjs/EffectSurface.swift) -- `lower of`/`upper of` still read as
+# Python's repr, unchanged, since this item is `text of` only.
 PYTHON_REFERENCE = [
     # a sum of two known numbers widens: shapes.py's numeric test never sees a Number
     'use http\nlet n = 1 + 2\nx = ask "https://x/" + text of n\n',
     'use http\nx = ask "https://x/" + text of (2 + 0.5)\n',
-    # a known list reads as Python's repr, every non-printable escaped
+    # a known list of text -- non-printable characters pass through unescaped,
+    # canonical_value's own escaping (escape_string_literal) needs only the
+    # four that break Planes' own literal syntax
     ('use http\nx = ask text of ["a\\tb", "c\u00a0d", "\u200b\u2028\U000e0001", "it\'s", '
      '"\\"q\\"", "\\\\"]\n'),
     'use http\nx = ask text of { k: "\u0085", n: 2, b: true, l: [1, "\U0010ffff"] }\n',
@@ -323,6 +331,32 @@ PYTHON_REFERENCE = [
 def test_the_analyser_follows_shapes_py_where_js_once_did_not():
     with tempfile.TemporaryDirectory() as d:
         for src in PYTHON_REFERENCE:
+            p = _src_to_tmp(src, d)
+            py = as_json(analyse_file(p, follow=False), p)
+            sw = _swift_shapes(p, follow=False)
+            assert sw == py, (f"src:\n{src}\n  py={json.dumps(py)}\n"
+                              f"  swift={json.dumps(sw)}")
+
+
+# ===================================================== the F2 follow-up oracle
+#
+# test_js_shapes.py's own oracle checks runtime-vs-static (Swift has no
+# interpreter to run); this is Swift's half of it -- the static surface for
+# the same `text of` known list/record programs must equal Python's exactly,
+# byte for byte, the same as EffectSurface.swift is held to everywhere else.
+TEXT_OF_ORACLE = [
+    'use http\nx = ask "https://api/" + text of [1, 2, 3]\n',
+    'use http\nx = ask "https://api/" + text of [1, [2, 3], { a: "y" }]\n',
+    'use http\nx = ask "https://api/" + text of [true, false]\n',
+    'use http\nx = ask "https://api/" + text of { a: 1, b: "x" }\n',
+    'use http\nx = ask "https://api/" + text of ["it\'s", "a\\\\b", "\\"q\\""]\n',
+    'use http\nx = ask "https://api/" + text of [1, nothing, 3]\n',
+]
+
+
+def test_oracle_text_of_a_known_list_or_record_matches_python():
+    with tempfile.TemporaryDirectory() as d:
+        for src in TEXT_OF_ORACLE:
             p = _src_to_tmp(src, d)
             py = as_json(analyse_file(p, follow=False), p)
             sw = _swift_shapes(p, follow=False)

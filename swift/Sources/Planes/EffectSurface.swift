@@ -54,8 +54,9 @@ public indirect enum StaticValue: Sendable {
 /// shapes.py's `UNKNOWN`.
 public let UNKNOWN = StaticValue.unknown
 
-// ---- Python str()/repr() analogues, so a fully-known list/record target reads
-// exactly as shapes.py's as_text(str(v)) does.
+// ---- Python str()/repr() analogues, for lower/upper/normalize of a list or
+// record target -- shapes.py's `str(v)`. `text of` no longer routes through
+// here (see textOfKnown below).
 
 /// Python's `repr()` of a `str`: single quotes unless the text holds a single
 /// quote and no double quote, and every character Python does not count
@@ -111,6 +112,42 @@ func pyStr(_ v: StaticValue) -> String {
     case let .list(items): return "[" + items.map(pyRepr).joined(separator: ", ") + "]"
     case let .record(entries):
         return "{" + entries.map { "\(pythonReprText($0.key)): \(pyRepr($0.value))" }.joined(separator: ", ") + "}"
+    }
+}
+
+/// `text of`'s own runtime rendering of a fully-known list or record (F2
+/// follow-up), if every part of it is one this can prove renders
+/// byte-identically to interp.py's `canonical_value` (js/interp.mjs's
+/// `canonicalValue`, grammar/interp.planes's `canonical-of-value`) — `nil`
+/// if any part is not, so the caller widens the whole target to `unknown`
+/// rather than describe a destination the program can never actually reach.
+///
+/// Before this, `text of` on a known list/record fell through `asText` to
+/// `pyStr` — Python's own repr, `True`/`False` and non-printable escaping
+/// included — which no Planes host's `text of` has ever produced. The same
+/// six-way case split as `canonicalValue`, minus number's raw-float corner
+/// (this analyser's own literals are always a `PlanesNumber`, whose
+/// `.text()` a Planes host's `text of` always matches exactly).
+func textOfKnown(_ v: StaticValue) -> String? {
+    switch v {
+    case .unknown: return nil
+    case let .bool(b): return b ? "true" : "false"
+    case let .number(n): return n.text()
+    case let .text(s): return "\"\(escapeStringLiteral(s))\""
+    case let .list(items):
+        var parts: [String] = []
+        for x in items {
+            guard let t = textOfKnown(x) else { return nil }
+            parts.append(t)
+        }
+        return "[" + parts.joined(separator: ", ") + "]"
+    case let .record(entries):
+        var parts: [String] = []
+        for (k, x) in entries {
+            guard let t = textOfKnown(x) else { return nil }
+            parts.append("\(k): \(t)")
+        }
+        return "{" + parts.joined(separator: ", ") + "}"
     }
 }
 
@@ -1130,7 +1167,15 @@ public final class Analyser {
         if let b = node as? AST.Builtin, sameText(b.name, "text") {
             let (v, vn) = const_(b.arg, consts)
             if v.isUnknown { return (UNKNOWN, StaticDeriv("unknown", "text of", [vn], nil, F)) }
-            return (.text(asText(v)), StaticDeriv("op", "text of", [vn], nil, F))
+            switch v {
+            case .list, .record:
+                guard let exact = textOfKnown(v) else {
+                    return (UNKNOWN, StaticDeriv("unknown", "text of", [vn], nil, F))
+                }
+                return (.text(exact), StaticDeriv("op", "text of", [vn], nil, F))
+            default:
+                return (.text(asText(v)), StaticDeriv("op", "text of", [vn], nil, F))
+            }
         }
         if let b = node as? AST.Builtin, sameText(b.name, "lower") || sameText(b.name, "upper") {
             let (v, vn) = const_(b.arg, consts)
@@ -1167,7 +1212,16 @@ public final class Analyser {
         if v.isUnknown { return (UNKNOWN, StaticDeriv("unknown", label, [n], nil, F)) }
         let op = StaticDeriv("op", label, [n], nil, F)
         switch node.name {
-        case _ where sameText(node.name, "text"): return (.text(asText(v)), op)
+        case _ where sameText(node.name, "text"):
+            switch v {
+            case .list, .record:
+                guard let exact = textOfKnown(v) else {
+                    return (UNKNOWN, StaticDeriv("unknown", label, [n], nil, F))
+                }
+                return (.text(exact), op)
+            default:
+                return (.text(asText(v)), op)
+            }
         case _ where sameText(node.name, "lower"): return (.text(pythonLower(pyStr(v))), op)
         case _ where sameText(node.name, "upper"): return (.text(pythonUpper(pyStr(v))), op)
         case _ where sameText(node.name, "normalize"): return (.text(pythonNFC(pyStr(v))), op)

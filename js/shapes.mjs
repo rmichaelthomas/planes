@@ -36,10 +36,10 @@ export const BOUNDARIES = ["network", "file", "console", "ambient", "foreign"];
 // by identity (=== UNKNOWN), the analogue of shapes.py's Unknown singleton.
 export const UNKNOWN = Object.freeze({ __unknown: true });
 
-// ---- Python str()/repr() analogues, so a fully-known list/record target reads
-// exactly as shapes.py's as_text(str(v)) would. No such target occurs in the
-// corpus, but the analyser stays total on any input and must not diverge if one
-// ever does.
+// ---- Python str()/repr() analogues, for lower/upper/normalize of a list or
+// record target -- shapes.py's `str(v)`. `text of` no longer routes through
+// here (see textOfKnown below); no other target reaches this either, but the
+// analyser stays total on any input and must not diverge if one ever does.
 function pyRepr(v) {
   if (typeof v === "string") return pyReprText(v);
   return pyStr(v);
@@ -58,6 +58,46 @@ function pyStr(v) {
     );
   }
   return String(v);
+}
+
+// `text of`'s own runtime rendering of a fully-known list or record (F2
+// follow-up), if every part of it is one this can prove renders
+// byte-identically to interp.mjs's canonicalValue (interp.py's
+// canonical_value, grammar/interp.planes's canonical-of-value) -- `null` if
+// any part is not, so the caller widens the whole target to UNKNOWN rather
+// than describe a destination the program can never actually reach.
+//
+// Before this, `text of` on a known list/record fell through asText to
+// pyStr -- Python's own repr, `True`/`False` and non-printable escaping
+// included -- which no Planes host's `text of` has ever produced. The same
+// six-way case split as canonicalValue, minus number's raw-float corner
+// (this analyser's own literals are always a PlanesNumber, whose `.text()`
+// a Planes host's `text of` always matches exactly; a value that somehow is
+// not stays refused rather than guessed).
+function textOfKnown(v) {
+  if (typeof v === "boolean") return v ? "true" : "false";
+  if (v === null || v === undefined) return "nothing";
+  if (v instanceof PlanesNumber) return v.text();
+  if (typeof v === "string") return `"${escapeStringLiteral(v)}"`;
+  if (Array.isArray(v)) {
+    const parts = [];
+    for (const x of v) {
+      const t = textOfKnown(x);
+      if (t === null) return null;
+      parts.push(t);
+    }
+    return "[" + parts.join(", ") + "]";
+  }
+  if (v instanceof Map) {
+    const parts = [];
+    for (const [k, x] of v.entries()) {
+      const t = textOfKnown(x);
+      if (t === null) return null;
+      parts.push(`${k}: ${t}`);
+    }
+    return "{" + parts.join(", ") + "}";
+  }
+  return null;
 }
 
 // Compare two strings by Unicode code point, the way Python's < does (JS's <
@@ -1114,6 +1154,11 @@ export class Analyser {
     if (is(node, "Builtin") && node.name === "text") {
       const [v, vn] = this.const_(node.arg, consts);
       if (v === UNKNOWN) return [UNKNOWN, new StaticDeriv("unknown", "text of", [vn], null, F)];
+      if (Array.isArray(v) || v instanceof Map) {
+        const exact = textOfKnown(v);
+        if (exact === null) return [UNKNOWN, new StaticDeriv("unknown", "text of", [vn], null, F)];
+        return [exact, new StaticDeriv("op", "text of", [vn], null, F)];
+      }
       return [this.asText(v), new StaticDeriv("op", "text of", [vn], null, F)];
     }
     if (is(node, "Builtin") && (node.name === "lower" || node.name === "upper")) {
@@ -1141,7 +1186,14 @@ export class Analyser {
     const [v, n] = this.const_(node.args[0], consts);
     const label = `${node.name} of`;
     if (v === UNKNOWN) return [UNKNOWN, new StaticDeriv("unknown", label, [n], null, F)];
-    if (node.name === "text") return [this.asText(v), new StaticDeriv("op", label, [n], null, F)];
+    if (node.name === "text") {
+      if (Array.isArray(v) || v instanceof Map) {
+        const exact = textOfKnown(v);
+        if (exact === null) return [UNKNOWN, new StaticDeriv("unknown", label, [n], null, F)];
+        return [exact, new StaticDeriv("op", label, [n], null, F)];
+      }
+      return [this.asText(v), new StaticDeriv("op", label, [n], null, F)];
+    }
     if (node.name === "lower") return [pythonLower(pyStr(v)), new StaticDeriv("op", label, [n], null, F)];
     if (node.name === "upper") return [pythonUpper(pyStr(v)), new StaticDeriv("op", label, [n], null, F)];
     if (node.name === "normalize") {

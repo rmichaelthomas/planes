@@ -541,13 +541,16 @@ def test_the_self_hosted_work_list_is_empty():
     116 -> 118 with F3 (fix/f3-reserved-word-name-message): `to-decl-name-
     arity`'s two refusals (a reserved word starting or appearing in a `to`
     name) are new self-hosted raise sites, ported from parser.py's
-    prescan_funcs alongside the message fix itself, and both name a fix."""
+    prescan_funcs alongside the message fix itself, and both name a fix.
+
+    118 -> 120 with F7: values-equal's single nothing-refusal split into two
+    (whole-value, inner-value), one raise each in values-equal-inner."""
     ec = _coverage()
     sites = ec.self_hosted_sites()
     total = sum(len(v) for v in sites.values())
     assert len(sites[ec.SHORTFALL]) == 0, [
         (s[0], s[1], s[2]) for s in sites[ec.SHORTFALL]]
-    assert total == 118, total
+    assert total == 120, total
     assert len(sites[ec.NAMES_FIX]) + len(sites[ec.DELIBERATE]) == total
 
 
@@ -557,7 +560,8 @@ def test_the_reference_work_list_is_still_empty_too():
     ec = _coverage()
     cov = ec.coverage()
     assert cov["counts"][ec.SHORTFALL] == 0
-    assert cov["errors"] == 116, cov["errors"]
+    # F7 split equal()'s single nothing-refusal raise into two -- 116 + 1.
+    assert cov["errors"] == 117, cov["errors"]
 
 
 def test_every_deliberate_self_hosted_silence_states_a_reason():

@@ -793,11 +793,27 @@ to as-condition of v:
 # handed to the host's `==` directly -- their `nothing` deriv slot would
 # itself trip the nothing-refusal.
 
+# The whole-value entry point (a bare `x == y`): `a`/`b` is the whole thing
+# being compared, so its nothing-refusal names the plain fix -- test the
+# whole value with `is nothing`. `lists-equal-walk`/`records-equal-walk` call
+# values-equal-inner instead once they are comparing an ELEMENT nested inside
+# a list or record, where a different fix holds -- the same split interp.py's
+# equal() makes off whether `path` accumulated any steps.
 to values-equal of a, b:
   if a.kind == "nothing":
-    fail { message: "nothing cannot be compared with ==", fix: "test for absence with `is nothing` — if the nothing is inside a compared list or record rather than the whole value (the path names which), test that inner value with `is nothing` directly rather than rewriting the whole comparison" } as cannot-compare
+    fail { message: "nothing cannot be compared with ==", fix: "test for absence with `is nothing`" } as cannot-compare
   if b.kind == "nothing":
-    fail { message: "nothing cannot be compared with ==", fix: "test for absence with `is nothing` — if the nothing is inside a compared list or record rather than the whole value (the path names which), test that inner value with `is nothing` directly rather than rewriting the whole comparison" } as cannot-compare
+    fail { message: "nothing cannot be compared with ==", fix: "test for absence with `is nothing`" } as cannot-compare
+  give values-equal-checked of a, b
+
+to values-equal-inner of a, b:
+  if a.kind == "nothing":
+    fail { message: "nothing cannot be compared with ==", fix: "the path names which value is nothing — test that inner value with `is nothing` directly rather than rewriting the whole comparison" } as cannot-compare
+  if b.kind == "nothing":
+    fail { message: "nothing cannot be compared with ==", fix: "the path names which value is nothing — test that inner value with `is nothing` directly rather than rewriting the whole comparison" } as cannot-compare
+  give values-equal-checked of a, b
+
+to values-equal-checked of a, b:
   if a.kind == "number" and b.kind == "number":
     give a.value == b.value
   a-bool = a.kind == "boolean"
@@ -831,7 +847,7 @@ to lists-equal-walk of xs, ys:
     give true
   x = first-item of xs
   y = first-item of ys
-  if not (values-equal of x, y):
+  if not (values-equal-inner of x, y):
     give false
   give lists-equal-walk of (rest of xs), (rest of ys)
 
@@ -849,7 +865,7 @@ to records-equal-walk of af, bf:
   match = field-in of bf, f.key
   if not match.found:
     fail { message: "records have different fields", fix: "compare records with the same fields" } as cannot-compare
-  if not (values-equal of f.value, match.value):
+  if not (values-equal-inner of f.value, match.value):
     give false
   give records-equal-walk of (rest of af), bf
 
@@ -886,7 +902,7 @@ to member-of of a, b:
   if b.kind == "text":
     if a.kind == "text":
       give (a.value) in (b.value)
-    fail { message: "cannot look for " + (detail-of-value of a) + " in text " + (detail-of-value of b), fix: "`in` over text looks for text — wrap the left side with `text of`, but only when it is a number, yes/no value, or nothing; if it is a list or record, `text of` gives an opaque placeholder, not its contents, so the search will not find what was probably intended" } as not-text
+    fail { message: "cannot look for " + (detail-of-value of a) + " in text " + (detail-of-value of b), fix: "`in` over text looks for text — wrap the left side with `text of`" } as not-text
   # A record's field names are text, so a candidate that is not text is simply
   # ABSENT -- an answer, not a refusal. This arm was missing entirely, so
   # `"a" in { a: 1 }` was refused here while interp.py answered `true`.
@@ -1081,7 +1097,7 @@ to eval-builtin of name, arg:
   if name == "count":
     give builtin-count of arg
   if name == "text":
-    give builtin-text of arg
+    give text-of-value of arg
   if name == "lower":
     give make-text of (lower of (require-text-of of arg, "lower", "lowercase"))
   if name == "upper":
@@ -1227,10 +1243,11 @@ to builtin-count of arg:
     give make-number of (count of arg.fields)
   fail { message: "cannot count " + (detail-of-value of arg), fix: "count takes a list, a record, or text — check which of those this value should be" } as not-a-collection
 
-# `text of` is interp.py's fmt: a value's plain display form, distinct from
-# the canonical form (a list is "[n items]", a record is "{record}", a string
-# is itself with no quotes). Used everywhere a value is spliced into a
-# message, so it is exact here.
+# `builtin-text` is interp.py's fmt: a value's plain display form, distinct
+# from the canonical form (a list is "[n items]", a record is "{record}", a
+# string is itself with no quotes). `show` and a foreign destination label
+# (fmt-of) render through this, unchanged -- both want the placeholder for a
+# list or record, the same way interp.py's own `show` still calls `fmt`.
 to builtin-text of arg:
   if arg.kind == "number":
     give make-text of (text of arg.value)
@@ -1247,6 +1264,19 @@ to builtin-text of arg:
   if arg.kind == "record":
     give make-text of "{record}"
   fail { message: "cannot render a value of kind '" + arg.kind + "'", fix: "the six value kinds are number, text, list, record, yes/no and nothing; reaching this means a value was built with a kind outside that set, which is a defect in the interpreter rather than in the program" } as cannot-render
+
+# The `text of` BUILTIN itself (F2), as distinct from builtin-text above: a
+# list or a record renders in full, through canonical-of-value -- the same
+# full-content form the canonical value form already computes, rather than a
+# second one invented for this -- instead of builtin-text's placeholder.
+# interp.py's `text` case in eval_builtin makes the same split, between fmt
+# and canonical_value; js/interp.mjs's, between fmt and canonicalValue.
+to text-of-value of arg:
+  if arg.kind == "list":
+    give make-text of (canonical-of-value of arg)
+  if arg.kind == "record":
+    give make-text of (canonical-of-value of arg)
+  give builtin-text of arg
 
 # The guard `lower`, `upper`, and `normalize` share -- interp.py's
 # `require_text`, js/interp.mjs's `requireText`.

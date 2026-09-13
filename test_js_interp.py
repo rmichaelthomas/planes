@@ -198,6 +198,28 @@ def test_error_tags_and_details_agree():
         assert po == jo, f"src:\n{src}\n py_out={po} js_out={jo}"
 
 
+def test_text_of_a_list_or_record_agrees_and_is_not_a_placeholder():
+    """F2: `text of` used to call `fmt` for every kind, so a list or record
+    silently gave the shape (`[N items]`/`{record}`) instead of its
+    contents. `show` still wants the placeholder -- its own `fmt` call is
+    untouched -- so this checks both: the placeholder still shows, and
+    `text of` no longer does."""
+    cases = [
+        ("show text of [1, 2, 3]\n", ["[1, 2, 3]"]),
+        ('show text of ["a", "b"]\n', ['["a", "b"]']),
+        ("show text of { a: 1, b: 2 }\n", ["{a: 1, b: 2}"]),
+        ("show text of [1, [2, 3], { a: nothing }]\n",
+         ["[1, [2, 3], {a: nothing}]"]),
+        ("show [1, 2, 3]\n", ["[3 items]"]),
+        ("show { a: 1 }\n", ["{record}"]),
+    ]
+    for src, want_out in cases:
+        (po, pt, _, _), (jo, jt, _, _) = _run_src(src)
+        assert pt is None and jt is None, f"src:\n{src}\n py_tag={pt} js_tag={jt}"
+        assert po == want_out, f"src:\n{src}\n py_out={po}"
+        assert po == jo, f"src:\n{src}\n py_out={po} js_out={jo}"
+
+
 # ================================================================ the show/why trace
 
 
