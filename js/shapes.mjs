@@ -1284,8 +1284,13 @@ function basename(p) {
   return parts[parts.length - 1];
 }
 
-export function asJson(surface, path) {
-  return {
+// `rules`, when given, is {checked, resolved_subjects, violations} (H1) —
+// merged in as an additional "rules" field, never touching a field above it.
+// Every existing two-argument caller keeps getting the exact document it
+// always did; omitting it (the default) omits the key entirely rather than
+// writing it as null, matching shapes_cli.as_json's rules=None default.
+export function asJson(surface, path, rules = null) {
+  const doc = {
     format: FORMAT_VERSION,
     program: basename(path),
     kind: surface.isLibrary() ? "library" : surface.isPure() ? "pure" : "program",
@@ -1316,6 +1321,8 @@ export function asJson(surface, path) {
     // program produce approximate values, and by what route.
     approximate: surface.approximate.map((p) => [...p]),
   };
+  if (rules !== null) doc.rules = rules;
+  return doc;
 }
 
 // Per-function effect breakdown: sorted function name -> its sorted effects, as

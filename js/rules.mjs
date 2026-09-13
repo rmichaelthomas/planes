@@ -116,6 +116,59 @@ export class Violation {
     return lines.join("\n");
   }
 
+  // Every field render() reads, as data rather than prose (H1). A
+  // --json --rules consumer gets the rule name, the rule's own
+  // kind/target/assertion/because, the specific effect (kind, boundary,
+  // target, line) it matched or null for the vacuous shape, and the
+  // supersedes/permit outcome (cleared_by) or narrowing sibling
+  // (narrowed_by) — every structural fact render()'s prose is built from.
+  // `message` is render()'s own text, included verbatim beside the fields
+  // so a host can print exactly what text mode prints without re-deriving
+  // it (rules.py's Violation.as_json and Rules.swift's Violation.asJSON
+  // must agree with this field for field). `origins` dedupes the same way
+  // render()'s derivation line does — by the formatted "name (file)"
+  // string, not by the raw pair.
+  asJson() {
+    const rule = this.rule;
+    const effect = this.effect;
+    const seen = new Map();
+    for (const [n, f] of this.origins) {
+      const key = f ? `${n} (${f})` : n;
+      if (!seen.has(key)) seen.set(key, [n, f]);
+    }
+    const origins = [...seen.keys()].sort(pyStrCmp).map((key) => {
+      const [n, f] = seen.get(key);
+      return { name: n, file: f ?? null };
+    });
+    return {
+      rule: rule.name,
+      rule_line: rule.line,
+      assertion: rule.assertion,
+      kind: rule.kind,
+      target: rule.target ?? null,
+      condition: condition(rule),
+      because: rule.annotation ? rule.annotation.text : null,
+      is_violation: this.is_violation,
+      vacuous: this.vacuous,
+      vacuous_situation: this.vacuous_situation,
+      uncertain: this.uncertain,
+      effect: effect
+        ? {
+            kind: effect.kind,
+            boundary: effect.boundary,
+            target: effect.target,
+            line: effect.site,
+          }
+        : null,
+      cleared_by: this.cleared_by
+        ? { rule: this.cleared_by.name, line: this.cleared_by.line }
+        : null,
+      narrowed_by: this.narrowed_by.map((r) => ({ rule: r.name, line: r.line })),
+      origins,
+      message: this.render(),
+    };
+  }
+
   _renderVacuous() {
     const rule = this.rule;
     const situation = this.vacuous_situation;

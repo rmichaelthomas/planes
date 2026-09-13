@@ -113,6 +113,55 @@ public final class Violation: CustomStringConvertible {
         return lines.joined(separator: "\n")
     }
 
+    /// Every field `render()` reads, as data rather than prose (H1). A
+    /// `--json --rules` consumer gets the rule name, the rule's own
+    /// kind/target/assertion/`because`, the specific effect (kind, boundary,
+    /// target, line) it matched or null for the vacuous shape, and the
+    /// supersedes/permit outcome (`clearedBy`) or narrowing sibling
+    /// (`narrowedBy`) — every structural fact `render()`'s prose is built
+    /// from. `message` is `render()`'s own text, included verbatim beside the
+    /// fields so a host can print exactly what text mode prints without
+    /// re-deriving it (rules.py's `Violation.as_json` and js/rules.mjs's
+    /// `Violation.asJson` must agree with this field for field). `origins`
+    /// dedupes the same way `render()`'s derivation line does — by the
+    /// formatted "name (file)" string, not by the raw pair.
+    public func asJSON() -> GrammarJSON {
+        var seenKeys = Set<String>()
+        var pairs: [(key: String, name: String, file: String?)] = []
+        for o in origins {
+            let key = (o.file.map { !$0.isEmpty } == true) ? "\(o.name) (\(o.file!))" : o.name
+            if seenKeys.insert(key).inserted { pairs.append((key, o.name, o.file)) }
+        }
+        let originsJSON = stableSorted(pairs) { pyLess($0.key, $1.key) }.map { p in
+            GrammarJSON.object([("name", .string(p.name)), ("file", p.file.map { GrammarJSON.string($0) } ?? .null)])
+        }
+        return .object([
+            ("rule", .string(rule.name)),
+            ("rule_line", .number(String(rule.line))),
+            ("assertion", .string(rule.assertion)),
+            ("kind", .string(rule.effectKind)),
+            ("target", rule.target.map { GrammarJSON.string($0) } ?? .null),
+            ("condition", .string(condition(rule))),
+            ("because", rule.annotation.map { GrammarJSON.string($0.text) } ?? .null),
+            ("is_violation", .bool(isViolation)),
+            ("vacuous", .bool(vacuous)),
+            ("vacuous_situation", vacuousSituation.map { GrammarJSON.number(String($0)) } ?? .null),
+            ("uncertain", .bool(uncertain)),
+            ("effect", effect.map { e in
+                GrammarJSON.object([("kind", .string(e.kind)), ("boundary", .string(e.boundary)),
+                                    ("target", .string(e.target)), ("line", .number(String(e.site)))])
+            } ?? .null),
+            ("cleared_by", clearedBy.map { c in
+                GrammarJSON.object([("rule", .string(c.name)), ("line", .number(String(c.line)))])
+            } ?? .null),
+            ("narrowed_by", .array(narrowedBy.map { r in
+                .object([("rule", .string(r.name)), ("line", .number(String(r.line)))])
+            })),
+            ("origins", .array(originsJSON)),
+            ("message", .string(render())),
+        ])
+    }
+
     private func renderVacuous() -> String {
         let header: String
         let reason: String
