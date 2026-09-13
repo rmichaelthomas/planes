@@ -190,6 +190,66 @@ def test_inline_amber_near_misses_parse_clean_and_identically():
         assert jout == py_form, f"src:\n{src}\n  divergence"
 
 
+# ======================================================= non-ASCII source: Python's semantics
+
+NON_ASCII = [
+    # digits of other scripts are NUMBER tokens, and exact numbers
+    ("x = \u0663\n", None),
+    ("x = \u0663 + \u0661\u0662.\u0665 * \uff11\uff12 - \U0001d7d9\n", None),
+    ("x = \u0661\u0662.\u0665 + \U0001d7d9\U0001d7d8 * \uff13\n", None),
+    ("y = \u0967\u0966\u0966 - \u0e52.\u0e55\u0e50\n", None),
+    # Python's whitespace indents a block
+    ("if yes:\n\x1cshow 1\n\x1cshow 2\nshow 3\n", None),
+    ("to f of a:\n\u3000give a\nshow f of \u0664\n", None),
+    # a byte-order mark, and CRLF line endings around a statement
+    ("\ufeffx = 1\nshow x\n", None),
+    ("\ufeff# a comment\nx = 1\n", None),
+    ("\ufeffx = 1\r\ny = 2\r\n", None),
+    # combining marks and emoji inside strings, next to the quotes and escapes
+    ('show "e\u0301 \U0001f468\u200d\U0001f469\u200d\U0001f467 \\"q\\" \\\\ \\t \\n"\n', None),
+    ('show "\u0301"\nshow "a\u0301"\nshow "\U0001f600"\n', None),
+    # annotations, targets and fingerprints carrying non-ASCII text
+    ('rule [r] x may not ask to "\u00fc\u0301" supersedes [q] @abcdef '
+     'because "\U0001f600"\n', None),
+    ('foreign f of u from "m.\u00e9" doing ask "\u210c", write u\n', None),
+    ('note: from "\u540d\u524d"\n', None),
+    ('r = { a: "\u00e9", b: [\U0001f600] }\n', None),
+    # messages that quote non-ASCII token values
+    ('let "na\u00efve \U0001f600" = 1\n', None),
+    ('x = { "\u00e9": 1 }\n', None),
+    ("rule [r] x may not ask supersedes [q] @\u0663\u0664\n", None),
+    # amber readings built from non-ASCII token text
+    ('x = remote ("\u00e9\U0001f468\u200d\U0001f469\u200d\U0001f467") + 2\n', {"remote"}),
+    ('x = remote ("\u00e9\u0301") + 2\n', {"remote": 1}),
+    ('to word:\n  give 1\n\nto word count:\n  give 2\n\nr = word count "\U0001f600" + 1\n',
+     None),
+]
+
+
+def test_non_ascii_programs_parse_and_refuse_identically():
+    """lexer.py reads `\\d` as any Unicode decimal digit and indentation as
+    Python's whitespace, and parser.py hands a NUMBER token to Fraction(), which
+    reads a digit of any script as its value. A NUMBER `٣` used to be skipped by
+    js/lexer.mjs — so `supersedes [q] @٣٤` said `found 'end of line'` where
+    parser.py says `found '٣٤'` — and one that reached js/planes_num.mjs threw
+    from BigInt; a U+001C indent opened no block; a leading byte-order mark
+    opened one. The cases test_swift_parser.py drives, and these."""
+    for src, known in NON_ASCII:
+        try:
+            py = canonical_program(parse(src, known))
+        except PlanesSyntaxError as e:
+            py = json.dumps({"error": type(e).__name__, "message": str(e)})
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "p.planes")
+            with open(p, "w", encoding="utf-8", newline="") as fh:
+                fh.write(src)
+            js = _js_ast_file(p, _known_json(known))
+        if js.startswith('{"error"'):
+            jd = json.loads(js)
+            js = json.dumps({"error": jd["error"], "message": jd["message"]})
+        assert js == py, f"src:\n{src!r}\n  py={py[:300]!r}\n  js={js[:300]!r}"
+
+
 if __name__ == "__main__":
     if NODE is None:
         print("  SKIP  node not on PATH")

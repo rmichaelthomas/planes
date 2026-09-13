@@ -27,6 +27,35 @@
 // flagged), and `eq` between two approximate values compares the underlying
 // rationals with no epsilon and no tolerance (a tolerance nobody chose is the
 // silent behaviour this design refuses).
+//
+// WHERE TEXT AND FLOATS CROSS, PYTHON'S SEMANTICS, NOT JAVASCRIPT'S. Three paths
+// used to follow the JavaScript engine and are now ported as planes_num.py runs
+// them: `fractionFromString` accepts exactly Python's `Fraction(str)` grammar
+// (Unicode decimal digits, `_` separators, Python whitespace, and its
+// refusals); `numberFromText` strips Python's whitespace and its `\d` is
+// Python's; and `toNumber` is Python's `float(q)`, correctly rounded, not the
+// quotient of two already-rounded floats.
+
+import {
+  isPythonSpace,
+  PYTHON_DIGIT_CLASS,
+  pythonDigitValue,
+  pythonStrip,
+  pyRepr,
+} from "./planes_text.mjs";
+
+// What the reference raises from these paths, by the name of the Python
+// exception and with its message: ValueError (a literal Fraction(str) refuses),
+// ZeroDivisionError (a zero denominator in that literal), OverflowError (a
+// quotient past the largest double). A plain Error, not a RangeError, which the
+// CLI and interpreter read as JavaScript's stack overflow.
+export class NumberError extends Error {
+  constructor(kind, message) {
+    super(message);
+    this.name = kind;
+    this.kind = kind;
+  }
+}
 
 // Roughly 4,000 bits — planes_num.py's MAX_DENOMINATOR = 2 ** 4000, unchanged.
 export const MAX_DENOMINATOR = 2n ** 4000n;
@@ -88,44 +117,167 @@ export class Fraction {
   }
 }
 
-// Parse a decimal / integer / scientific / a-over-b string into an exact
-// Fraction. Source NUMBER literals are only \d+(\.\d+)? — no sign, no exponent
-// — but Number.of routes a foreign JS float here via String(v) (the shortest
-// round-trip decimal, JS's analogue of Python's repr(float)), which may carry a
-// sign and an exponent, so both forms are handled. Different textual formats of
-// the same shortest-round-trip decimal (e.g. "1e+16" vs "10000000000000000")
-// denote the same rational, so the parsed value matches Python regardless of
-// whether JS's String and Python's repr chose the same notation.
+// Parse text into an exact Fraction, accepting exactly what Python's
+// `Fraction(str)` accepts — fractions._RATIONAL_FORMAT, compiled IGNORECASE:
+//
+//     \A\s* [-+]? (?=\d|\.\d) (\d*|\d+(_\d+)*)
+//       ( (\s*/\s*\d+(_\d+)*)? | (\.(\d*|\d+(_\d+)*))? (E[-+]?\d+(_\d+)*)? )
+//     \s*\z
+//
+// with `\d` any Unicode decimal digit, read by int() as its value, and `\s`
+// Python's whitespace. Source NUMBER literals are only \d+(\.\d+)? — Unicode
+// digits included, since lexer.py's `\d` is Python's — but Number.of routes a
+// foreign JS float here via String(v) (the shortest round-trip decimal, JS's
+// analogue of Python's repr(float)), which may carry a sign and an exponent.
+// Different textual formats of the same shortest-round-trip decimal (e.g.
+// "1e+16" vs "10000000000000000") denote the same rational, so the parsed value
+// matches Python regardless of whether JS's String and Python's repr chose the
+// same notation.
+//
+// This used to trim() and hand the pieces to BigInt: ASCII digits only (so a
+// NUMBER token `٣` threw a SyntaxError where Python reads 3), JavaScript's
+// whitespace, no `_`, and it accepted what Python refuses — `1/2/3`, `1e`,
+// `--1`, `- 1` — reading each as some number rather than raising.
 export function fractionFromString(text) {
-  let s = String(text).trim();
-  if (s.includes("/")) {
-    const [a, b] = s.split("/");
-    return new Fraction(BigInt(a.trim()), BigInt(b.trim()));
+  const src = String(text);
+  const cps = [...src];
+  const n = cps.length;
+  const invalid = () =>
+    new NumberError("ValueError", `Invalid literal for Fraction: ${pyRepr(src)}`);
+  let i = 0;
+  const digit = (k) => (k < n ? pythonDigitValue(cps[k].codePointAt(0)) : -1);
+  const skipSpace = () => {
+    while (i < n && isPythonSpace(cps[i].codePointAt(0))) i += 1;
+  };
+  // `\d+(_\d+)*`, greedy, as ASCII digits ("" if there are none). No character
+  // that can follow a digit group in the pattern is a digit or `_`, so the
+  // greedy reading is the only one the regex's backtracking could accept.
+  const digitGroups = () => {
+    let out = "";
+    while (digit(i) >= 0) out += digit(i++);
+    if (out === "") return out;
+    while (i < n && cps[i] === "_" && digit(i + 1) >= 0) {
+      i += 1;
+      while (digit(i) >= 0) out += digit(i++);
+    }
+    return out;
+  };
+
+  skipSpace();
+  let negative = false;
+  if (i < n && (cps[i] === "-" || cps[i] === "+")) {
+    negative = cps[i] === "-";
+    i += 1;
   }
-  let sign = 1n;
-  if (s[0] === "+") s = s.slice(1);
-  else if (s[0] === "-") {
-    sign = -1n;
-    s = s.slice(1);
+  if (!(digit(i) >= 0 || (i < n && cps[i] === "." && digit(i + 1) >= 0))) throw invalid();
+  let num = BigInt(digitGroups() || "0");
+  let den = 1n;
+
+  // The first alternative: a denominator.
+  const afterNum = i;
+  skipSpace();
+  if (i < n && cps[i] === "/") {
+    i += 1;
+    skipSpace();
+    const d = digitGroups();
+    if (d === "") throw invalid();
+    skipSpace();
+    if (i !== n) throw invalid();
+    den = BigInt(d);
+  } else {
+    // The second: a fractional part and an exponent.
+    i = afterNum;
+    if (i < n && cps[i] === ".") {
+      i += 1;
+      const decimal = digitGroups();
+      if (decimal !== "") {
+        const scale = 10n ** BigInt(decimal.length);
+        num = num * scale + BigInt(decimal);
+        den *= scale;
+      }
+    }
+    if (i < n && (cps[i] === "e" || cps[i] === "E")) {
+      let k = i + 1;
+      let expNegative = false;
+      if (k < n && (cps[k] === "-" || cps[k] === "+")) {
+        expNegative = cps[k] === "-";
+        k += 1;
+      }
+      if (digit(k) >= 0) {
+        i = k;
+        const exp = BigInt(digitGroups());
+        if (expNegative) den *= 10n ** exp;
+        else num *= 10n ** exp;
+      }
+    }
+    skipSpace();
+    if (i !== n) throw invalid();
   }
-  let exp = 0n;
-  const eIdx = s.search(/[eE]/);
-  if (eIdx >= 0) {
-    exp = BigInt(s.slice(eIdx + 1));
-    s = s.slice(0, eIdx);
+  if (negative) num = -num;
+  if (den === 0n) throw new NumberError("ZeroDivisionError", `Fraction(${num}, 0)`);
+  return new Fraction(num, den);
+}
+
+// Python's float(q): CPython's long_true_divide for q.n / q.d — the double
+// nearest the exact quotient, ties to even, with gradual underflow, and
+// OverflowError when the rounded result is past the largest finite double.
+// Dividing Number(q.n) by Number(q.d) rounds each side first, so the quotient
+// can land on a neighbouring double, and a numerator past 1.8e308 became
+// Infinity (or Infinity / Infinity, NaN) instead of refusing.
+const DBL_MANT_DIG = 53;
+const DBL_MAX_EXP = 1024;
+const DBL_MIN_EXP = -1021;
+
+function bitLength(a) {
+  return a === 0n ? 0 : a.toString(2).length;
+}
+
+// dx * 2**e, exactly, for a dx of at most 56 bits whose result is representable:
+// 2**e alone underflows to 0 below 2**-1074, so a subnormal is reached in two
+// steps.
+function ldexp(dx, e) {
+  if (e < -1000) return dx * 2 ** -1000 * 2 ** (e + 1000);
+  return dx * 2 ** e;
+}
+
+export function fractionToDouble(q) {
+  const negate = q.n < 0n;
+  const a = biAbs(q.n);
+  const b = q.d;
+  if (a === 0n) return 0;
+  const overflow = () =>
+    new NumberError("OverflowError", "integer division result too large for a float");
+  // a/b is in [2**(diff-1), 2**(diff+1)).
+  const diff = bitLength(a) - bitLength(b);
+  if (diff > DBL_MAX_EXP) throw overflow();
+  if (diff < DBL_MIN_EXP - DBL_MANT_DIG - 1) return negate ? -0 : 0;
+  const shift = Math.max(diff, DBL_MIN_EXP) - DBL_MANT_DIG - 2;
+  let inexact = false;
+  let x;
+  if (shift <= 0) {
+    x = a << BigInt(-shift);
+  } else {
+    x = a >> BigInt(shift);
+    if (a - (x << BigInt(shift)) !== 0n) inexact = true;
   }
-  let intPart = s;
-  let fracPart = "";
-  if (s.includes(".")) {
-    [intPart, fracPart] = s.split(".");
+  if (x % b !== 0n) inexact = true;
+  x /= b;
+  const xBits = bitLength(x);
+  // The number of extra bits that have to be rounded away: 2 or 3.
+  const extraBits = Math.max(xBits, DBL_MIN_EXP - shift) - DBL_MANT_DIG;
+  const mask = 1n << BigInt(extraBits - 1);
+  let low = x | (inexact ? 1n : 0n);
+  if ((low & mask) !== 0n && (low & (3n * mask - 1n)) !== 0n) low += mask;
+  x = low & ~(2n * mask - 1n);
+  const dx = Number(x); // exact: its low extra bits are clear
+  if (
+    shift + xBits >= DBL_MAX_EXP &&
+    (shift + xBits > DBL_MAX_EXP || dx === 2 ** xBits)
+  ) {
+    throw overflow();
   }
-  intPart = intPart === "" ? "0" : intPart;
-  const digits = intPart + fracPart;
-  let num = BigInt(digits === "" ? "0" : digits);
-  let den = 10n ** BigInt(fracPart.length);
-  if (exp >= 0n) num *= 10n ** exp;
-  else den *= 10n ** -exp;
-  return new Fraction(sign * num, den);
+  const result = ldexp(dx, shift);
+  return negate ? -result : result;
 }
 
 // An operation whose exact result cannot be represented in bounds. Mirrors
@@ -242,8 +394,10 @@ export class PlanesNumber {
     if (!this.isWhole()) throw new RangeError(`${this.text()} is not a whole number`);
     return this.q.n;
   }
+  // The value as a host float — planes_num.py's float(q). Only the host
+  // boundary uses it; nothing computes a Planes value from it.
   toNumber() {
-    return Number(this.q.n) / Number(this.q.d);
+    return fractionToDouble(this.q);
   }
 
   // ---- arithmetic, each refusing past the bound rather than rounding
@@ -354,14 +508,20 @@ export class PlanesNumber {
 // asymmetry nobody asked for. Whitespace is trimmed first, the same
 // convention fractionFromString already uses.
 
-const NUMBER_TEXT_RE = /^-?\d+(\.\d+)?$/;
+// planes_num.py's `-?\d+(\.\d+)?`, full match — with Python's `\d`, any Unicode
+// decimal digit, so `number of "٣٤.٥"` is 34.5 there and must be here. A
+// JavaScript `\d` is 0-9 only.
+const NUMBER_TEXT_RE = new RegExp(
+  `^-?[${PYTHON_DIGIT_CLASS}]+(\\.[${PYTHON_DIGIT_CLASS}]+)?$`,
+  "u",
+);
 
 // Text `number of` refuses. `approximation` distinguishes the `~`-prefixed
 // case (its own reason: the text names an approximation, not a value) from
 // plain non-numeric text, so the caller can raise the right message.
 export class NotANumber extends Error {
   constructor(text, approximation = false) {
-    super(`not a number: ${text}`);
+    super(`not a number: ${pyRepr(text)}`);
     this.name = "NotANumber";
     this.text = text;
     this.approximation = approximation;
@@ -374,7 +534,9 @@ export class NotANumber extends Error {
 // value, so parsing it would silently manufacture a different, terminating
 // rational than the one that was printed.
 export function numberFromText(text) {
-  const s = text.trim();
+  // text.strip(): Python's whitespace, not trim()'s — "\x1c5" is 5 there, and
+  // "\ufeff5" is refused.
+  const s = pythonStrip(text);
   if (s.startsWith("~")) throw new NotANumber(text, true);
   if (!NUMBER_TEXT_RE.test(s)) throw new NotANumber(text);
   return new PlanesNumber(fractionFromString(s));

@@ -37,7 +37,13 @@ import tempfile
 REPO = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, REPO)
 
-BASE_REF = "main"  # the pre-this-build state (HEAD de541dc)
+# A fixed historical range, not "main". Diffing against "main" was true only
+# while this build's branch was open: once #88 merged, every later branch that
+# touched interp.py or js/interp.mjs for any reason failed F, because "main"
+# had correctly moved on. test_cut_cost_verification.py records the same fix
+# for #89. BASE_REF/HEAD_REF are this build's own base and merge commit.
+BASE_REF = "de541dc"  # the pre-this-build state
+HEAD_REF = "02010fd"  # this build's own merge commit (PR #88)
 WINDOW = 5
 N = 300  # generations, enough to cross WINDOW many times over
 KERNEL_SOURCE = os.path.join(REPO, "world_kernel.py")
@@ -226,8 +232,8 @@ def test_d_no_gc_call_between_the_two_perf_counter_reads_in_step():
 # ================================================================ F. value-model untouched
 
 def test_f_interp_py_and_js_interp_mjs_changes_confined_to_seal():
-    """`git diff --name-only main` for `interp.py`/`js/interp.mjs` must
-    show changes only inside `_seal` — never a value/effect/builtin/plane
+    """This build's diff (BASE_REF..HEAD_REF) for `interp.py`/`js/interp.mjs`
+    shows changes only inside `_seal` — never a value/effect/builtin/plane
     surface change. Checked by naming the permitted changed region and
     asserting every diff hunk for those two files falls inside it."""
     problems = []
@@ -236,14 +242,16 @@ def test_f_interp_py_and_js_interp_mjs_changes_confined_to_seal():
         ("js/interp.mjs", PERMITTED_JS_INTERP_MARKERS),
     ):
         diff = subprocess.run(
-            ["git", "diff", "-U0", BASE_REF, "--", path], cwd=REPO,
+            ["git", "diff", "-U0", BASE_REF, HEAD_REF, "--", path], cwd=REPO,
             capture_output=True, text=True, check=True).stdout
         if not diff.strip():
             continue  # no change to this file at all — trivially fine
 
-        full_path = os.path.join(REPO, path)
-        with open(full_path, encoding="utf-8") as fh:
-            new_src = fh.read()
+        # HEAD_REF's content, not the working file: the hunks' line numbers
+        # are HEAD_REF's, and the file has moved since.
+        new_src = subprocess.run(
+            ["git", "show", f"{HEAD_REF}:{path}"], cwd=REPO,
+            capture_output=True, text=True, check=True).stdout
         marker_idx = min((new_src.find(m) for m in permitted_markers
                           if new_src.find(m) != -1), default=-1)
         if marker_idx == -1:
