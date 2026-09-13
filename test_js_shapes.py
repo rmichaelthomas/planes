@@ -489,6 +489,40 @@ def test_non_ascii_paths_follow_imports():
             assert js["program"] == "m\u00e4in.planes"
 
 
+# ================================================================ #108: module rename resolution
+
+def test_a_renamed_collision_agrees_after_the_rename_resolution_fix():
+    """js/shapes.mjs ported shapes.py's `self.local` rename table as one flat
+    map, so a call to the pre-rename name resolved the same way no matter
+    which file wrote it. Here a and b both define `helper`; main renames
+    b's on import. b's own `label`/`b-helper` must show no network reach
+    (b's helper is pure); a's own `fetch-a`/`helper` must still show theirs
+    \u2014 the declared surface never hides what a function can really do."""
+    with tempfile.TemporaryDirectory() as d:
+        _src_to_tmp(
+            'use http\n\n'
+            'to helper of x:\n  give ask "https://a.example/" + x\n'
+            'to fetch-a of x:\n  give helper of x\n',
+            d, "a.planes")
+        _src_to_tmp(
+            'to helper of x:\n  give x + " (local)"\n'
+            'to label of x:\n  give helper of x\n',
+            d, "b.planes")
+        p = _src_to_tmp(
+            "use a\nuse b with helper as b-helper\n"
+            'show label of "hi"\n',
+            d, "main.planes")
+        py = as_json(analyse_file(p, follow=True), p)
+        js = _js_shapes(p, follow=True)
+        assert js == py, f"py={json.dumps(py)}\njs={json.dumps(js)}"
+        pf = _py_functions(analyse_file(p, follow=True))
+        jf = _js_shapes_fn(p, follow=True)
+        assert jf == pf, f"py={pf}\njs={jf}"
+        assert pf["label"] == [] and pf["b-helper"] == [], pf
+        assert any(e["kind"] == "ask" for e in pf["fetch-a"]), pf["fetch-a"]
+        assert any(e["kind"] == "ask" for e in pf["helper"]), pf["helper"]
+
+
 if __name__ == "__main__":
     if NODE is None:
         print("  SKIP  node not on PATH")

@@ -426,6 +426,10 @@ export class Interpreter {
     }
     this.env = new Env();
     this.funcs = new Map();
+    // `${file}\u0000${name as that file wrote it}` -> function: how a file's
+    // own calls find its own definitions without scanning `funcs` on every
+    // call (#108). Written wherever `funcs` is. interp.py keeps the same table.
+    this.ownFuncs = new Map();
     this.foreigns = new Map();
     this.modules = new Set();
     this.output = [];
@@ -1093,6 +1097,7 @@ export class Interpreter {
         fn.file = file;
         this.funcs.set(rn(s.name), fn);
         fn.local = s.name;
+        this.ownFuncs.set(`${file}\u0000${s.name}`, fn);
         this.hoist(s.body, env, renames, file);
       }
     }
@@ -1195,7 +1200,9 @@ export class Interpreter {
       // carries the same one line for the same reason.
       const fn = new PlanesFunction(stmt.name, stmt.params, stmt.body, env);
       fn.file = this.currentFile;
+      fn.local = stmt.name;
       this.funcs.set(stmt.name, fn);
+      this.ownFuncs.set(`${this.currentFile}\u0000${stmt.name}`, fn);
       return null;
     }
     if (k === "Assign") {
@@ -1814,33 +1821,31 @@ export class Interpreter {
   }
 
   call(name, args, env, line = 0) {
-    if (!this.funcs.has(name) && builtinNames().has(name)) {
+    // A module's own calls resolve to its own definitions first, by the name
+    // it wrote at the call site: an importer's rename only changes what
+    // OTHERS call a function, never what the defining file calls itself, and
+    // a same-named function belonging to a DIFFERENT file is a different
+    // function (module rename resolution, #108). Only once the current file
+    // has no such definition does resolution fall through to the flat,
+    // importer-facing view below — "what it itself uses", per the existing
+    // rules.
+    let fn = this.ownFuncs.get(`${this.currentFile}\u0000${name}`) ?? null;
+    let iname;
+    if (fn !== null) {
+      iname = name;
+    } else if (!this.funcs.has(name) && builtinNames().has(name)) {
       if (args.length !== 1) {
         throw new PlanesError("wrong-arity", `'${name}' takes 1 value, given ${args.length}`, `write it as \`${name} of x\``);
       }
       const arg = args[0] instanceof Traced ? args[0] : this.eval(args[0], env);
       return this.builtin(name, arg, line || null);
-    }
-    if (this.foreigns.has(name) && !this.funcs.has(name)) {
+    } else if (this.foreigns.has(name) && !this.funcs.has(name)) {
       return this.call_foreign(this.foreigns.get(name), args, env);
-    }
-    let fn;
-    let iname;
-    if (this.funcs.has(name)) {
+    } else if (this.funcs.has(name)) {
       fn = this.funcs.get(name);
       iname = name;
     } else {
-      fn = null;
-      for (const f of this.funcs.values()) {
-        if (f.local === name) {
-          fn = f;
-          break;
-        }
-      }
-      if (fn === null) {
-        throw new PlanesError("unknown-function", `no function named '${name}'`, `define it: to ${name}: ...`);
-      }
-      iname = fn.local || fn.name;
+      throw new PlanesError("unknown-function", `no function named '${name}'`, `define it: to ${name}: ...`);
     }
     if (args.length !== fn.params.length) {
       const word = fn.params.length === 1 ? "value" : "values";

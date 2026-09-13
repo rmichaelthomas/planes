@@ -604,7 +604,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "wrong-arity",
-      "source": "interp.py:1955",
+      "source": "interp.py:1967",
       "raised_in": "call",
       "template": "'{name}' takes 1 value, given {len(args)}",
       "slots": [
@@ -618,7 +618,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "unknown-function",
-      "source": "interp.py:1973",
+      "source": "interp.py:1981",
       "raised_in": "call",
       "template": "no function named '{name}'",
       "slots": [
@@ -631,7 +631,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "wrong-arity",
-      "source": "interp.py:1989",
+      "source": "interp.py:1996",
       "raised_in": "call",
       "template": "'{iname}' takes {len(fn.params)} {word}, given {len(args)}",
       "slots": [
@@ -647,7 +647,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "recursion-too-deep",
-      "source": "interp.py:2022",
+      "source": "interp.py:2029",
       "raised_in": "call",
       "template": "'{iname}' recursed past the depth this interpreter can follow",
       "slots": [
@@ -660,7 +660,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "wrong-arity",
-      "source": "interp.py:2046",
+      "source": "interp.py:2053",
       "raised_in": "call_foreign",
       "template": "'{decl.name}' takes {len(decl.params)} {word}, given {len(args)}",
       "slots": [
@@ -676,7 +676,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "bad-foreign-target",
-      "source": "interp.py:2061",
+      "source": "interp.py:2068",
       "raised_in": "call_foreign",
       "template": null,
       "slots": [],
@@ -689,7 +689,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "foreign-not-found",
-      "source": "interp.py:2064",
+      "source": "interp.py:2071",
       "raised_in": "call_foreign",
       "template": "cannot find '{decl.target}' in the host",
       "slots": [
@@ -702,7 +702,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "foreign-failed",
-      "source": "interp.py:2096",
+      "source": "interp.py:2103",
       "raised_in": "call_foreign",
       "template": "'{decl.name}' raised {type(e).__name__}: {e}",
       "slots": [
@@ -717,7 +717,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "cannot-combine",
-      "source": "interp.py:2116",
+      "source": "interp.py:2123",
       "raised_in": "apply_op",
       "template": "cannot combine {detail_value(a)} with {detail_value(b)} using +",
       "slots": [
@@ -731,7 +731,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "divided-by-zero",
-      "source": "interp.py:2128",
+      "source": "interp.py:2135",
       "raised_in": "apply_op",
       "template": "the right side of / was 0",
       "slots": [],
@@ -742,7 +742,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "unknown-operator",
-      "source": "interp.py:2138",
+      "source": "interp.py:2145",
       "raised_in": "apply_op",
       "template": "no operator is spelled '{op}'",
       "slots": [
@@ -755,7 +755,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-text",
-      "source": "interp.py:2190",
+      "source": "interp.py:2197",
       "raised_in": "membership",
       "template": "cannot look for {detail_value(a)} in text {detail_value(b)}",
       "slots": [
@@ -769,7 +769,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-collection",
-      "source": "interp.py:2206",
+      "source": "interp.py:2213",
       "raised_in": "membership",
       "template": "cannot look inside {detail_value(b)}",
       "slots": [
@@ -782,7 +782,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "not-a-number",
-      "source": "interp.py:2215",
+      "source": "interp.py:2222",
       "raised_in": "arith",
       "template": "cannot use '{op}' on {detail_value(v)}",
       "slots": [
@@ -796,7 +796,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "needs-rounding",
-      "source": "interp.py:2226",
+      "source": "interp.py:2233",
       "raised_in": "arith",
       "template": null,
       "slots": [],
@@ -809,7 +809,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "unknown-operator",
-      "source": "interp.py:2229",
+      "source": "interp.py:2236",
       "raised_in": "arith",
       "template": "'{op}' is not an arithmetic operator",
       "slots": [
@@ -822,7 +822,7 @@
       "kind": "error",
       "class": "PlanesError",
       "tag": "cannot-compare",
-      "source": "interp.py:2258",
+      "source": "interp.py:2265",
       "raised_in": "compare",
       "template": "cannot compare {detail_value(a)} with {detail_value(b)}",
       "slots": [
@@ -1627,7 +1627,7 @@
       "interp.py:109",
       "interp.py:118",
       "interp.py:139",
-      "interp.py:2258"
+      "interp.py:2265"
     ],
     "not-a-yes-no": [
       "interp.py:154"
@@ -1636,7 +1636,7 @@
       "interp.py:180",
       "interp.py:195",
       "interp.py:1795",
-      "interp.py:2190"
+      "interp.py:2197"
     ],
     "unrecognized-record-format": [
       "interp.py:345"
@@ -1676,7 +1676,7 @@
       "interp.py:1826",
       "interp.py:1842",
       "interp.py:1848",
-      "interp.py:2215"
+      "interp.py:2222"
     ],
     "module-not-used": [
       "interp.py:1553",
@@ -1702,7 +1702,7 @@
       "interp.py:1678",
       "interp.py:1762",
       "interp.py:1929",
-      "interp.py:2206"
+      "interp.py:2213"
     ],
     "ask-failed": [
       "interp.py:1718"
@@ -1721,37 +1721,37 @@
       "interp.py:1908"
     ],
     "wrong-arity": [
-      "interp.py:1955",
-      "interp.py:1989",
-      "interp.py:2046"
+      "interp.py:1967",
+      "interp.py:1996",
+      "interp.py:2053"
     ],
     "unknown-function": [
-      "interp.py:1973"
+      "interp.py:1981"
     ],
     "recursion-too-deep": [
-      "interp.py:2022"
+      "interp.py:2029"
     ],
     "bad-foreign-target": [
-      "interp.py:2061"
+      "interp.py:2068"
     ],
     "foreign-not-found": [
-      "interp.py:2064"
+      "interp.py:2071"
     ],
     "foreign-failed": [
-      "interp.py:2096"
+      "interp.py:2103"
     ],
     "cannot-combine": [
-      "interp.py:2116"
+      "interp.py:2123"
     ],
     "divided-by-zero": [
-      "interp.py:2128"
+      "interp.py:2135"
     ],
     "unknown-operator": [
-      "interp.py:2138",
-      "interp.py:2229"
+      "interp.py:2145",
+      "interp.py:2236"
     ],
     "needs-rounding": [
-      "interp.py:2226"
+      "interp.py:2233"
     ],
     "grammar-data-missing": [
       "lexer.py:82",
