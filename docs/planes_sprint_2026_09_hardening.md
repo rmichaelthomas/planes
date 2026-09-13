@@ -30,7 +30,32 @@ Each answer closes its question. None is carried forward.
 | 11 | Does `send` conflict with Horizon's "no eighth effect"? | **No.** Horizon §9.2 limited how world data is carried (it crosses `show`) during the Phase 0 build. It is not a limit on the language. World data keeps using `show`. | P-Q25 (Horizon) |
 | 12 | Four false lines in `tutor.html` | **Approved replacements** (F4). The architect also ruled the decorative seed a **bug**. Sharing a seed was meant to be the point (v24.0 §316, v27.0 §81), and no build or audit flagged it. Filed as [issue #106](https://github.com/rmichaelthomas/planes/issues/106), no rush. | — |
 
-**Register after Track 0:** sixteen open (A-Q1, A-Q5, A-Q6a, A-Q6c, A-Q7, A-Q8, A-Q10, A-Q11, A-Q13, A-Q17, A-Q24, A-Q25, T-Q4, T-Q5, T-Q6, T-Q7).
+---
+
+## The rest of the register — decided (walkthrough, September 13, 2026)
+
+The architect answered the sixteen questions left after Track 0 in the same session. **The open register is empty.**
+
+| # | Question | Decision | Closes |
+|---|---|---|---|
+| 13 | Where does the interactive surface live? | The GitHub Pages site, `rmichaelthomas.github.io/planes`. Prosecode.org is no longer the planned home. | A-Q5 |
+| 14 | Rename the `shapes` tool? | No. `shapes` stays the command's name; the feature is always "the effect surface" in writing. | A-Q10 |
+| 15 | Private functions? | No. Every function a module defines stays visible. A name clash is fixed by renaming at the point of use, which F8 makes correct. | A-Q6c |
+| 16 | Versions in the language? | No. `use` names a file. Versions come from tagged releases, and `--diff` shows what changed between two. | A-Q6a |
+| 17 | How is Planes distributed? | Tagged GitHub releases only: Swift through SwiftPM at a tag (E3), JS by copying `js/` at a tag (E2), Python by checkout at a tag. No PyPI or npm. | A-Q7 |
+| 18 | What does a registry publish? | There is no registry. `--json` and `--diff` publish and compare a surface wherever the code lives. | A-Q8 |
+| 19 | A public cross-host determinism claim? | Yes, after H6's four-way `sine` agreement test passes: the same numbers on every machine and in every implementation. | A-Q24 |
+| 20 | D1's first artifact? | Neither a reference model nor a trig table. No determinism-market work. | A-Q25 |
+| 21 | The benchmark set? | H7: four ordinary jobs in Planes, Python and JS, plus effect-surface time over the corpus with its foreign fraction, published in the README. | A-Q1 |
+| 22 | What the measurement layer needs? | Nothing. It belonged to a model-narrated tutor that is not being built. | A-Q13 |
+| 23 | The wedge: analyse other languages? | No. Planes analyses Planes programs only; other languages are Cutter's job. | A-Q11 |
+| 24 | Foreign target portability? | The eight `sharedTargets()` names are the portable set, supported by every host that runs programs. Any other name works only where a host provides it. | A-Q17 |
+| 25 | What is a lesson? | One entry in `tutor.html`'s lesson list. | T-Q4 |
+| 26 | "Approximate": feature or caution? | Information, not a warning. | T-Q5 |
+| 27 | Answer key, and the record plane? | The worked example is the answer, shown openly; not a record-plane artifact. | T-Q6 |
+| 28 | Starter vocabulary; what the picker writes? | Garden words ship in the key. The learner writes their `because` reason and sky name. The picker writes `custom-sky of` and numbers, never the learner's words. | T-Q7 |
+
+Found while verifying these: F8 below ([issue #108](https://github.com/rmichaelthomas/planes/issues/108)).
 
 For the next checkpoint's register (bookkeeping only):
 - P-Q17 has been used three times: v2.0 §36 fingerprints, v14.0 §159 host seam, v37.0 rule-target matching.
@@ -88,6 +113,11 @@ PR #101 replaced `trim()` with Python's whitespace set in the lexer, and listed 
 - Fix: give records a plain-data form (`toJSON` or a documented `toPlain`), with a round-trip test through `structuredClone`.
 - Verify first: *not re-run here.*
 
+**F8. Renaming a module's function on import makes that module call the other module's function.** *Verified* in Python and JS ([issue #108](https://github.com/rmichaelthomas/planes/issues/108)). With `use a` and `use b with helper as b-helper`, b's own calls to `helper` run a's, silently. In the reproduction that means a wrong value, and a network request b never made. `interp.py:1126–1150` hoists every module into one flat env, and `js/run_file.mjs` ports the same structure.
+- Fix: a module's calls resolve to its own definitions first, in Python, JS and `grammar/interp.planes`.
+- Gate: agreement tests over the issue's two reproductions, and a test that the effect surface and the run agree on them.
+- Why now: Track 0's no-private-functions answer (#15) relies on renaming working.
+
 **F7. The `nothing` comparison's fix clause still lists cases inside itself.** `interp.py:97` reads "test for absence with `is nothing` — if the nothing is inside a compared list or record rather than the whole value (the path names which)…". Track 0 #2 settled that each raise site's advice is true for its exact case. Split it so the whole-value and inner-value cases each raise with their own clause, byte-identical in every host.
 
 ### Hardening: agreement, gates and completeness
@@ -113,6 +143,14 @@ PR #101 replaced `trim()` with Python's whitespace set in the lexer, and listed 
 - `identity/render_logo.py` still says "rough marker, not locked" and has no Typography section (v16.0 §176, reported).
 - `README.md`'s foreign example spells a POST as `doing ask` (v37.1 §531). It is relabelled `doing send` in B1 (Track 0 #9), not here.
 - Not included: `reports/CORE_SUBSET.md`'s stale "half the keywords" (v18.0 §206). It lives in `reports/`, which is archival.
+
+**H6. Four-way `sine` agreement, then the determinism claim.** No suite compares `sine` digit for digit across hosts. Each tests its own (e.g. `js/test/exactness.test.mjs`).
+- Add an agreement test sweeping many angles (including large, negative and quarter-turn ones) through Python, JS, `grammar/interp.planes` and Swift's `PlanesNumber`.
+- Once it passes, add one README sentence: Planes computes the same numbers on every machine and in every implementation (#19).
+
+**H7. The published benchmarks** (#21). Add a README Performance section, measured once on the architect's Mac with the machine named.
+- **Set A:** word count, record updates, invoice arithmetic and a file transform, each written in Planes, Python and JS. Unflattering results are published.
+- **Set B:** effect-surface time across the 51 corpus programs, stating the fraction that crosses a foreign boundary.
 
 ### Consumers: make Planes easy to embed and to pin
 
@@ -202,8 +240,6 @@ These are real, and in [`ROADMAP.md`](../ROADMAP.md):
 - the tutor's phone and touch pass and adult variant
 - collection builtins
 - dynamic record lookup
-- module versioning and private functions
-- the registry
 - surface-to-receipt wiring
 
 Reason: each one needs a design or an external input (hardware, learners, an architect ruling) that a hardening sprint shouldn't stand in for.
