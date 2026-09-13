@@ -15,7 +15,6 @@ import sys
 from fractions import Fraction
 
 from planes_num import Inexact, Number
-
 from swift_host import REPO, SWIFT, command
 
 

@@ -29,7 +29,10 @@ import Foundation
 // trailing backslash that consumes the closing quote.
 // `noFix` mirrors lexer.py's `no_fix` (C2): a reason why this raise site names
 // no fix clause. Never rendered — the message is byte-identical either way.
-public struct PlanesSyntaxError: Error, CustomStringConvertible, Sendable {
+// A class, not a struct, because parser.py's PlanesAmbiguity subclasses it: every
+// `catch let e as PlanesSyntaxError` catches an ambiguity too, as every `except
+// PlanesSyntaxError` does. Immutable, hence the unchecked Sendable.
+public class PlanesSyntaxError: Error, CustomStringConvertible, @unchecked Sendable {
     public let message: String
     public let noFix: String?
 

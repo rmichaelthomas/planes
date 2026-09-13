@@ -32,6 +32,11 @@ def binary():
                            capture_output=True, text=True)
         if r.returncode != 0:
             raise AssertionError(f"swift build failed:\n{r.stdout[-4000:]}\n{r.stderr[-4000:]}")
+        # A source whose mtime moved but whose content did not (a checkout, a
+        # restored backup) leaves the build a no-op that never relinks, so the
+        # binary would stay "older" and every later call would pay for another
+        # no-op build. The build just said the binary is current; record that.
+        os.utime(BINARY)
     return BINARY
 
 

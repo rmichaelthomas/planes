@@ -17,5 +17,6 @@ case "text": TextCommand.run(rest)
 case "tokens": TokensCommand.run(rest)
 case "num": NumCommand.run(rest)
 case "hash": HashCommand.run(rest)
+case "ast": AstCommand.run(rest)
 default: CLI.fail("planes-swift: unknown or not yet ported command '\(sub)'")
 }

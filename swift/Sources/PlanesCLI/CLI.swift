@@ -27,9 +27,31 @@ enum CLI {
         }
     }
 
-    /// Writes text on stdout, as `out(text)` does.
+    /// Writes text on stdout followed by a newline.
     static func out(text: String) {
         FileHandle.standardOutput.write(Data((text + "\n").utf8))
+    }
+
+    /// Writes text on stdout exactly, with no newline added — js/cli.mjs's
+    /// `out(s)`, which is `process.stdout.write(s)`. For output a suite compares
+    /// byte for byte rather than parsing.
+    static func write(_ text: String) {
+        FileHandle.standardOutput.write(Data(text.utf8))
+    }
+
+    /// `JSON.stringify(value)` for a flat object of strings, keys in the order
+    /// given, no newline added.
+    static func write(jsonObject entries: [(String, String)]) {
+        do {
+            let parts = try entries.map { key, value -> String in
+                let k = try JSONSerialization.data(withJSONObject: key, options: [.fragmentsAllowed, .withoutEscapingSlashes])
+                let v = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed, .withoutEscapingSlashes])
+                return String(decoding: k, as: UTF8.self) + ":" + String(decoding: v, as: UTF8.self)
+            }
+            write("{" + parts.joined(separator: ",") + "}")
+        } catch {
+            fail("planes-swift: could not encode output: \(error)")
+        }
     }
 
     /// The file's text, every code point kept. `String(data:encoding:)` only
