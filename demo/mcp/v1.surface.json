@@ -1,0 +1,92 @@
+{
+  "format": 1,
+  "program": "v1.planes",
+  "kind": "program",
+  "pure": false,
+  "complete": true,
+  "boundaries": [
+    "ambient",
+    "console",
+    "file",
+    "network"
+  ],
+  "kinds": [
+    "ask",
+    "clock",
+    "read",
+    "show",
+    "write"
+  ],
+  "effects": [
+    {
+      "kind": "clock",
+      "boundary": "ambient",
+      "target": "time.time (destination not stated)",
+      "computed": true,
+      "declared": true
+    },
+    {
+      "kind": "show",
+      "boundary": "console",
+      "target": "{...}",
+      "computed": true,
+      "declared": false
+    },
+    {
+      "kind": "read",
+      "boundary": "file",
+      "target": "mcp.stdio.read (destination not stated)",
+      "computed": true,
+      "declared": true
+    },
+    {
+      "kind": "write",
+      "boundary": "file",
+      "target": "audit.jsonl",
+      "computed": false,
+      "declared": false
+    },
+    {
+      "kind": "ask",
+      "boundary": "network",
+      "target": "https://registry.internal.example.com/v1/packages/{...}",
+      "computed": true,
+      "declared": false
+    }
+  ],
+  "runs_on_load": [
+    {
+      "kind": "clock",
+      "boundary": "ambient",
+      "target": "time.time (destination not stated)"
+    },
+    {
+      "kind": "show",
+      "boundary": "console",
+      "target": "{...}"
+    },
+    {
+      "kind": "read",
+      "boundary": "file",
+      "target": "mcp.stdio.read (destination not stated)"
+    },
+    {
+      "kind": "write",
+      "boundary": "file",
+      "target": "audit.jsonl"
+    },
+    {
+      "kind": "ask",
+      "boundary": "network",
+      "target": "https://registry.internal.example.com/v1/packages/{...}"
+    }
+  ],
+  "modules_declared": [
+    "file",
+    "http"
+  ],
+  "modules_unused": [],
+  "effects_undeclared": [],
+  "unresolved_calls": [],
+  "approximate": []
+}
