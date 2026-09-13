@@ -55,6 +55,14 @@ enum NumCommand {
             case "round":
                 guard let places = int(1).asInt else { CLI.fail("num: places out of range") }
                 return try parse(0).roundTo(places).text()
+            case "sine":
+                // H6: the four-way sine agreement suite drives this the same
+                // way `sine of d` does in a running program — parse the
+                // degrees, take the sine, render the same `.text()` a `show`
+                // would print.
+                return sineDegrees(try parse(0)).text()
+            case "root":
+                return try rootOf(try parse(0)).text()
             case "frac":
                 return PlanesNumber(try Fraction(int(0), int(1))).text()
             case "cmp":

@@ -310,6 +310,13 @@ denominators grows the denominator. Summing 2000 distinct fractions takes about
 10 ms; past the bound an operation is *refused* rather than silently rounded,
 because a refusal is visible and a rounding is not.
 
+**The same numbers, in every implementation.** Arithmetic is exact by
+construction, and `sine` and `root` — the only two operations that can return
+an approximate value — compute it by the identical deterministic algorithm in
+Python, JavaScript, self-hosted Planes, and Swift: 1724 angles and 237
+radicands, checked byte for byte, agree across all four
+(`test_sine_agreement.py`).
+
 ---
 
 ## Effect surface
