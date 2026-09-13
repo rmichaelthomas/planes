@@ -1,6 +1,6 @@
 # Planes roadmap
 
-**Updated:** September 13, 2026, at `c4400ad` (addendum v37.1)
+**Updated:** September 13, 2026, after the Track 0 decision walkthrough (base `c4400ad`, addendum v37.1)
 **Supersedes as the working roadmap:** `reports/planes_handoff_2026_08_01_language_and_performance_roadmap.md`. That file is archival and unedited. Its phase order still stands, and each phase's current status is below.
 **Near-term work:** [`docs/planes_sprint_2026_09_hardening.md`](docs/planes_sprint_2026_09_hardening.md)
 
@@ -38,9 +38,16 @@ No semantics change. See the sprint doc. In short:
 
 ## Next — Sprint B: the effect vocabulary grows to eight, and the rule plane catches up
 
-1. **The send effect (P-Q25).** The network gets its `write`. Designed at a build session against v37.1 §530's test, then built in all five implementations, and the seven-kind pins move to eight.
-2. **Rule-target matching (P-Q17, v37.0).** Exact, host or prefix, decided by the architect. Built with `may not send to`, so both network kinds match the same way.
-3. **`until` and `contradicts` (v5.0 §76), and mandatory-or-optional fingerprints (v2.0 §36).** Locked long ago and never built, or retired by checkpoint.
+All decided at Track 0 (September 13, 2026). The full specification is in the sprint doc, B1–B4.
+
+1. **The send effect.** The network gets its `write`.
+   - `send` is an effect kind `foreign` functions declare. No keyword, no host method.
+   - The vocabulary goes from seven to eight.
+   - Data going out is `send`; fetch-only is `ask`.
+   - Existing mislabelled sends are relabelled, and `--diff` reports the change.
+   - Forbidding `ask` also forbids `send`, so no older rule weakens.
+2. **Rule-target matching.** A rule's address covers everything under it: same host, path at `/` boundaries, query ignored. Subdomains are separate. Built with `send`, so both network kinds match the same way. Settles Koncord PE-Q42.
+3. **`contradicts`, and mandatory supersession fingerprints.** `until` is withdrawn.
 4. **Structured violations.** Hosts write their own wording from fields, not by parsing rendered text.
 
 ---
@@ -68,7 +75,7 @@ Each item says where it came from and what it waits on. The Aug 1 handoff's phas
 | **A beneficiary on rules**: who a rule protects | Not built. Asked by TAOS (OL-Q1), Koncord v0.13 §96.3 and the Cloudflare contribution; Undertow built its own `for=`. | Architect: language or Liminate |
 | Rules about data reaching a send (`customer emails may not derive into any send`) | Partial. Named subjects resolve through derivation (A-Q22); data in a URL is traced (v37.0 §520). A request body can't be expressed until P-Q25. | Sprint B |
 | Rule-set consistency beyond conflict and vacuity | 5xFive runs Z3 on Liminate, not on Planes rules | — |
-| Temporal rules beyond `until`; retroactive re-check of stored derivations against new rules | Brainstormed (DeepSeek) | Sprint B `until` |
+| Retroactive re-check of stored derivations against new rules | Brainstormed (DeepSeek) | — (expiring rules were declined at Track 0 #4) |
 | Dynamic record lookup with a missing-key contract; precedence diagnostics | Not built | Handoff open question 3 |
 
 ### 3. The language itself
@@ -96,11 +103,12 @@ Held on purpose, with their triggers:
 
 ### 4. Errors and messages
 
-- **A-Q20:** what the error catalogue is for, and where it lives. `errors.json` is 44% of the tutor payload.
-- **A-Q21:** split multi-intent raise sites (`cannot-compare` is shared by `equal()` and `compare()`).
+- **Settled at Track 0:**
+  - `grammar/errors.json` is a generated reference copy; messages are written in each host's code and held equal by the agreement suites (A-Q20, closed).
+  - Every raise site gives advice true for its exact case (A-Q21, closed; the last leftover is sprint item F7).
 - The 54 error messages never audited (v22.2 §291).
 - Teaching-grade tags: the tutor softens only 4.
-- Messages are now a four-host byte-identical contract (Swift README rule 4), so every message change costs four edits. That is an argument for A-Q20 landing first.
+- Messages are a four-host byte-identical contract (Swift README rule 4), so every message change costs four edits.
 
 ### 5. Performance (handoff P2–P3)
 
@@ -170,12 +178,13 @@ Open alongside it: the R2 machine-export provenance bound (v29.0 §454) must be 
 - **Audience.** The page speaks to children in adult wording ("approximating builtin"). There is no adult variant.
 - **Proposal and page must agree.** The proposal says each lesson adds to one program and that Planes shows what a program touches before it runs. The tutor does neither today.
 - **More first-timers.** None tested since #98/#99.
+- **The seed is decorative, but sharing a seed was meant to be the point** (v24.0 §316, v27.0 §81). Bug, [issue #106](https://github.com/rmichaelthomas/planes/issues/106), no rush. Until it's fixed, the copy says the saved file is what's shared (sprint F4).
 
 ---
 
 ## The open register
 
-**Twenty questions.** Addendum v37.1 counts eighteen because A-Q20 and A-Q21 fell out after v23.0 without being resolved.
+**Sixteen questions.** Addendum v37.1 counted eighteen but had dropped A-Q20 and A-Q21, so the true count was twenty. Track 0 answered four: A-Q20, A-Q21, P-Q17 (v37.0) and P-Q25.
 
 | # | Question | Where it lands |
 |---|---|---|
@@ -189,17 +198,16 @@ Open alongside it: the R2 machine-export provenance bound (v29.0 §454) must be 
 | A-Q11 | The wedge: option A dead or unexercised | §6, §7 |
 | A-Q13 | What the measurement layer needs | §1 |
 | A-Q17 | Foreign target portability (now three host tables, Swift included) | §6 |
-| **A-Q20** | What the error catalogue is for, and where it lives | §4 |
-| **A-Q21** | Split multi-intent raise sites | §4 |
 | A-Q24 | Cross-host determinism claim | §7 |
 | A-Q25 | D1's first artifact | §7 |
-| P-Q17 (v37.0) | Rule-target matching | Sprint B |
-| P-Q25 | The send effect | Sprint B |
 | T-Q4 – T-Q7 | Teaching | §9 |
 
-Parked or untracked, but not closed:
-- the original P-Q17, supersession fingerprints (Sprint B)
-- F-Q1/F-Q2, `contradicts` and `until`: resolved in design, never built (Sprint B)
+Closed at Track 0, outside the register:
+- the original P-Q17, supersession fingerprints: mandatory
+- F-Q1, `contradicts`: build
+- F-Q2, `until`: withdrawn
+
+Parked or untracked, not closed:
 - I-Q5, I-Q6, I-Q7: whole-corpus effect-log oracle, metamorphic tests, mutation tests. The Swift port did mutation testing informally.
 - R-Q1
 - linearity for capabilities
