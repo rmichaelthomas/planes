@@ -97,12 +97,7 @@ CANNOT_COMBINE_FIX = (
     "expression"
 )
 
-IN_TEXT_FIX = (
-    "`in` over text looks for text — wrap the left side with `text of`, "
-    "but only when it is a number, yes/no value, or nothing; if it is a "
-    "list or record, `text of` gives an opaque placeholder, not its "
-    "contents, so the search will not find what was probably intended"
-)
+IN_TEXT_FIX = "`in` over text looks for text — wrap the left side with `text of`"
 
 SINE_FIX = (
     "sine takes an angle in degrees as a number — e.g. sine of 30; if "

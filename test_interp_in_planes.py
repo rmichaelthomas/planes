@@ -26,30 +26,18 @@ control flow, and effects are builds 2 and 3 -- an effect-bearing node
 """
 import sys
 
-from interp import Deriv, Interpreter, PlanesError, Traced, is_num
+from interp import Deriv, Interpreter, PlanesError, Traced, canonical_value, is_num
 from parser import parse
 from planes_num import Number
 from planes_text import escape_string_literal
 
 # ============================================== the canonical value form (Python side)
 
-
-def canonical(v):
-    """The canonical text form of one interp.py value. The oracle the
-    Planes side is checked against."""
-    if v is None:
-        return "nothing"
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if is_num(v):
-        return Number.of(v).text()
-    if isinstance(v, str):
-        return '"' + escape_string_literal(v) + '"'
-    if isinstance(v, list):
-        return "[" + ", ".join(canonical(x) for x in v) + "]"
-    if isinstance(v, dict):
-        return "{" + ", ".join(f"{k}: {canonical(val)}" for k, val in v.items()) + "}"
-    raise AssertionError(f"canonical: cannot render {v!r} ({type(v).__name__})")
+# `canonical_value` (F2: also what `text of` now calls for a list or record)
+# is this exact rendering -- promoted out of this test and into interp.py, so
+# the oracle both hosts agree on and the builtin's real output are the same
+# function, not two copies that could drift apart.
+canonical = canonical_value
 
 
 # ============================================== building a Planes value-record literal
@@ -545,6 +533,30 @@ def test_eval_builtin_text():
     assert_eval_agrees("text of xs", {"xs": [Number.of(1), Number.of(2)]})
     assert_eval_agrees("text of r", {"r": {"a": Number.of(1)}})
     assert_eval_agrees('"read " + text of size + " bytes"', {"size": Number.of(42)})
+
+
+def test_eval_builtin_text_of_a_list_or_record_gives_full_contents_not_a_placeholder():
+    """F2: `text of` on a list or record used to give the shape (`[N items]`,
+    `{record}`) -- the placeholder `fmt`/`show` still give, and the same one
+    `whole of`'s and `in`'s error details still name -- instead of the
+    contents, silently, since the result still typechecked as text.
+
+    The calls above already covered a list and a record, but only for
+    agreement -- they would have passed just as well under the placeholder,
+    since both sides gave it identically. This pins the actual string, on
+    the Python side, and checks records and nested lists too (not just the
+    one flat list F2's own example names).
+    """
+    assert interp_eval("text of [1, 2, 3]") == "[1, 2, 3]"
+    assert interp_eval('text of ["a", "b"]') == '["a", "b"]'
+    assert interp_eval("text of { a: 1, b: 2 }") == "{a: 1, b: 2}"
+    assert interp_eval("text of [1, [2, 3], { a: nothing }]") == \
+        "[1, [2, 3], {a: nothing}]"
+    # And the self-hosted host gives the same, not just a shared wrong answer.
+    assert_eval_agrees("text of [1, 2, 3]")
+    assert_eval_agrees('text of ["a", "b", true, nothing]')
+    assert_eval_agrees("text of { a: 1, b: [2, 3] }")
+    assert_eval_agrees("text of [1, [2, 3], { a: nothing }]")
 
 
 def test_eval_builtin_case_and_normalize():

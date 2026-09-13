@@ -337,6 +337,17 @@ def test_show_uses_fmt_for_lists_and_records():
     assert_output_agrees(src)
 
 
+def test_text_of_a_list_or_record_gives_full_contents_not_a_placeholder():
+    # F2: `text of` no longer calls fmt for a list or record -- show above,
+    # which does call fmt, is unaffected and still gives the placeholder.
+    src = ('show text of [1, 2, 3]\n'
+           'show text of { x: 1, y: 2 }\n'
+           'show text of [1, [2, 3], { a: nothing }]\n')
+    assert_output_agrees(src)
+    assert planes_output(src) == [
+        "[1, 2, 3]", "{x: 1, y: 2}", "[1, [2, 3], {a: nothing}]"]
+
+
 def test_show_computed_values():
     src = ('total = 100\n'
            'show "total is " + text of total\n'

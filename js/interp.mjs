@@ -78,6 +78,34 @@ export function fmt(v) {
   return String(v);
 }
 
+// The full-content text of a value -- a list or record rendered out, not the
+// `[N items]`/`{record}` shape fmt gives (F2). `text of` used to call fmt for
+// every kind, so `text of [1, 2, 3]` gave the placeholder instead of the
+// list's contents, silently, since the result still typechecks as text. This
+// is what `text of` calls instead for a list or record; a scalar still goes
+// through fmt, unchanged, so `text of "x"` stays bare and `show` (which wants
+// the placeholder -- its own fmt call is untouched) is unaffected.
+//
+// Nested text is quoted and escaped (escapeStringLiteral, the same four
+// escapes every canonical rendering here uses); nested numbers, booleans and
+// nothing render the way fmt renders them at top level. The algorithm is
+// interp.py's canonical_value and grammar/interp.planes's canonical-of-value
+// again -- already the metacircular test's oracle form for a full value.
+function canonicalValue(v) {
+  if (typeof v === "boolean") return v ? "true" : "false";
+  if (v === null || v === undefined) return "nothing";
+  if (v instanceof PlanesNumber) return v.text();
+  if (typeof v === "number" || typeof v === "bigint") {
+    return PlanesNumber.of(v).text();
+  }
+  if (typeof v === "string") return `"${escapeStringLiteral(v)}"`;
+  if (Array.isArray(v)) return `[${v.map(canonicalValue).join(", ")}]`;
+  if (v instanceof Map) {
+    return `{${[...v.entries()].map(([k, x]) => `${k}: ${canonicalValue(x)}`).join(", ")}}`;
+  }
+  return String(v);
+}
+
 // A caught error, as an ordinary record — discriminated by shape, never by type.
 //
 // One convention for an absent field (C5, Ruling 3): `fix` (§158) and `path`
@@ -1748,7 +1776,12 @@ export class Interpreter {
       return new Traced(n, this.mk("op", "root of", n, [arg.node]));
     }
     if (name === "text") {
-      const v = fmt(arg.value);
+      // F2: a list or record gets its full contents (canonicalValue), not
+      // fmt's `[N items]`/`{record}` placeholder -- everything else is
+      // unaffected, fmt already gives the right, unplaceholdered thing for
+      // a scalar.
+      const isCollection = Array.isArray(arg.value) || arg.value instanceof Map;
+      const v = isCollection ? canonicalValue(arg.value) : fmt(arg.value);
       return new Traced(v, this.mk("op", "text of", v, [arg.node]));
     }
     if (name === "normalize") {
@@ -2074,11 +2107,7 @@ function inOp(a, b) {
       throw new PlanesError(
         "not-text",
         `cannot look for ${detailValue(a)} in text ${detailValue(b)}`,
-        "`in` over text looks for text — wrap the left side with " +
-          "`text of`, but only when it is a number, yes/no value, or " +
-          "nothing; if it is a list or record, `text of` gives an opaque " +
-          "placeholder, not its contents, so the search will not find " +
-          "what was probably intended",
+        "`in` over text looks for text — wrap the left side with `text of`",
       );
     }
     return b.includes(a);
