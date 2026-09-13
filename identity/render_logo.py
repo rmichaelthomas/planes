@@ -13,6 +13,12 @@ mark, change the data at the top and re-run — never hand-edit an output.
     python3 render_logo.py
 
 No dependencies.
+
+Typography — locked (v16.0 §176). Red Hat Display 700 for the wordmark,
+headings, and nav; Martian Mono 400–500 for body copy, UI labels, and code.
+UI palette — locked (v16.0 §176). Clay #A65A2E (dominant role) and
+slate-blue #4A5B68 (minority role) on paper #F7F2E9, graphite #211D19,
+and line #D6C9B4. Both accent colors are WCAG AA verified for contrast.
 """
 
 import math
@@ -330,7 +336,7 @@ SHEET_TEMPLATE = r"""<!DOCTYPE html>
 
 <header>
   <h1>planes — visual identity</h1>
-  <p class="sub">Master sheet and generation instructions · rough marker, not locked · July 24, 2026</p>
+  <p class="sub">Master sheet and generation instructions · Locked per v16.0 §176 · July 24, 2026</p>
 </header>
 
 <h2>The mark</h2>
@@ -341,8 +347,11 @@ SHEET_TEMPLATE = r"""<!DOCTYPE html>
 <strong>Known limit of the 2D stills.</strong> A static projection cannot assert orthogonality; that is a 3D fact and a flat image has no way to carry it. In a still, the four planes read as "four planes at various angles." The animated version is where the structural claim — three perpendicular, one crossing — is actually legible. Treat the stills as the compressed form.
 </div>
 
+<h2>Typography</h2>
+<p><strong>Locked (v16.0 §176).</strong> Display typeface is Red Hat Display, weight 700, for wordmarks, headings, and navigation. Body and UI labels use Martian Mono, weights 400–500, for all running text, UI labels, and code.</p>
+
 <h2>Plane colors</h2>
-<p>Provisional. The plane-to-color mapping is written down so it stops being arbitrary, but nothing here is locked.</p>
+<p>Locked (v16.0 §176). The plane-to-color mapping is a 3D fact — each plane is defined by its basis vectors and carries its color.</p>
 <div class="card">
 {swatches}
 </div>
@@ -484,7 +493,7 @@ sheet.save('/tmp/contact_sheet.png')
 </div>
 
 <footer>
-planes — visual identity master sheet. Rough marker; nothing locked. Regenerate everything with <code>python3 render_logo.py</code>.
+planes — visual identity master sheet. Locked per v16.0 §176. Regenerate everything with <code>python3 render_logo.py</code>.
 </footer>
 
 </div>
