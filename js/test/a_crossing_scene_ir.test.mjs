@@ -73,3 +73,44 @@ test("rejects normalized coordinates outside the renderer contract", () => {
     (error) => error instanceof SceneIntentError && error.record === "camera",
   );
 });
+
+// ---- whitespace at a line's edges (sprint 2026-09, F5) ---------------------
+//
+// Tokenizing used to be raw.trim().split(/\s+/); PR #101 flagged it as
+// unaudited. It is now pythonStrip(raw.trim()) -- the union of trim()'s
+// whitespace and Python's str.strip()'s. Unlike the drawing and sound
+// protocols, a scene-intent line has no DRAW_LINE/SOUND_LINE-style gate
+// ahead of the split, so a leading character either strip alone misses
+// stays glued to "scene" and the whole line is silently treated as one
+// this parser does not recognise (a warning-free no-op here, since an
+// unrecognised leading word is not "scene" or "audio") rather than being
+// tokenized as intended. These three pin the union at that leading edge.
+// Written with \u escapes rather than the literal bytes so the characters
+// under test show up in a diff.
+
+test("a leading U+001F (in Python's whitespace, not trim()'s) does not glue onto \"scene\"", () => {
+  const intent = parseSceneIntent([
+    "\u001fscene protocol 1",
+    "scene camera horizon 0.42 0.54 1",
+    "scene environment bright-passage afternoon clear",
+  ]);
+  assert.equal(intent.protocol, 1);
+});
+
+test("a leading U+0085 (in Python's whitespace, not trim()'s) does not glue onto \"scene\"", () => {
+  const intent = parseSceneIntent([
+    "\u0085scene protocol 1",
+    "scene camera horizon 0.42 0.54 1",
+    "scene environment bright-passage afternoon clear",
+  ]);
+  assert.equal(intent.protocol, 1);
+});
+
+test("a leading U+FEFF byte-order mark (in trim()'s whitespace, not Python's) does not glue onto \"scene\"", () => {
+  const intent = parseSceneIntent([
+    "\ufeffscene protocol 1",
+    "scene camera horizon 0.42 0.54 1",
+    "scene environment bright-passage afternoon clear",
+  ]);
+  assert.equal(intent.protocol, 1);
+});

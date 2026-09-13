@@ -1,3 +1,14 @@
+// Tokenized on the UNION of trim()'s whitespace and Python's — audited, PR
+// #101 (js/paint/protocol.mjs carries the full rationale). Unlike that file
+// and js/sound/protocol.mjs, a line here has no gate equivalent to
+// DRAW_LINE/SOUND_LINE ahead of the split: a leading character trim() alone
+// does not strip (U+001C...U+001F, U+0085) would stay glued to
+// "scene"/"audio" and the line would be silently treated as one this parser
+// does not recognise, rather than tokenizing as intended — and a leading
+// character pythonStrip alone does not strip (U+FEFF) would do the same,
+// so both are applied.
+import { pythonStrip } from "../planes_text.mjs";
+
 export class SceneIntentError extends Error {
   constructor(record, line, message) {
     super(`scene ${record} at output line ${line}: ${message}`);
@@ -39,7 +50,7 @@ export function parseSceneIntent(lines) {
 
   lines.forEach((raw, index) => {
     const line = index + 1;
-    const parts = raw.trim().split(/\s+/);
+    const parts = pythonStrip(raw.trim()).split(/\s+/);
     if (parts[0] === "audio") {
       const record = parts[1] || "audio";
       if (record === "bed") {

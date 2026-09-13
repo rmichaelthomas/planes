@@ -8,6 +8,20 @@
 // grammar, and the refusal contract; the stream-level rules (the version
 // declaration's ordering, path lifecycle, transform balance) live in
 // painter.mjs, which is what actually walks a stream in order.
+//
+// A line is tokenized on the UNION of trim()'s whitespace and Python's
+// (audited, PR #101, which flagged this file's trim() calls as unaudited).
+// This protocol has no Python parser to agree with byte-for-byte, so nothing
+// here has to pick Python's narrower set the way js/lexer.mjs does — the
+// goal is just not to drop either host's idea of "blank". trim() alone
+// leaves U+001C...U+001F and U+0085 in place (Python's str.strip() removes
+// them), so a line ending in one of those silently glued it onto the last
+// argument token instead of separating cleanly; pythonStrip alone leaves a
+// leading U+FEFF byte-order mark in place (trim() removes it, and Python's
+// str.strip() does not either, but nothing here needs to agree with that),
+// which would have re-broken the very case trim() got right. Composing both
+// strips widens the boundary to their union with neither regression.
+import { pythonStrip } from "../planes_text.mjs";
 
 const ARITY = Object.freeze({
   stroke: 4,
@@ -191,7 +205,8 @@ function parseLabel(line) {
 // fourth would need another.
 function parseGradient(line) {
   const afterVerb = line.replace(/^\s*draw\s+gradient\s*/, "");
-  const tokens = afterVerb.trim().length ? afterVerb.trim().split(/\s+/) : [];
+  const strippedVerb = pythonStrip(afterVerb.trim());
+  const tokens = strippedVerb.length ? strippedVerb.split(/\s+/) : [];
   const kindWord = tokens[0];
   if (kindWord === undefined || !(kindWord in GRADIENT_KINDS)) {
     return err(
@@ -254,7 +269,7 @@ export function parseCommand(line) {
     return { kind: "prose", text: line };
   }
 
-  const tokens = line.trim().split(/\s+/);
+  const tokens = pythonStrip(line.trim()).split(/\s+/);
   const verb = tokens[1];
 
   if (verb === undefined) {

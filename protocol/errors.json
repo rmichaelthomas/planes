@@ -10,7 +10,7 @@
     {
       "kind": "error",
       "tag": "wrong-arity",
-      "source": "js/paint/protocol.mjs:140",
+      "source": "js/paint/protocol.mjs:154",
       "raised_in": "parseProtocol",
       "template": "\"protocol\" takes exactly one argument (the version number) in \"{line}\", got {args.length}",
       "slots": [
@@ -23,7 +23,7 @@
     {
       "kind": "error",
       "tag": "bad-protocol-version",
-      "source": "js/paint/protocol.mjs:148",
+      "source": "js/paint/protocol.mjs:162",
       "raised_in": "parseProtocol",
       "template": "\"protocol\" takes a positive whole number version in \"{line}\", got \"{args[0]}\"",
       "slots": [
@@ -36,7 +36,7 @@
     {
       "kind": "error",
       "tag": "wrong-arity",
-      "source": "js/paint/protocol.mjs:161",
+      "source": "js/paint/protocol.mjs:175",
       "raised_in": "parseLabel",
       "template": "\"label\" takes two numbers and text to draw in \"{line}\"",
       "slots": [
@@ -48,7 +48,7 @@
     {
       "kind": "error",
       "tag": "bad-number",
-      "source": "js/paint/protocol.mjs:172",
+      "source": "js/paint/protocol.mjs:186",
       "raised_in": "parseLabel",
       "template": "\"{bad}\" is not a valid number in \"{line}\"",
       "slots": [
@@ -61,7 +61,7 @@
     {
       "kind": "error",
       "tag": "bad-word",
-      "source": "js/paint/protocol.mjs:197",
+      "source": "js/paint/protocol.mjs:212",
       "raised_in": "parseGradient",
       "template": "\"gradient\" takes one of {Object.keys(GRADIENT_KINDS).join(\", \")} in \"{line}\", got \"{kindWord ?? \"\"}\"",
       "slots": [
@@ -75,7 +75,7 @@
     {
       "kind": "error",
       "tag": "wrong-arity",
-      "source": "js/paint/protocol.mjs:209",
+      "source": "js/paint/protocol.mjs:224",
       "raised_in": "parseGradient",
       "template": "\"gradient {kindWord}\" takes {range} numeric arguments in \"{line}\", got {rest.length}",
       "slots": [
@@ -90,7 +90,7 @@
     {
       "kind": "error",
       "tag": "bad-number",
-      "source": "js/paint/protocol.mjs:218",
+      "source": "js/paint/protocol.mjs:233",
       "raised_in": "parseGradient",
       "template": "\"{rest[badIndex]}\" is not a valid number in \"{line}\"",
       "slots": [
@@ -103,7 +103,7 @@
     {
       "kind": "error",
       "tag": "bad-number",
-      "source": "js/paint/protocol.mjs:232",
+      "source": "js/paint/protocol.mjs:247",
       "raised_in": "parseGradient",
       "template": "\"gradient radial\"'s inner radius {rInner} is not smaller than its radius {r} in \"{line}\"",
       "slots": [
@@ -117,7 +117,7 @@
     {
       "kind": "error",
       "tag": "bad-number",
-      "source": "js/paint/protocol.mjs:242",
+      "source": "js/paint/protocol.mjs:257",
       "raised_in": "parseGradient",
       "template": "\"gradient mid\"'s stop position {p} is not between 0 and 1 in \"{line}\"",
       "slots": [
@@ -130,7 +130,7 @@
     {
       "kind": "error",
       "tag": "unknown-verb",
-      "source": "js/paint/protocol.mjs:261",
+      "source": "js/paint/protocol.mjs:276",
       "raised_in": "parseCommand",
       "template": "\"draw\" with no verb in \"{line}\"",
       "slots": [
@@ -142,7 +142,7 @@
     {
       "kind": "error",
       "tag": "unknown-verb",
-      "source": "js/paint/protocol.mjs:281",
+      "source": "js/paint/protocol.mjs:296",
       "raised_in": "parseCommand",
       "template": "unrecognised drawing verb \"{verb}\" in \"{line}\"",
       "slots": [
@@ -155,7 +155,7 @@
     {
       "kind": "error",
       "tag": "wrong-arity",
-      "source": "js/paint/protocol.mjs:293",
+      "source": "js/paint/protocol.mjs:308",
       "raised_in": "parseCommand",
       "template": "\"{verb}\" takes {arity} argument{arity === 1 ? \"\" : \"s\"} in \"{line}\", got {args.length}",
       "slots": [
@@ -171,7 +171,7 @@
     {
       "kind": "error",
       "tag": "wrong-arity",
-      "source": "js/paint/protocol.mjs:300",
+      "source": "js/paint/protocol.mjs:315",
       "raised_in": "parseCommand",
       "template": "\"{verb}\" takes {arity} to {maxArity} arguments in \"{line}\", got {args.length}",
       "slots": [
@@ -187,7 +187,7 @@
     {
       "kind": "error",
       "tag": "bad-word",
-      "source": "js/paint/protocol.mjs:310",
+      "source": "js/paint/protocol.mjs:325",
       "raised_in": "parseCommand",
       "template": "\"{verb}\" takes one of {[...WORDS[verb]].join(\", \")} in \"{line}\", got \"{word}\"",
       "slots": [
@@ -202,7 +202,7 @@
     {
       "kind": "error",
       "tag": "bad-number",
-      "source": "js/paint/protocol.mjs:322",
+      "source": "js/paint/protocol.mjs:337",
       "raised_in": "parseCommand",
       "template": "\"{args[badIndex]}\" is not a valid number in \"{line}\"",
       "slots": [
@@ -349,29 +349,29 @@
   ],
   "tags": {
     "wrong-arity": [
-      "js/paint/protocol.mjs:140",
-      "js/paint/protocol.mjs:161",
-      "js/paint/protocol.mjs:209",
-      "js/paint/protocol.mjs:293",
-      "js/paint/protocol.mjs:300"
+      "js/paint/protocol.mjs:154",
+      "js/paint/protocol.mjs:175",
+      "js/paint/protocol.mjs:224",
+      "js/paint/protocol.mjs:308",
+      "js/paint/protocol.mjs:315"
     ],
     "bad-protocol-version": [
-      "js/paint/protocol.mjs:148"
+      "js/paint/protocol.mjs:162"
     ],
     "bad-number": [
-      "js/paint/protocol.mjs:172",
-      "js/paint/protocol.mjs:218",
-      "js/paint/protocol.mjs:232",
-      "js/paint/protocol.mjs:242",
-      "js/paint/protocol.mjs:322"
+      "js/paint/protocol.mjs:186",
+      "js/paint/protocol.mjs:233",
+      "js/paint/protocol.mjs:247",
+      "js/paint/protocol.mjs:257",
+      "js/paint/protocol.mjs:337"
     ],
     "bad-word": [
-      "js/paint/protocol.mjs:197",
-      "js/paint/protocol.mjs:310"
+      "js/paint/protocol.mjs:212",
+      "js/paint/protocol.mjs:325"
     ],
     "unknown-verb": [
-      "js/paint/protocol.mjs:261",
-      "js/paint/protocol.mjs:281"
+      "js/paint/protocol.mjs:276",
+      "js/paint/protocol.mjs:296"
     ],
     "protocol-repeated": [
       "js/paint/stream.mjs:189"
