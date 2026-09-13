@@ -81,6 +81,33 @@ Both pages are also hosted, with no install: <https://rmichaelthomas.github.io/p
 The gate needs `ruff` and `mypy`, which live in `./.venv`. It tells you so at
 step one if they are missing.
 
+### Checking a file without Python
+
+Anyone writing Planes for another project can check a file with Node or Swift
+alone. Both parse it and print its effect surface in the `--json` format
+([`docs/surface-format-v1.md`](docs/surface-format-v1.md)), and add rule
+results with `--rules`:
+
+```bash
+node js/cli.mjs shapes manifest.planes             # Node, nothing to build
+node js/cli.mjs shapes manifest.planes --rules
+
+swift build --package-path swift -c release        # Swift, built once
+swift/.build/release/planes-swift shapes manifest.planes
+```
+
+A file that doesn't parse is refused with the line and what was expected, and a
+non-zero exit:
+
+```
+$ node js/cli.mjs shapes manifest.planes
+syntax error — line 1: expected from, found 'doing'
+$ swift/.build/release/planes-swift shapes manifest.planes
+shapes: line 1: expected from, found 'doing'
+```
+
+That is what a `foreign` line with no `from "…"` target gets.
+
 ---
 
 ## Three implementations

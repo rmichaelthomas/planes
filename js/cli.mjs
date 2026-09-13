@@ -857,7 +857,16 @@ switch (sub) {
     const { asJson } = await import("./shapes.mjs");
     const { analyseFile } = await import("./shapes_node.mjs");
     const follow = !rest.includes("--no-follow");
-    const surface = await analyseFile(rest[0], follow);
+    let surface;
+    try {
+      surface = await analyseFile(rest[0], follow);
+    } catch (e) {
+      // E4: this is the documented way to check a file without Python, so a
+      // syntax error reads the way shapes_cli.py prints it, not as a stack.
+      if (!(e instanceof PlanesSyntaxError)) throw e;
+      process.stderr.write(`syntax error — ${e.message}\n`);
+      process.exit(1);
+    }
     if (rest.includes("--rules")) {
       const { check, RuleConflict, RuleNotSupported } = await import("./rules.mjs");
       const pathmod = await import("node:path");
