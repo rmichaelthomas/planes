@@ -123,6 +123,41 @@ All three produce that message, byte for byte. **0 divergences across 349
 shapes.** Both the effect surface and the derivation graph are computed by the
 JavaScript stack too, so neither guarantee depends on Python.
 
+### Embedding from JavaScript
+
+`js/embed.mjs` is the entry point for a host embedding the JavaScript
+implementation as a library rather than running `js/cli.mjs`. Importing it
+loads the grammar synchronously, as the import's own side effect — no `fs`
+read, no `fetch`, no top-level `await` — so it works unchanged under Node, in
+a browser, and in a Cloudflare Worker, and a caller can never hit
+`GrammarDataError: vocabulary not loaded` by forgetting a loading step there
+isn't one of:
+
+```js
+import { parse, analyse, check, Interpreter, TestHost } from "./js/embed.mjs";
+
+const src = 'show "hi"\n';
+const itp = new Interpreter({ host: new TestHost() });
+itp.run(src);              // ["hi"]
+analyse(src);               // the effect surface, without running it
+check(parse(src).filter((s) => s.__node === "Rule"), analyse(src));
+```
+
+It re-exports `parse`, `analyse` (the effect surface) and `check` (rule
+checking) under their real names, plus `Interpreter` and the rest of what
+`js/cli.mjs` itself uses: surface-JSON rendering and diff (`asJson`,
+`functionsBreakdown`, `derivationForm`, `diff`), the in-memory `Host`/
+`MemoryHost`/`TestHost` stand-ins, and the value-crossing helpers
+(`fmt`/`toJson`/`toHost`/`fromForeign`) between a Planes value and a plain
+host one. Hand-written types ship alongside it in `js/embed.d.mts`, documenting
+the exact-rational number representation among the rest.
+
+The grammar data itself is generated, the way Swift embeds it in
+`GrammarData.swift`: `python3 scripts/js_grammar_gen.py` projects
+`grammar/vocabulary.json`, `grammar/messages/amber.json` and
+`grammar/core.json` into `js/embedded_grammar_data.mjs`, and `--check` (run by
+`test_js_grammar_data.py`) fails the suites on any drift.
+
 ---
 
 ## The vocabulary

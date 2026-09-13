@@ -39,7 +39,7 @@ Every root `*.html` page, and whether its prose names the highest protocol versi
 
 Every file in scope, and whether any comment claiming "never a gate" (or an equivalent phrase) is contradicted by the file's own sys.exit expression.
 
-**0 finding(s), 34 site(s) examined.**
+**0 finding(s), 35 site(s) examined.**
 
 ### Sites examined
 
@@ -55,6 +55,7 @@ Every file in scope, and whether any comment claiming "never a gate" (or an equi
 - scripts/check_pages_surface.py -- no trigger phrase in any comment
 - scripts/ci.sh -- no trigger phrase in any comment
 - scripts/find_amber_site5_candidates.py -- no trigger phrase in any comment
+- scripts/js_grammar_gen.py -- no trigger phrase in any comment
 - scripts/measure-density.mjs -- no trigger phrase in any comment
 - scripts/measure-page-tick.mjs -- no trigger phrase in any comment
 - scripts/measure_association_idiom.py -- no trigger phrase in any comment
