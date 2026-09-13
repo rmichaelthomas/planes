@@ -1,6 +1,6 @@
 # Planes roadmap
 
-**Updated:** September 13, 2026, after the Track 0 decision walkthrough (base `c4400ad`, addendum v37.1)
+**Updated:** September 13, 2026, after the Track 0 and register walkthroughs. The open register is empty (base `c4400ad`, addendum v37.1)
 **Supersedes as the working roadmap:** `reports/planes_handoff_2026_08_01_language_and_performance_roadmap.md`. That file is archival and unedited. Its phase order still stands, and each phase's current status is below.
 **Near-term work:** [`docs/planes_sprint_2026_09_hardening.md`](docs/planes_sprint_2026_09_hardening.md)
 
@@ -35,6 +35,9 @@ No semantics change. See the sprint doc. In short:
 - a JS embedding entry point with types
 - a root `Package.swift`
 - a tagged release downstream projects can pin
+- the module rename bug ([#108](https://github.com/rmichaelthomas/planes/issues/108))
+- a four-way `sine` agreement test, then the "same numbers everywhere" README claim
+- a README performance section
 
 ## Next — Sprint B: the effect vocabulary grows to eight, and the rule plane catches up
 
@@ -62,7 +65,7 @@ Each item says where it came from and what it waits on. The Aug 1 handoff's phas
 |---|---|---|
 | Versioned release contract: language, grammar, host interface, protocol versions, dependency hashes | Not built. The World IR (`world-v1.json`, #83) proved the pattern for a protocol. | Handoff open question 1: manifest syntax |
 | Canonical AST serialization and a public conformance corpus | Partial. The canonical form exists in Python, JS and Swift, and agreement suites run it. Not yet published as fixtures a stranger can run. | Sprint A tag |
-| Structured run receipt: sources, seed, host, surface, observed effects, rule decisions | Partial. The record plane (#7), fingerprints and the event log (#85) exist; nothing is signed. | A-Q13; Omniglot O-Q3 and 5xFive refusal receipts want surface→receipt wiring |
+| Structured run receipt: sources, seed, host, surface, observed effects, rule decisions | Partial. The record plane (#7), fingerprints and the event log (#85) exist; nothing is signed. | Omniglot O-Q3 and 5xFive refusal receipts want surface→receipt wiring |
 | `planes describe`, a manifest of manifests | Admitted at v18.0 §200, not built | — |
 | Surface format versioning beyond format 1 | Starts with Sprint A E1 | Sprint B's eighth kind |
 
@@ -93,13 +96,14 @@ These are gaps real programs hit, each with a witness. Per standing rule, work i
 | String escapes are only `\" \\ \n \t`; JSON's `\r \b \f \uXXXX` are refused | `grammar/json.planes:23`; the tutor's `because` can't hold a `"` |
 | `why` is a statement, not a value a program can branch on | DeepSeek; wanted for click-to-explain and audits |
 | A host `ask` must return synchronously | 5xFive v3.2 §264a works around it with a prefetched address |
-| Private functions (A-Q6c); module versioning (A-Q6a) | v18.0 §204, verified absent |
 | A dead `Builtin` node in `lexer.py` | `ADDENDUM_SPRINT` §6 (reported) |
 
 Held on purpose, with their triggers:
 - **Structured concurrency:** Tier 5; trigger is the first parallel-I/O program.
 - **No type system:** v9.1 §118, always cited with §119's linear-capability exception.
 - **No `hash` builtin:** v32.0.
+- **No private functions** (A-Q6c): every function a module defines stays visible; a clash is fixed by renaming at the point of use, which #108 makes correct.
+- **No versions in the language** (A-Q6a): `use` names a file; versions come from tagged releases, and `--diff` shows what changed between two.
 
 ### 4. Errors and messages
 
@@ -118,7 +122,8 @@ Held on purpose, with their triggers:
 | Explicit stack instead of host recursion | **Done for `explain`** (#79). The interpreter still recurses; metacircular ceiling 178–199 frames. |
 | Retention tail and GC stalls | Python fixed (#88); JS windowed tail residue unconfirmed against a dense scene |
 | `_cut` redesign | Phase-2-gated, to be decided against a real cell's per-tick shape (v33.0) |
-| Benchmark contract with named platforms | Open (handoff question 4; A-Q1). Every gate is still provisional, set on the dev machine. No Planes-vs-other-language figure exists; Firefox never measured. |
+| Published benchmarks (A-Q1, decided) | Two sets in a README Performance section, measured once on the architect's Mac with the machine named. **Set A:** four ordinary jobs (word count, record updates, invoice arithmetic, a file transform) in Planes, Python and JS. **Set B:** effect-surface time over the 51 corpus programs, with the fraction that crosses a foreign boundary. Unflattering numbers included. |
+| Benchmark platforms for gates | Every gate is still provisional, set on the dev machine (handoff question 4). Firefox never measured. |
 | Bytecode, Wasm, JIT | Rejected as measured-unnecessary for the kernel (v33.0). Reconsider only after profiling a real workload. |
 
 ### 6. Ports and embedding
@@ -130,20 +135,27 @@ Held on purpose, with their triggers:
 | Self-hosted world emission | A named follow-on (`test_world_runtime_conformance.py`) |
 | `grammar/interp.planes` dynamic `host.resolve` | The `foreign.planes` gap (v25.0 §360) |
 | Workers-ready JS bundle, TypeScript types, structured-clone-safe records | Sprint A E2 and F6 start it |
-| Effect extraction from non-Planes code (JS, HTML, Python) | Asked by Koncord §98, Cutter, Omniglot O-Q4. Planes has said it analyses only Planes (Koncord v1.5 §240.3). **Needs a scope ruling**; A-Q11's option A is the same question. |
+| Effect extraction from non-Planes code (JS, HTML, Python) | **Not Planes' job** (A-Q11, decided). Planes analyses Planes programs only; other languages are Cutter's, which already maps TS and Python reach in Planes' vocabulary. Asked by Koncord §98 and Omniglot O-Q4. |
+| Foreign target names across hosts (A-Q17, decided) | The eight names in `sharedTargets()` (`js/host.mjs`) are the portable set, and every host that runs programs supports them, Swift included once it has an interpreter. Any other name works only where that host provides it, and fails elsewhere with "cannot find". |
 
 ### 7. Ecosystem and distribution (handoff P4)
 
-- **A-Q7:** distribution and installation. `pyproject.toml` is `0.1.0` with no publish path.
-- **A-Q8:** what a registry publishes. After H1 it has every field group it named.
-- **A-Q6a:** module versioning, which must come first.
-- **A-Q10:** the `shapes` tool name.
-- **A-Q11:** the wedge. Effect surfaces for Python/npm packages, starting from `shapes_python_probe.py`.
-- **A-Q5:** the interactive surface's home. GitHub Pages ships; Prosecode.org was the stated home.
+Decided in the register walkthrough:
+- **Distribution (A-Q7):** tagged GitHub releases only.
+  - Swift through SwiftPM at a tag (after the root `Package.swift`).
+  - JS by copying `js/` at a tag (with the embedding entry point).
+  - Python by checking out the repository at a tag.
+  - No PyPI or npm packages.
+- **No registry (A-Q8).** `--json` and `--diff` publish and compare a surface wherever the code lives.
+- **Public home (A-Q5):** the GitHub Pages site, `rmichaelthomas.github.io/planes`.
+- **The tool keeps the name `shapes` (A-Q10).** The feature is always "the effect surface" in writing.
+- **Determinism (A-Q24):** Planes publicly claims the same numbers on every machine and in every implementation, once a test sweeping `sine` across Python, JS, `grammar/interp.planes` and Swift passes.
+- **No determinism-market artifact (A-Q25):** no reference model, no generated trig table.
+- **Analysing other languages (A-Q11)** is not Planes' job (§6).
+
+Still later:
 - A task/workflow plane: cancellation, deadlines, retries.
 - LSP support built on effect and provenance hovers.
-- **A-Q24:** a public cross-host determinism claim, now with four agreeing implementations.
-- **A-Q25:** D1's first artifact, the generated fixed-point trig table.
 - A syntax quick reference for agents. 5xFive v3.1 §260 found an agent inventing `;` comments and quoted keys.
 
 ### 8. Horizon
@@ -169,10 +181,12 @@ Open alongside it: the R2 machine-export provenance bound (v29.0 §454) must be 
 
 ### 9. Teaching
 
-- **T-Q4:** a lesson as an artifact.
-- **T-Q5:** exact vs approximate, as feature or caution.
-- **T-Q6:** answer key and the record plane.
-- **T-Q7:** starter vocabulary. The picker writes `custom-sky` too, against BP invariant 5.
+- **Decided in the register walkthrough:**
+  - A lesson is one entry in `tutor.html`'s lesson list: title, instruction, worked example, and the ordered lines to type (T-Q4).
+  - "Approximate" is presented as information, not a warning (T-Q5).
+  - The worked example is the lesson's answer, shown openly. It is lesson content, not a record-plane artifact (T-Q6).
+  - The garden words ship ready-made in the key. The learner writes their own `because` reason and their own sky name. The picker writes `custom-sky of` and the colour numbers, never the learner's words (T-Q7).
+- **No measurement layer (A-Q13).** It belonged to a model-narrated tutor that is not being built.
 - **Crosswalk gaps after v35.0's exact-match typing.** Lessons 2 and 5 can't be answered by changing a number, and lessons 3 and 6 have no prediction or explanation prompt. The ODE codes are unchecked against Draft v1.0.
 - **Unverified surfaces.** No phone or touch pass (verified only to 800px, and the coordinate tip is hover-only). Refresh loses mid-lesson progress in lessons 1–6.
 - **Audience.** The page speaks to children in adult wording ("approximating builtin"). There is no adult variant.
@@ -184,30 +198,13 @@ Open alongside it: the R2 machine-export provenance bound (v29.0 §454) must be 
 
 ## The open register
 
-**Sixteen questions.** Addendum v37.1 counted eighteen but had dropped A-Q20 and A-Q21, so the true count was twenty. Track 0 answered four: A-Q20, A-Q21, P-Q17 (v37.0) and P-Q25.
+**Empty.** Addendum v37.1 counted eighteen, but it had dropped A-Q20 and A-Q21, so the true count was twenty. The architect answered all twenty on September 13, 2026:
+- **Track 0:** A-Q20, A-Q21, P-Q17 (v37.0), P-Q25. Also closed outside the register: the original P-Q17 fingerprints, F-Q1 `contradicts`, F-Q2 `until`, and Koncord PE-Q42.
+- **The register walkthrough:** A-Q1, A-Q5, A-Q6a, A-Q6c, A-Q7, A-Q8, A-Q10, A-Q11, A-Q13, A-Q17, A-Q24, A-Q25, T-Q4, T-Q5, T-Q6, T-Q7.
 
-| # | Question | Where it lands |
-|---|---|---|
-| A-Q1 | The benchmark set | §5 |
-| A-Q5 | The interactive surface's form and home | §7 |
-| A-Q6a | Module versioning | §3, §7 |
-| A-Q6c | Private functions | §3 |
-| A-Q7 | Distribution and installation | §7 |
-| A-Q8 | What a registry publishes | §7 |
-| A-Q10 | The `shapes` tool name | §7 |
-| A-Q11 | The wedge: option A dead or unexercised | §6, §7 |
-| A-Q13 | What the measurement layer needs | §1 |
-| A-Q17 | Foreign target portability (now three host tables, Swift included) | §6 |
-| A-Q24 | Cross-host determinism claim | §7 |
-| A-Q25 | D1's first artifact | §7 |
-| T-Q4 – T-Q7 | Teaching | §9 |
+Each answer is recorded where it lands above, and in the sprint doc's decision tables.
 
-Closed at Track 0, outside the register:
-- the original P-Q17, supersession fingerprints: mandatory
-- F-Q1, `contradicts`: build
-- F-Q2, `until`: withdrawn
-
-Parked or untracked, not closed:
+Parked or untracked, not closed (next walkthrough):
 - I-Q5, I-Q6, I-Q7: whole-corpus effect-log oracle, metamorphic tests, mutation tests. The Swift port did mutation testing informally.
 - R-Q1
 - linearity for capabilities
