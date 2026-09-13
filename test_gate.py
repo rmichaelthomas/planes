@@ -232,7 +232,7 @@ def _verify_scripts():
         dirs[:] = [d for d in dirs
                    if d not in (".git", ".venv", "__pycache__", ".ci-logs",
                                 "node_modules", ".mypy_cache", ".ruff_cache",
-                                ".pytest_cache")]
+                                ".pytest_cache") and not d.startswith(".")]
         for f in files:
             named_verify = f.startswith("verify_") or f.startswith("verify-")
             if named_verify and f.endswith(VERIFY_SUFFIXES):
