@@ -13,6 +13,7 @@ import {
   escapeStringLiteral,
   codePoints,
   codePointLength,
+  pyRepr,
 } from "./planes_text.mjs";
 import { parse, findDiscardedWrites } from "./parser.mjs";
 import { builtinNames, effectKinds } from "./lexer.mjs";
@@ -155,12 +156,17 @@ function equal(a, b, path = null) {
     const ak = [...a.keys()].sort();
     const bk = [...b.keys()].sort();
     if (ak.length !== bk.length || ak.some((k, i) => k !== bk[i])) {
-      const sym = [...new Set([...ak, ...bk])].filter(
-        (k) => !(a.has(k) && b.has(k)),
-      ).sort();
+      // interp.py writes `sorted(set(a) ^ set(b))`: a Python list of str,
+      // sorted by code point and rendered by repr — ['y', 'z'], not
+      // JSON.stringify's ["y","z"] — and a default sort() orders UTF-16 units,
+      // which puts an astral field name before U+E000...U+FFFF where Python
+      // puts it after.
+      const sym = [...new Set([...ak, ...bk])]
+        .filter((k) => !(a.has(k) && b.has(k)))
+        .sort(strCmp);
       throw new PlanesError(
         "cannot-compare",
-        `records have different fields: ${JSON.stringify(sym)}`,
+        `records have different fields: [${sym.map(pyRepr).join(", ")}]`,
         "compare records with the same fields",
         path,
       );

@@ -295,6 +295,71 @@ def test_the_trace_adds_no_effect_of_its_own():
     assert len(po) == 3  # the `why` line is output, not effect
 
 
+# ======================================================= non-ASCII text: Python's semantics
+
+def _messages(src, cfg=None):
+    """Run `src` on both and return (py, js) as (output, tag, message)."""
+    cfg = cfg or {}
+    host = TestHost(responses=cfg.get("responses", {}),
+                    files=dict(cfg.get("files", {})),
+                    now=cfg.get("now", 1_000_000.0))
+    itp = Interpreter(host=host)
+    tag = message = None
+    try:
+        itp.run(src)
+    except PlanesError as e:
+        tag, message = e.tag, str(e)
+    except PlanesSyntaxError as e:
+        tag, message = "PARSE", str(e)
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "p.planes")
+        with open(p, "w", encoding="utf-8", newline="") as fh:
+            fh.write(src)
+        r = subprocess.run([NODE, "js/cli.mjs", "run", p, json.dumps(cfg)],
+                           cwd=REPO, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise AssertionError(f"node failed:\n{src!r}\n{r.stderr}")
+    jd = json.loads(r.stdout)
+    return (list(itp.output), tag, message), (jd["output"], jd["tag"], jd["message"])
+
+
+def test_non_ascii_digits_and_whitespace_run_identically():
+    """A digit of any script is a number, in source and to `number of`; Python's
+    whitespace indents a block and is stripped by `number of`; a byte-order mark
+    is neither."""
+    cases = [
+        "x = \u0663\nshow x + \u0661\u0662.\u0665\nshow \U0001d7d9\U0001d7d8 * 2\n",
+        'x = 1\nif x == 1:\n\x1cshow "in"\nshow "out"\n',
+        "\ufeffx = 1\nshow x\n",
+        'show number of "\x1c\u0663\u0664.\u0665\u3000"\n',
+        'show number of "\u0e52\u0e55" + 1\n',
+        'show number of "\ufeff5"\n',
+        'show number of "\U00011de0"\n',
+        'show number of "~\u0663"\n',
+    ]
+    for src in cases:
+        py, js = _messages(src)
+        assert py == js, f"src:\n{src!r}\n py={py}\n js={js}"
+
+
+def test_records_with_different_fields_name_them_as_python_does():
+    """interp.py's message is `sorted(set(a) ^ set(b))` as Python prints a list
+    of str — ['y', 'z'], quoted and escaped by repr, sorted by code point, so an
+    astral field name sorts after U+FF01 — where the port wrote
+    JSON.stringify of a UTF-16 sort."""
+    keys = ["\uff01", "\U0001f600", "it's", 'say "hi"', "tab\there", "\x85", "e\u0301"]
+    body = ", ".join(f"{json.dumps(k)}: 1" for k in keys)
+    cfg = {"responses": {"https://x/r.json": "{" + body + "}"}}
+    cases = [
+        "a = {x: 1, y: 2}\nb = {x: 1, z: 2}\nshow a == b\n",
+        'use http\na = ask "https://x/r.json"\nb = {x: 1}\nshow a == b\n',
+    ]
+    for src in cases:
+        py, js = _messages(src, cfg)
+        assert py[1] == "cannot-compare", py
+        assert py == js, f"src:\n{src!r}\n py={py}\n js={js}"
+
+
 if __name__ == "__main__":
     if NODE is None:
         print("  SKIP  node not on PATH")

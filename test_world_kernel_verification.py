@@ -28,6 +28,12 @@ import time
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 
+# This build's own base and merge commit (PR #87). A fixed range, not "main":
+# against "main", D stays true only until any later branch legitimately edits
+# a core file (test_retention_tail_verification.py and
+# test_cut_cost_verification.py record the same fix).
+BASE_REF = "432900b"  # the pre-this-build state
+HEAD_REF = "de541dc"  # this build's own merge commit (PR #87)
 READ_ONLY_CORE = (
     "world_ir.py", "world_delta.py",
     "grammar/protocols/world-v1.json",
@@ -222,7 +228,7 @@ def test_c_the_results_file_is_complete():
 
 def test_d_the_read_only_core_files_are_untouched():
     r = subprocess.run(
-        ["git", "diff", "--name-only", "main", "--", *READ_ONLY_CORE],
+        ["git", "diff", "--name-only", BASE_REF, HEAD_REF, "--", *READ_ONLY_CORE],
         capture_output=True, text=True, cwd=REPO)
     changed = [line for line in r.stdout.splitlines() if line.strip()]
     assert not changed, f"read-only core files were touched: {changed}"

@@ -539,15 +539,14 @@ test("E: renderCardForMark and renderCardForSourceLine share one card-building c
 // ---- invariants (§8) ------------------------------------------------------
 
 test("invariant: the engine, why.mjs, hit.mjs, scene_vocab.mjs, and scene.planes are unmodified by this build", () => {
-  const status = fs
-    .readFileSync(path.join(REPO, ".git", "HEAD"), "utf-8")
-    .trim();
   // A lightweight sanity check that this suite is running inside the repo it
   // thinks it is — the real invariant (git diff --stat only touches
   // tutor.html and this test file) is checked at PR time via `git diff
   // --stat`, not re-implemented here with a git plumbing call this suite
-  // would then have to keep correct across every CI environment.
-  assert.ok(status.length > 0);
+  // would then have to keep correct across every CI environment. `.git` is a
+  // directory in a clone and a one-line `gitdir:` file in a worktree, so the
+  // check is that it exists, not that .git/HEAD can be opened.
+  assert.ok(fs.existsSync(path.join(REPO, ".git")));
 });
 
 test("invariant: no rendered code surface compresses two Planes statements onto one line — the worked example and the assembled program both come from one-line-per-item LESSONS data", () => {
@@ -629,14 +628,15 @@ test("H §4 vocabulary check: every placeable/phrase the keep-growing card sugge
   assert.match(html, /the middle of the night/, "the suggested night sky phrase must be one of scene_vocab.mjs's real SKY_PHRASES");
 });
 
-test("H §5: no serving/build instructions render in the visible footer text — only inside HTML comments", () => {
+test("H §5: no serving/build instructions render on the page — only inside HTML comments", () => {
+  // Read across the whole page rather than a <footer>: 1d8a833 removed the
+  // footer this used to slice, and the instructions must stay out of whatever
+  // renders, footer or not.
   const html = pageSrc();
-  const footerIdx = html.indexOf("<footer>");
-  const footerEnd = html.indexOf("</footer>");
-  assert.ok(footerIdx >= 0 && footerEnd > footerIdx, "tutor.html no longer has a <footer> where this suite reads it");
-  const footerText = html.slice(footerIdx, footerEnd);
-  assert.doesNotMatch(footerText, /python3 -m http\.server/, "the visible footer must not carry serving instructions");
-  assert.doesNotMatch(footerText, /Serving:/, "the visible footer must not carry serving instructions");
+  const rendered = html.replace(/<!--[\s\S]*?-->/g, "");
+  assert.match(html, /python3 -m http\.server/, "the serving instructions are still on the page, in a comment");
+  assert.doesNotMatch(rendered, /python3 -m http\.server/, "the page must not carry serving instructions outside a comment");
+  assert.doesNotMatch(rendered, /Serving:/, "the page must not carry serving instructions outside a comment");
 });
 
 test("H §5: both taglines were replaced away from 'draw something', and the meta description already leads with typing", () => {
