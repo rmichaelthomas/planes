@@ -728,6 +728,20 @@ test("H §8: actual file-saving stays reachable only from the capstone dialog pa
   assert.match(html.slice(saveWireIdx, saveWireIdx + 100), /proceedLessonSwitch\(true\)/, "the save button must still route through the one saveGardenFile() call site");
 });
 
+test("H §9: F4 copy fixes — old false lines replaced with approved copy", () => {
+  const html = pageSrc();
+  // Old phrases that must be gone
+  assert.doesNotMatch(html, /the same seed always grows the exact same one/, "old phrase: 'the same seed always grows the exact same one' must be replaced");
+  assert.doesNotMatch(html, /Your garden is already grown/, "old phrase: 'Your garden is already grown' must be replaced");
+  assert.doesNotMatch(html, /the garden you grew across the lessons/, "old phrase: 'the garden you grew across the lessons' must be replaced");
+  assert.doesNotMatch(html, /Your garden is a tiny file plus your seed/, "old share-card phrase must be replaced");
+  // New phrases that must be present
+  assert.match(html, /Your garden is a tiny file\. Give a friend the file, and the.*exact same.*garden grows on their computer/, "share-card copy must be updated");
+  assert.match(html, /Trade garden files with anyone else growing a garden — the same file always grows the exact same one/, "seed trading copy must be updated");
+  assert.match(html, /Here's a garden grown from everything you've learned — every line in it is one you now know how to write/, "lesson 7 intro copy must be updated");
+  assert.match(html, /Every line in this garden is one you learned to write — now it's yours to change/, "capstone completion message must be updated");
+});
+
 // Small local helper: the canonical (non-learner-authored) program text for a
 // given lesson index, evaluated the same way loadLessons()'s own LESSONS
 // literal is — used only to state, and check, the precondition a "full
