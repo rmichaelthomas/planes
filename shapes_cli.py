@@ -18,9 +18,12 @@ The point of --json is that this is a fact an agent can act on before
 installing anything. --diff exits 1 when a new boundary is crossed. --rules
 exits 1 on a genuine violation, 2 when every genuine violation is absent but
 a named-subject rule resolved and matched nothing (it checked nothing —
-P-Q19), 0 otherwise; both drop into CI as a gate. --rules does not yet
-appear in --json's output — a --json consumer cannot see rule results at
-all today, vacuous or otherwise.
+P-Q19), 0 otherwise; both drop into CI as a gate. `--json --rules` together
+add a "rules" field to the JSON document (H1) — the same violations, in the
+same order, that --rules alone prints as text, as structured fields plus the
+rendered message string, so a --json consumer no longer has to run --rules
+separately or parse its prose to see what it found. The exit code is
+unchanged either way.
 """
 import json
 import os
@@ -39,7 +42,7 @@ from shapes import analyse, analyse_file, diff
 FORMAT_VERSION = 1
 
 
-def as_json(surface, path):
+def as_json(surface, path, rules=None):
     """The machine-readable surface.
 
     `effects` reports the DECLARED surface — everything this file offers,
@@ -48,8 +51,15 @@ def as_json(surface, path):
     whole system exists to prevent, and it said exactly that until this was
     fixed: `sneaky.planes` emitted `"effects": []` beside
     `"boundaries": ["network"]`.
+
+    `rules`, when given, is `rules_json(found, results)` (H1) — appended as
+    an additional "rules" field, never touching any field above it. Every
+    existing two-argument caller keeps getting the exact document it always
+    did; `rules=None` (the default) omits the key entirely rather than
+    writing it as `null`, so a consumer that never asked for --rules sees no
+    trace that the field exists.
     """
-    return {
+    doc = {
         "format": FORMAT_VERSION,
         "program": os.path.basename(path),
         "kind": ("library" if surface.is_library()
@@ -82,6 +92,26 @@ def as_json(surface, path):
         # The third question, in the machine-readable report too: does this
         # program produce approximate values, and by what route.
         "approximate": [list(p) for p in surface.approximate],
+    }
+    if rules is not None:
+        doc["rules"] = rules
+    return doc
+
+
+def rules_json(found, results):
+    """--rules's results, structured for --json (H1).
+
+    `checked` and `resolved_subjects` are the same readback the text
+    summary line reports (P-Q20: read from `results.resolved_subjects`,
+    never re-derived by assuming every named subject in `found` survived).
+    `violations` is every `Violation.as_json()`, in the exact order
+    `check()` returned them — the same order text mode prints them in, so a
+    --json consumer sees an identical sequence to a --rules reader.
+    """
+    return {
+        "checked": len(found),
+        "resolved_subjects": list(results.resolved_subjects),
+        "violations": [v.as_json() for v in results],
     }
 
 
@@ -258,13 +288,23 @@ def main(argv):
             print(f"syntax error — {e}", file=sys.stderr)
             return 1
         found = [s for s in prog if isinstance(s, Rule)]
-        if not found:
-            print(f"no rules found in {os.path.basename(path)}")
-            return 0
 
         if "--fingerprints" in args:
+            if not found:
+                print(f"no rules found in {os.path.basename(path)}")
+                return 0
             for r in found:
                 print(f"[{r.name}] @{fingerprint(r)}")
+            return 0
+
+        # H1: with --json also given, the result is the JSON document with
+        # a "rules" field, not the text below — an empty `found` still goes
+        # through check_rules() (which reports 0 checked, no violations)
+        # rather than the "no rules found" text short-circuit, since a
+        # --json consumer wants a document, not a sentence.
+        as_json_output = "--json" in args
+        if not found and not as_json_output:
+            print(f"no rules found in {os.path.basename(path)}")
             return 0
 
         try:
@@ -273,7 +313,12 @@ def main(argv):
         except (RuleNotSupported, RuleConflict) as e:
             print(f"rule check error — {e}", file=sys.stderr)
             return 1
-        if not results:
+
+        if as_json_output:
+            print(json.dumps(
+                as_json(surface, path, rules=rules_json(found, results)),
+                indent=2))
+        elif not results:
             word = "rule" if len(found) == 1 else "rules"
             summary = f"{len(found)} {word} checked"
             # Read back from check()'s own record of what it resolved
@@ -287,16 +332,18 @@ def main(argv):
                 subj_word = "subject" if n == 1 else "subjects"
                 summary += f" ({n} named {subj_word} resolved)"
             print(f"{summary}, no violations")
-            return 0
-        for v in results:
-            print(v.render())
-            print()
+        else:
+            for v in results:
+                print(v.render())
+                print()
+
         # A cleared prohibition, or a vacuous named-subject rule, is
-        # returned (so the reader sees it) but is not a genuine violation —
+        # reported (so the reader sees it) but is not a genuine violation —
         # only a genuine violation exits 1. A vacuous rule (P-Q19) still
         # exits non-zero: a rule that checked nothing should fail its CI
         # gate, distinctly from a real violation, so a caller can tell
-        # "this broke" from "this rule no longer applies to anything."
+        # "this broke" from "this rule no longer applies to anything." Same
+        # exit-code logic whether the result above printed as JSON or text.
         if any(v.is_violation for v in results):
             return 1
         if any(v.vacuous for v in results):

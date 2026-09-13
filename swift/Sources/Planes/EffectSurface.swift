@@ -1358,9 +1358,15 @@ func basename(_ p: String) -> String {
 private func jsonStrings(_ xs: [String]) -> GrammarJSON { .array(xs.map { .string($0) }) }
 
 /// shapes_cli.py's as_json: the machine-readable surface, keys in its order.
-public func asJson(_ surface: Surface, _ path: String) -> GrammarJSON {
+///
+/// `rules`, when given, is the H1 {checked, resolved_subjects, violations}
+/// document — appended as a trailing "rules" field, never touching a field
+/// above it. Every existing two-argument call site keeps getting the exact
+/// document it always did; `rules: nil` (the default) omits the key entirely
+/// rather than writing it as null, matching shapes_cli.as_json's rules=None.
+public func asJson(_ surface: Surface, _ path: String, rules: GrammarJSON? = nil) -> GrammarJSON {
     let kind = surface.isLibrary() ? "library" : surface.isPure() ? "pure" : "program"
-    return .object([
+    var entries: [(key: String, value: GrammarJSON)] = [
         ("format", .number(String(FORMAT_VERSION))),
         ("program", .string(basename(path))),
         ("kind", .string(kind)),
@@ -1383,7 +1389,9 @@ public func asJson(_ surface: Surface, _ path: String) -> GrammarJSON {
         ("unresolved_calls", jsonStrings(pySortedUnique(surface.unresolved))),
         // The third question, in the machine-readable report too.
         ("approximate", .array(surface.approximate.map(jsonStrings))),
-    ])
+    ]
+    if let rules { entries.append(("rules", rules)) }
+    return .object(entries)
 }
 
 /// Per-function effect breakdown: sorted function name -> its sorted effects.

@@ -174,6 +174,59 @@ class Violation:
             lines.append(f"  derived from: {', '.join(parts)}")
         return "\n".join(lines)
 
+    def as_json(self):
+        """Every field `render()` reads, as data rather than prose (H1).
+
+        A `--json --rules` consumer gets the rule name, the rule's own
+        kind/target/assertion/`because`, the specific effect (kind, boundary,
+        target, line) it matched or None for the vacuous shape, and the
+        supersedes/permit outcome (`cleared_by`) or narrowing sibling
+        (`narrowed_by`) — every structural fact `render()`'s prose is built
+        from. `message` is `render()`'s own text, included verbatim beside
+        the fields so a host can print exactly what text mode prints without
+        re-deriving it (js/rules.mjs's Violation.asJson and Rules.swift's
+        Violation.asJSON must agree with this field for field).
+
+        `origins` dedupes the same way `render()`'s derivation line does —
+        by the formatted "name (file)" string, not by the raw pair — so the
+        structured list and the rendered line never disagree about what
+        counts as one origin.
+        """
+        rule = self.rule
+        effect = self.effect
+        seen = {}
+        for n, f in self.origins:
+            key = f"{n} ({f})" if f else n
+            seen.setdefault(key, (n, f))
+        origins = [{"name": n, "file": f} for _, (n, f) in sorted(seen.items())]
+        return {
+            "rule": rule.name,
+            "rule_line": rule.line,
+            "assertion": rule.assertion,
+            "kind": rule.kind,
+            "target": rule.target,
+            "condition": condition(rule),
+            "because": rule.annotation.text if rule.annotation is not None else None,
+            "is_violation": self.is_violation,
+            "vacuous": self.vacuous,
+            "vacuous_situation": self.vacuous_situation,
+            "uncertain": self.uncertain,
+            "effect": None if effect is None else {
+                "kind": effect.kind,
+                "boundary": effect.boundary,
+                "target": effect.target,
+                "line": effect.site,
+            },
+            "cleared_by": None if self.cleared_by is None else {
+                "rule": self.cleared_by.name,
+                "line": self.cleared_by.line,
+            },
+            "narrowed_by": [{"rule": r.name, "line": r.line}
+                           for r in self.narrowed_by],
+            "origins": origins,
+            "message": self.render(),
+        }
+
     def _render_vacuous(self):
         """§2's three situations, one message each — never the word
         "violated": this is not one (§3.1)."""

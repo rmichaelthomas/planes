@@ -34,6 +34,7 @@ from parser import PlanesSyntaxError, parse
 from planes_text import escape_string_literal
 from rules import RuleConflict, RuleNotSupported, check, fingerprint
 from shapes import analyse, analyse_file
+from shapes_cli import as_json, rules_json
 
 NODE = shutil.which("node")
 REPO = os.path.dirname(os.path.abspath(__file__))
@@ -216,6 +217,22 @@ def test_rule_check_agrees_on_the_corpus_rule_files():
         surface = analyse_file(path, follow=True)
         py = _py_rules(found, surface, declaring_file=os.path.abspath(path))
         js = _run(["rules", path])
+        assert js == py, f"{path}:\n  py={json.dumps(py)}\n  js={json.dumps(js)}"
+
+
+def test_json_rules_agree_on_the_corpus_rule_files():
+    """H1: `shapes --rules` (js/cli.mjs's oracle for shapes_cli's
+    `--json --rules`) must merge the identical "rules" document
+    shapes_cli.as_json(surface, path, rules=rules_json(found, results))
+    would — every structured violation field, plus the rendered message,
+    byte for byte with the Python side."""
+    for path in RULE_FILES:
+        src = open(path, encoding="utf-8").read()
+        found = [s for s in parse(src) if isinstance(s, Rule)]
+        surface = analyse_file(path, follow=True)
+        results = check(found, surface, declaring_file=os.path.abspath(path))
+        py = as_json(surface, path, rules=rules_json(found, results))
+        js = _run(["shapes", path, "--rules"])
         assert js == py, f"{path}:\n  py={json.dumps(py)}\n  js={json.dumps(js)}"
 
 

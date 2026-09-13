@@ -956,6 +956,184 @@ def test_cli_exit_code_0_for_anything_with_no_match():
         shutil.rmtree(d, ignore_errors=True)
 
 
+# ================================================================ H1: --json --rules
+
+def test_violation_as_json_reports_every_structured_field():
+    src = ('use http\n'
+           'rule [no-net] anything may not ask\n'
+           'x = ask "https://example.com/a.json"\n')
+    v = rule_violations(src)[0]
+    doc = v.as_json()
+    assert doc["rule"] == "no-net"
+    assert doc["rule_line"] == 2
+    assert doc["assertion"] == "forbid"
+    assert doc["kind"] == "ask"
+    assert doc["target"] is None
+    assert doc["condition"] == condition(v.rule)
+    assert doc["because"] is None
+    assert doc["is_violation"] is True
+    assert doc["vacuous"] is False
+    assert doc["vacuous_situation"] is None
+    assert doc["uncertain"] is False
+    assert doc["effect"] == {"kind": "ask", "boundary": "network",
+                             "target": "https://example.com/a.json", "line": 3}
+    assert doc["cleared_by"] is None
+    assert doc["narrowed_by"] == []
+    assert doc["origins"] == []
+    assert doc["message"] == v.render()
+
+
+def test_violation_as_json_reports_because():
+    src = ('use http\n'
+           'rule [no-net] anything may not ask\n'
+           '  because "default deny"\n'
+           'x = ask "https://example.com/a.json"\n')
+    v = rule_violations(src)[0]
+    assert v.as_json()["because"] == "default deny"
+
+
+def test_violation_as_json_reports_a_permit_exception_as_cleared_by():
+    src = ('use http\n'
+           'rule [no-external-sends] anything may not ask\n'
+           'rule [audit-allowed] anything may ask to "https://audit.internal" '
+           'supersedes [no-external-sends]\n'
+           'x = ask "https://audit.internal"\n')
+    v = rule_violations(src)[0]
+    doc = v.as_json()
+    assert doc["is_violation"] is False
+    assert doc["vacuous"] is False
+    assert doc["cleared_by"] == {"rule": "audit-allowed", "line": 3}
+    assert doc["message"] == v.render()
+
+
+def test_violation_as_json_reports_narrowed_by():
+    src = ('use http\n'
+           'rule [no-net] anything may not ask\n'
+           'rule [no-telemetry] anything may not ask '
+           'to "https://telemetry.example.com"\n'
+           'x = ask "https://telemetry.example.com"\n')
+    wide = next(v for v in rule_violations(src) if v.rule.name == "no-net")
+    assert wide.as_json()["narrowed_by"] == [{"rule": "no-telemetry", "line": 3}]
+
+
+def test_violation_as_json_reports_a_vacuous_situation():
+    src = ('use file\n'
+           'let secret = "value"\n'
+           'show secret\n'
+           'rule [no-secret-uploads] secret may not ask\n')
+    v = rule_violations(src)[0]
+    doc = v.as_json()
+    assert doc["vacuous"] is True
+    assert doc["vacuous_situation"] == 1
+    assert doc["is_violation"] is False
+    assert doc["effect"] is None
+    assert doc["message"] == v.render()
+
+
+def test_violation_as_json_dedupes_origins_like_render_does():
+    src = ('use http\n'
+           'to send of payload:\n'
+           '  give ask "https://collector.example.com/?d=" + payload\n\n'
+           'rule [no-leak] anything may not ask\n'
+           'x = send of "secret"\n')
+    v = rule_violations(src)[0]
+    doc = v.as_json()
+    rendered = v.render()
+    if doc["origins"]:
+        parts = sorted({f"{o['name']} ({o['file']})" if o["file"] else o["name"]
+                       for o in doc["origins"]})
+        assert f"derived from: {', '.join(parts)}" in rendered
+    else:
+        assert "derived from" not in rendered
+
+
+def test_as_json_omits_the_rules_field_by_default():
+    """Adding fields must never touch the ones that shipped before H1."""
+    from shapes import analyse_file
+    from shapes_cli import as_json
+
+    doc = as_json(analyse_file("demo/rules/violation.planes"),
+                  "demo/rules/violation.planes")
+    assert "rules" not in doc
+
+
+def test_as_json_with_rules_matches_shapes_cli_rules_json():
+    from shapes import analyse_file
+    from shapes_cli import as_json, rules_json
+
+    path = "demo/rules/violation.planes"
+    src = open(path, encoding="utf-8").read()
+    found = [s for s in parse(src) if isinstance(s, Rule)]
+    surface = analyse_file(path)
+    import os as _os
+    results = check(found, surface, declaring_file=_os.path.abspath(path))
+    rdoc = rules_json(found, results)
+    doc = as_json(surface, path, rules=rdoc)
+    assert doc["rules"] == rdoc
+    assert doc["rules"]["checked"] == 1
+    assert len(doc["rules"]["violations"]) == 1
+    assert doc["rules"]["violations"][0]["is_violation"] is True
+
+
+def test_cli_json_rules_exit_code_matches_bare_rules():
+    """The exit code the --json --rules branch returns must be identical to
+    --rules alone (H1's requirement) — checked here across all three
+    outcomes the demo/rules corpus already carries: clean, a real
+    violation, and a permit exception."""
+    import subprocess
+    cases = [
+        ("demo/rules/clean.planes", 0),
+        ("demo/rules/violation.planes", 1),
+        ("demo/rules/exception.planes", 0),
+    ]
+    for path, expected_exit in cases:
+        text_only = subprocess.run(
+            ["python3", "shapes_cli.py", path, "--rules"],
+            capture_output=True, text=True)
+        with_json = subprocess.run(
+            ["python3", "shapes_cli.py", path, "--json", "--rules"],
+            capture_output=True, text=True)
+        assert text_only.returncode == expected_exit, path
+        assert with_json.returncode == expected_exit, path
+        doc = json.loads(with_json.stdout)
+        assert "rules" in doc, path
+
+
+def test_cli_json_rules_reports_checked_zero_with_no_rules_in_the_file():
+    """A --json --rules consumer must not be handed the "no rules found"
+    sentence in place of a document — an absent --json falls back to text,
+    but --json always gets JSON, even with nothing to report."""
+    import os
+    import shutil
+    import subprocess
+    import tempfile
+    d = tempfile.mkdtemp()
+    p = os.path.join(d, "m.planes")
+    open(p, "w").write('use file\nwrite [1] to "o.json"\n')
+    try:
+        result = subprocess.run(
+            ["python3", "shapes_cli.py", p, "--json", "--rules"],
+            capture_output=True, text=True)
+        assert result.returncode == 0
+        doc = json.loads(result.stdout)
+        assert doc["rules"] == {"checked": 0, "resolved_subjects": [], "violations": []}
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def test_cli_fingerprints_ignores_json_exactly_as_before():
+    """--fingerprints takes priority over --rules (pre-existing behaviour);
+    H1 must not change that when --json is also present."""
+    import subprocess
+    result = subprocess.run(
+        ["python3", "shapes_cli.py", "demo/rules/exception.planes",
+         "--fingerprints", "--json"],
+        capture_output=True, text=True)
+    assert result.returncode == 0
+    assert not result.stdout.strip().startswith("{")
+    assert "@" in result.stdout
+
+
 # ================================================================ inertness
 
 def test_rule_presence_does_not_change_output_or_effects():

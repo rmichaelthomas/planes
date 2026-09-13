@@ -835,13 +835,46 @@ switch (sub) {
     break;
   }
   case "shapes": {
-    // shapes <file> [--no-follow] — the published effect surface (as_json),
-    // the effect-surface oracle against shapes_cli.as_json.
+    // shapes <file> [--no-follow] [--rules] — the published effect surface
+    // (as_json), the effect-surface oracle against shapes_cli.as_json.
+    // --rules (H1) additionally checks this file's own rules — a second
+    // parse of the same file for its top-level Rule statements, declaringFile
+    // = the resolved path, matching shapes_cli.py's --json --rules path
+    // (analyseFile(follow) + abspath) — and merges the result the same way.
+    // A RuleConflict / RuleNotSupported is reported the same way the `rules`
+    // case reports it, as {error, message}, since this is the oracle CLI,
+    // not shapes_cli.py's own stderr-and-exit-1 convention.
     loadGrammar();
     const { asJson } = await import("./shapes.mjs");
     const { analyseFile } = await import("./shapes_node.mjs");
     const follow = !rest.includes("--no-follow");
     const surface = await analyseFile(rest[0], follow);
+    if (rest.includes("--rules")) {
+      const { check, RuleConflict, RuleNotSupported } = await import("./rules.mjs");
+      const pathmod = await import("node:path");
+      const src = readSourceFile(rest[0]);
+      const found = parse(src).filter((s) => s.__node === "Rule");
+      const declaringFile = pathmod.resolve(rest[0]);
+      try {
+        const results = check(found, surface, declaringFile);
+        out(
+          JSON.stringify(
+            asJson(surface, rest[0], {
+              checked: found.length,
+              resolved_subjects: results.resolvedSubjects,
+              violations: results.map((v) => v.asJson()),
+            }),
+          ),
+        );
+      } catch (e) {
+        if (e instanceof RuleConflict) {
+          out(JSON.stringify({ error: "RuleConflict", message: e.message }));
+        } else if (e instanceof RuleNotSupported) {
+          out(JSON.stringify({ error: "RuleNotSupported", message: e.message }));
+        } else throw e;
+      }
+      break;
+    }
     out(JSON.stringify(asJson(surface, rest[0])));
     break;
   }
