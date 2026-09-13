@@ -20,7 +20,14 @@ import { canonicalProgram } from "./canonical.mjs";
 import { Interpreter, PlanesError, CoreRestrictionError, lit, replay } from "./interp.mjs";
 import { TestHost } from "./host.mjs";
 import { sha256Hex } from "./sha256.mjs";
-import { PlanesNumber, Fraction, Inexact } from "./planes_num.mjs";
+import {
+  PlanesNumber,
+  Fraction,
+  Inexact,
+  NotANumber,
+  NumberError,
+  numberFromText,
+} from "./planes_num.mjs";
 import {
   resolveStringEscapes,
   escapeStringLiteral,
@@ -206,6 +213,36 @@ function numOp(op) {
         return "NO-REFUSAL";
       } catch (e) {
         return e instanceof Inexact ? "INEXACT" : "OTHER:" + e.message;
+      }
+    }
+    // The three places text or a float crosses into or out of a number, each
+    // answering with the value or with the Python exception's name and message.
+    case "fromtext":
+      // PlanesNumber.of(str) — Python's Fraction(str), grammar and refusals.
+      try {
+        const q = PlanesNumber.of(a[0]).q;
+        return `${q.n}/${q.d}`;
+      } catch (e) {
+        if (e instanceof NumberError) return `${e.kind}: ${e.message}`;
+        throw e;
+      }
+    case "numberof":
+      // numberFromText — `number of`.
+      try {
+        return numberFromText(a[0]).text();
+      } catch (e) {
+        if (e instanceof NotANumber) return `NotANumber(${e.approximation}): ${e.message}`;
+        throw e;
+      }
+    case "float": {
+      // toNumber of the exact a/b, as the 16 hex digits of its IEEE-754 bits.
+      try {
+        const view = new DataView(new ArrayBuffer(8));
+        view.setFloat64(0, new PlanesNumber(new Fraction(BigInt(a[0]), BigInt(a[1]))).toNumber());
+        return view.getBigUint64(0).toString(16).padStart(16, "0");
+      } catch (e) {
+        if (e instanceof NumberError) return `${e.kind}: ${e.message}`;
+        throw e;
       }
     }
     default:

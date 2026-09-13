@@ -3,14 +3,26 @@
 // Indentation-sensitive; emits EOL, BEGIN, END, EOF. The token classes and
 // their order come from grammar/vocabulary.json (the single source of truth),
 // combined into one named-group regex exactly as lexer.py does. The patterns in
-// vocabulary.json are already valid JavaScript regular expressions, so they are
-// used verbatim.
+// vocabulary.json are written for Python's `re`, and are used verbatim except
+// where the same text means something different to a JavaScript RegExp (see
+// pythonPattern below).
+//
+// Positions are UTF-16 indexes, but every one this file stops at is a code-point
+// boundary — the regex is compiled with the `u` flag and a stray character is
+// skipped whole — so they walk the same characters as lexer.py's code-point
+// indexes. Whitespace is Python's (planes_text.mjs), not trim()'s.
 //
 // Checked against lexer.py's tokenize() by agreement on every corpus file
 // (test_js_lexer.py). lexer.py's output is the specification.
 
 import { vocabulary, GrammarDataError } from "./grammar_data.mjs";
-import { resolveStringEscapes, StringEscapeError } from "./planes_text.mjs";
+import {
+  PYTHON_DIGIT_CLASS,
+  pythonLstripLength,
+  pythonStrip,
+  resolveStringEscapes,
+  StringEscapeError,
+} from "./planes_text.mjs";
 
 export { GrammarDataError };
 
@@ -42,16 +54,71 @@ let _tokenRe = null;
 let _groupNames = null;
 let _keywords = null;
 
+// A vocabulary pattern, as Python's `re` reads it, rewritten as the JavaScript
+// RegExp source (for the `u` flag) that matches the same code points. Two
+// spellings differ between the engines, and both are in the patterns today:
+//
+//   `\d`  Python: any Unicode decimal digit (category Nd), so `x = ٣` is a
+//         NUMBER. JavaScript: 0-9 only, and the Arabic-Indic digit was skipped
+//         as a stray character. Written out as Python's own digit table, not
+//         `\p{Nd}`, which is the engine's Unicode version rather than Python's.
+//   `.`   Python: any code point but "\n". JavaScript: also not "\r", U+2028 or
+//         U+2029, so STRING's `\\.` refused a backslash before one of those and
+//         the error became "unterminated string" where Python says
+//         "unrecognized escape". Written as `[^\n]`.
+//
+// The other classes Python reads by Unicode — `\w`, `\s`, `\b` and their
+// negations — are in no pattern, and rather than guess at a translation for
+// one that appears later, the lexer refuses the vocabulary.
+function pythonPattern(name, pattern) {
+  let out = "";
+  let inClass = false;
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === "\\") {
+      const e = pattern[i + 1];
+      i += 1;
+      if (e === "d") {
+        out += inClass ? PYTHON_DIGIT_CLASS : `[${PYTHON_DIGIT_CLASS}]`;
+      } else if ("DwWsSbB".includes(e)) {
+        throw new GrammarDataError(
+          "grammar-data-missing",
+          `token class ${name} uses \\${e}, which matches differently in ` +
+            `Python's re and a JavaScript RegExp`,
+          "add its Python meaning to pythonPattern in js/lexer.mjs",
+        );
+      } else {
+        out += c + e;
+      }
+    } else if (c === "[" && !inClass) {
+      inClass = true;
+      out += c;
+    } else if (c === "]" && inClass) {
+      inClass = false;
+      out += c;
+    } else if (c === "." && !inClass) {
+      out += "[^\\n]";
+    } else {
+      out += c;
+    }
+  }
+  return out;
+}
+
 function ensureCompiled() {
   if (_tokenRe !== null) return;
   const vocab = vocabulary();
   const specs = vocab.token_classes; // JSON array order is load-bearing
   _groupNames = specs.map((t) => t.name);
-  const combined = specs.map((t) => `(?<${t.name}>${t.pattern})`).join("|");
+  const combined = specs
+    .map((t) => `(?<${t.name}>${pythonPattern(t.name, t.pattern)})`)
+    .join("|");
   // The sticky flag anchors each match at lastIndex — the equivalent of
   // lexer.py's TOKEN_RE.match(stripped, pos), which anchors rather than
-  // searching, so a position where nothing matches is visible as such.
-  _tokenRe = new RegExp(combined, "y");
+  // searching, so a position where nothing matches is visible as such. The
+  // `u` flag makes the regex match code points, as Python's does, so an astral
+  // digit is one `\d` and a `[^\n]` never splits a surrogate pair.
+  _tokenRe = new RegExp(combined, "uy");
   _keywords = new Set(vocab.keywords.map((e) => e.word));
 }
 
@@ -127,9 +194,16 @@ export function tokenize(src) {
   for (let li = 0; li < lines.length; li++) {
     lineno = li + 1;
     const raw = lines[li];
-    const stripped = raw.trim();
+    // raw.strip() and raw.lstrip(), with Python's whitespace. trim() differed
+    // both ways: it kept U+001C...U+001F and U+0085, so a line indented by one
+    // opened no block, and it stripped U+FEFF, so a file's leading byte-order
+    // mark — which Python's utf-8 codec keeps, and str.strip() does not strip —
+    // counted as indentation and opened a spurious one. Every Python whitespace
+    // character is in the BMP, so this UTF-16 count is lexer.py's code-point
+    // count.
+    const stripped = pythonStrip(raw);
     if (stripped === "" || stripped.startsWith("#")) continue;
-    const indent = raw.length - raw.trimStart().length;
+    const indent = pythonLstripLength(raw);
     if (indent > indents[indents.length - 1]) {
       indents.push(indent);
       out.push(new Token("BEGIN", "", lineno));
@@ -163,7 +237,10 @@ export function tokenize(src) {
               `+ across lines`,
           );
         }
-        pos += 1;
+        // One code point, as lexer.py's `pos += 1` over a str is: stepping one
+        // UTF-16 unit into an astral character would leave lastIndex inside a
+        // surrogate pair.
+        pos += stripped.codePointAt(pos) > 0xffff ? 2 : 1;
         continue;
       }
       let kind = null;
