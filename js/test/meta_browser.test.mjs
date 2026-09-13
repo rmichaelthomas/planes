@@ -45,9 +45,9 @@ globalThis.fetch = async (url) => {
   const u = new URL(String(url));
   const p = fileURLToPath(new URL(u.pathname, BASE));
   if (!fs.existsSync(p)) {
-    return { ok: false, status: 404, text: async () => "" };
+    return new Response("", { status: 404 });
   }
-  return { ok: true, status: 200, text: async () => fs.readFileSync(p, "utf-8") };
+  return new Response(fs.readFileSync(p));
 };
 
 const {

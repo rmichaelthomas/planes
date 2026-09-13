@@ -6,17 +6,16 @@
 // loads for the single-file effect-surface view — stay free of any node:
 // import. The port of shapes.py's analyse_file.
 
-import fs from "node:fs";
 import { parse } from "./parser.mjs";
 import { Analyser, analyse } from "./shapes.mjs";
 import { load_graph, check_collisions, names_in_graph, rename_map } from "./modules.mjs";
-import { createNodeModuleLoader } from "./module_loader_node.mjs";
+import { createNodeModuleLoader, readSourceFile } from "./module_loader_node.mjs";
 
 export async function analyseFile(p, follow = true) {
   if (!follow) {
     // The single-file surface: `file` is the path as given (not resolved),
     // matching shapes.py's analyse(open(path).read(), file=path).
-    return analyse(fs.readFileSync(p, "utf-8"), p);
+    return analyse(readSourceFile(p), p);
   }
   const loader = createNodeModuleLoader();
   const graph = await load_graph(loader, p);

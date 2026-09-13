@@ -12,6 +12,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { missingModuleError } from "./modules.mjs";
+import { pythonTextMode } from "./planes_text.mjs";
+
+// Python's `open(path, encoding="utf-8").read()`: strict UTF-8 (a file that is
+// not UTF-8 raises rather than reading as U+FFFD), a leading byte-order mark
+// kept, universal newlines translated.
+const STRICT_UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+export function readSourceFile(location) {
+  return pythonTextMode(STRICT_UTF8.decode(fs.readFileSync(location)));
+}
 
 export function createNodeModuleLoader({ base = null } = {}) {
   return {
@@ -26,7 +35,7 @@ export function createNodeModuleLoader({ base = null } = {}) {
       throw missingModuleError(name);
     },
     read(location) {
-      return fs.readFileSync(location, "utf-8");
+      return readSourceFile(location);
     },
     key(location) {
       return path.resolve(location);

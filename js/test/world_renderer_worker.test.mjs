@@ -58,9 +58,9 @@ function withStubbedFixtureFetch(fn) {
   const real = globalThis.fetch;
   globalThis.fetch = async (url) => {
     if (String(url) === FIXTURE_URL) {
-      return { ok: true, text: async () => FIXTURE_SOURCE };
+      return new Response(FIXTURE_SOURCE);
     }
-    return { ok: false, text: async () => "" };
+    return new Response("", { status: 404 });
   };
   return fn().finally(() => {
     globalThis.fetch = real;

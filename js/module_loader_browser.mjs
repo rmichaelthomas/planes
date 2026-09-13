@@ -20,6 +20,9 @@
 // canvas are both untouched.
 
 import { missingModuleError } from "./modules.mjs";
+import { pythonTextMode } from "./planes_text.mjs";
+
+const KEEP_BOM = new TextDecoder("utf-8", { ignoreBOM: true });
 
 export class BrowserModuleLoader {
   constructor({ base, cacheBust = null }) {
@@ -71,7 +74,10 @@ export class BrowserModuleLoader {
       throw missingModuleError(this._nameFromLocation(location));
     }
     if (!res.ok) throw missingModuleError(this._nameFromLocation(location));
-    const text = await res.text();
+    // modules.py reads in text mode, as the Node loader does: universal
+    // newlines, and a leading byte-order mark kept — which res.text() would
+    // strip, turning a BOM before indentation into an indented first line.
+    const text = pythonTextMode(KEEP_BOM.decode(await res.arrayBuffer()));
     this._cache.set(k, text);
     this._loaded.push({ name: this._nameFromLocation(location), location: k });
     return text;

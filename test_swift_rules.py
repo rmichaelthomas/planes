@@ -15,7 +15,8 @@ FINGERPRINT token embeds it), the four rule-bearing corpus files through the
 shapes_cli --rules path (follow + declaring_file), and the generated rule markers
 (render-rules, which needed Render.swift). rules.py is the specification.
 
-The last sections have no JavaScript counterpart. Rule names are ASCII by the
+The last sections were written for this port and then taken into
+test_js_rules.py. Rule names are ASCII by the
 grammar, so the non-ASCII text a rule compares is its target, its `because`, and
 the paths it names: targets that differ only by normalisation must not match,
 code-point order decides the derived-from line, a fingerprint hashes UTF-8, and
