@@ -426,6 +426,10 @@ export class Interpreter {
     }
     this.env = new Env();
     this.funcs = new Map();
+    // `${file}\u0000${name as that file wrote it}` -> function: how a file's
+    // own calls find its own definitions without scanning `funcs` on every
+    // call (#108). Written wherever `funcs` is. interp.py keeps the same table.
+    this.ownFuncs = new Map();
     this.foreigns = new Map();
     this.modules = new Set();
     this.output = [];
@@ -1093,6 +1097,7 @@ export class Interpreter {
         fn.file = file;
         this.funcs.set(rn(s.name), fn);
         fn.local = s.name;
+        this.ownFuncs.set(`${file}\u0000${s.name}`, fn);
         this.hoist(s.body, env, renames, file);
       }
     }
@@ -1195,7 +1200,9 @@ export class Interpreter {
       // carries the same one line for the same reason.
       const fn = new PlanesFunction(stmt.name, stmt.params, stmt.body, env);
       fn.file = this.currentFile;
+      fn.local = stmt.name;
       this.funcs.set(stmt.name, fn);
+      this.ownFuncs.set(`${this.currentFile}\u0000${stmt.name}`, fn);
       return null;
     }
     if (k === "Assign") {
@@ -1822,13 +1829,7 @@ export class Interpreter {
     // has no such definition does resolution fall through to the flat,
     // importer-facing view below — "what it itself uses", per the existing
     // rules.
-    let fn = null;
-    for (const f of this.funcs.values()) {
-      if (f.file === this.currentFile && f.local === name) {
-        fn = f;
-        break;
-      }
-    }
+    let fn = this.ownFuncs.get(`${this.currentFile}\u0000${name}`) ?? null;
     let iname;
     if (fn !== null) {
       iname = name;

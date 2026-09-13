@@ -478,6 +478,10 @@ class Interpreter:
                  trace=True):
         self.env = Env()
         self.funcs = {}
+        # (defining file, name as that file wrote it) -> Function: how a
+        # file's own calls find its own definitions without scanning `funcs`
+        # on every call (#108). Written wherever `funcs` is.
+        self.own_funcs = {}
         self.foreigns = {}       # name -> Foreign declaration
         self.modules = set()
         # Every line the program produced, in order — and a SUPERSET of what
@@ -1255,6 +1259,7 @@ class Interpreter:
                 exported = renames.get(s.name, s.name)
                 self.funcs[exported] = fn
                 fn.local = s.name
+                self.own_funcs[(file, s.name)] = fn
                 self.hoist(s.body, env, renames, file)
 
     def exec_block(self, stmts, env):
@@ -1304,8 +1309,10 @@ class Interpreter:
             # Dropped, this quietly replaced every hoisted function with a
             # file-less copy and every trace line pointed at a call site
             # instead of at the `show` itself.
-            self.funcs[stmt.name] = Function(stmt.name, stmt.params, stmt.body,
-                                             env, file=self.current_file)
+            fn = Function(stmt.name, stmt.params, stmt.body, env,
+                          local=stmt.name, file=self.current_file)
+            self.funcs[stmt.name] = fn
+            self.own_funcs[(self.current_file, stmt.name)] = fn
             return None
 
         if isinstance(stmt, Assign):
@@ -1955,8 +1962,7 @@ class Interpreter:
         # once the current file has no such definition does resolution fall
         # through to the flat, importer-facing view below — "what it itself
         # uses", per the existing rules.
-        own = next((f for f in self.funcs.values()
-                   if f.file == self.current_file and f.local == name), None)
+        own = self.own_funcs.get((self.current_file, name))
         if own is not None:
             fn, iname = own, name
         # A user's own definition wins over a builtin of the same name.
