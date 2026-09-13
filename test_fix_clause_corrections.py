@@ -67,12 +67,7 @@ def test_an_unreachable_url_through_the_real_host_is_a_planes_error():
 # grammar/interp.planes makes itself; grammar-data-missing is a lexer/
 # parser bootstrap concern, not something the self-hosted program raises).
 
-NOTHING_FIX = (
-    "test for absence with `is nothing` — if the nothing is inside a "
-    "compared list or record rather than the whole value (the path names "
-    "which), test that inner value with `is nothing` directly rather than "
-    "rewriting the whole comparison"
-)
+NOTHING_FIX = "test for absence with `is nothing`"
 
 EQUAL_CROSS_TYPE_FIX = (
     "compare same-kind values — numbers with numbers, text with text, "
@@ -273,6 +268,44 @@ def test_whole_of_actually_rounds_half_away_from_zero():
         assert out == [expected], f"whole of {value} gave {out}, not [{expected!r}]"
         if NODE is not None:
             assert _js(src) == (kind, tag, out), f"whole of {value}: py {out} != js"
+
+
+# ================= E. F7: nothing's whole-value and inner-value fixes
+#
+# interp.py:97's old clause named both cases inside one sentence: "test for
+# absence with `is nothing` -- if the nothing is inside a compared list or
+# record rather than the whole value ..., test that inner value ...". Split
+# into two raise sites (NOTHING_FIX above is now the whole-value one), each
+# true only for its own case. This is the inner-value one's regression
+# guard -- NOTHING_FIX's own CASES entry above already covers the
+# whole-value raise.
+
+NOTHING_NESTED_FIX = (
+    "the path names which value is nothing — test that inner value with "
+    "`is nothing` directly rather than rewriting the whole comparison"
+)
+
+
+def test_nothing_nested_in_a_compared_list_gets_the_inner_value_fix():
+    src = "show text of ([1, nothing] == [1, 2])"
+    msg = _py_message(src)
+    assert msg.endswith(f"\n  try: {NOTHING_NESTED_FIX}"), msg
+    if NODE is not None:
+        assert _js_message(src) == msg
+    e = _planes_eval_fails("[1, nothing] == [1, 2]")
+    assert e.tag == "cannot-compare", e.tag
+    assert str(e).endswith(f"\n  try: {NOTHING_NESTED_FIX}"), str(e)
+
+
+def test_nothing_nested_in_a_compared_record_gets_the_inner_value_fix():
+    src = 'show text of ({ a: nothing } == { a: 1 })'
+    msg = _py_message(src)
+    assert msg.endswith(f"\n  try: {NOTHING_NESTED_FIX}"), msg
+    if NODE is not None:
+        assert _js_message(src) == msg
+    e = _planes_eval_fails("{ a: nothing } == { a: 1 }")
+    assert e.tag == "cannot-compare", e.tag
+    assert str(e).endswith(f"\n  try: {NOTHING_NESTED_FIX}"), str(e)
 
 
 if __name__ == "__main__":

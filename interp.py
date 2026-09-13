@@ -93,13 +93,18 @@ def equal(a, b, path=None):
     path = path if path is not None else []
 
     if a is None or b is None:
+        if path:
+            raise PlanesError(
+                "cannot-compare",
+                "nothing cannot be compared with ==",
+                "the path names which value is nothing — test that inner "
+                "value with `is nothing` directly rather than rewriting "
+                "the whole comparison",
+                path=path)
         raise PlanesError(
             "cannot-compare",
             "nothing cannot be compared with ==",
-            "test for absence with `is nothing` — if the nothing is inside "
-            "a compared list or record rather than the whole value (the "
-            "path names which), test that inner value with `is nothing` "
-            "directly rather than rewriting the whole comparison",
+            "test for absence with `is nothing`",
             path=path)
 
     if is_num(a) and is_num(b):

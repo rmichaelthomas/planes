@@ -109,13 +109,20 @@ function errorRecord(e) {
 function equal(a, b, path = null) {
   path = path === null ? [] : path;
   if (a === null || b === null || a === undefined || b === undefined) {
+    if (path.length) {
+      throw new PlanesError(
+        "cannot-compare",
+        "nothing cannot be compared with ==",
+        "the path names which value is nothing — test that inner value " +
+          "with `is nothing` directly rather than rewriting the whole " +
+          "comparison",
+        path,
+      );
+    }
     throw new PlanesError(
       "cannot-compare",
       "nothing cannot be compared with ==",
-      "test for absence with `is nothing` — if the nothing is inside a " +
-        "compared list or record rather than the whole value (the path " +
-        "names which), test that inner value with `is nothing` directly " +
-        "rather than rewriting the whole comparison",
+      "test for absence with `is nothing`",
       path,
     );
   }

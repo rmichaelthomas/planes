@@ -793,11 +793,27 @@ to as-condition of v:
 # handed to the host's `==` directly -- their `nothing` deriv slot would
 # itself trip the nothing-refusal.
 
+# The whole-value entry point (a bare `x == y`): `a`/`b` is the whole thing
+# being compared, so its nothing-refusal names the plain fix -- test the
+# whole value with `is nothing`. `lists-equal-walk`/`records-equal-walk` call
+# values-equal-inner instead once they are comparing an ELEMENT nested inside
+# a list or record, where a different fix holds -- the same split interp.py's
+# equal() makes off whether `path` accumulated any steps.
 to values-equal of a, b:
   if a.kind == "nothing":
-    fail { message: "nothing cannot be compared with ==", fix: "test for absence with `is nothing` — if the nothing is inside a compared list or record rather than the whole value (the path names which), test that inner value with `is nothing` directly rather than rewriting the whole comparison" } as cannot-compare
+    fail { message: "nothing cannot be compared with ==", fix: "test for absence with `is nothing`" } as cannot-compare
   if b.kind == "nothing":
-    fail { message: "nothing cannot be compared with ==", fix: "test for absence with `is nothing` — if the nothing is inside a compared list or record rather than the whole value (the path names which), test that inner value with `is nothing` directly rather than rewriting the whole comparison" } as cannot-compare
+    fail { message: "nothing cannot be compared with ==", fix: "test for absence with `is nothing`" } as cannot-compare
+  give values-equal-checked of a, b
+
+to values-equal-inner of a, b:
+  if a.kind == "nothing":
+    fail { message: "nothing cannot be compared with ==", fix: "the path names which value is nothing — test that inner value with `is nothing` directly rather than rewriting the whole comparison" } as cannot-compare
+  if b.kind == "nothing":
+    fail { message: "nothing cannot be compared with ==", fix: "the path names which value is nothing — test that inner value with `is nothing` directly rather than rewriting the whole comparison" } as cannot-compare
+  give values-equal-checked of a, b
+
+to values-equal-checked of a, b:
   if a.kind == "number" and b.kind == "number":
     give a.value == b.value
   a-bool = a.kind == "boolean"
@@ -831,7 +847,7 @@ to lists-equal-walk of xs, ys:
     give true
   x = first-item of xs
   y = first-item of ys
-  if not (values-equal of x, y):
+  if not (values-equal-inner of x, y):
     give false
   give lists-equal-walk of (rest of xs), (rest of ys)
 
@@ -849,7 +865,7 @@ to records-equal-walk of af, bf:
   match = field-in of bf, f.key
   if not match.found:
     fail { message: "records have different fields", fix: "compare records with the same fields" } as cannot-compare
-  if not (values-equal of f.value, match.value):
+  if not (values-equal-inner of f.value, match.value):
     give false
   give records-equal-walk of (rest of af), bf
 
