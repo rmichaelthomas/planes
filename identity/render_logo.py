@@ -13,6 +13,14 @@ mark, change the data at the top and re-run — never hand-edit an output.
     python3 render_logo.py
 
 No dependencies.
+
+Typography — locked (v8.0). Red Hat Display 700 for the wordmark,
+headings, and nav; Martian Mono 400–500 for body copy, UI labels, and code.
+UI palette — locked (v8.0). Clay #A65A2E (dominant role) and slate-blue
+#4A5B68 (minority role) on paper #F7F2E9, graphite #211D19, and line
+#D6C9B4. Both accents clear WCAG AA against paper, computed: clay 4.57:1,
+slate-blue 6.30:1. The plane colours are locked only as provisional and
+stated (v7.0 §87). v16.0 §176 found the sheet below still said none of this.
 """
 
 import math
@@ -330,7 +338,7 @@ SHEET_TEMPLATE = r"""<!DOCTYPE html>
 
 <header>
   <h1>planes — visual identity</h1>
-  <p class="sub">Master sheet and generation instructions · rough marker, not locked · July 24, 2026</p>
+  <p class="sub">Master sheet and generation instructions · typography, UI palette and lockup locked (v8.0) · July 24, 2026</p>
 </header>
 
 <h2>The mark</h2>
@@ -341,8 +349,14 @@ SHEET_TEMPLATE = r"""<!DOCTYPE html>
 <strong>Known limit of the 2D stills.</strong> A static projection cannot assert orthogonality; that is a 3D fact and a flat image has no way to carry it. In a still, the four planes read as "four planes at various angles." The animated version is where the structural claim — three perpendicular, one crossing — is actually legible. Treat the stills as the compressed form.
 </div>
 
+<h2>Typography</h2>
+<p><strong>Locked (v8.0).</strong> Red Hat Display 700 for the wordmark, headings, and nav. Martian Mono 400–500 for body copy, UI labels, and code.</p>
+
+<h2>UI palette</h2>
+<p><strong>Locked (v8.0).</strong> A duotone accent, separate from the mark's plane colors: clay <code>#A65A2E</code> (dominant — links, primary emphasis) and slate-blue <code>#4A5B68</code> (minority — secondary flags, quieter signal), on paper <code>#F7F2E9</code>, graphite <code>#211D19</code>, line <code>#D6C9B4</code>. Both accents clear WCAG AA against paper, computed rather than estimated: clay 4.57:1, slate-blue 6.30:1.</p>
+
 <h2>Plane colors</h2>
-<p>Provisional. The plane-to-color mapping is written down so it stops being arbitrary, but nothing here is locked.</p>
+<p>Locked as provisional (v7.0 §87). The binding of color to plane is stated so it stops being arbitrary; the colors themselves are data in the script, a one-line change.</p>
 <div class="card">
 {swatches}
 </div>
@@ -484,7 +498,7 @@ sheet.save('/tmp/contact_sheet.png')
 </div>
 
 <footer>
-planes — visual identity master sheet. Rough marker; nothing locked. Regenerate everything with <code>python3 render_logo.py</code>.
+planes — visual identity master sheet. Typography, UI palette and lockup locked (v8.0). Regenerate everything with <code>python3 render_logo.py</code>.
 </footer>
 
 </div>
