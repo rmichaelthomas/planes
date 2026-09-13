@@ -342,6 +342,36 @@ def test_non_ascii_digits_and_whitespace_run_identically():
         assert py == js, f"src:\n{src!r}\n py={py}\n js={js}"
 
 
+def test_case_and_normalisation_run_at_pythons_unicode_version():
+    """`lower of`, `upper of` and `normalize of` are interp.py's str.lower,
+    str.upper and NFC at Python's Unicode version — which the engine's
+    toLowerCase, toUpperCase and normalize are not (Node 22 is on Unicode 17,
+    Python 3.14 on 16: `upper of` U+A7CE differs). Every code point of planes 0-3
+    and 14 goes through all three, in chunks, and final sigma beside each; the
+    surrogates stay out (two in a row are one astral character to JavaScript) and
+    so does the carriage return."""
+    def literal(cps):
+        esc = {'"': '\\"', "\\": "\\\\", "\n": "\\n", "\t": "\\t"}
+        return '"' + "".join(esc.get(chr(c), chr(c)) for c in cps) + '"'
+    cps = [c for c in range(0x110000)
+           if not (0xD800 <= c < 0xE000 or c == 0x0D)
+           and (c < 0x40000 or 0xE0000 <= c < 0xF0000)]
+    step = 0x10000
+    for i in range(0, len(cps), step):
+        chunk = cps[i:i + step]
+        sigma = [x for c in chunk[::7] for x in (0x41, c, 0x3A3, 0x30, 0x41, 0x3A3, c, 0x30)]
+        lines = [f"show lower of {literal(chunk)}", f"show upper of {literal(chunk)}",
+                 f"show normalize of {literal(chunk)}", f"show lower of {literal(sigma)}"]
+        py, js = _messages("\n".join(lines) + "\n")
+        assert py[1:] == js[1:] == (None, None), f"chunk {i}: py={py[1:]} js={js[1:]}"
+        for a, b in zip(py[0], js[0]):
+            if a != b:
+                k = next(n for n, (x, y) in enumerate(zip(a, b)) if x != y)
+                raise AssertionError(f"chunk {i} at {k}: py U+{ord(a[k]):04X} "
+                                     f"vs js U+{ord(b[k]):04X}")
+        assert py[0] == js[0]
+
+
 def test_records_with_different_fields_name_them_as_python_does():
     """interp.py's message is `sorted(set(a) ^ set(b))` as Python prints a list
     of str — ['y', 'z'], quoted and escaped by repr, sorted by code point, so an

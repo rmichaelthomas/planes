@@ -22,7 +22,8 @@
 
 import { effectKinds, builtinNames } from "./lexer.mjs";
 import { parse } from "./parser.mjs";
-import { escapeStringLiteral } from "./planes_text.mjs";
+import { escapeStringLiteral, pyRepr as pyReprText } from "./planes_text.mjs";
+import { pythonLower, pythonNFC, pythonUpper } from "./python_unicode.mjs";
 import { PlanesNumber } from "./planes_num.mjs";
 import { isTup } from "./nodes.mjs";
 
@@ -40,22 +41,7 @@ export const UNKNOWN = Object.freeze({ __unknown: true });
 // corpus, but the analyser stays total on any input and must not diverge if one
 // ever does.
 function pyRepr(v) {
-  if (v === null || v === undefined) return "None";
-  if (typeof v === "boolean") return v ? "True" : "False";
-  if (v instanceof PlanesNumber) return v.text();
-  if (typeof v === "string") {
-    const q = v.includes("'") && !v.includes('"') ? '"' : "'";
-    let body = "";
-    for (const c of v) {
-      if (c === "\\") body += "\\\\";
-      else if (c === q) body += "\\" + q;
-      else if (c === "\n") body += "\\n";
-      else if (c === "\t") body += "\\t";
-      else if (c === "\r") body += "\\r";
-      else body += c;
-    }
-    return q + body + q;
-  }
+  if (typeof v === "string") return pyReprText(v);
   return pyStr(v);
 }
 function pyStr(v) {
@@ -1108,14 +1094,12 @@ export class Analyser {
       if (left === UNKNOWN || right === UNKNOWN) {
         return [UNKNOWN, new StaticDeriv("unknown", "+", [leftN, rightN], null, F)];
       }
-      const sameType =
-        (typeof left === "string" && typeof right === "string") ||
-        (left instanceof PlanesNumber && right instanceof PlanesNumber);
-      if (!sameType) {
+      // shapes.py folds text + text only: its numeric test is
+      // `isinstance(left, (int, float))`, which a Planes Number is not.
+      if (typeof left !== "string" || typeof right !== "string") {
         return [UNKNOWN, new StaticDeriv("unknown", "+", [leftN, rightN], null, F)];
       }
-      const v = typeof left === "string" ? left + right : left.add(right);
-      return [v, new StaticDeriv("op", "+", [leftN, rightN], null, F)];
+      return [left + right, new StaticDeriv("op", "+", [leftN, rightN], null, F)];
     }
     if (is(node, "Builtin") && node.name === "text") {
       const [v, vn] = this.const_(node.arg, consts);
@@ -1126,7 +1110,7 @@ export class Analyser {
       const [v, vn] = this.const_(node.arg, consts);
       const label = `${node.name} of`;
       if (v === UNKNOWN) return [UNKNOWN, new StaticDeriv("unknown", label, [vn], null, F)];
-      const result = node.name === "lower" ? pyStr(v).toLowerCase() : pyStr(v).toUpperCase();
+      const result = node.name === "lower" ? pythonLower(pyStr(v)) : pythonUpper(pyStr(v));
       return [result, new StaticDeriv("op", label, [vn], null, F)];
     }
     if (is(node, "Call")) {
@@ -1148,10 +1132,10 @@ export class Analyser {
     const label = `${node.name} of`;
     if (v === UNKNOWN) return [UNKNOWN, new StaticDeriv("unknown", label, [n], null, F)];
     if (node.name === "text") return [this.asText(v), new StaticDeriv("op", label, [n], null, F)];
-    if (node.name === "lower") return [pyStr(v).toLowerCase(), new StaticDeriv("op", label, [n], null, F)];
-    if (node.name === "upper") return [pyStr(v).toUpperCase(), new StaticDeriv("op", label, [n], null, F)];
+    if (node.name === "lower") return [pythonLower(pyStr(v)), new StaticDeriv("op", label, [n], null, F)];
+    if (node.name === "upper") return [pythonUpper(pyStr(v)), new StaticDeriv("op", label, [n], null, F)];
     if (node.name === "normalize") {
-      return [pyStr(v).normalize("NFC"), new StaticDeriv("op", label, [n], null, F)];
+      return [pythonNFC(pyStr(v)), new StaticDeriv("op", label, [n], null, F)];
     }
     if (node.name === "join") {
       if (Array.isArray(v) && v.every((x) => typeof x === "string")) {

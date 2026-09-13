@@ -12,7 +12,15 @@ vacuous flag; the resolved subjects; the exit category; and the RuleConflict /
 RuleNotSupported message on refusal. Plus fingerprint byte-identity (the
 FINGERPRINT token embeds it) and the four rule-bearing corpus files through the
 shapes_cli --rules path (follow + declaring_file). rules.py is the specification.
+
+The last sections came from test_swift_rules.py: every message shape, non-ASCII
+targets, `because` text and declaring paths, a subject declared in another file,
+render-rules across the whole corpus, and a rule file with a lone carriage
+return — which Python's text mode reads as a newline, moving every line number a
+violation reports, and which the JS CLI read as nothing until it read files the
+same way (module_loader_node.mjs's readSourceFile).
 """
+import glob
 import json
 import os
 import shutil
@@ -21,7 +29,8 @@ import sys
 import tempfile
 
 from lexer import Rule
-from parser import parse
+from modules import ModuleError
+from parser import PlanesSyntaxError, parse
 from planes_text import escape_string_literal
 from rules import RuleConflict, RuleNotSupported, check, fingerprint
 from shapes import analyse, analyse_file
@@ -284,6 +293,189 @@ def test_rendered_markers_agree():
                                 cwd=REPO, capture_output=True, text=True)
             assert js.returncode == 0, js.stderr
             assert js.stdout == py, f"src:\n{src}\n--- py ---\n{py}\n--- js ---\n{js.stdout}"
+
+
+def _render_rules(path):
+    r = subprocess.run([NODE, "js/cli.mjs", "render-rules", path], cwd=REPO,
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return r.stdout
+
+
+MORE_RULE_PROGRAMS = [
+    # two rules with one name; a rule superseding itself; a stale fingerprint
+    ('use http\nrule [a] anything may not ask\nrule [a] anything may not write\n'
+     'x = ask "https://x"\n'),
+    'rule [a] anything may not ask supersedes [a]\n',
+    ('use http\nrule [a] anything may not ask to "https://x"\n'
+     'rule [b] anything may ask to "https://x" supersedes [a] @000000\n'
+     'x = ask "https://x"\n'),
+    # a permit over a computed target clears nothing
+    ('use http\nrule [no-net] anything may not ask\n'
+     'rule [ok] anything may ask to "https://a" supersedes [no-net]\n'
+     'for each u in ["https://a"]:\n  x = ask u\n'),
+    # vacuous situation 2: the kind is performed, but not from the subject
+    ('use http\ncap = "https://a"\nrule [cap-guard] cap may not ask\n'
+     'x = ask cap\ny = ask "https://b"\n'),
+    ('use http\nuse file\ncap = "a.json"\nrule [cap-guard] cap may not ask\n'
+     'write [1] to cap\ny = ask "https://b"\n'),
+    # vacuous situation 3: the subject reaches the kind, never at the target
+    ('use http\nto send of payload:\n  give ask "https://c/?d=" + payload\n\n'
+     'rule [leak] payload may not ask to "https://elsewhere"\nx = send of "s"\n'),
+    # a rule whose target is empty text
+    ('use http\nrule [a] anything may not ask to ""\nrule [b] anything may not ask to ""\n'
+     'x = ask ""\n'),
+]
+
+
+def test_rule_check_agrees_on_every_message_shape():
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "r.planes")
+        mismatches = []
+        for src in MORE_RULE_PROGRAMS:
+            with open(p, "w", encoding="utf-8", newline="") as fh:
+                fh.write(src)
+            py = _py_rules_src(src)
+            js = _run(["rules-src", p])
+            if js != py:
+                mismatches.append(f"src:\n{src}\n  py={json.dumps(py)}\n"
+                                  f"  js={json.dumps(js)}")
+        assert not mismatches, "rule-check divergences:\n" + "\n".join(mismatches)
+
+
+NON_ASCII_RULES = [
+    # a target equal under canonical equivalence but not by code point: no match
+    ('use http\nrule [no-cafe] anything may not ask to "https://caf\u00e9.example"\n'
+     'x = ask "https://cafe\u0301.example"\n'),
+    ('use http\nrule [no-cafe] anything may not ask to "https://caf\u00e9.example"\n'
+     'x = ask "https://caf\u00e9.example"\n'),
+    # two rules whose targets look alike: distinct, so not a conflict
+    ('use http\nrule [a] anything may not ask to "\u00e9"\n'
+     'rule [b] anything may not ask to "e\u0301"\nx = ask "\u00e9"\n'),
+    # the same target twice: a conflict that quotes it, emoji and all
+    ('use http\nrule [a] anything may not ask to "https://\U0001f600/\u00fc"\n'
+     'rule [b] anything may ask to "https://\U0001f600/\u00fc"\n'
+     'x = ask "https://\U0001f600/\u00fc"\n'),
+    # an uncertain match quoting a non-ASCII target, and a permit that clears it
+    ('use http\nrule [no-t] anything may not ask to "https://t\u00e9l\u00e9m\u00e9trie"\n'
+     'for each u in ["https://t\u00e9l\u00e9m\u00e9trie"]:\n  x = ask u\n'),
+    ('use http\nrule [deny] anything may not ask\n'
+     'rule [allow] anything may ask to "https://\u4f8b\u3048.jp" supersedes [deny] '
+     'because "\u8a31\u53ef \U0001f44d"\n'
+     'x = ask "https://\u4f8b\u3048.jp"\ny = ask "https://\u4f8b\u3048.jp/\u0301"\n'),
+    # derived-from order over names, and violations sorted by non-ASCII targets
+    ('use http\nto send of zeta, alpha:\n  give ask "https://\u00e9/" + zeta + alpha\n\n'
+     'rule [leak] anything may not ask\nx = send of "\U0001f600", "\uff41"\n'
+     'y = ask "https://\uff41"\nz = ask "https://\U0001f600"\n'),
+    # a fingerprinted supersedes over a non-ASCII target
+    ('use http\nrule [a] anything may not ask to "https://\u00fc"\n'
+     'rule [b] anything may not ask to "https://\u00fc" supersedes [a] @%s\n'
+     'x = ask "https://\u00fc"\n' % fingerprint(Rule("a", "anything", "ask", "https://\u00fc", 2))),
+]
+
+
+def test_non_ascii_rule_checks_agree():
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "r.planes")
+        for src in NON_ASCII_RULES:
+            with open(p, "w", encoding="utf-8", newline="") as fh:
+                fh.write(src)
+            py = _py_rules_src(src)
+            assert _run(["rules-src", p]) == py, f"src:\n{src!r}\n  py={json.dumps(py)}"
+            parsed = [s for s in parse(src) if isinstance(s, Rule)]
+            assert _run(["fingerprints", p]) == [[r.name, fingerprint(r)] for r in parsed]
+            try:
+                py_render = render_program(parse(src), parsed, src)
+            except (RuleConflict, RuleNotSupported):
+                r = subprocess.run([NODE, "js/cli.mjs", "render-rules", p], cwd=REPO,
+                                   capture_output=True, text=True)
+                assert r.returncode != 0, f"rendered a rule set that does not resolve:\n{src!r}"
+                continue
+            assert _render_rules(p) == py_render, f"src:\n{src!r}"
+
+
+def render_program(prog, found, src):
+    from render import render
+    return render(prog, rules=found, surface=analyse(src)) if found else render(prog)
+
+
+def test_a_declaring_file_with_a_non_ascii_path_resolves_its_subjects():
+    """shapes_cli --rules scopes a named subject to abspath(file); the path is
+    compared by code point, and the derived-from line prints it."""
+    src = ('use http\nto send of payload:\n'
+           '  give ask "https://collector.example.com/?d=" + payload\n\n'
+           'rule [no-payload-leak] payload may not ask\nx = send of "secret"\n')
+    with tempfile.TemporaryDirectory() as d:
+        for name in ["caf\u00e9", "cafe\u0301", "\U0001f600"]:
+            sub = os.path.join(d, name)
+            os.makedirs(sub, exist_ok=True)
+            p = os.path.join(sub, "r\u00e8gles.planes")
+            with open(p, "w", encoding="utf-8", newline="") as fh:
+                fh.write(src)
+            found = [s for s in parse(src) if isinstance(s, Rule)]
+            py = _py_rules(found, analyse_file(p, follow=True), declaring_file=os.path.abspath(p))
+            js = _run(["rules", p])
+            assert js == py, f"{p!r}:\n  py={json.dumps(py)}\n  js={json.dumps(js)}"
+            assert py["exit"] == 1 and name in py["violations"][0]["render"]
+
+
+def test_a_subject_declared_in_another_file_is_refused_naming_that_file():
+    """A rule may not reach across an import to a name it never saw declared;
+    the refusal names the other file's absolute path, non-ASCII and all."""
+    lib = 'use http\nto send of payload:\n  give ask "https://c.example/?d=" + payload\n'
+    main = 'use lib\nrule [no-leak] payload may not ask\nx = send of "s\u00e9cret"\n'
+    with tempfile.TemporaryDirectory() as d:
+        sub = os.path.join(d, "d\u00e9p\u00f4t \U0001f600")
+        os.makedirs(sub)
+        with open(os.path.join(sub, "lib.planes"), "w", encoding="utf-8") as fh:
+            fh.write(lib)
+        p = os.path.join(sub, "main.planes")
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(main)
+        found = [s for s in parse(main, {"send"}) if isinstance(s, Rule)]
+        py = _py_rules(found, analyse_file(p, follow=True), declaring_file=os.path.abspath(p))
+        js = _run(["rules", p])
+    assert js == py, f"py={json.dumps(py)}\n  js={json.dumps(js)}"
+    assert py.get("error") == "RuleNotSupported" and "lib.planes" in py["message"], py
+
+
+def test_line_endings_in_a_rule_file_are_read_as_python_reads_them():
+    """shapes_cli reads the file in text mode, so a lone CR ends a line and moves
+    every line number a violation reports."""
+    src = ('use http\rrule [no-net] anything may not ask\r\n'
+           'x = ask "https://a"\ry = ask "https://b"\r\n')
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "r.planes")
+        with open(p, "w", encoding="utf-8", newline="") as fh:
+            fh.write(src)
+        with open(p, encoding="utf-8") as fh:
+            text = fh.read()
+        found = [s for s in parse(text) if isinstance(s, Rule)]
+        py = _py_rules(found, analyse_file(p, follow=True), declaring_file=os.path.abspath(p))
+        assert _run(["rules", p]) == py
+        assert "violated at line 4" in json.dumps(py)
+
+
+def test_render_rules_agrees_across_the_corpus():
+    """js/render.mjs's canonical source, byte for byte, for every parseable file
+    (markers where the file has rules)."""
+    checked = 0
+    mismatches = []
+    for f in sorted(x for x in glob.glob("**/*.planes", recursive=True) if ".venv" not in x):
+        try:
+            with open(f, encoding="utf-8") as fh:
+                src = fh.read()
+            prog = parse(src)
+            found = [s for s in prog if isinstance(s, Rule)]
+            py = render_program(prog, found, src)
+        except (PlanesSyntaxError, ModuleError, RuleConflict, RuleNotSupported, ValueError):
+            continue
+        js = _render_rules(f)
+        if js != py:
+            mismatches.append(f)
+        checked += 1
+    assert checked >= 40, checked
+    assert not mismatches, f"render divergences: {mismatches}"
 
 
 if __name__ == "__main__":

@@ -20,6 +20,15 @@ implementations produce the surface and this compares the JSON structure:
 
 The analyser must reproduce shapes.py's widening EXACTLY — a JS analyser more
 precise than the Python one is a divergence, not an improvement (A.1 ruling 2).
+
+The last sections came from test_swift_shapes.py, where the Swift port found
+the places this one parted from shapes.py: a sum of two known numbers folded
+instead of widening, a known list escaped five characters instead of Python's
+repr, and `lower of`, `upper of` and `normalize of` read the engine's Unicode
+tables instead of Python's (js/python_unicode.mjs now carries Python's). Beside
+them, the non-ASCII sections: targets that differ only by normalisation or sort
+differently by code point than by UTF-16 unit, every code point through all four
+text operations, final sigma, CRLF and lone-CR files, non-ASCII file names.
 """
 import glob
 import json
@@ -74,9 +83,9 @@ def all_planes_files():
                   if ".venv" not in f)
 
 
-def _src_to_tmp(src, d):
-    p = os.path.join(d, "p.planes")
-    with open(p, "w", encoding="utf-8") as fh:
+def _src_to_tmp(src, d, name="p.planes"):
+    p = os.path.join(d, name)
+    with open(p, "w", encoding="utf-8", newline="") as fh:
         fh.write(src)
     return p
 
@@ -294,6 +303,190 @@ def test_single_file_view_reports_unresolved_identically():
     js = _js_shapes("demo/app/main.planes", follow=False)
     assert js == py
     assert js["unresolved_calls"], "must report calls it cannot resolve"
+
+
+# ===================================================== where this port once parted from shapes.py
+
+# js/shapes.mjs folded a sum of two known numbers and escaped only five characters
+# in a known list's repr; shapes.py does neither.
+PYTHON_REFERENCE = [
+    # a sum of two known numbers widens: shapes.py's numeric test never sees a Number
+    'use http\nlet n = 1 + 2\nx = ask "https://x/" + text of n\n',
+    'use http\nx = ask "https://x/" + text of (2 + 0.5)\n',
+    # a known list reads as Python's repr, every non-printable escaped
+    ('use http\nx = ask text of ["a\\tb", "c\u00a0d", "\u200b\u2028\U000e0001", "it\'s", '
+     '"\\"q\\"", "\\\\"]\n'),
+    'use http\nx = ask text of { k: "\u0085", n: 2, b: true, l: [1, "\U0010ffff"] }\n',
+    'use http\nx = ask text of ({ a: "x", b: 1 } with a: "\u00e9", c: false)\n',
+    'use http\nx = ask lower of [true, "\u0130"]\ny = ask upper of { k: 0.25 }\n',
+    'use http\nx = ask text of ["it\'s \\"both\\""]\ny = ask text of ([] plus "\u3000")\n',
+]
+
+
+def test_the_analyser_follows_shapes_py_where_it_once_did_not():
+    with tempfile.TemporaryDirectory() as d:
+        for src in PYTHON_REFERENCE:
+            p = _src_to_tmp(src, d)
+            py = as_json(analyse_file(p, follow=False), p)
+            js = _js_shapes(p, follow=False)
+            assert js == py, (f"src:\n{src}\n  py={json.dumps(py)}\n"
+                              f"  js={json.dumps(js)}")
+
+
+NON_ASCII = [
+    # targets equal under canonical equivalence but not by code point: two effects
+    'use http\nx = ask "https://caf\u00e9.example"\ny = ask "https://cafe\u0301.example"\n',
+    # code-point order is not UTF-16 order, which JavaScript's sort uses
+    ('use http\nx = ask "https://x/\uff41"\ny = ask "https://x/\U0001f600"\n'
+     'z = ask "https://x/\u00e9"\nw = ask "https://x/e\u0301"\n'),
+    # a combining mark joining a known prefix
+    'use http\nlet base = "https://e"\nx = ask base + "\u0301/p"\n',
+    # a computed target around non-ASCII text
+    ('use http\nto get of n:\n  give ask "https://\u00fc/" + n + "/\U0001f600"\n\n'
+     'xs = for each i in ["a"]: get of i\n'),
+    # final sigma, special casing, and a case-ignorable run before sigma
+    ('use http\nx = ask lower of "\u039f\u0394\u039f\u03a3 \u039f\u0394\u039f\u03a3."\n'
+     'y = ask upper of "stra\u00dfe \ufb03 \u0149"\n'
+     'z = ask lower of "\u0130\u03a3\u0345a A\u03a3\u0301 \u03a3 a\u00ad\u03a3\u00ad"\n'),
+    # normalize composes across marks
+    'use http\nx = ask normalize of "A\u030a e\u0301 \u1e9b\u0323 \u1100\u1161\u11a8 \u2126"\n',
+    # a long run of combining marks with one that decomposes (Foundation's NFC
+    # drops it), Kirat Rai's Unicode 16 composites, and Hangul jamo
+    ('use http\nx = ask normalize of "a' + "\u0301" * 70 + '\u0340\u0344"\n'
+     'y = ask normalize of "\U00016d67\U00016d67\U00016d63\U00016d67\U00016d67"\n'
+     'z = ask normalize of "\u1100\u1161\u11a8 \uac00\u11a8 \u0b47\u0b3e"\n'),
+    # join and rest of known lists
+    ('use http\nx = ask join of ["\U0001f468", "\u200d", "\U0001f469"]\n'
+     'y = ask text of (rest of ["a", "\u00e9"])\n'),
+    # a foreign's literal and parameter claims
+    ('foreign f of u from "m.\u00e9" doing ask "https://\u210c", write u\n'
+     'r = f of "\u00fc\u0301.json"\n'),
+    # a function specialised on a non-ASCII argument, called twice
+    ('use file\nto save of name:\n  write [1] to name + ".json"\n\n'
+     'save of "\u00e9"\nsave of "e\u0301"\n'),
+    # console text
+    'show "\U0001f468\u200d\U0001f469\u200d\U0001f467"\nshow "\u00e9"\nshow "e\u0301"\n',
+]
+
+
+def test_non_ascii_targets_agree():
+    with tempfile.TemporaryDirectory() as d:
+        for src in NON_ASCII:
+            p = _src_to_tmp(src, d)
+            py = as_json(analyse_file(p, follow=False), p)
+            js = _js_shapes(p, follow=False)
+            assert js == py, (f"src:\n{src!r}\n  py={json.dumps(py)}\n"
+                              f"  js={json.dumps(js)}")
+            sf = _js_shapes_fn(p, follow=False)
+            pf = _py_functions(analyse_file(p, follow=False))
+            assert sf == pf, f"src:\n{src!r}\n  py={pf}\n  js={sf}"
+
+
+def _string_literal(cps):
+    out = []
+    for c in cps:
+        ch = chr(c)
+        out.append({'"': '\\"', "\\": "\\\\", "\n": "\\n", "\t": "\\t"}.get(ch, ch))
+    return '"' + "".join(out) + '"'
+
+
+def _probe_code_points():
+    """Every code point of planes 0-3 and 14, where Unicode assigns characters,
+    and every 256th of the rest (unassigned or private use), with each end —
+    all but the surrogates and the carriage return."""
+    def wanted(c):
+        if 0xD800 <= c < 0xE000 or c == 0x0D:
+            return False
+        return c < 0x40000 or 0xE0000 <= c < 0xF0000 or c % 0x100 in (0, 0xFF)
+    return [c for c in range(0x110000) if wanted(c)]
+
+
+def _first_difference(py, js):
+    for i, (a, b) in enumerate(zip(py, js)):
+        if a != b:
+            return (f"at {i}: py {a!r} (U+{ord(a):04X}) vs js {b!r} (U+{ord(b):04X}) "
+                    f"in ...{py[max(0, i - 20):i + 20]!r}")
+    return f"lengths {len(py)} vs {len(js)}"
+
+
+def test_every_code_point_reads_as_python_reads_it():
+    """`text of [...]` is Python's repr, `lower of` / `upper of` its str.lower
+    and str.upper, `normalize of` its NFC — each at Python's Unicode version, not
+    the engine's (js/python_unicode.mjs). Every code point goes through all four,
+    in chunks — so runs of combining marks and adjacent composable pairs are
+    normalised in context too — except the surrogates and the carriage return,
+    which Python's text-mode read would turn into a newline, and planes 4 to 13
+    and 15 to 16, which hold no assigned character but private use and are
+    sampled."""
+    cps = _probe_code_points()
+    step = 0x10000
+    lines = ["use http"]
+    for n, i in enumerate(range(0, len(cps), step)):
+        lit = _string_literal(cps[i:i + step])
+        lines.append(f"r{n} = ask text of [{lit}]")
+        lines.append(f"l{n} = ask lower of {lit}")
+        lines.append(f"u{n} = ask upper of {lit}")
+        lines.append(f"n{n} = ask normalize of {lit}")
+    with tempfile.TemporaryDirectory() as d:
+        p = _src_to_tmp("\n".join(lines) + "\n", d)
+        py = as_json(analyse_file(p, follow=False), p)
+        js = _js_shapes(p, follow=False)
+    pt = [e["target"] for e in py["effects"]]
+    st = [e["target"] for e in js["effects"]]
+    assert len(pt) == len(st), f"{len(pt)} effects in py, {len(st)} in js"
+    for a, b in zip(pt, st):
+        assert a == b, _first_difference(a, b)
+    assert js == py
+
+
+def test_final_sigma_reads_every_neighbour_as_python_does():
+    """str.lower() picks final sigma by whether the characters around it are
+    cased or case-ignorable — two more per-code-point properties, at Python's
+    Unicode version. Each code point stands before a capital sigma ("AcΣ0") and
+    after one ("AΣc0"); the digit ends each probe, neither cased nor ignorable."""
+    cps = _probe_code_points()
+    step = 0x10000
+    lines = ["use http"]
+    for n, i in enumerate(range(0, len(cps), step)):
+        probes = [f"A{chr(c)}\u03a30A\u03a3{chr(c)}0" for c in cps[i:i + step]]
+        lines.append(f"s{n} = ask lower of {_string_literal([ord(x) for x in ''.join(probes)])}")
+    with tempfile.TemporaryDirectory() as d:
+        p = _src_to_tmp("\n".join(lines) + "\n", d)
+        py = as_json(analyse_file(p, follow=False), p)
+        js = _js_shapes(p, follow=False)
+    pt = [e["target"] for e in py["effects"]]
+    st = [e["target"] for e in js["effects"]]
+    assert len(pt) == len(st), f"{len(pt)} effects in py, {len(st)} in js"
+    for a, b in zip(pt, st):
+        assert a == b, _first_difference(a, b)
+
+
+def test_line_endings_are_read_as_python_reads_them():
+    """shapes.py reads a file in text mode: CRLF and a lone CR are newlines."""
+    with tempfile.TemporaryDirectory() as d:
+        for src in ['use http\r\nx = ask "https://a"\r\nshow "b"\ry = ask "https://c"\r',
+                    '\ufeffuse http\r\nto f:\r\n  give ask "https://\u00e9"\r\n\r\nr = f\r\n']:
+            p = _src_to_tmp(src, d)
+            py = as_json(analyse_file(p, follow=False), p)
+            assert _js_shapes(p, follow=False) == py
+            assert _js_shapes(p, follow=True) == as_json(analyse_file(p, follow=True), p)
+
+
+def test_non_ascii_paths_follow_imports():
+    """A program in a directory whose name differs from another only by
+    normalisation, importing a module beside it: the graph is keyed and
+    compared by code point."""
+    with tempfile.TemporaryDirectory() as d:
+        for dirname in ["caf\u00e9", "cafe\u0301", "\U0001f600 dir"]:
+            sub = os.path.join(d, dirname)
+            os.makedirs(sub, exist_ok=True)
+            lib = 'use http\nto fetch of u:\n  give ask "https://\u00e9/" + u\n'
+            _src_to_tmp(lib, sub, "lib.planes")
+            p = _src_to_tmp('use lib\nuse http\nx = fetch of "\u00fc"\n', sub, "m\u00e4in.planes")
+            py = as_json(analyse_file(p, follow=True), p)
+            js = _js_shapes(p, follow=True)
+            assert js == py, f"{p!r}:\n  py={json.dumps(py)}\n  js={json.dumps(js)}"
+            assert js["program"] == "m\u00e4in.planes"
 
 
 if __name__ == "__main__":

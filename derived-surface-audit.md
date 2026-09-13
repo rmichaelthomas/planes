@@ -71,10 +71,10 @@ Every file in scope, and whether any comment claiming "never a gate" (or an equi
 - scripts/measure_update_cost.py -- no trigger phrase in any comment
 - scripts/parser_corpus_agreement.py -- no trigger phrase in any comment
 - scripts/protocol_gen.mjs -- no trigger phrase in any comment
+- scripts/python_unicode_gen.py -- no trigger phrase in any comment
 - scripts/run_corpus_selfhosted.py -- no trigger phrase in any comment
 - scripts/run_corpus_through_planes.py -- no trigger phrase in any comment
 - scripts/run_suites.py -- no trigger phrase in any comment
 - scripts/swift_grammar_gen.py -- no trigger phrase in any comment
-- scripts/swift_unicode_gen.py -- no trigger phrase in any comment
 - scripts/world_renderer_bench.mjs -- no trigger phrase in any comment
 

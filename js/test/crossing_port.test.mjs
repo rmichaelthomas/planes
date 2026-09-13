@@ -85,8 +85,8 @@ function withStubbedFixtureFetch(fn) {
   const real = globalThis.fetch;
   globalThis.fetch = async (url) => {
     const key = String(url);
-    if (FILES[key]) return { ok: true, text: async () => fs.readFileSync(FILES[key], "utf-8") };
-    return { ok: false, text: async () => "" };
+    if (FILES[key]) return new Response(fs.readFileSync(FILES[key]));
+    return new Response("", { status: 404 });
   };
   return fn().finally(() => {
     globalThis.fetch = real;

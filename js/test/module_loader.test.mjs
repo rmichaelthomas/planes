@@ -85,9 +85,9 @@ function stubFetch(files) {
   return async (url) => {
     const key = String(url);
     if (Object.prototype.hasOwnProperty.call(files, key)) {
-      return { ok: true, text: async () => files[key] };
+      return new Response(files[key]);
     }
-    return { ok: false, text: async () => "" };
+    return new Response("", { status: 404 });
   };
 }
 
@@ -117,6 +117,24 @@ test("browser loader: read fetches once and caches for the life of the loader", 
     assert.equal(first, files["https://example.test/paint/util.planes"]);
     assert.equal(second, first);
     assert.equal(calls, 1, "a second read of an already-cached location issues no fetch");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("both loaders read a file as Python's text mode does: BOM kept, CRLF and lone CR as newlines", async () => {
+  const raw = "\ufeff  x = 1\r\ny = 2\rz = 3\r";
+  const want = "\ufeff  x = 1\ny = 2\nz = 3\n";
+  const dir = tempDir();
+  const nodeLoader = createNodeModuleLoader();
+  assert.equal(nodeLoader.read(writeFile(dir, "m.planes", raw)), want);
+
+  const base = "https://example.test/paint/main.planes";
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = stubFetch({ "https://example.test/paint/m.planes": raw });
+  try {
+    const loader = new BrowserModuleLoader({ base });
+    assert.equal(await loader.read(loader.locate("m", null)), want);
   } finally {
     globalThis.fetch = realFetch;
   }

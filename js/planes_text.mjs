@@ -84,6 +84,15 @@ export function codePoints(s) {
   return [...s];
 }
 
+// A file's text as Python's text mode reads it (`open(path, encoding="utf-8")`):
+// "\r\n" and a lone "\r" arrive as "\n". Every reader of a .planes file that
+// mirrors an `open(...).read()` in the reference goes through this — modules.py,
+// shapes.py, shapes_cli.py and host.py all read that way — so a lone carriage
+// return ends a line, and moves every line number after it, in both.
+export function pythonTextMode(raw) {
+  return raw.includes("\r") ? raw.replace(/\r\n?/g, "\n") : raw;
+}
+
 // The number of code points in `s` — Planes text length. `count of "😀"` is 1;
 // `s.length` (UTF-16 units) would wrongly give 2 (interp.py:766 uses Python's
 // len(), a code-point count).

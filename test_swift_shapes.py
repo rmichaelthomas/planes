@@ -22,9 +22,10 @@ implementations produce the surface and this compares the JSON structure:
 The analyser must reproduce shapes.py's widening EXACTLY — a Swift analyser more
 precise than the Python one is a divergence, not an improvement (A.1 ruling 2).
 
-The last sections have no JavaScript counterpart. One holds the places the
-JavaScript analyser parts from shapes.py (a sum of two known numbers widens; a
-known list reads as Python's repr, escapes and all). The others are non-ASCII:
+The last sections were written for this port and then taken into
+test_js_shapes.py. One holds the places the JavaScript analyser parted from
+shapes.py (a sum of two known numbers widens; a known list reads as Python's
+repr, escapes and all). The others are non-ASCII:
 targets that differ only by normalisation or sort differently by code point than
 by UTF-16 unit, every code point through `text of [...]`, `lower of`, `upper of`
 and `normalize of`, final sigma, a CRLF file, non-ASCII file names — where
@@ -301,9 +302,9 @@ def test_single_file_view_reports_unresolved_identically():
     assert sw["unresolved_calls"], "must report calls it cannot resolve"
 
 
-# ============================================= where shapes.py, not JavaScript, is the reference
+# ============================================= where shapes.py, not JavaScript, was the reference
 
-# js/shapes.mjs folds a sum of two known numbers and escapes only five characters
+# js/shapes.mjs folded a sum of two known numbers and escaped only five characters
 # in a known list's repr; shapes.py does neither, and EffectSurface.swift follows it.
 PYTHON_REFERENCE = [
     # a sum of two known numbers widens: shapes.py's numeric test never sees a Number
@@ -319,7 +320,7 @@ PYTHON_REFERENCE = [
 ]
 
 
-def test_the_analyser_follows_shapes_py_where_js_does_not():
+def test_the_analyser_follows_shapes_py_where_js_once_did_not():
     with tempfile.TemporaryDirectory() as d:
         for src in PYTHON_REFERENCE:
             p = _src_to_tmp(src, d)

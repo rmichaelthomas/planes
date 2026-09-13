@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 import { Host, HostError, pyJsonDumps, sharedTargets, resolveWith } from "./host.mjs";
+import { pythonTextMode } from "./planes_text.mjs";
 
 // The host Planes runs on under Node: the real filesystem, the real clock, a
 // resolver over the targets the corpus names (os.getcwd -> process.cwd), and
@@ -35,7 +36,8 @@ export class NodeHost extends Host {
   }
   read(path) {
     try {
-      return fs.readFileSync(path, "utf-8");
+      // host.py reads with open(path): text mode, universal newlines.
+      return pythonTextMode(fs.readFileSync(path, "utf-8"));
     } catch {
       throw new HostError(`no such file: ${path}`);
     }

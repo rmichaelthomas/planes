@@ -17,8 +17,8 @@ function installFsFetch() {
   const real = globalThis.fetch;
   globalThis.fetch = async (url) => {
     const p = typeof url === "string" && !url.startsWith("file:") ? path_from_relative(url) : fileURLToPath(url);
-    if (!fs.existsSync(p)) return { ok: false, status: 404, text: async () => "" };
-    return { ok: true, text: async () => fs.readFileSync(p, "utf-8") };
+    if (!fs.existsSync(p)) return new Response("", { status: 404 });
+    return new Response(fs.readFileSync(p));
   };
   return () => {
     if (real) globalThis.fetch = real;

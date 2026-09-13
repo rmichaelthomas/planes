@@ -9,7 +9,7 @@ command reads only public Surface queries and diff.
 Agreement: the same commands, same inputs, same output text and exit code as the
 Python CLI. shapes_cli.py is the specification.
 
-The last test has no JavaScript counterpart: a directory of files whose names
+The last test, since taken into test_js_shapes_cli.py: a directory of files whose names
 are non-ASCII (one differing from another only by normalisation), hidden, or
 carry ".planes" twice, indexed and searched through `*`, `?` and `[...]` globs —
 where the column padding counts code points and the listing sorts by them.

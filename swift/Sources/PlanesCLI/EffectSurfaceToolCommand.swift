@@ -5,9 +5,9 @@
 // subcommand of the one agreement CLI. A thin shell: every line of analysis is
 // in EffectSurface.swift (analyseFile, the Surface queries, diff). This only enumerates
 // files, calls the engine, and prints the text the Python CLI prints, with its
-// exit code. Where js/shapes_cli.mjs approximates Python, this follows Python:
-// glob skips hidden files and understands `?` and `[...]`, file lists sort by
-// code point, and a column pads by code points, as `f"{s:16}"` does.
+// exit code. As in js/shapes_cli.mjs, glob skips hidden files and understands
+// `?` and `[...]`, file lists sort by code point, and a column pads by code
+// points, as `f"{s:16}"` does.
 import Foundation
 import Planes
 
@@ -119,7 +119,7 @@ enum EffectSurfaceToolCommand {
         if !base.contains(where: { $0 == "*" || $0 == "?" || $0 == "[" }) {
             return FileManager.default.fileExists(atPath: p) ? [p] : []
         }
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir.isEmpty ? "." : dir) else {
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: slash == nil ? "." : dir.isEmpty ? "/" : dir) else {
             return []
         }
         return entries.filter { e in

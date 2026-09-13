@@ -14,6 +14,7 @@ import fs from "node:fs";
 import { HostError, Host } from "./host.mjs";
 import { NodeHost } from "./host_node.mjs";
 import { loadGrammar } from "./loader_node.mjs";
+import { readSourceFile } from "./module_loader_node.mjs";
 import { tokenize, PlanesSyntaxError } from "./lexer.mjs";
 import { parse, PlanesAmbiguity } from "./parser.mjs";
 import { canonicalProgram } from "./canonical.mjs";
@@ -736,7 +737,7 @@ switch (sub) {
     loadGrammar();
     const { render } = await import("./render.mjs");
     const { analyse } = await import("./shapes.mjs");
-    const src = fs.readFileSync(rest[0], "utf-8");
+    const src = readSourceFile(rest[0]);
     const prog = parse(src);
     const found = prog.filter((s) => s.__node === "Rule");
     out(found.length ? render(prog, found, analyse(src)) : render(prog));
@@ -874,7 +875,7 @@ switch (sub) {
     // conflict / unsupported subject. The rule-results oracle (A.3).
     loadGrammar();
     const { check, RuleConflict, RuleNotSupported } = await import("./rules.mjs");
-    const src = fs.readFileSync(rest[0], "utf-8");
+    const src = readSourceFile(rest[0]);
     const found = parse(src).filter((s) => s.__node === "Rule");
     let surface;
     let declaringFile = null;
@@ -918,7 +919,7 @@ switch (sub) {
     // against rules.py's fingerprint() (which the FINGERPRINT token embeds).
     loadGrammar();
     const { fingerprint } = await import("./rules.mjs");
-    const found = parse(fs.readFileSync(rest[0], "utf-8")).filter(
+    const found = parse(readSourceFile(rest[0])).filter(
       (s) => s.__node === "Rule",
     );
     out(JSON.stringify(found.map((r) => [r.name, fingerprint(r)])));
