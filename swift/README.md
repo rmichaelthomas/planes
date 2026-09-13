@@ -21,6 +21,18 @@ is not. That file is generated: edit the grammar, then run
 `python3 scripts/swift_grammar_gen.py`; `test_swift_grammar_data.py` runs its
 `--check` and fails on a stale copy.
 
+Python's own Unicode behaviour — `str.isprintable`, `str.lower`, `str.upper`,
+NFC — is embedded the same way, in `Sources/Planes/Generated/PythonUnicodeData.swift`,
+because shapes.py folds text through them and neither Swift's runtime tables nor
+Foundation's normaliser match Python's (rule 5). After a Python upgrade, run
+`python3 scripts/swift_unicode_gen.py`; `test_swift_unicode_data.py` runs its
+`--check`.
+
+`HostRules.swift` is the entry point for an application that checks the effects
+it is about to perform (a request to a URL) against Planes rules it ships as
+source, without running a Planes program; `test_swift_host_rules.py` holds it to
+shapes.py and rules.py.
+
 ## Porting rules
 
 These are the places Swift differs from Python in ways that change results

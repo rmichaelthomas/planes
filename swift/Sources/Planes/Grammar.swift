@@ -71,9 +71,10 @@ public enum GrammarJSON: Sendable, Equatable {
     public var array: [GrammarJSON]? { if case let .array(a) = self { a } else { nil } }
     public var int: Int? { if case let .number(n) = self { Int(n) } else { nil } }
 
-    /// JSON text for a value, as `JSON.stringify` writes it — used only to name a
-    /// bad value in a refusal.
-    var jsonText: String {
+    /// JSON text for a value, as `JSON.stringify` writes it, keys in order — used
+    /// to name a bad value in a refusal, and by the agreement CLI to emit the
+    /// surface and rule forms (Shapes.swift's asJson and its siblings).
+    public var jsonText: String {
         switch self {
         case .null: return "null"
         case let .bool(b): return b ? "true" : "false"
