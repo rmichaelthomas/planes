@@ -26,7 +26,7 @@ subcommands and output forms mirror `js/cli.mjs` exactly.
 | `parser.py` and the canonical AST form | `Nodes.swift`, `Parser.swift`, `Canonical.swift`, `CoreRestrict.swift` | `test_swift_parser.py` |
 | `shapes.py`, `shapes_cli.py` | `EffectSurface.swift`, `Modules.swift` | `test_swift_shapes.py`, `test_swift_shapes_derivation.py`, `test_swift_shapes_cli.py`, `test_swift_metacircular_shapes.py` |
 | `rules.py`, rule rendering | `Rules.swift`, `Render.swift` | `test_swift_rules.py` |
-| Python's Unicode tables | `PythonUnicode.swift`, `Generated/PythonUnicodeData.swift` | `test_swift_unicode_data.py` |
+| Python's Unicode tables | `PythonUnicode.swift`, `Generated/PythonUnicodeData.swift` | `test_python_unicode_data.py` |
 
 Not yet ported: the interpreter (`interp.py`, the host and module effects), so
 `planes-swift` cannot run a program.
@@ -49,7 +49,7 @@ Python's own Unicode behaviour — `str.isprintable`, `str.lower`, `str.upper`,
 NFC — is embedded the same way, in `Sources/Planes/Generated/PythonUnicodeData.swift`,
 because shapes.py folds text through them and neither Swift's runtime tables nor
 Foundation's normaliser match Python's (rule 5). After a Python upgrade, run
-`python3 scripts/swift_unicode_gen.py`; `test_swift_unicode_data.py` runs its
+`python3 scripts/python_unicode_gen.py`; `test_python_unicode_data.py` runs its
 `--check`.
 
 ## Porting rules

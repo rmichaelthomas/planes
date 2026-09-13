@@ -20,6 +20,7 @@ import { builtinNames, effectKinds } from "./lexer.mjs";
 import { core } from "./grammar_data.mjs";
 import { keywordsOf, lineOf, recordLines, suspectKinds } from "./core_restrict.mjs";
 import { sha256Hex } from "./sha256.mjs";
+import { pythonLower, pythonNFC, pythonUpper } from "./python_unicode.mjs";
 
 // ================================================================ values
 
@@ -1634,12 +1635,12 @@ export class Interpreter {
     }
     if (name === "lower") {
       requireText("lower", "lowercase", arg.value);
-      const v = arg.value.toLowerCase();
+      const v = pythonLower(arg.value);
       return new Traced(v, this.mk("op", "lower of", v, [arg.node]));
     }
     if (name === "upper") {
       requireText("upper", "uppercase", arg.value);
-      const v = arg.value.toUpperCase();
+      const v = pythonUpper(arg.value);
       return new Traced(v, this.mk("op", "upper of", v, [arg.node]));
     }
     if (name === "whole") {
@@ -1738,7 +1739,7 @@ export class Interpreter {
     }
     if (name === "normalize") {
       requireText("normalize", "normalize", arg.value);
-      const v = arg.value.normalize("NFC");
+      const v = pythonNFC(arg.value);
       return new Traced(v, this.mk("op", "normalize of", v, [arg.node]));
     }
     if (name === "join") {

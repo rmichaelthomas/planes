@@ -9,7 +9,7 @@
 // Unicode 16's composites and drops code points from a long run of combining
 // marks ("a" + 63 × U+0301 + U+0340 loses the U+0340). The
 // data is Python's own, generated into Generated/PythonUnicodeData.swift by
-// scripts/swift_unicode_gen.py; this file is the algorithms over it, as CPython
+// scripts/python_unicode_gen.py; this file is the algorithms over it, as CPython
 // runs them. test_swift_shapes.py drives every code point through all four
 // against the running Python.
 
