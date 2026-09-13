@@ -10,7 +10,7 @@
     {
       "kind": "error",
       "tag": "wrong-arity",
-      "source": "js/sound/protocol.mjs:66",
+      "source": "js/sound/protocol.mjs:71",
       "raised_in": "parseProtocol",
       "template": "\"protocol\" takes exactly one argument (the version number) in \"{line}\", got {args.length}",
       "slots": [
@@ -23,7 +23,7 @@
     {
       "kind": "error",
       "tag": "bad-protocol-version",
-      "source": "js/sound/protocol.mjs:74",
+      "source": "js/sound/protocol.mjs:79",
       "raised_in": "parseProtocol",
       "template": "\"protocol\" takes a positive whole number version in \"{line}\", got \"{args[0]}\"",
       "slots": [
@@ -36,7 +36,7 @@
     {
       "kind": "error",
       "tag": "unknown-verb",
-      "source": "js/sound/protocol.mjs:92",
+      "source": "js/sound/protocol.mjs:97",
       "raised_in": "parseCommand",
       "template": "\"sound\" with no verb in \"{line}\"",
       "slots": [
@@ -48,7 +48,7 @@
     {
       "kind": "error",
       "tag": "unknown-verb",
-      "source": "js/sound/protocol.mjs:104",
+      "source": "js/sound/protocol.mjs:109",
       "raised_in": "parseCommand",
       "template": "unrecognised sounding verb \"{verb}\" in \"{line}\"",
       "slots": [
@@ -61,7 +61,7 @@
     {
       "kind": "error",
       "tag": "wrong-arity",
-      "source": "js/sound/protocol.mjs:114",
+      "source": "js/sound/protocol.mjs:119",
       "raised_in": "parseCommand",
       "template": "\"{verb}\" takes {arity} argument{arity === 1 ? \"\" : \"s\"} in \"{line}\", got {args.length}",
       "slots": [
@@ -77,7 +77,7 @@
     {
       "kind": "error",
       "tag": "bad-word",
-      "source": "js/sound/protocol.mjs:124",
+      "source": "js/sound/protocol.mjs:129",
       "raised_in": "parseCommand",
       "template": "\"{verb}\" takes one of {[...WORDS[verb]].join(\", \")} in \"{line}\", got \"{word}\"",
       "slots": [
@@ -92,7 +92,7 @@
     {
       "kind": "error",
       "tag": "bad-number",
-      "source": "js/sound/protocol.mjs:136",
+      "source": "js/sound/protocol.mjs:141",
       "raised_in": "parseCommand",
       "template": "\"{args[badIndex]}\" is not a valid number in \"{line}\"",
       "slots": [
@@ -172,21 +172,21 @@
   ],
   "tags": {
     "wrong-arity": [
-      "js/sound/protocol.mjs:66",
-      "js/sound/protocol.mjs:114"
+      "js/sound/protocol.mjs:71",
+      "js/sound/protocol.mjs:119"
     ],
     "bad-protocol-version": [
-      "js/sound/protocol.mjs:74"
+      "js/sound/protocol.mjs:79"
     ],
     "unknown-verb": [
-      "js/sound/protocol.mjs:92",
-      "js/sound/protocol.mjs:104"
+      "js/sound/protocol.mjs:97",
+      "js/sound/protocol.mjs:109"
     ],
     "bad-word": [
-      "js/sound/protocol.mjs:124"
+      "js/sound/protocol.mjs:129"
     ],
     "bad-number": [
-      "js/sound/protocol.mjs:136"
+      "js/sound/protocol.mjs:141"
     ],
     "protocol-repeated": [
       "js/sound/stream.mjs:104"

@@ -356,3 +356,58 @@ test('a line quoting a draw command as text is prose', () => {
 test("an empty line is prose", () => {
   assert.deepEqual(parseCommand(""), { kind: "prose", text: "" });
 });
+
+// ---- whitespace at a line's edges (sprint 2026-09, F5) ---------------------
+//
+// Tokenizing used to be trim().split(/\s+/); PR #101 flagged it as
+// unaudited. It is now pythonStrip(x.trim()) -- the union of trim()'s
+// whitespace and Python's str.strip()'s, since this protocol has no Python
+// parser to agree with byte-for-byte and switching to Python's narrower set
+// alone would only trade one gap for another (see js/paint/protocol.mjs's
+// own comment). These pin the union: a stray U+001F or U+0085 at a line's
+// edge -- in Python's whitespace but not trim()'s -- now separates cleanly
+// instead of gluing onto the adjacent argument, and a leading U+FEFF
+// byte-order mark -- in trim()'s whitespace but not Python's -- still does
+// not become part of the verb. Written with \u escapes rather than the
+// literal bytes so the characters under test show up in a diff.
+
+test("a trailing U+001F (in Python's whitespace, not trim()'s) does not glue onto the last argument", () => {
+  assert.deepEqual(parseCommand("draw circle 200 100 40\u001f"), {
+    kind: "command",
+    verb: "circle",
+    args: [200, 100, 40],
+  });
+});
+
+test("a trailing U+0085 (in Python's whitespace, not trim()'s) does not glue onto the last argument", () => {
+  assert.deepEqual(parseCommand("draw circle 200 100 40\u0085"), {
+    kind: "command",
+    verb: "circle",
+    args: [200, 100, 40],
+  });
+});
+
+test("a leading U+FEFF byte-order mark (in trim()'s whitespace, not Python's) does not become part of the verb", () => {
+  assert.deepEqual(parseCommand("\ufeffdraw circle 200 100 40"), {
+    kind: "command",
+    verb: "circle",
+    args: [200, 100, 40],
+  });
+});
+
+test("gradient's own tokenizing (afterVerb.trim(), the second audited site) gets the same union", () => {
+  // The top-level split (JS \s+) still separates "gradient" from what
+  // follows on the real space here, so this reaches parseGradient with
+  // afterVerb starting after that same space. Its own replace()'s trailing
+  // \s* also consumes that real space and then stops at U+001F -- a
+  // character trim() alone leaves in place, gluing it onto "linear" and
+  // reading as an unrecognised kind word rather than the command it is.
+  assert.deepEqual(
+    parseCommand("draw gradient \u001flinear 0 0 100 0 0.9 0.05 90 1 0.4 0.1 260 1"),
+    {
+      kind: "command",
+      verb: "gradient",
+      args: ["linear", 0, 0, 100, 0, 0.9, 0.05, 90, 1, 0.4, 0.1, 260, 1],
+    },
+  );
+});

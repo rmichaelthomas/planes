@@ -16,6 +16,11 @@
 // build this came from explicitly refuses. (That scanner is not comment-aware,
 // which is why the name of the function it looks for is not written out in
 // this paragraph — a mention in prose would be read as a call site.)
+//
+// A line is tokenized on the UNION of trim()'s whitespace and Python's — see
+// js/paint/protocol.mjs's own comment on this same choice, made here
+// identically to keep the two files the same shape.
+import { pythonStrip } from "../planes_text.mjs";
 
 const ARITY = Object.freeze({
   wave: 1,
@@ -85,7 +90,7 @@ export function parseCommand(line) {
     return { kind: "prose", text: line };
   }
 
-  const tokens = line.trim().split(/\s+/);
+  const tokens = pythonStrip(line.trim()).split(/\s+/);
   const verb = tokens[1];
 
   if (verb === undefined) {

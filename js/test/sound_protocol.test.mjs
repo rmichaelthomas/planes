@@ -224,3 +224,37 @@ test("collectSink is a player that plays nothing and reports everything", () => 
   assert.equal(r.version, 1);
   assert.equal(sink.notes.length, 1);
 });
+
+// ---- whitespace at a line's edges (sprint 2026-09, F5) ---------------------
+//
+// Tokenizing used to be trim().split(/\s+/); PR #101 flagged it as
+// unaudited. It is now pythonStrip(x.trim()) -- the union of trim()'s
+// whitespace and Python's str.strip()'s -- identically to
+// js/paint/protocol.mjs, whose comment carries the full rationale (this
+// protocol has no Python parser to agree with either). Written with \u
+// escapes rather than the literal bytes so the characters under test show
+// up in a diff.
+
+test("a trailing U+001F (in Python's whitespace, not trim()'s) does not glue onto the last argument", () => {
+  assert.deepEqual(parseCommand("sound gain 0.4\u001f"), {
+    kind: "command",
+    verb: "gain",
+    args: [0.4],
+  });
+});
+
+test("a trailing U+0085 (in Python's whitespace, not trim()'s) does not glue onto the last argument", () => {
+  assert.deepEqual(parseCommand("sound gain 0.4\u0085"), {
+    kind: "command",
+    verb: "gain",
+    args: [0.4],
+  });
+});
+
+test("a leading U+FEFF byte-order mark (in trim()'s whitespace, not Python's) does not become part of the verb", () => {
+  assert.deepEqual(parseCommand("\ufeffsound gain 0.4"), {
+    kind: "command",
+    verb: "gain",
+    args: [0.4],
+  });
+});
