@@ -215,6 +215,71 @@ def test_computed_target_is_treated_as_a_possible_match():
     assert "could not be pinned down" in rendered
 
 
+def test_a_computed_target_with_an_incompatible_known_prefix_is_a_certain_non_match():
+    """v37.0 §513: a computed target is not an unknown one. Its known chunks
+    are facts, and a host they rule out is not a possible match."""
+    src = ('use http\n'
+           'rule [no-telemetry] anything may not ask '
+           'to "https://telemetry.example.com/collect"\n'
+           'to lookup of name:\n'
+           '  give ask "https://registry.example.com/v1/packages/" + name\n\n'
+           'x = for each n in ["a"]: lookup of n\n')
+    assert rule_violations(src) == []
+
+
+def test_a_computed_target_that_could_still_be_the_rule_target_stays_possible():
+    src = ('use http\n'
+           'rule [no-requests] anything may not ask '
+           'to "https://registry.example.com/v1/packages/requests"\n'
+           'to lookup of name:\n'
+           '  give ask "https://registry.example.com/v1/packages/" + name\n\n'
+           'x = for each n in ["a"]: lookup of n\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].uncertain is True
+
+
+def test_pattern_exclusion_anchors_both_ends_and_orders_the_middle():
+    from rules import _pattern_excludes
+    assert _pattern_excludes("https://a/x", "{...}") is False
+    assert _pattern_excludes("https://a/x.json", "https://{...}.json") is False
+    assert _pattern_excludes("https://a/x.json", "https://{...}.xml") is True
+    assert _pattern_excludes("https://a/x.json", "http://{...}") is True
+    assert _pattern_excludes("aXbYc", "a{...}b{...}c") is False
+    assert _pattern_excludes("acb", "a{...}b{...}c") is True
+    # a hole may be empty, and a chunk may not overlap its neighbour
+    assert _pattern_excludes("ab", "a{...}b") is False
+    assert _pattern_excludes("a", "a{...}a") is True
+
+
+def test_a_foreign_with_no_stated_destination_is_never_excluded():
+    """Its target names the host function, not where the request goes, so
+    the text differing from the rule's target proves nothing."""
+    from rules import _pattern_excludes
+    assert _pattern_excludes("https://t.example.com", "m.post (destination not stated)") is False
+    assert _pattern_excludes("https://t.example.com", "m.{...} (destination not stated)") is False
+    src = ('rule [no-telemetry] anything may not ask to "https://t.example.com"\n'
+           'foreign post of x from "m.post" doing ask\n'
+           'r = post of 1\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].uncertain is True
+
+
+def test_a_forbid_rule_fires_on_its_real_target_beside_an_excluded_one():
+    src = ('use http\n'
+           'rule [no-telemetry] anything may not ask '
+           'to "https://telemetry.example.com/collect"\n'
+           'to lookup of name:\n'
+           '  give ask "https://registry.example.com/v1/packages/" + name\n\n'
+           'x = for each n in ["a"]: lookup of n\n'
+           'y = ask "https://telemetry.example.com/collect"\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].uncertain is False
+    assert v[0].effect.target == "https://telemetry.example.com/collect"
+
+
 def test_uncertain_target_message_re_escapes_a_quote_in_the_rule_target():
     src = ('use http\n'
            'rule [no-telemetry] anything may not ask '
@@ -742,9 +807,9 @@ def test_vacuous_situation_3_subject_reaches_the_kind_but_not_the_target():
     function-level effect and a specialised (exact-target) top-level one
     in `.declared` (a pre-existing shapes.py dedup quirk, unrelated to
     this build) — and a computed target is conservatively treated as a
-    possible match by `_target_matches` (v2.0 §34), which would make the
-    rule match the generic effect and mask the situation-3 case this test
-    wants to isolate.
+    possible match by `_target_matches` (v2.0 §34) unless its known chunks
+    exclude the rule's target (v37.0 §513). Kept plain so the case this
+    test isolates does not depend on that exclusion.
     """
     src = ('use http\n'
            'let payload = "secret"\n'

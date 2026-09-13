@@ -322,6 +322,31 @@ MORE_RULE_PROGRAMS = [
     # vacuous situation 3: the subject reaches the kind, never at the target
     ('use http\nto send of payload:\n  give ask "https://c/?d=" + payload\n\n'
      'rule [leak] payload may not ask to "https://elsewhere"\nx = send of "s"\n'),
+    # a computed target's known chunks exclude a rule target they cannot reach
+    # (v37.0 §513): another host, a mismatched end, a middle chunk that is absent
+    ('use http\nrule [t] anything may not ask to "https://t.example/collect"\n'
+     'to get of n:\n  give ask "https://r.example/p/" + n\n\nx = for each i in ["a"]: get of i\n'),
+    ('use http\nrule [t] anything may not ask to "https://r.example/p/q"\n'
+     'to get of n:\n  give ask "https://r.example/p/" + n\n\nx = for each i in ["a"]: get of i\n'),
+    ('use http\nrule [t] anything may not ask to "https://r.example/p.json"\n'
+     'to get of n:\n  give ask "https://r.example/" + n + ".xml"\n\n'
+     'x = for each i in ["a"]: get of i\n'),
+    ('use http\nrule [t] anything may not ask to "https://a/xc"\n'
+     'to get of n, m:\n  give ask "https://a/" + n + "b" + m + "c"\n\n'
+     'x = for each i in ["a"]: get of i, i\n'),
+    # a foreign with no stated destination is never excluded
+    ('rule [t] anything may not ask to "https://t.example"\n'
+     'foreign post of x from "m.post" doing ask\nr = post of 1\n'),
+    # the real target still fires beside an excluded one
+    ('use http\nrule [t] anything may not ask to "https://t.example/collect"\n'
+     'to get of n:\n  give ask "https://r.example/p/" + n\n\nx = for each i in ["a"]: get of i\n'
+     'y = ask "https://t.example/collect"\n'),
+    # chunks compare by code point: a decomposed é is not a composed one, and an
+    # astral character is one code point
+    ('use http\nrule [t] anything may not ask to "https://caf\u00e9/x"\n'
+     'to get of n:\n  give ask "https://cafe\u0301/" + n\n\nx = for each i in ["a"]: get of i\n'),
+    ('use http\nrule [t] anything may not ask to "https://\U0001f600/x"\n'
+     'to get of n:\n  give ask "https://\U0001f600/" + n\n\nx = for each i in ["a"]: get of i\n'),
     # a rule whose target is empty text
     ('use http\nrule [a] anything may not ask to ""\nrule [b] anything may not ask to ""\n'
      'x = ask ""\n'),
