@@ -137,6 +137,14 @@ def test_comparison_shape_and_whole_and_as_int():
             ["whole", "5.0"], ["asint", "5"], ["asint", "2.5"], ["asint", "42"]])
 
 
+def test_an_integer_past_4300_digits_agrees():
+    # CPython refuses int<->str past 4300 digits by default; planes_num.py turns
+    # that guard off so the reference computes what the other hosts compute.
+    big = "9" * 5000
+    _agree([["parse", big], ["add", big, "1"], ["div", big, "3"],
+            ["mul", big, big], ["cmp", big, "1" + "0" * 5000]])
+
+
 def test_a_broad_fraction_sweep_renders_identically():
     ops = []
     for n in range(-9, 10):

@@ -60,6 +60,16 @@ def test_repeated_addition_does_not_drift():
     assert run(src + "\nshow text of t") == ["1"]
 
 
+def test_an_integer_has_no_digit_limit():
+    """Planes numbers are exact at any size, so a 5000-digit literal reads, adds
+    and prints. CPython refuses int<->str conversion past 4300 digits by default
+    (a denial-of-service guard, `sys.set_int_max_str_digits`), and the reference
+    raised ValueError here while the JS and Swift hosts did not."""
+    big = "9" * 5000
+    assert run(f"x = {big} + 1\nshow text of x") == ["1" + "0" * 5000]
+    assert run(f"y = {big} / 3\nshow text of y") == ["3" * 5000]
+
+
 def test_money_arithmetic_is_exact():
     src = ('price = 19.99\n'
            'qty = 3\n'
