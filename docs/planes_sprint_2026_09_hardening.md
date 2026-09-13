@@ -7,27 +7,36 @@
 
 Every item below says where it came from. **Verified** means it was run or read at `c4400ad` in this session. **Reported** means a source document or a reading pass says so and it was not re-run here.
 
-The sprint has two halves. **Sprint A** changes no language semantics: fixes, agreement, gates, docs, embedding. It can start now. **Sprint B** is the language work the portfolio surfaced — the eighth effect kind and the rule-plane changes — and it starts with decisions only the architect can make. Track 0 lists those decisions. Most of them block only Sprint B.
+The sprint has two halves. **Sprint A** changes no language semantics: fixes, agreement, gates, docs, embedding. It can start now. **Sprint B** is the language work the portfolio surfaced: the eighth effect kind and the rule-plane changes. Track 0 held the decisions Sprint B needed. The architect answered all of them in a walkthrough on September 13, 2026, and they are recorded below.
 
 ---
 
-## Track 0 — decisions for the architect
+## Track 0 — decided (walkthrough, September 13, 2026)
 
-Nothing in Sprint A waits on these, except D6's copy.
+Each answer closes its question. None is carried forward.
 
-| # | Decision | Why now | Source |
+| # | Question | Decision | Closes |
 |---|---|---|---|
-| D1 | **P-Q25: the send effect.** Its name (`send` is already a function name in `demo/fdiff/`, the README and tests), a new host method or a body on `ask`, where `ask` ends and `send` begins, what happens to existing `doing ask` claims, `may not send` rules, and how the five seven-kind pins move. Also: Horizon Phase 0 says world programs use "no eighth effect". Say whether that holds for world programs or was a Phase-0-only constraint. | Filed today. Five downstream copies of the vocabulary would need to change with it. | v37.1 §531–§533; Horizon Phase 0 constraints |
-| D2 | **P-Q17 (v37.0): rule-target matching.** Exact string, host, or path prefix, and the syntax for it (`under`? trailing slash?). | Koncord (PE-Q42) and 5xFive (`compliance-compiler.ts` writes a `{...}` hole into a rule target as a wildcard) both need a rule that covers `…/pixel.gif`. | v37.0 §522–§524; Koncord v1.12 §282 |
-| D3 | **`until` and `contradicts`.** Locked at v5.0 §76, never built. Build them in Sprint B, or retire the lock in a checkpoint. | A locked construct with no code breaks the "locked means built" rule. Nothing flags it: `audit_locked_vs_built.py` doesn't look at rule-plane relations. *Verified absent:* no syntax in `.py`, `.mjs`, `.swift` or `grammar/*.json`. | v5.0 §76 (F-Q1, F-Q2) |
-| D4 | **Supersession fingerprints: optional or mandatory.** "Absence is unverified supersession." Still optional in `parser.py:493–494`. | This is the original P-Q17 (v2.0 §36). It was parked with the rule plane and never came back. Deciding it now fits alongside D2 and D3. | v2.0 §36, v3.0 §53 |
-| D5 | **Restore A-Q20 and A-Q21 to the register.** A-Q20: what the error catalogue is for, and where it lives. A-Q21: split a raise site reached by several intents, so each fix clause is always true. | *Verified:* both are carried open at v23.0, then disappear from every later register without being resolved. The true open count is **twenty**, not eighteen. Relevant now because PR #101 and the Swift port made messages a four-host agreement cost. | v22.1 §281, v22.2 §286, v23.0 register |
-| D6 | **Tutor copy that says something false.** Approve replacement wording for three strings (see F4). | The teaching proposal relies on the page telling the truth. | Tutor reading pass, verified at `tutor.html` |
+| 1 | What is the error-message catalogue for? | `grammar/errors.json` is a generated reference copy and stays as it is. Messages are written in each host's code, and the agreement suites keep every host saying the same words. | A-Q20 |
+| 2 | When one error is raised for several reasons, does each get its own advice? | Yes. Every raise site gives a fix clause true for that exact case, which is already how the code works. The one leftover, `interp.py:97`'s `nothing` clause that still lists cases inside itself, is routine cleanup (F7). | A-Q21 |
+| 3 | Must `supersedes` carry the fingerprint of the rule it overrides? | **Yes, required.** Without it the checker refuses the rule and prints the fingerprint to add. No portfolio rule file uses `supersedes` today (*verified* in `~/5xfive/worker` and `~/browser-concordance`). Only `demo/rules/exception.planes` and tests need it. | The original P-Q17 (v2.0 §36) |
+| 4 | Should rules expire on a date (`until`)? | **No.** The v5.0 §76 lock on `until` is withdrawn. No program or portfolio project needs it, so a real need later starts as a new idea. | F-Q2 |
+| 5 | Should Planes let an author declare that two rules must never both apply (`contradicts`)? | **Yes, build it** (B3). It records an incompatibility in meaning that structural conflict detection can't see. 5xFive runs Z3 separately for consistency across compliance sources, and this catches part of what Z3 is used for. | F-Q1 |
+| 6 | Does a rule about an address cover only that exact address? | **No.** A rule's target covers that address and everything under it (B2). | P-Q17 (v37.0); Koncord PE-Q42 |
+| 7 | Is `send` a language command or an effect label? | **An effect label for `foreign` functions**, the way `clock` works. No native send command, no new keyword, no new host method. The effect vocabulary grows from seven to eight. `send` stays usable as a function name. | P-Q25 (name, host method) |
+| 8 | Where does `ask` end and `send` begin? | **The author of the foreign declaration chooses, by one rule:** a request that carries the program's data out (a message, form, upload or report) is `send`; one that only fetches is `ask`. Planes doesn't guess from HTTP methods. Data inside a URL is still traced by derivation (v37.0 §520). | P-Q25 (boundary) |
+| 9 | What happens to existing sends labelled `doing ask`? | **Relabel them** in the build (`README.md:548`, `demo/fdiff/v1.planes`, `demo/fdiff/v2.planes`). `--diff` reports an `ask` → `send` change as a change, even when the code is otherwise unchanged. | P-Q25 (existing claims) |
+| 10 | Does a rule about `ask` also govern `send`? | **Forbidding `ask` to an address also forbids `send` to it.** Forbidding `send` does not forbid `ask`. Allowing `ask` does not allow `send`. No rule written before `send` ever weakens. | P-Q25 (rules) |
+| 11 | Does `send` conflict with Horizon's "no eighth effect"? | **No.** Horizon §9.2 limited how world data is carried (it crosses `show`) during the Phase 0 build. It is not a limit on the language. World data keeps using `show`. | P-Q25 (Horizon) |
+| 12 | Four false lines in `tutor.html` | **Approved replacements** (F4). The architect also ruled the decorative seed a **bug**. Sharing a seed was meant to be the point (v24.0 §316, v27.0 §81), and no build or audit flagged it. Filed as [issue #106](https://github.com/rmichaelthomas/planes/issues/106), no rush. | — |
 
-Also for the next checkpoint (bookkeeping, not decisions):
-- **P-Q17 has been used three times**: v2.0 §36 fingerprints, v14.0 §159 host seam, v37.0 rule-target matching. v37.1 recorded two and gave the first as v3.0.
-- **P-Q16 and P-Q23 have each been used twice.**
-- The P-Q20–P-Q23 closures live only in `reports/REPORT_AUDIT.md`. The vault chain never records them.
+**Register after Track 0:** sixteen open (A-Q1, A-Q5, A-Q6a, A-Q6c, A-Q7, A-Q8, A-Q10, A-Q11, A-Q13, A-Q17, A-Q24, A-Q25, T-Q4, T-Q5, T-Q6, T-Q7).
+
+For the next checkpoint's register (bookkeeping only):
+- P-Q17 has been used three times: v2.0 §36 fingerprints, v14.0 §159 host seam, v37.0 rule-target matching.
+- P-Q16 and P-Q23 have each been used twice.
+- The P-Q20–P-Q23 closures live only in `reports/REPORT_AUDIT.md`.
+- The v23.0-to-v30.1 count carried two offsetting errors: v25.1 decremented A-Q2, which was never counted, and v30.1 re-resolved A-Q23, already closed at v24.0 §309. Separately, A-Q20 and A-Q21 were dropped from the list from v30.1 onward.
 
 ---
 
@@ -43,7 +52,7 @@ Order within Sprint A is by risk: wrong answers first, then agreement, then cons
 - Source: PR #102 "Found and still open".
 
 **F2. `text of` on a list returns a placeholder.** *Verified:* `show text of [1, 2, 3]` prints `[3 items]`. Code that follows the error message's advice to use `text of` gets that placeholder, silently.
-- Fix: make it the repr that shapes already uses for a known list (PR #103 made JS match Python here), or refuse it with a fix clause. Either one closes the wrong answer; changing the output needs D5-style care because the message is shared by every host.
+- Fix: make it the repr that shapes already uses for a known list (PR #103 made JS match Python here), or refuse it with a fix clause. Either one closes the wrong answer; either way the output must change identically in every host.
 - Source: v22.2 §286.
 
 **F3. A reserved-word error names a function that doesn't exist.** *Verified:* `to dawn and dusk:` reports "cannot appear in the function name 'dawn and'", then dumps all 32 reserved words.
@@ -56,7 +65,15 @@ Order within Sprint A is by risk: wrong answers first, then agreement, then cons
 - `tutor.html:797`: lesson 7 says "Your garden is already grown, from everything you built in the lessons before this one". Lesson 7's garden is fixed frame data (`tutor.html:800–808`). The learner's lesson 4 reason and lesson 6 sky name are not carried in.
 - The capstone completion string "the garden you grew across the lessons" is flagged AUTHOR-DRAFTED in `tutor-refinements-verification.md`.
 
-Fix: new wording, which needs D6. Gate: `js/test/tutor_redesign.test.mjs` asserts none of those phrases appear.
+Fix, approved at Track 0 #12:
+1. Share card: "Your garden is a tiny file. Give a friend the file, and the **exact same** garden grows on their computer."
+2. Under the save button: "Trade garden files with anyone else growing a garden — the same file always grows the exact same one."
+3. Lesson 7 introduction: "Here's a garden grown from everything you've learned — every line in it is one you now know how to write. This is your sandbox now…" (the rest unchanged)
+4. Lesson 7 completion (`tutor.html:1202`): "Every line in this garden is one you learned to write — now it's yours to change."
+
+The six-digit seed stays as a keepsake on the certificate, and no copy claims it does anything. Making the seed real is a bug, not this fix: [issue #106](https://github.com/rmichaelthomas/planes/issues/106).
+
+Gate: `js/test/tutor_redesign.test.mjs` asserts the four old phrases never appear.
 
 **F5. `trim()` in the three JS protocol parsers was never audited.** *Verified present:*
 - `js/paint/protocol.mjs:194, 257`
@@ -71,15 +88,18 @@ PR #101 replaced `trim()` with Python's whitespace set in the lexer, and listed 
 - Fix: give records a plain-data form (`toJSON` or a documented `toPlain`), with a round-trip test through `structuredClone`.
 - Verify first: *not re-run here.*
 
+**F7. The `nothing` comparison's fix clause still lists cases inside itself.** `interp.py:97` reads "test for absence with `is nothing` — if the nothing is inside a compared list or record rather than the whole value (the path names which)…". Track 0 #2 settled that each raise site's advice is true for its exact case. Split it so the whole-value and inner-value cases each raise with their own clause, byte-identical in every host.
+
 ### Hardening: agreement, gates and completeness
 
 **H1. `--rules` results in `--json`.** *Verified:* `shapes_cli.py:21–23` says "--rules does not yet appear in --json's output — a --json consumer cannot see rule results at all today."
 - A-Q8 names this as the registry's one missing field group. Every JSON consumer (5xFive, Undertow, Omniglot, Cartouche) wants it.
 - Build in Python, JS and Swift. Bump the JSON format version only if an existing field changes.
 
-**H2. The audit tool learns rule-plane relations.** `audit_locked_vs_built.py` checks constructs, not rule-plane relations. That is why D3's `until` and `contradicts` have gone unflagged since v5.0.
-- Extend it to `supersedes`, `permit`, `contradicts`, `until` and fingerprints.
-- It will report D3's pair as NOT BUILT until D3 is decided. That is the point.
+**H2. The audit tool learns rule-plane relations.** `audit_locked_vs_built.py` checks constructs, not rule-plane relations. That is why `until` and `contradicts` went unflagged from v5.0 to Track 0.
+- Extend it to `supersedes`, `permit`, `contradicts` and mandatory fingerprints.
+- `contradicts` reports NOT BUILT until B3 lands. That is the point.
+- `until` is withdrawn (Track 0 #4) and must not appear as a locked construct.
 
 **H3. Commit the v37.0 MCP demo.** *Verified absent:* there is no `demo/mcp/` at `c4400ad`. v37.0 §518–§521 logged it as the first agent-tool artifact written in Planes, and its strongest adoption asset (the `derived from: pkg-name` trace).
 - Rebuild `demo/mcp/v1.planes` and `demo/mcp/v2.planes` plus the JSON surface.
@@ -91,7 +111,7 @@ PR #101 replaced `trim()` with Python's whitespace set in the lexer, and listed 
 
 **H5. Stale statements in live files.**
 - `identity/render_logo.py` still says "rough marker, not locked" and has no Typography section (v16.0 §176, reported).
-- `README.md`'s foreign example spells a POST as `doing ask` (v37.1 §531). Leave the example as it is until D1, but footnote it.
+- `README.md`'s foreign example spells a POST as `doing ask` (v37.1 §531). It is relabelled `doing send` in B1 (Track 0 #9), not here.
 - Not included: `reports/CORE_SUBSET.md`'s stale "half the keywords" (v18.0 §206). It lives in `reports/`, which is archival.
 
 ### Consumers: make Planes easy to embed and to pin
@@ -127,19 +147,45 @@ Every agreement suite (JS and Swift) must cover each fixed branch. Tag the resul
 
 ---
 
-## Sprint B — additive, after Track 0
+## Sprint B — additive, decided at Track 0
 
-**B1. The send effect (P-Q25), designed then built.** Design session first (D1). Then build it across:
-- `grammar/vocabulary.json`, `interp.py`, `host.py`, `shapes.py`, `rules.py`
-- `js/`, `grammar/interp.planes`, and Swift (including `HostRules`' `HostEffect`)
-- the five pins: `test_foreign.py` `test_effect_vocabulary_stays_closed`, `js/test/garden_gate.test.mjs` H, README counts, `core_check.py`, `corpus_coverage.py`
-- E1's schema
+**B1. The send effect (P-Q25).** Specified by Track 0 #7–#11:
+- `send` is an **effect kind that `foreign` declarations use**: `foreign post of message from "slack.post" doing send "https://hooks.slack.com/…"`.
+  - No keyword, no builtin, no host method.
+  - The vocabulary is `ask clock env random read send show write`.
+  - `send` is on the network boundary with `ask`. Its note: a request that carries the program's data out.
+- **Documentation states the one rule:** data going out is `send`; fetch-only is `ask`. Nothing checks beyond the declared label, the same trust every `doing` claim has.
+- **Relabel** `README.md:548`, `demo/fdiff/v1.planes` and `demo/fdiff/v2.planes` to `doing send`.
+- **`--diff` reports a kind change** (`ask` → `send` on the same destination) as a change, exit 1.
+- **Rules:**
+  - `may not ask to X` forbids both `ask` and `send` to X.
+  - `may not send to X` forbids only `send`.
+  - `may ask to X` permits only `ask`.
+  - `may send to X` permits `send`.
+  - A test pins that every rule written before `send` flags at least what it flagged before.
+- **Horizon:** world data keeps crossing `show`. Horizon §9.2 was a Phase 0 build limit.
+- **Build across:**
+  - `grammar/vocabulary.json`, `shapes.py`, `rules.py`, `interp.py`'s `doing` validation
+  - `js/`, `grammar/*.planes`, Swift (including `HostRules`' `HostEffect`)
+  - E1's schema
+  - the five pins: `test_foreign.py` `test_effect_vocabulary_stays_closed`, `js/test/garden_gate.test.mjs` H, README counts, `core_check.py`, `corpus_coverage.py`
+- **Gate:** v37.1 §530's three-part test is recorded in the PR, and the agreement suites cover each rule direction above.
 
-Gate: v37.1 §530's three-part test, written into the design doc before the build.
+**B2. Rule-target matching (P-Q17 v37.0).** Specified by Track 0 #6, built with B1 so `ask` and `send` match the same way.
+- A rule target covers that address **and everything under it**:
+  - the same scheme and host;
+  - the path matches at `/` boundaries, so `/ingest` covers `/ingest/v2` but not `/ingestion`;
+  - a query string or fragment on the effect's target is ignored.
+- A different host is never covered (`tracker.example.evil.com` is not `tracker.example`). Subdomains are separate addresses.
+- It applies to forbid and permit rules alike.
+- #104's `_pattern_excludes` is re-proven against the new semantics: a computed target is excluded only when its known chunks cannot reach any address under the rule's target. The v37.0 §514 argument stands: never hide a real reach.
+- Settles Koncord PE-Q42 and removes 5xFive's `{...}` wildcard workaround in `compliance-compiler.ts`.
 
-**B2. Rule-target matching (P-Q17 v37.0), as D2 decides it.** Build after B1 so `may not send to` and `may not ask to` get the same matching semantics in one pass. It composes with #104's `_pattern_excludes`, whose soundness argument (v37.0 §514) has to be re-proven for prefix semantics.
-
-**B3. `until` and `contradicts` (if D3 keeps them), plus fingerprints (D4).** `until` takes an explicit `--as-of` and never reads the clock. An expired rule is a fifth Violation shape. H2's audit flips to BUILT.
+**B3. `contradicts`, and mandatory fingerprints.**
+- `contradicts` (Track 0 #5): an authored declaration that two rules must never both apply, reported when both are active. Distinct from structural conflict detection (v5.0 §76).
+- Fingerprints (Track 0 #3): `supersedes [name]` without `@fingerprint` is refused, and the message prints the fingerprint to add. Update `demo/rules/exception.planes` and the tests.
+- H2's audit flips `contradicts` and fingerprints to BUILT.
+- `until` is not built (Track 0 #4).
 
 **B4. Readable violations.** Keep a rule's `because` and the violation parts as structured fields in the JSON (after H1), so hosts can write their own wording without parsing the rendered text.
 - 5xFive v3.2 §267 translates `v.render()` output, MuseSky MOD-2 wants amber without jargon, and Koncord keeps Planes backstage.
