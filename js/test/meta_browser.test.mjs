@@ -144,7 +144,11 @@ test("the whole standalone corpus agrees, with only the documented exceptions", 
     for (const e of fs.readdirSync(path.join(REPO, d), { withFileTypes: true })) {
       const rel = d === "." ? e.name : `${d}/${e.name}`;
       if (e.isDirectory()) {
-        if ([".venv", ".git", "node_modules", ".playwright-cli"].includes(e.name)) continue;
+        // Every hidden directory, as Python's `glob("**")` skips them in the
+        // suites that walk the same corpus. Named ones alone were not enough:
+        // agent worktrees under `.claude/worktrees/` hold whole copies of the
+        // repo, and walking twelve of them ran this test out of heap.
+        if (e.name.startsWith(".") || e.name === "node_modules") continue;
         walk(rel);
       } else if (e.name.endsWith(".planes")) all.push(rel);
     }
