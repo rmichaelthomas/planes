@@ -129,6 +129,24 @@ def test_non_ascii_file_names_agree():
         assert "hidden" not in out, out
 
 
+def test_shapes_refuses_a_syntax_error_without_a_stack_trace():
+    """E4: `node js/cli.mjs shapes <file>` is the documented way to check a
+    file without Python, so a file that doesn't parse gets shapes_cli.py's
+    one-line refusal and exit 1, not a Node stack trace."""
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "manifest.planes")
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write('foreign post of m doing ask "https://x.example"\n')
+        r = subprocess.run([NODE, "js/cli.mjs", "shapes", p], cwd=REPO,
+                           capture_output=True, text=True)
+        py = subprocess.run([sys.executable, "shapes_cli.py", p], cwd=REPO,
+                            capture_output=True, text=True)
+    assert r.returncode == 1, r
+    assert r.stderr == "syntax error — line 1: expected from, found 'doing'\n", r.stderr
+    assert r.stderr == py.stderr, (r.stderr, py.stderr)
+    assert r.stdout == "", r.stdout
+
+
 if __name__ == "__main__":
     if NODE is None:
         print("  SKIP  node not on PATH")

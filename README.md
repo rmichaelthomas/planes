@@ -83,44 +83,30 @@ step one if they are missing.
 
 ### Checking a file without Python
 
-Manifest authors and other downstream projects can parse and analyse a `.planes`
-file without Python, using Node or Swift:
+Anyone writing Planes for another project can check a file with Node or Swift
+alone. Both parse it and print its effect surface in the `--json` format
+([`docs/surface-format-v1.md`](docs/surface-format-v1.md)), and add rule
+results with `--rules`:
 
 ```bash
-node js/cli.mjs shapes corpus/word-count.planes     # Node (requires Node.js)
-swift/.build/release/planes-swift shapes corpus/word-count.planes    # Swift (after build)
+node js/cli.mjs shapes manifest.planes             # Node, nothing to build
+node js/cli.mjs shapes manifest.planes --rules
+
+swift build --package-path swift -c release        # Swift, built once
+swift/.build/release/planes-swift shapes manifest.planes
 ```
 
-Both commands print the effect surface as JSON:
+A file that doesn't parse is refused with the line and what was expected, and a
+non-zero exit:
 
 ```
-{
-  "format": 1,
-  "program": "word-count.planes",
-  "kind": "program",
-  "pure": false,
-  "complete": true,
-  "boundaries": ["console"],
-  "kinds": ["show"],
-  "effects": [...]
-}
+$ node js/cli.mjs shapes manifest.planes
+syntax error — line 1: expected from, found 'doing'
+$ swift/.build/release/planes-swift shapes manifest.planes
+shapes: line 1: expected from, found 'doing'
 ```
 
-On a syntax error, both report it to stderr and exit non-zero:
-
-```
-$ node js/cli.mjs shapes invalid.planes 2>&1
-line 1: expected a value, found 'as'
-  a value starts with a number, a quoted string, true, false, nothing, a name,
-  `not`, a list, a record, or a parenthesised expression — a statement word
-  like `show` or `write` cannot stand in for one
-```
-
-To build the Swift CLI:
-
-```bash
-swift build --package-path swift -c release
-```
+That is what a `foreign` line with no `from "…"` target gets.
 
 ---
 
