@@ -175,13 +175,14 @@ def test_host_rules_agree_on_every_scenario():
         _agree(src, effects)
 
 
-def test_a_repeated_destination_is_reported_at_one_of_its_lines():
+def test_a_repeated_destination_is_reported_at_its_first_line():
     """The same request made twice is one declared effect, and a violation names
-    one line for it. Which line, shapes.py leaves to chance: its top-level
-    effects are a Python set, sorted by (boundary, kind, target), so the tie
-    between two sites falls in hash order — which PYTHONHASHSEED changes from run
-    to run. Swift (like js) keeps the first. So this checks Swift's answer is
-    one Python gives, and that Python really gives both."""
+    one line for it: the first. shapes.py's top-level effects are a Python set,
+    sorted by (boundary, kind, target) with `site` as a tie-breaker (F1), so the
+    tie between two sites resolves to the lower line every time rather than
+    falling into hash order — which PYTHONHASHSEED would otherwise change from
+    run to run. This checks Python names line 7 across a spread of hash seeds,
+    and that Swift agrees with it exactly on every one."""
     rules_src = 'rule [no-ingest] anything may not ask to "https://metrics.internal/ingest"\n'
     effects = [{"kind": "ask", "target": "https://metrics.internal/ingest", "site": 7},
                {"kind": "ask", "target": "https://metrics.internal/ingest", "site": 9}]
@@ -189,23 +190,22 @@ def test_a_repeated_destination_is_reported_at_one_of_its_lines():
         "import json, sys\n"
         "from test_swift_host_rules import _python\n"
         "print(json.dumps(_python(sys.argv[1], json.loads(sys.argv[2]))))\n")
-    seen = {}
+    first = "[no-ingest] violated at line 7."
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "rules.planes")
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(rules_src)
+        sw = _swift(p, effects)
+    assert sw["rules"]["violations"][0]["render"].startswith(first), sw
     for seed in range(8):
         env = {**os.environ, "PYTHONHASHSEED": str(seed)}
         r = subprocess.run([sys.executable, "-c", probe, rules_src, json.dumps(effects)], cwd=REPO,
                            capture_output=True, text=True, env=env)
         assert r.returncode == 0, r.stderr
         out = json.loads(r.stdout)
-        seen[out["rules"]["violations"][0]["render"].split("\n")[0]] = out
-    assert len(seen) == 2, f"expected the reference to vary with the hash seed: {list(seen)}"
-    with tempfile.TemporaryDirectory() as d:
-        p = os.path.join(d, "rules.planes")
-        with open(p, "w", encoding="utf-8") as fh:
-            fh.write(rules_src)
-        sw = _swift(p, effects)
-    first = "[no-ingest] violated at line 7."
-    assert sw["rules"]["violations"][0]["render"].startswith(first), sw
-    assert sw == seen[first]
+        assert out["rules"]["violations"][0]["render"].startswith(first), (seed, out)
+        assert out == sw, (f"seed={seed}\n  py={json.dumps(out, ensure_ascii=False)}\n"
+                           f"  swift={json.dumps(sw, ensure_ascii=False)}")
 
 
 def test_effects_with_no_literal_destination_are_refused():

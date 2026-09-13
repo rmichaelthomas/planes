@@ -73,6 +73,23 @@ class Effect:
         return f"{self.kind} {t}"
 
 
+def _effect_sort_key(e):
+    """Sort key for a surface's effect lists: (boundary, kind, target), with
+    `site` as a tie-breaker.
+
+    Two effects that reach the same destination from different lines are
+    distinct set members (site is part of Effect's identity), so a repeated
+    destination ties on (boundary, kind, target) alone. Without `site` in the
+    key, which of the two sorts first depends on the iteration order of the
+    Python `set` they came from — hash order, which PYTHONHASHSEED changes
+    from run to run. Breaking the tie on `site` keeps the first (lowest-line)
+    occurrence first, every run, matching the js/swift ports — their
+    `EffectSet` keeps insertion order and a stable sort does the rest, since
+    neither has this problem to begin with.
+    """
+    return (e.boundary, e.kind, e.target, e.site)
+
+
 @dataclass
 class Surface:
     """A program's total effect surface.
@@ -463,15 +480,15 @@ class Analyser:
 
         surface = Surface(
             approximate=self.approximation_routes(prog),
-            effects=sorted(top, key=lambda e: (e.boundary, e.kind, e.target)),
-            functions={n: sorted(s, key=lambda e: (e.boundary, e.kind, e.target))
+            effects=sorted(top, key=_effect_sort_key),
+            functions={n: sorted(s, key=_effect_sort_key)
                        for n, s in fn_effects.items()},
             modules=set(self.modules),
             unresolved=list(self.unresolved),
             foreign=sorted(
                 {e for d in self.foreigns.values()
                  for e in self.foreign_effects(d)},
-                key=lambda e: (e.boundary, e.kind, e.target)),
+                key=_effect_sort_key),
         )
         return surface
 
