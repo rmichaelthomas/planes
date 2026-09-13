@@ -2096,21 +2096,24 @@ function looseEqual(a, b) {
   return false;
 }
 
-// json.dumps(unwrap(v), indent=2) — the write effect's payload. Whole numbers
-// stay whole; others go out as text so an exact value is not silently rounded.
-export function toJson(v) {
-  function unwrap(x) {
-    if (x instanceof Traced) return unwrap(x.value);
-    if (Array.isArray(x)) return x.map(unwrap);
-    if (x instanceof Map) {
-      const o = {};
-      for (const [k, val] of x) o[k] = unwrap(val);
-      return o;
-    }
-    if (x instanceof PlanesNumber) return x.isWhole() ? Number(x.asInt()) : x.text();
-    return x;
+// A Planes value (Traced/Array/Map/PlanesNumber, nested arbitrarily) as plain
+// JSON-shaped data: whole numbers stay whole; others go out as text so an
+// exact value is not silently rounded. Shared by toJson (below) and toPlain.
+function unwrapPlanesValue(x) {
+  if (x instanceof Traced) return unwrapPlanesValue(x.value);
+  if (Array.isArray(x)) return x.map(unwrapPlanesValue);
+  if (x instanceof Map) {
+    const o = {};
+    for (const [k, val] of x) o[k] = unwrapPlanesValue(val);
+    return o;
   }
-  return pyJsonDumps(unwrap(v));
+  if (x instanceof PlanesNumber) return x.isWhole() ? Number(x.asInt()) : x.text();
+  return x;
+}
+
+// json.dumps(unwrap(v), indent=2) — the write effect's payload.
+export function toJson(v) {
+  return pyJsonDumps(unwrapPlanesValue(v));
 }
 
 export function toHost(x) {
@@ -2122,6 +2125,53 @@ export function toHost(x) {
     return o;
   }
   return x;
+}
+
+// A record-plane entry (Interpreter.records — kind/boundary/target/anchor/
+// when/derivation/format, §97) made safe to cross a structured-clone or JSON
+// boundary. `derivation` nests Deriv objects, and a Deriv's own `value` can
+// be a PlanesNumber (a Fraction of two BigInts) or a Map (a Planes record).
+// structuredClone does not throw on any of that — Map and BigInt are both
+// natively cloneable — but a class instance clones down to a plain object
+// with the same fields and no prototype: `instanceof Deriv` and
+// `instanceof PlanesNumber` are false afterwards and their methods (`.text()`
+// included) are gone, silently, with no exception to catch. JSON.stringify
+// is worse: it throws outright the moment it reaches a BigInt inside a
+// Fraction. (Reported downstream: 5xFive's Cloudflare Workflow `step.do()`
+// structured-clones its argument, and every run failed until 5xFive
+// hand-sanitized the entry first.) toPlain walks the derivation chain the
+// way toJson's unwrapPlanesValue does, for the same reason: an exact
+// rational goes out in the one form the JS port already uses for JSON
+// output — a whole number as a JS number, anything else as its text.
+//
+// No inverse. A record is a write-only trace of a run — the interpreter
+// never reads one back in — so there is nothing here to round-trip into
+// live Deriv/PlanesNumber objects; interp.py's records_from_json does not
+// reconstruct one either, it only checks the format version.
+export function toPlain(entry) {
+  function plainDeriv(d) {
+    if (d === null) return null;
+    return {
+      kind: d.kind,
+      label: d.label,
+      value: unwrapPlanesValue(d.value),
+      inputs: d.inputs.map(plainDeriv),
+      origin: plainDeriv(d.origin),
+      generation: d.generation,
+      releasedCount: d.releasedCount,
+      fingerprint: d.fingerprint,
+    };
+  }
+  return {
+    kind: entry.kind,
+    boundary: entry.boundary,
+    target: entry.target,
+    computed: entry.computed,
+    anchor: { kind: entry.anchor.kind, identity: entry.anchor.identity },
+    when: entry.when,
+    derivation: plainDeriv(entry.derivation),
+    format: entry.format,
+  };
 }
 
 export function fromForeign(x) {
