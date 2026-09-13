@@ -14,5 +14,6 @@ let rest = Array(arguments.dropFirst())
 
 switch sub {
 case "text": TextCommand.run(rest)
+case "tokens": TokensCommand.run(rest)
 default: CLI.fail("planes-swift: unknown or not yet ported command '\(sub)'")
 }

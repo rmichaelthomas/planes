@@ -10,12 +10,10 @@ length/iteration through both implementations and compares, covering astral
 characters and multi-scalar clusters.
 """
 import json
-import os
 import subprocess
 import sys
 
 from planes_text import escape_string_literal, resolve_string_escapes
-
 from swift_host import REPO, SWIFT, command
 
 

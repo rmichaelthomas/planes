@@ -14,6 +14,13 @@ python3 test_swift_text.py                 # one agreement suite (builds if stal
 `import Planes` is the library. `planes-swift` is the agreement CLI; its
 subcommands and output forms mirror `js/cli.mjs` exactly.
 
+The grammar files `js/loader_node.mjs` reads off disk (`grammar/vocabulary.json`,
+`grammar/messages/amber.json`, `grammar/core.json`) are embedded verbatim in
+`Sources/Planes/Generated/GrammarData.swift`, so the library runs where this repo
+is not. That file is generated: edit the grammar, then run
+`python3 scripts/swift_grammar_gen.py`; `test_swift_grammar_data.py` runs its
+`--check` and fails on a stale copy.
+
 ## Porting rules
 
 These are the places Swift differs from Python in ways that change results
@@ -33,6 +40,10 @@ silently. Every one has bitten a port somewhere.
    (`planes_num.py`). No `Double` on any path that computes a Planes value.
 4. **Messages are byte-identical.** An error message is part of the language's
    output and is compared as a string. Port the text, not the gist.
-5. **Port the reference's structure.** Keep `js/`'s file split and function
+5. **Character classes are Python's.** `re`'s `\d` is every Unicode decimal
+   digit, `str.strip()` strips Python's `isspace` set, and both are fixed at
+   Python's Unicode version, not Swift's. Where the reference uses one, port the
+   exact set (`Lexer.swift` does) and drive every member through a suite.
+6. **Port the reference's structure.** Keep `js/`'s file split and function
    names where Swift allows, so a divergence can be found by reading two files
    side by side.

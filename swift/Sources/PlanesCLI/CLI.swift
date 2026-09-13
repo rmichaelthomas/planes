@@ -32,11 +32,15 @@ enum CLI {
         FileHandle.standardOutput.write(Data((text + "\n").utf8))
     }
 
+    /// The file's text, every code point kept. `String(data:encoding:)` only
+    /// validates here: it drops a leading byte-order mark, which Python's
+    /// `open(path, encoding="utf-8")` and Node's `readFileSync(path, "utf-8")`
+    /// both keep, and which reaches the lexer as a stray character.
     static func readFile(_ path: String) -> String {
         guard let data = FileManager.default.contents(atPath: path),
-              let text = String(data: data, encoding: .utf8) else {
+              String(data: data, encoding: .utf8) != nil else {
             fail("planes-swift: cannot read \(path)")
         }
-        return text
+        return String(decoding: data, as: UTF8.self)
     }
 }
