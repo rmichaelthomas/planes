@@ -683,7 +683,9 @@ than hand-kept, so a tool never has to parse prose to learn the vocabulary.
 ```
 
 `grammar_gen.py --check` fails the build if any of these drifts from the code it
-describes. `shapes_cli.py --json` emits an effect surface in the same spirit.
+describes. `shapes_cli.py --json` emits an effect surface in the same spirit —
+the exact format, field by field, is `docs/surface-format-v1.md` and its JSON
+Schema, `grammar/protocols/surface-v1.json`.
 
 ---
 
