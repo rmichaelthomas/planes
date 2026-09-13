@@ -285,6 +285,60 @@ def test_a_show_inside_an_imported_helper_reports_the_line_that_called_it():
         assert lines == ["3", "4"], lines
 
 
+# ============================================== #108: module rename resolution
+
+def _write_files(d, files):
+    paths = {}
+    for name, body in files.items():
+        p = os.path.join(d, name)
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(body)
+        paths[name] = p
+    return paths
+
+
+def test_renaming_a_collision_agrees_between_python_and_js():
+    """Issue #108, reproduction 1. `a` and `b` both define `helper`; main
+    renames b's on import. b's own `label` must reach its OWN helper, not
+    a's — which would silently perform a network call `label` never asks
+    for. Both implementations must give b's answer and b's effects."""
+    with tempfile.TemporaryDirectory() as d:
+        paths = _write_files(d, {
+            "a.planes": 'use http\n\n'
+                       'to helper of x:\n  give ask "https://a.example/" + x\n'
+                       'to fetch-a of x:\n  give helper of x\n',
+            "b.planes": 'to helper of x:\n  give x + " (local)"\n'
+                       'to label of x:\n  give helper of x\n',
+            "main.planes": "use a\nuse b with helper as b-helper\n"
+                          'show label of "hi"\n',
+        })
+        cfg = {"responses": {"https://a.example/hi": "FROM-A"}}
+        po, pt, pe, _ = _py_run(paths["main.planes"], cfg)
+        jo, jt, je, _ = _js_run(paths["main.planes"], cfg)
+        assert (po, pt) == (jo, jt), f"py=({po},{pt}) js=({jo},{jt})"
+        assert po == ["hi (local)"], po
+        assert pe == je == [["show", "hi (local)"]], f"py={pe} js={je}"
+
+
+def test_renaming_a_collision_agrees_between_python_and_js_pure_variant():
+    """Issue #108, reproduction 2 — no network, so a wrong answer cannot
+    hide behind a stubbed effect: `double` must use b's own `helper`
+    (x * 2 = 6), not a's (x + 1 = 4), on both implementations."""
+    with tempfile.TemporaryDirectory() as d:
+        paths = _write_files(d, {
+            "a.planes": 'to helper of x:\n  give x + 1\n'
+                       'to fetch-a of x:\n  give helper of x\n',
+            "b.planes": 'to helper of x:\n  give x * 2\n'
+                       'to double of x:\n  give helper of x\n',
+            "main.planes": "use a\nuse b with helper as b-helper\n"
+                          "show double of 3\n",
+        })
+        po, pt, _, _ = _py_run(paths["main.planes"])
+        jo, jt, _, _ = _js_run(paths["main.planes"])
+        assert (po, pt) == (jo, jt), f"py=({po},{pt}) js=({jo},{jt})"
+        assert po == ["6"], po
+
+
 def test_the_trace_adds_no_effect_of_its_own():
     """`why` performs nothing (test_why_in_planes.py pins that for the
     language) and neither does keeping a derivation beside each output line:

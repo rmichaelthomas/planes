@@ -457,7 +457,7 @@ export class Analyser {
     this.unresolved = [];
     this.depth = 0;
     this._recCache = new Map();
-    this.local = new Map(); // original name -> exported name, for renames
+    this.local = new Map(); // file -> {original name: exported name}, for renames
     this.foreigns = new Map(); // name -> Foreign
     this.funcFile = new Map();
     this.foreignFile = new Map();
@@ -605,14 +605,24 @@ export class Analyser {
         const name = ren.get(node.name) ?? node.name;
         this.foreigns.set(name, node);
         this.foreignFile.set(name, file);
-        if (ren.has(node.name)) this.local.set(node.name, ren.get(node.name));
+        if (ren.has(node.name)) {
+          if (!this.local.has(file)) this.local.set(file, new Map());
+          this.local.get(file).set(node.name, ren.get(node.name));
+        }
         return;
       }
       if (is(node, "FuncDef")) {
+        // Register under the exported name only, keyed by THIS file: a
+        // rename only ever changes what a call site in the FILE THAT WAS
+        // RENAMED sees, never a same-named call written in some other file
+        // (module rename resolution, #108).
         const exported = ren.get(node.name) ?? node.name;
         this.funcs.set(exported, node);
         this.funcFile.set(exported, file);
-        if (exported !== node.name) this.local.set(node.name, exported);
+        if (exported !== node.name) {
+          if (!this.local.has(file)) this.local.set(file, new Map());
+          this.local.get(file).set(node.name, exported);
+        }
         for (const s of node.body) scan(s);
       } else if (is(node, "Use")) {
         this.modules.add(node.module);
@@ -663,7 +673,7 @@ export class Analyser {
         out.add(new Effect(node.name, K.get(node.name), target, computed, { site: node.line, derivation: deriv }));
         return out;
       }
-      const target = this.local.get(node.name) ?? node.name;
+      const target = this.local.get(this.currentFile)?.get(node.name) ?? node.name;
       if (this.foreigns.has(target)) {
         out.union(this.foreignEffects(this.foreigns.get(target), node.args, consts));
         return out;
@@ -1150,13 +1160,18 @@ export class Analyser {
     return [UNKNOWN, new StaticDeriv("unknown", label, [n], null, F)];
   }
 
+  // `node.name` is resolved through `this.local`, scoped to the file
+  // currently being walked, the same as an ordinary call in `walk` —
+  // otherwise folding a module's own body could inline a DIFFERENT file's
+  // same-named function (module rename resolution, #108).
   constCall(node, consts) {
     const F = this.currentFile;
-    const fn = this.funcs.get(node.name);
+    const target = this.local.get(this.currentFile)?.get(node.name) ?? node.name;
+    const fn = this.funcs.get(target);
     if (fn === undefined || this.depth > 6) {
       return [UNKNOWN, new StaticDeriv("unknown", node.name, [], null, F)];
     }
-    if (this.isRecursive(node.name)) {
+    if (this.isRecursive(target)) {
       return [UNKNOWN, new StaticDeriv("unknown", node.name, [], null, F)];
     }
     const argPairs = node.args.map((a) => this.const_(a, consts));
@@ -1170,7 +1185,7 @@ export class Analyser {
       return [UNKNOWN, new StaticDeriv("unknown", node.name, argNodes, null, F)];
     }
 
-    const calleeFile = this.funcFile.get(node.name) ?? this.currentFile;
+    const calleeFile = this.funcFile.get(target) ?? this.currentFile;
     const inner = new Consts();
     for (let idx = 0; idx < fn.params.length; idx++) {
       const [v, n] = argPairs[idx];

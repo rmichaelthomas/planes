@@ -405,7 +405,7 @@ class Analyser:
         self.unresolved = []
         self.depth = 0           # guards recursive constant evaluation
         self._rec_cache = {}     # name -> can it reach itself?
-        self.local = {}          # original name -> exported name, for renames
+        self.local = {}          # file -> {original name: exported name}, for renames
         self.foreigns = {}       # name -> Foreign declaration
         self.func_file = {}      # name -> file path that declared it
         self.foreign_file = {}   # name -> file path that declared it
@@ -565,19 +565,22 @@ class Analyser:
                 self.foreigns[name] = node
                 self.foreign_file[name] = file
                 if node.name in renames:
-                    self.local[node.name] = renames[node.name]
+                    self.local.setdefault(file, {})[node.name] = renames[node.name]
                 return
             if isinstance(node, FuncDef):
                 # Register under the exported name only. Also registering
                 # the original would put the colliding name straight back
                 # into the shared table — the thing the rename fixes.
                 # Calls inside the defining file are resolved separately
-                # via `self.local`.
+                # via `self.local`, keyed by THIS file: a rename only ever
+                # changes what a call site in the FILE THAT WAS RENAMED
+                # sees, never a same-named call written in some other file
+                # (module rename resolution, #108).
                 exported = renames.get(node.name, node.name)
                 self.funcs[exported] = node
                 self.func_file[exported] = file
                 if exported != node.name:
-                    self.local[node.name] = exported
+                    self.local.setdefault(file, {})[node.name] = exported
                 for s in node.body:
                     scan(s)
             elif isinstance(node, Use):
@@ -636,7 +639,7 @@ class Analyser:
                 out.add(Effect(node.name, EFFECT_KINDS[node.name],
                                target, computed, site=node.line, derivation=deriv))
                 return out
-            target = self.local.get(node.name, node.name)
+            target = self.local.get(self.current_file, {}).get(node.name, node.name)
             if target in self.foreigns:
                 out |= self.foreign_effects(
                     self.foreigns[target], node.args, consts)
@@ -1212,12 +1215,18 @@ class Analyser:
         are the argument nodes only — the callee's internal derivation
         chain is not inlined, so nested calls do not grow the graph
         multiplicatively (P-Q10).
+
+        `node.name` is resolved through `self.local`, scoped to the file
+        currently being walked, the same as an ordinary call in `walk` —
+        otherwise folding a module's own body could inline a DIFFERENT
+        file's same-named function (module rename resolution, #108).
         """
-        fn = self.funcs.get(node.name)
+        target = self.local.get(self.current_file, {}).get(node.name, node.name)
+        fn = self.funcs.get(target)
         if fn is None or self.depth > 6:
             return UNKNOWN, StaticDeriv("unknown", node.name,
                                         file=self.current_file)
-        if self.is_recursive(node.name):
+        if self.is_recursive(target):
             return UNKNOWN, StaticDeriv("unknown", node.name,
                                         file=self.current_file)
         arg_pairs = [self.const(a, consts) for a in node.args]
@@ -1239,7 +1248,7 @@ class Analyser:
             return UNKNOWN, StaticDeriv("unknown", node.name, inputs=arg_nodes,
                                         file=self.current_file)
 
-        callee_file = self.func_file.get(node.name, self.current_file)
+        callee_file = self.func_file.get(target, self.current_file)
         inner = Consts()
         for p, (v, n) in zip(fn.params, arg_pairs):
             inner.set(p, v, StaticDeriv("param", p, inputs=(n,), file=callee_file))

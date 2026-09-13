@@ -771,6 +771,105 @@ def test_a_module_still_calls_its_own_functions_after_being_renamed():
         _clean("demo/_ren4")
 
 
+# ================================================================ #108: renaming a
+# collision must not make the renamed module call the OTHER module's function
+
+def test_renaming_a_collision_leaves_a_module_calling_its_own_function():
+    """Issue #108, reproduction 1. Both a and b define `helper`; main renames
+    b's on import. b's own `label` must still reach its OWN helper — not a's,
+    which would silently make a network call `label` never asks for."""
+    _write("demo/_ren8", {
+        "a.planes": 'use http\n\n'
+                    'to helper of x:\n  give ask "https://a.example/" + x\n'
+                    'to fetch-a of x:\n  give helper of x\n',
+        "b.planes": 'to helper of x:\n  give x + " (local)"\n'
+                    'to label of x:\n  give helper of x\n',
+        "main.planes": "use a\nuse b with helper as b-helper\n"
+                       'show label of "hi"\n',
+    })
+    try:
+        i = Interpreter(http=lambda u: "FROM-A")
+        out = i.run_file("demo/_ren8/main.planes")
+        assert out == ["hi (local)"], f"got {out}"
+        assert i.effects == [("show", "hi (local)")], i.effects
+    finally:
+        _clean("demo/_ren8")
+
+
+def test_renaming_a_collision_leaves_a_module_using_its_own_pure_value():
+    """Issue #108, reproduction 2 — the pure variant. No network at all, so
+    the wrong answer cannot hide behind a stubbed effect: `double` must use
+    b's own `helper` (x * 2 = 6), not a's (x + 1 = 4)."""
+    _write("demo/_ren9", {
+        "a.planes": 'to helper of x:\n  give x + 1\n'
+                    'to fetch-a of x:\n  give helper of x\n',
+        "b.planes": 'to helper of x:\n  give x * 2\n'
+                    'to double of x:\n  give helper of x\n',
+        "main.planes": "use a\nuse b with helper as b-helper\n"
+                       "show double of 3\n",
+    })
+    try:
+        out = Interpreter().run_file("demo/_ren9/main.planes")
+        assert out == ["6"], f"got {out}"
+    finally:
+        _clean("demo/_ren9")
+
+
+def test_the_effect_surface_agrees_with_the_actual_run_after_a_rename_collision():
+    """The oracle (shapes.py's own module docstring): every runtime effect
+    must appear in the static surface, and the surface must not claim a reach
+    the run does not have. Before the #108 fix, the two disagreed here in the
+    dangerous direction — the top-level surface reported no network reach
+    while the (then-buggy) interpreter actually made one.
+
+    `label`/`b-helper` are b's own, pure, functions: their DECLARED surface
+    must be empty. `fetch-a`/`helper` are a's own: they genuinely reach the
+    network if ever called, and the surface must keep saying so (never
+    under-report), even though nothing at main's top level calls them."""
+    from shapes import analyse_file
+    _write("demo/_ren10", {
+        "a.planes": 'use http\n\n'
+                    'to helper of x:\n  give ask "https://a.example/" + x\n'
+                    'to fetch-a of x:\n  give helper of x\n',
+        "b.planes": 'to helper of x:\n  give x + " (local)"\n'
+                    'to label of x:\n  give helper of x\n',
+        "main.planes": "use a\nuse b with helper as b-helper\n"
+                       'show label of "hi"\n',
+    })
+    try:
+        i = Interpreter(http=lambda u: "FROM-A")
+        out = i.run_file("demo/_ren10/main.planes")
+        # The actual run: b's own answer, and no network effect logged.
+        assert out == ["hi (local)"], out
+        assert i.effects == [("show", "hi (local)")], i.effects
+
+        s = analyse_file("demo/_ren10/main.planes")
+        # The oracle: every runtime effect (kind, target) must be among the
+        # ones the top-level static surface claims — checked against the
+        # ACTUAL run above, not a hardcoded expectation, so a regression in
+        # either interp.py or shapes.py alone fails this.
+        runtime_pairs = {(kind, target) for kind, target, *_ in i.effects}
+        static_pairs = {(e.kind, e.target) for e in s.effects}
+        assert runtime_pairs == static_pairs, (runtime_pairs, static_pairs)
+        # And exactly — the narrower "what does running THIS file do"
+        # question, with the exact (non-computed) target known statically.
+        assert [(e.kind, e.target, e.computed) for e in s.effects] == \
+            [("show", "hi (local)", False)], s.effects
+        # b's own functions never reach the network.
+        assert s.functions["label"] == [], s.functions["label"]
+        assert s.functions["b-helper"] == [], s.functions["b-helper"]
+        # a's own functions still show their real (unreachable-from-here, but
+        # real if ever called) network reach — the declared surface never
+        # hides what a function can do.
+        assert any(e.kind == "ask" for e in s.functions["fetch-a"]), \
+            s.functions["fetch-a"]
+        assert any(e.kind == "ask" for e in s.functions["helper"]), \
+            s.functions["helper"]
+        assert not s.unresolved, s.unresolved
+    finally:
+        _clean("demo/_ren10")
+
+
 def test_several_renames_from_one_module():
     _write("demo/_ren5", {
         "lib.planes": 'to one:\n  give 1\n\nto two:\n  give 2\n',

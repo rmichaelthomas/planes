@@ -560,7 +560,7 @@ public final class Analyser {
     var unresolved: [String] = []
     var depth = 0
     private var recCache: [CodePoints: Bool] = [:]
-    var local = NameMap<String>()  // original name -> exported name, for renames
+    var local: [String?: NameMap<String>] = [:]  // file -> {original name: exported name}, for renames
     var foreigns = NameMap<AST.Foreign>()
     var funcFile = NameMap<String?>()
     var foreignFile = NameMap<String?>()
@@ -692,14 +692,26 @@ public final class Analyser {
                 let name = renames[f.name] ?? f.name
                 foreigns[name] = f
                 foreignFile[name] = .some(file)
-                if let renamed = renames[f.name] { local[f.name] = renamed }
+                if let renamed = renames[f.name] {
+                    var m = local[file] ?? NameMap<String>()
+                    m[f.name] = renamed
+                    local[file] = m
+                }
                 return
             }
             if let fn = node as? AST.FuncDef {
+                // Register under the exported name only, keyed by THIS file: a
+                // rename only ever changes what a call site in the FILE THAT
+                // WAS RENAMED sees, never a same-named call written in some
+                // other file (module rename resolution, #108).
                 let exported = renames[fn.name] ?? fn.name
                 funcs[exported] = fn
                 funcFile[exported] = .some(file)
-                if !sameText(exported, fn.name) { local[fn.name] = exported }
+                if !sameText(exported, fn.name) {
+                    var m = local[file] ?? NameMap<String>()
+                    m[fn.name] = exported
+                    local[file] = m
+                }
                 for s in fn.body { scan(s) }
             } else if let u = node as? AST.Use {
                 if !modules.contains(where: { sameText($0, u.module) }) { modules.append(u.module) }
@@ -752,7 +764,7 @@ public final class Analyser {
                 out.add(Effect(c.name, boundary, target, computed, site: c.line, derivation: deriv))
                 return out
             }
-            let target = local[c.name] ?? c.name
+            let target = local[currentFile]?[c.name] ?? c.name
             if let decl = foreigns[target] {
                 out.union(foreignEffects(decl, c.args, consts))
                 return out
@@ -1175,12 +1187,17 @@ public final class Analyser {
         return (UNKNOWN, StaticDeriv("unknown", label, [n], nil, F))
     }
 
+    /// `node.name` is resolved through `local`, scoped to the file currently
+    /// being walked, the same as an ordinary call in `walk` — otherwise
+    /// folding a module's own body could inline a DIFFERENT file's
+    /// same-named function (module rename resolution, #108).
     func constCall(_ node: AST.Call, _ consts: Consts) -> (StaticValue, StaticDeriv) {
         let F = currentFile
-        guard let fn = funcs[node.name], depth <= 6 else {
+        let target = local[currentFile]?[node.name] ?? node.name
+        guard let fn = funcs[target], depth <= 6 else {
             return (UNKNOWN, StaticDeriv("unknown", node.name, [], nil, F))
         }
-        if isRecursive(node.name) { return (UNKNOWN, StaticDeriv("unknown", node.name, [], nil, F)) }
+        if isRecursive(target) { return (UNKNOWN, StaticDeriv("unknown", node.name, [], nil, F)) }
         let argPairs = node.args.map { const_($0, consts) }
         let argNodes = argPairs.map(\.1)
         if argPairs.count != fn.params.count {
@@ -1191,7 +1208,7 @@ public final class Analyser {
             return (UNKNOWN, StaticDeriv("unknown", node.name, argNodes, nil, F))
         }
 
-        let calleeFile = fileOf(node.name, currentFile)
+        let calleeFile = fileOf(target, currentFile)
         let inner = Consts()
         for (p, pair) in zip(fn.params, argPairs) {
             inner.set(p, pair.0, StaticDeriv("param", p, [pair.1], nil, calleeFile))

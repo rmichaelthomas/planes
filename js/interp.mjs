@@ -1814,33 +1814,37 @@ export class Interpreter {
   }
 
   call(name, args, env, line = 0) {
-    if (!this.funcs.has(name) && builtinNames().has(name)) {
+    // A module's own calls resolve to its own definitions first, by the name
+    // it wrote at the call site: an importer's rename only changes what
+    // OTHERS call a function, never what the defining file calls itself, and
+    // a same-named function belonging to a DIFFERENT file is a different
+    // function (module rename resolution, #108). Only once the current file
+    // has no such definition does resolution fall through to the flat,
+    // importer-facing view below — "what it itself uses", per the existing
+    // rules.
+    let fn = null;
+    for (const f of this.funcs.values()) {
+      if (f.file === this.currentFile && f.local === name) {
+        fn = f;
+        break;
+      }
+    }
+    let iname;
+    if (fn !== null) {
+      iname = name;
+    } else if (!this.funcs.has(name) && builtinNames().has(name)) {
       if (args.length !== 1) {
         throw new PlanesError("wrong-arity", `'${name}' takes 1 value, given ${args.length}`, `write it as \`${name} of x\``);
       }
       const arg = args[0] instanceof Traced ? args[0] : this.eval(args[0], env);
       return this.builtin(name, arg, line || null);
-    }
-    if (this.foreigns.has(name) && !this.funcs.has(name)) {
+    } else if (this.foreigns.has(name) && !this.funcs.has(name)) {
       return this.call_foreign(this.foreigns.get(name), args, env);
-    }
-    let fn;
-    let iname;
-    if (this.funcs.has(name)) {
+    } else if (this.funcs.has(name)) {
       fn = this.funcs.get(name);
       iname = name;
     } else {
-      fn = null;
-      for (const f of this.funcs.values()) {
-        if (f.local === name) {
-          fn = f;
-          break;
-        }
-      }
-      if (fn === null) {
-        throw new PlanesError("unknown-function", `no function named '${name}'`, `define it: to ${name}: ...`);
-      }
-      iname = fn.local || fn.name;
+      throw new PlanesError("unknown-function", `no function named '${name}'`, `define it: to ${name}: ...`);
     }
     if (args.length !== fn.params.length) {
       const word = fn.params.length === 1 ? "value" : "values";
