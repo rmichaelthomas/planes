@@ -14,6 +14,30 @@ python3 test_swift_text.py                 # one agreement suite (builds if stal
 `import Planes` is the library. `planes-swift` is the agreement CLI; its
 subcommands and output forms mirror `js/cli.mjs` exactly.
 
+## What is ported
+
+| Reference | Swift | Suite |
+|---|---|---|
+| `planes_text.py` | `PlanesText.swift` | `test_swift_text.py` |
+| `planes_num.py` (exact rationals, over `BigInt.swift`) | `PlanesNumber.swift` | `test_swift_num.py` |
+| `hashlib.sha256` | `SHA256.swift` (CryptoKit) | `test_swift_hash.py` |
+| grammar data | `Grammar.swift`, `Generated/GrammarData.swift` | `test_swift_grammar_data.py` |
+| `lexer.py` | `Lexer.swift` | `test_swift_lexer.py` |
+| `parser.py` and the canonical AST form | `Nodes.swift`, `Parser.swift`, `Canonical.swift`, `CoreRestrict.swift` | `test_swift_parser.py` |
+| `shapes.py`, `shapes_cli.py` | `Shapes.swift`, `Modules.swift` | `test_swift_shapes.py`, `test_swift_shapes_derivation.py`, `test_swift_shapes_cli.py`, `test_swift_metacircular_shapes.py` |
+| `rules.py`, rule rendering | `Rules.swift`, `Render.swift` | `test_swift_rules.py` |
+| Python's Unicode tables | `PythonUnicode.swift`, `Generated/PythonUnicodeData.swift` | `test_swift_unicode_data.py` |
+
+Not yet ported: the interpreter (`interp.py`, the host and module effects), so
+`planes-swift` cannot run a program.
+
+`HostRules.swift` is the one Swift-only surface: a host application parses a
+`.planes` rules source, describes the effects it means to perform (a network
+ask with a literal destination, a write), and checks them, getting back the
+same `Violation`s `rules.py` would report for a program performing those
+effects — plus each violated rule's `because`. `test_swift_host_rules.py`
+holds it to shapes.py and rules.py on that equivalent program.
+
 The grammar files `js/loader_node.mjs` reads off disk (`grammar/vocabulary.json`,
 `grammar/messages/amber.json`, `grammar/core.json`) are embedded verbatim in
 `Sources/Planes/Generated/GrammarData.swift`, so the library runs where this repo
@@ -27,11 +51,6 @@ because shapes.py folds text through them and neither Swift's runtime tables nor
 Foundation's normaliser match Python's (rule 5). After a Python upgrade, run
 `python3 scripts/swift_unicode_gen.py`; `test_swift_unicode_data.py` runs its
 `--check`.
-
-`HostRules.swift` is the entry point for an application that checks the effects
-it is about to perform (a request to a URL) against Planes rules it ships as
-source, without running a Planes program; `test_swift_host_rules.py` holds it to
-shapes.py and rules.py.
 
 ## Porting rules
 

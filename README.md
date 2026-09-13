@@ -97,6 +97,11 @@ they are the check.
 The third one is the interesting one. `grammar/interp.planes` is a Planes
 interpreter written in Planes; it runs on either of the other two.
 
+A fourth is under way. `swift/` is Planes in Swift, a port of the reference held
+to the same agreement suites (`test_swift_*.py`). It lexes, parses, computes
+effect surfaces and checks rules; it does not yet run programs. See
+[`swift/README.md`](swift/README.md).
+
 ```bash
 $ node js/cli.mjs meta run ordinary.planes
 ```
