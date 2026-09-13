@@ -14,11 +14,13 @@ mark, change the data at the top and re-run — never hand-edit an output.
 
 No dependencies.
 
-Typography — locked (v16.0 §176). Red Hat Display 700 for the wordmark,
+Typography — locked (v8.0). Red Hat Display 700 for the wordmark,
 headings, and nav; Martian Mono 400–500 for body copy, UI labels, and code.
-UI palette — locked (v16.0 §176). Clay #A65A2E (dominant role) and
-slate-blue #4A5B68 (minority role) on paper #F7F2E9, graphite #211D19,
-and line #D6C9B4. Both accent colors are WCAG AA verified for contrast.
+UI palette — locked (v8.0). Clay #A65A2E (dominant role) and slate-blue
+#4A5B68 (minority role) on paper #F7F2E9, graphite #211D19, and line
+#D6C9B4. Both accents clear WCAG AA against paper, computed: clay 4.57:1,
+slate-blue 6.30:1. The plane colours are locked only as provisional and
+stated (v7.0 §87). v16.0 §176 found the sheet below still said none of this.
 """
 
 import math
@@ -336,7 +338,7 @@ SHEET_TEMPLATE = r"""<!DOCTYPE html>
 
 <header>
   <h1>planes — visual identity</h1>
-  <p class="sub">Master sheet and generation instructions · Locked per v16.0 §176 · July 24, 2026</p>
+  <p class="sub">Master sheet and generation instructions · typography, UI palette and lockup locked (v8.0) · July 24, 2026</p>
 </header>
 
 <h2>The mark</h2>
@@ -348,10 +350,13 @@ SHEET_TEMPLATE = r"""<!DOCTYPE html>
 </div>
 
 <h2>Typography</h2>
-<p><strong>Locked (v16.0 §176).</strong> Display typeface is Red Hat Display, weight 700, for wordmarks, headings, and navigation. Body and UI labels use Martian Mono, weights 400–500, for all running text, UI labels, and code.</p>
+<p><strong>Locked (v8.0).</strong> Red Hat Display 700 for the wordmark, headings, and nav. Martian Mono 400–500 for body copy, UI labels, and code.</p>
+
+<h2>UI palette</h2>
+<p><strong>Locked (v8.0).</strong> A duotone accent, separate from the mark's plane colors: clay <code>#A65A2E</code> (dominant — links, primary emphasis) and slate-blue <code>#4A5B68</code> (minority — secondary flags, quieter signal), on paper <code>#F7F2E9</code>, graphite <code>#211D19</code>, line <code>#D6C9B4</code>. Both accents clear WCAG AA against paper, computed rather than estimated: clay 4.57:1, slate-blue 6.30:1.</p>
 
 <h2>Plane colors</h2>
-<p>Locked (v16.0 §176). The plane-to-color mapping is a 3D fact — each plane is defined by its basis vectors and carries its color.</p>
+<p>Locked as provisional (v7.0 §87). The binding of color to plane is stated so it stops being arbitrary; the colors themselves are data in the script, a one-line change.</p>
 <div class="card">
 {swatches}
 </div>
@@ -493,7 +498,7 @@ sheet.save('/tmp/contact_sheet.png')
 </div>
 
 <footer>
-planes — visual identity master sheet. Locked per v16.0 §176. Regenerate everything with <code>python3 render_logo.py</code>.
+planes — visual identity master sheet. Typography, UI palette and lockup locked (v8.0). Regenerate everything with <code>python3 render_logo.py</code>.
 </footer>
 
 </div>
