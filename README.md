@@ -81,6 +81,47 @@ Both pages are also hosted, with no install: <https://rmichaelthomas.github.io/p
 The gate needs `ruff` and `mypy`, which live in `./.venv`. It tells you so at
 step one if they are missing.
 
+### Checking a file without Python
+
+Manifest authors and other downstream projects can parse and analyse a `.planes`
+file without Python, using Node or Swift:
+
+```bash
+node js/cli.mjs shapes corpus/word-count.planes     # Node (requires Node.js)
+swift/.build/release/planes-swift shapes corpus/word-count.planes    # Swift (after build)
+```
+
+Both commands print the effect surface as JSON:
+
+```
+{
+  "format": 1,
+  "program": "word-count.planes",
+  "kind": "program",
+  "pure": false,
+  "complete": true,
+  "boundaries": ["console"],
+  "kinds": ["show"],
+  "effects": [...]
+}
+```
+
+On a syntax error, both report it to stderr and exit non-zero:
+
+```
+$ node js/cli.mjs shapes invalid.planes 2>&1
+line 1: expected a value, found 'as'
+  a value starts with a number, a quoted string, true, false, nothing, a name,
+  `not`, a list, a record, or a parenthesised expression — a statement word
+  like `show` or `write` cannot stand in for one
+```
+
+To build the Swift CLI:
+
+```bash
+swift build --package-path swift -c release
+```
+
 ---
 
 ## Three implementations
