@@ -144,7 +144,9 @@ PR #101 replaced `trim()` with Python's whitespace set in the lexer, and listed 
 - `README.md`'s foreign example spells a POST as `doing ask` (v37.1 §531). It is relabelled `doing send` in B1 (Track 0 #9), not here.
 - Not included: `reports/CORE_SUBSET.md`'s stale "half the keywords" (v18.0 §206). It lives in `reports/`, which is archival.
 
-**H6. Four-way `sine` agreement, then the determinism claim.** No suite compares `sine` digit for digit across hosts. Each tests its own (e.g. `js/test/exactness.test.mjs`).
+**H6. Four-way `sine` agreement, then the determinism claim.** No suite was found that compares `sine` digit for digit across hosts. Each tests its own (e.g. `js/test/exactness.test.mjs`).
+- The gap has bitten once. `test_world_kernel_conformance.py`'s docstring records Python and JS `sine` results disagreeing "in a low decimal digit" during the kernel spike. The fixture now rounds before comparing, so that suite no longer detects a `sine` difference.
+- *Spot check, September 13:* `sine_degrees` in Python and `sineDegrees` in JS return identical exact fractions for 27 angles (integers, negatives, fractions, `360000030`). This is not a substitute for the suite.
 - Add an agreement test sweeping many angles (including large, negative and quarter-turn ones) through Python, JS, `grammar/interp.planes` and Swift's `PlanesNumber`.
 - Once it passes, add one README sentence: Planes computes the same numbers on every machine and in every implementation (#19).
 
