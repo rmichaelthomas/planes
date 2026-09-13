@@ -59,5 +59,13 @@ docs/superpowers/
 # assets/ as its own commit rather than living here.
 .superpowers/
 
-# The Swift host's build products.
+# The Swift host's build products: swift/.build/ from `swift build
+# --package-path swift`, and the root /.build/ from `swift build` against the
+# root Package.swift (E3) — including a triple-specific subdirectory such as
+# arm64-apple-ios/ when built for another platform.
 swift/.build/
+/.build/
+
+# Xcode's per-checkout SwiftPM state when a package is opened directly in
+# Xcode (e.g. to verify an iOS destination) — machine-local, never committed.
+.swiftpm/
