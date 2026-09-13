@@ -4,7 +4,8 @@ The third host, after the Python reference and `js/`. It is a port of the
 reference, held to the same agreement suites: each `test_swift_*.py` at the repo
 root is its `test_js_*.py` counterpart with `planes-swift` in place of
 `node js/cli.mjs`, and compares against the Python implementation. It has no
-dependencies and targets macOS 14.
+dependencies and targets macOS 14 (the `Planes` library also targets iOS 17;
+see "The root manifest" below).
 
 ```bash
 swift build --package-path swift          # the library and the CLI
@@ -13,6 +14,47 @@ python3 test_swift_text.py                 # one agreement suite (builds if stal
 
 `import Planes` is the library. `planes-swift` is the agreement CLI; its
 subcommands and output forms mirror `js/cli.mjs` exactly.
+
+## The root manifest (E3)
+
+SwiftPM resolves a remote package dependency (`.package(url: ..., from: ...)`)
+only from a manifest at the repository root, never one in a subdirectory
+(Koncord v1.12 build prompt §2) — so `/Package.swift`, at the repo root, is
+what a downstream consumer actually depends on. It is not a second copy of
+the sources: it points `path:` at these same `Sources/Planes` and
+`Sources/PlanesCLI` directories, under the same product names (`Planes`,
+`planes-swift`). `swift/Package.swift` keeps working unchanged for local
+development and for the `test_swift_*.py` suites (`swift_host.py` always
+builds `--package-path swift`); `test_swift_root_package.py` holds the root
+manifest to it — same products and targets by `swift package describe --type
+json`, plus an actual `swift build` from the root, cached the way
+`swift_host.py` caches `swift/`'s binary.
+
+Platforms: `.macOS(.v14)` and `.iOS(.v17)`. The platform list is
+package-wide — it is not possible to give one target in a manifest a
+different platform list than another — so adding iOS was only safe to do
+after checking nothing under `Sources/` is macOS-only: no `Process` (Foundation's
+process-launching type, unavailable on iOS) anywhere in `Sources/Planes` or
+`Sources/PlanesCLI`, no `#if os(macOS)`, and every `FileManager` use
+(`Modules.swift`, `EffectSurfaceToolCommand.swift`, `CLI.swift`) is ordinary
+path/file access available on iOS — nothing reads a home directory or
+anything else iOS sandboxes away at compile time. Verified both ways:
+`swift build --triple arm64-apple-ios17.0 --sdk $(xcrun --sdk iphoneos
+--show-sdk-path)` from the root, and `xcodebuild -scheme Planes -destination
+'generic/platform=iOS' build`, both succeed for the `Planes` library target
+(the produced binary's load command reports `platform 2` / `minos 17.0`,
+confirmed with `otool -l`). `PlanesCLI` also happens to compile for iOS
+(nothing in it is macOS-only either), but stays a plain command-line
+executable — iOS has no notion of running one outside a jailbreak, so its
+practical iOS relevance is nil regardless of whether it type-checks. It is
+kept macOS-only in practice, and the root manifest's `planes-swift` product
+is not something an iOS consumer would ever depend on — only `Planes`,
+the library, is.
+
+A repo-internal benchmark tool (H4, added separately) is deliberately **not**
+in the root manifest: it uses `Process` and `Darwin` APIs freely
+(macOS-only, on purpose), and is not a product a downstream consumer should
+ever see.
 
 ## What is ported
 
@@ -37,6 +79,28 @@ ask with a literal destination, a write), and checks them, getting back the
 same `Violation`s `rules.py` would report for a program performing those
 effects — plus each violated rule's `because`. `test_swift_host_rules.py`
 holds it to shapes.py and rules.py on that equivalent program.
+
+### Measuring `HostRules` cost (H4)
+
+`Sources/HostRulesBench` is a repo-internal timing tool (not an agreement
+suite; not run by `scripts/ci.sh`) answering Koncord v1.10 §272.4, which
+recorded the per-page rule-check cost as unmeasured. It generates a
+synthetic rules fixture scaled up from `demo/rules/exception.planes`'s shape
+(one default-deny rule plus many named permits, each with `because`) at ~50
+and ~200 rules, checks each against a synthetic 150-effect "page" of asks
+(clean hits on permitted endpoints, a permitted host with a tracking query
+string no rule named, and hosts no rule mentions at all), and reports
+p50/p95 (plus min/p99/max/mean) for loading/compiling the rules and for
+checking a page, over thousands of iterations:
+
+```bash
+cd swift
+swift build -c release --product HostRulesBench
+.build/release/HostRulesBench host-rules-bench-results.md
+```
+
+Results (machine specs, iteration counts, and a concurrent-build caveat
+included) are in `host-rules-bench-results.md`, next to this file.
 
 The grammar files `js/loader_node.mjs` reads off disk (`grammar/vocabulary.json`,
 `grammar/messages/amber.json`, `grammar/core.json`) are embedded verbatim in
