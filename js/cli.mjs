@@ -28,6 +28,8 @@ import {
   NotANumber,
   NumberError,
   numberFromText,
+  sineDegrees,
+  rootOf,
 } from "./planes_num.mjs";
 import {
   resolveStringEscapes,
@@ -185,6 +187,13 @@ function numOp(op) {
       return PlanesNumber.parse(a[0]).div(PlanesNumber.parse(a[1])).text();
     case "round":
       return PlanesNumber.parse(a[0]).roundTo(Number(a[1])).text();
+    case "sine":
+      // H6: the four-way sine agreement suite drives this the same way
+      // `sine of d` does in a running program — parse the degrees, take the
+      // sine, render the same `.text()` a `show` would print.
+      return sineDegrees(PlanesNumber.parse(a[0])).text();
+    case "root":
+      return rootOf(PlanesNumber.parse(a[0])).text();
     case "frac":
       return new PlanesNumber(new Fraction(BigInt(a[0]), BigInt(a[1]))).text();
     case "cmp":
