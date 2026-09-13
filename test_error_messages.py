@@ -536,13 +536,18 @@ def test_the_two_fixed_messages_are_in_the_catalogue_as_naming_a_fix():
 
 def test_the_self_hosted_work_list_is_empty():
     """The endpoint. Not "71 clauses were written" — three states, and the
-    third at zero, the same shape the reference reached 0 of 109 in."""
+    third at zero, the same shape the reference reached 0 of 109 in.
+
+    116 -> 118 with F3 (fix/f3-reserved-word-name-message): `to-decl-name-
+    arity`'s two refusals (a reserved word starting or appearing in a `to`
+    name) are new self-hosted raise sites, ported from parser.py's
+    prescan_funcs alongside the message fix itself, and both name a fix."""
     ec = _coverage()
     sites = ec.self_hosted_sites()
     total = sum(len(v) for v in sites.values())
     assert len(sites[ec.SHORTFALL]) == 0, [
         (s[0], s[1], s[2]) for s in sites[ec.SHORTFALL]]
-    assert total == 116, total
+    assert total == 118, total
     assert len(sites[ec.NAMES_FIX]) + len(sites[ec.DELIBERATE]) == total
 
 
@@ -647,6 +652,70 @@ def test_every_self_hosted_site_carries_its_tag_or_none():
             assert tag is None or (tag and " " not in tag), site
             # Every raise site in these files is inside a function.
             assert fn and " " not in fn, site
+
+
+# ============================== 7. F3 — a reserved word in a `to` name
+#
+# A third call site, distinct from section 2's `expect("NAME")` gate:
+# prescan_funcs assembles a `to` name from several NAME tokens before
+# deciding whether one of them is a reserved word, so its message has to be
+# built from the whole span rather than one bad token. It used to stop
+# collecting at the reserved word, so `to dawn and dusk:` reported the name
+# as "dawn and" — truncated at the very word that made it fail — and then
+# dumped all 32 reserved words, none of which said which of the 32 was the
+# problem. The fix quotes the name exactly as written, wherever in it the
+# reserved word lands, and replaces the dump with the one word that
+# actually matters and a real next move.
+
+RESERVED_WORD_MID_NAME = "to dawn and dusk:\n  give 1\n"
+RESERVED_WORD_FIRST_IN_NAME = "to and dusk:\n  give 1\n"
+RESERVED_WORD_LAST_IN_NAME = "to dawn dusk and:\n  give 1\n"
+
+
+def test_a_reserved_word_in_a_function_name_quotes_the_name_as_written():
+    msg = _py_error(RESERVED_WORD_MID_NAME)
+    assert msg == (
+        "line 1: 'and' is a reserved word and cannot appear in the "
+        "function name 'dawn and dusk'\n"
+        "  join the words with a hyphen instead of a space, or reword "
+        "to avoid 'and'"), msg
+
+
+def test_the_reserved_word_message_names_the_word_wherever_it_lands():
+    """Whether the reserved word opens the name or closes it, the message
+    still quotes the whole name — not just the words seen before it."""
+    for src, expected in (
+            (RESERVED_WORD_FIRST_IN_NAME,
+             "line 1: 'and' is a reserved word and cannot start the "
+             "function name 'and dusk'\n"
+             "  join the words with a hyphen instead of a space, or "
+             "reword to avoid 'and'"),
+            (RESERVED_WORD_LAST_IN_NAME,
+             "line 1: 'and' is a reserved word and cannot appear in the "
+             "function name 'dawn dusk and'\n"
+             "  join the words with a hyphen instead of a space, or "
+             "reword to avoid 'and'"),
+    ):
+        msg = _py_error(src)
+        assert msg == expected, (src, msg)
+
+
+def test_a_lone_reserved_word_name_has_nothing_to_hyphenate():
+    """`to and:` has no other word to join it with, so the fix falls back to
+    rewording rather than suggesting a hyphen that would not help."""
+    msg = _py_error("to and:\n  give 1\n")
+    assert msg == (
+        "line 1: 'and' is a reserved word and cannot start the function "
+        "name 'and'\n"
+        "  reword the name to avoid 'and'"), msg
+
+
+def test_the_function_name_reserved_word_fix_is_identical_in_javascript():
+    if NODE is None:
+        return
+    for src in (RESERVED_WORD_MID_NAME, RESERVED_WORD_FIRST_IN_NAME,
+                RESERVED_WORD_LAST_IN_NAME):
+        assert _js_error(src) == _py_error(src), src
 
 
 if __name__ == "__main__":

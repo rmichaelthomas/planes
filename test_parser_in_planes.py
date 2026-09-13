@@ -571,6 +571,18 @@ def test_the_read_claim_clause_is_byte_identical_in_both_parsers():
         assert py.endswith(expected_tail), (src, py)
 
 
+def test_the_reserved_word_in_name_message_is_byte_identical_in_both_parsers():
+    """F3: a reserved word in a `to` name quotes the whole name exactly as
+    written, whether it lands first, in the middle, or last."""
+    for src in (
+            "to dawn and dusk:\n  give 1\n",   # reserved word in the middle
+            "to and dusk:\n  give 1\n",        # reserved word first
+            "to dawn dusk and:\n  give 1\n",   # reserved word last
+    ):
+        py, pl = _py_refusal(src), _planes_refusal(src)
+        assert py == pl, f"{src!r}\n  py={py!r}\n  pl={pl!r}"
+
+
 def test_the_two_comma_joiners_are_copies_under_different_names():
     """Both files carry the same fold, because `join of` concatenates with no
     separator. They cannot share a NAME: the two land in one module graph and

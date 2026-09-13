@@ -248,6 +248,7 @@ SYNTAX_ERRORS = [
     "x = r.\n",
     "to if:\n  give 1\n",
     "to get first:\n  give 1\n",
+    "to dawn and dusk:\n  give 1\n",
     "to\n",
     'x = "abc\n',
 ]

@@ -1303,7 +1303,6 @@ private func _param_arity(_ tokens: [Token], _ start: Int) -> Int {
 /// order, as parser.py's dict is.
 public func prescan_funcs(_ tokens: [Token]) throws -> TextTable<Int> {
     var names = TextTable<Int>()
-    let reserved = { () throws -> String in sortedJoined(try keywords()) }
     for (i, t) in tokens.enumerated() {
         if sameText(t.kind, "FOREIGN") {
             var j = i + 1
@@ -1322,29 +1321,41 @@ public func prescan_funcs(_ tokens: [Token]) throws -> TextTable<Int> {
         // `to` also appears inside `write x to "path"`. A definition is the one
         // that starts a statement.
         if i > 0 && !["EOL", "BEGIN", "END"].contains(where: { sameText($0, tokens[i - 1].kind) }) { continue }
+        // Collected as one span, all the way to the real end of the name --
+        // `of`, a punctuation mark, end of line, or end of file -- rather
+        // than stopping at the first non-NAME token. A reserved word can
+        // land first (`to and dusk:`), in the middle (`to dawn and
+        // dusk:`), or last (`to dawn dusk and:`); scanning past it instead
+        // of stopping there is what lets the message quote the name
+        // exactly as the author wrote it, instead of just the words seen
+        // before the reserved word turned up.
         var j = i + 1
-        var parts: [String] = []
-        while sameText(tokenAt(tokens, j).kind, "NAME") {
-            parts.append(tokenAt(tokens, j).value)
+        var span: [Token] = []
+        while !["OF", "OP", "EOL", "EOF"].contains(where: { sameText($0, tokenAt(tokens, j).kind) }) {
+            span.append(tokenAt(tokens, j))
             j += 1
         }
-        if parts.isEmpty {
-            let after = tokenAt(tokens, i + 1)
+        let bad = span.firstIndex(where: { !sameText($0.kind, "NAME") })
+        if let bad {
+            let word = span[bad]
+            let fullName = span.map { $0.value }.joined(separator: " ")
+            let fix = span.count > 1
+                ? "join the words with a hyphen instead of a space, or reword " +
+                  "to avoid '\(word.value)'"
+                : "reword the name to avoid '\(word.value)'"
+            if bad == 0 {
+                throw PlanesSyntaxError(
+                    "line \(word.line): '\(word.value)' is a reserved word " +
+                        "and cannot start the function name '\(fullName)'\n" +
+                        "  \(fix)")
+            }
             throw PlanesSyntaxError(
-                "line \(after.line): " +
-                    "'\(after.value)' is a reserved word and cannot " +
-                    "start a function name\n" +
-                    "  reserved: \(try reserved())")
+                "line \(word.line): '\(word.value)' is a reserved word and " +
+                    "cannot appear in the function name '\(fullName)'\n" +
+                    "  \(fix)")
         }
+        let parts = span.map { $0.value }
         let stop = tokenAt(tokens, j)
-        if !["OF", "OP", "EOL", "EOF"].contains(where: { sameText($0, stop.kind) }) {
-            throw PlanesSyntaxError(
-                "line \(stop.line): " +
-                    "'\(stop.value)' is a reserved word and cannot " +
-                    "appear in the function name " +
-                    "'\(parts.joined(separator: " ")) \(stop.value)'\n" +
-                    "  reserved: \(try reserved())")
-        }
         let arity = sameText(stop.kind, "OF") ? _param_arity(tokens, j + 1) : 0
         names[parts.joined(separator: " ")] = arity
     }
