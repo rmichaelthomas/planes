@@ -58,3 +58,6 @@ docs/superpowers/
 # worth keeping gets promoted into mockups/, docs/superpowers/specs/, or
 # assets/ as its own commit rather than living here.
 .superpowers/
+
+# The Swift host's build products.
+swift/.build/
