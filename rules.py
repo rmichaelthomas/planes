@@ -261,13 +261,58 @@ def _target_matches(rule, effect):
     string match is certain; an effect whose own target is computed=True
     (the analyser could not pin it down) is a possible match, not a
     confirmed one — conservative at the boundary (v2.0 §34): widening is
-    sound, assuming a computed target is safe is not.
+    sound, assuming a computed target is safe is not — unless its known
+    chunks rule the rule's target out, which is a certain non-match
+    (v37.0 §513, _pattern_excludes below).
     """
     if rule.target is None:
         return True, False
     if effect.computed:
+        if _pattern_excludes(rule.target, effect.target):
+            return False, False
         return True, True
     return effect.target == rule.target, False
+
+
+HOLE = "{...}"
+NO_DESTINATION = " (destination not stated)"
+
+
+def _pattern_excludes(rule_target, effect_target):
+    """Can this computed target provably never equal the rule's target?
+
+    A computed target is not an unknown one (v37.0 §511): shapes.py keeps
+    every statically known chunk and marks only the unknown spans `{...}`.
+    Those chunks are facts. The rule's target can equal the effect's only if
+    they appear in it in order — the first at the start and the last at the
+    end, unless the pattern opens or closes with a hole — with a hole free to
+    stand for any text, including none. When they cannot, the match is
+    impossible and this returns True.
+
+    Only ever removes matches that could not occur (v37.0 §514): anything
+    this cannot rule out stays a possible match. A pattern that is nothing
+    but holes excludes nothing. Neither does a computed target that is not a
+    pattern at all: a foreign function that states no destination reports
+    `<host function> (destination not stated)`, which names where the claim
+    came from, not where the request goes. Text that happens to spell `{...}`
+    is read as a hole, which can only make exclusion rarer. js/rules.mjs's
+    patternExcludes and Rules.swift's patternExcludes must agree with this.
+    """
+    if HOLE not in effect_target or effect_target.endswith(NO_DESTINATION):
+        return False
+    chunks = effect_target.split(HOLE)
+    first, middle, last = chunks[0], chunks[1:-1], chunks[-1]
+    if len(first) + len(last) > len(rule_target):
+        return True
+    if not rule_target.startswith(first) or not rule_target.endswith(last):
+        return True
+    pos, end = len(first), len(rule_target) - len(last)
+    for chunk in middle:
+        at = rule_target.find(chunk, pos, end)
+        if at < 0:
+            return True
+        pos = at + len(chunk)
+    return False
 
 
 def _resolve_subject(rule, surface, declaring_file):

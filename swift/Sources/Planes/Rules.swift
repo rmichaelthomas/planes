@@ -180,8 +180,59 @@ public func narrows(_ b: AST.Rule, _ a: AST.Rule) -> Bool {
 /// (matched, uncertain).
 func targetMatches(_ rule: AST.Rule, _ effect: Effect) -> (Bool, Bool) {
     guard let target = rule.target else { return (true, false) }
-    if effect.computed { return (true, true) }
+    if effect.computed {
+        if patternExcludes(target, effect.target) { return (false, false) }
+        return (true, true)
+    }
     return (sameText(effect.target, target), false)
+}
+
+/// rules.py's `_pattern_excludes`, which this must agree with: can a computed
+/// target provably never equal the rule's target? Its known chunks must appear
+/// in the rule's target in order, the first at the start and the last at the
+/// end, a hole standing for any text including none. A target with no hole, or
+/// a foreign's "(destination not stated)", excludes nothing. Compared scalar by
+/// scalar, never by `String`'s canonical equivalence.
+func patternExcludes(_ ruleTarget: String, _ effectTarget: String) -> Bool {
+    let hole = Array("{...}".unicodeScalars)
+    let rule = Array(ruleTarget.unicodeScalars)
+    let effect = Array(effectTarget.unicodeScalars)
+    let noDestination = Array(" (destination not stated)".unicodeScalars)
+
+    func find(_ needle: [Unicode.Scalar], in hay: [Unicode.Scalar], from: Int, to: Int) -> Int? {
+        if needle.isEmpty { return from <= to ? from : nil }
+        var i = from
+        while i + needle.count <= to {
+            if hay[i..<(i + needle.count)].elementsEqual(needle) { return i }
+            i += 1
+        }
+        return nil
+    }
+
+    if effect.count >= noDestination.count && effect.suffix(noDestination.count).elementsEqual(noDestination) {
+        return false
+    }
+    var chunks: [[Unicode.Scalar]] = []
+    var start = 0
+    while let at = find(hole, in: effect, from: start, to: effect.count) {
+        chunks.append(Array(effect[start..<at]))
+        start = at + hole.count
+    }
+    if chunks.isEmpty { return false }
+    chunks.append(Array(effect[start...]))
+
+    let first = chunks[0], last = chunks[chunks.count - 1]
+    if first.count + last.count > rule.count { return true }
+    if !rule.prefix(first.count).elementsEqual(first) || !rule.suffix(last.count).elementsEqual(last) {
+        return true
+    }
+    var pos = first.count
+    let end = rule.count - last.count
+    for chunk in chunks.dropFirst().dropLast() {
+        guard let at = find(chunk, in: rule, from: pos, to: end) else { return true }
+        pos = at + chunk.count
+    }
+    return false
 }
 
 func resolveSubject(_ rule: AST.Rule, _ surface: Surface, _ declaringFile: String?) throws {

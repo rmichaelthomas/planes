@@ -190,8 +190,38 @@ export function narrows(b, a) {
 
 function targetMatches(rule, effect) {
   if (rule.target === null || rule.target === undefined) return [true, false];
-  if (effect.computed) return [true, true];
+  if (effect.computed) {
+    if (patternExcludes(rule.target, effect.target)) return [false, false];
+    return [true, true];
+  }
   return [effect.target === rule.target, false];
+}
+
+const HOLE = "{...}";
+const NO_DESTINATION = " (destination not stated)";
+
+// rules.py's _pattern_excludes, which this must agree with: can a computed
+// target provably never equal the rule's target? Its known chunks must appear
+// in the rule's target in order, the first at the start and the last at the
+// end, a hole standing for any text including none. A target with no hole, or
+// a foreign's "(destination not stated)", excludes nothing. Plain string
+// search is code-point exact here: a well-formed chunk cannot match across a
+// surrogate pair.
+function patternExcludes(ruleTarget, effectTarget) {
+  if (!effectTarget.includes(HOLE) || effectTarget.endsWith(NO_DESTINATION)) return false;
+  const chunks = effectTarget.split(HOLE);
+  const first = chunks[0];
+  const last = chunks[chunks.length - 1];
+  if (first.length + last.length > ruleTarget.length) return true;
+  if (!ruleTarget.startsWith(first) || !ruleTarget.endsWith(last)) return true;
+  let pos = first.length;
+  const end = ruleTarget.length - last.length;
+  for (const chunk of chunks.slice(1, -1)) {
+    const at = ruleTarget.indexOf(chunk, pos);
+    if (at < 0 || at + chunk.length > end) return true;
+    pos = at + chunk.length;
+  }
+  return false;
 }
 
 // Code-point string compare, matching Python's sorted() (see shapes.mjs).

@@ -1482,7 +1482,7 @@
       "kind": "error",
       "class": "RuleNotSupported",
       "tag": null,
-      "source": "rules.py:297",
+      "source": "rules.py:342",
       "raised_in": "_resolve_subject",
       "template": "rule [{rule.name}] (line {rule.line}): subject '{rule.subject}' only resolves in {other}, not in the file that declares this rule \u2014 a rule cannot reach across an import boundary to a name it never saw declared\n  write the rule in {other} instead, or name a subject local to this file",
       "slots": [
@@ -1498,7 +1498,7 @@
       "kind": "error",
       "class": "RuleNotSupported",
       "tag": null,
-      "source": "rules.py:304",
+      "source": "rules.py:349",
       "raised_in": "_resolve_subject",
       "template": "rule [{rule.name}] (line {rule.line}): subject '{rule.subject}' does not resolve to anything in the traced effect surface \u2014 checking it needs a value this file's derivation graph can reach\n  check the name is spelled as it appears in this file, or write the rule against 'anything' instead",
       "slots": [
@@ -1512,7 +1512,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:355",
+      "source": "rules.py:400",
       "raised_in": "_resolve_active",
       "template": "two rules are both named [{r.name}] (line {other.line} and line {r.line}) \u2014 a rule name must be unique\n  rename one of them",
       "slots": [
@@ -1526,7 +1526,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:366",
+      "source": "rules.py:411",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes itself\n  supersedes should name an earlier, different rule",
       "slots": [
@@ -1539,7 +1539,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:370",
+      "source": "rules.py:415",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes [{r.supersedes}], which is not a rule in this file\n  check the name, or remove the supersedes clause",
       "slots": [
@@ -1553,7 +1553,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:379",
+      "source": "rules.py:424",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes [{r.supersedes}] (line {target_rule.line}) as of @{r.supersedes_fingerprint}, but [{r.supersedes}] is now @{actual} \u2014 it changed after [{r.name}] was written to override it\n  confirm the override still means what it meant, then update the fingerprint to @{actual}",
       "slots": [
@@ -1573,7 +1573,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:420",
+      "source": "rules.py:465",
       "raised_in": "_check_permits_are_related",
       "template": "rule [{p.name}] (line {p.line}) permits '{p.kind}' but excepts no forbid rule \u2014 a permit only has force against a prohibition it supersedes or narrows\n  add 'supersedes [name-of-the-forbid-rule]' to [{p.name}], or give it a target that narrows one of the forbid rules over '{p.kind}'",
       "slots": [
@@ -1589,7 +1589,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:464",
+      "source": "rules.py:509",
       "raised_in": "_check_conflicts",
       "template": "rule [{forbid.name}] (line {forbid.line}) and rule [{permit.name}] (line {permit.line}) demand opposite things over {where} \u2014 one forbids it, the other permits it, and neither narrows nor supersedes the other\n  add 'supersedes [{forbid.name}]' to [{permit.name}] to make the exception explicit, or give one of them a target the other lacks",
       "slots": [
@@ -1607,7 +1607,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:473",
+      "source": "rules.py:518",
       "raised_in": "_check_conflicts",
       "template": "rule [{a.name}] (line {a.line}) and rule [{b.name}] (line {b.line}) are equally specific over {where} \u2014 neither narrows nor supersedes the other\n  add 'supersedes [{a.name}]' to [{b.name}] (or the reverse), or give one of them a target the other lacks",
       "slots": [
@@ -1891,31 +1891,31 @@
       "rules.py:202-208"
     ],
     "rules.rulenotsupported-site._resolve_subject-1": [
-      "rules.py:297"
+      "rules.py:342"
     ],
     "rules.rulenotsupported-site._resolve_subject-2": [
-      "rules.py:304"
+      "rules.py:349"
     ],
     "rules.ruleconflict-site._resolve_active-1": [
-      "rules.py:355"
+      "rules.py:400"
     ],
     "rules.ruleconflict-site._resolve_active-2": [
-      "rules.py:366"
+      "rules.py:411"
     ],
     "rules.ruleconflict-site._resolve_active-3": [
-      "rules.py:370"
+      "rules.py:415"
     ],
     "rules.ruleconflict-site._resolve_active-4": [
-      "rules.py:379"
+      "rules.py:424"
     ],
     "rules.ruleconflict-site._check_permits_are_related": [
-      "rules.py:420"
+      "rules.py:465"
     ],
     "rules.ruleconflict-site._check_conflicts-1": [
-      "rules.py:464"
+      "rules.py:509"
     ],
     "rules.ruleconflict-site._check_conflicts-2": [
-      "rules.py:473"
+      "rules.py:518"
     ]
   }
 }
