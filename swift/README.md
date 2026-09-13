@@ -80,6 +80,28 @@ same `Violation`s `rules.py` would report for a program performing those
 effects — plus each violated rule's `because`. `test_swift_host_rules.py`
 holds it to shapes.py and rules.py on that equivalent program.
 
+### Measuring `HostRules` cost (H4)
+
+`Sources/HostRulesBench` is a repo-internal timing tool (not an agreement
+suite; not run by `scripts/ci.sh`) answering Koncord v1.10 §272.4, which
+recorded the per-page rule-check cost as unmeasured. It generates a
+synthetic rules fixture scaled up from `demo/rules/exception.planes`'s shape
+(one default-deny rule plus many named permits, each with `because`) at ~50
+and ~200 rules, checks each against a synthetic 150-effect "page" of asks
+(clean hits on permitted endpoints, a permitted host with a tracking query
+string no rule named, and hosts no rule mentions at all), and reports
+p50/p95 (plus min/p99/max/mean) for loading/compiling the rules and for
+checking a page, over thousands of iterations:
+
+```bash
+cd swift
+swift build -c release --product HostRulesBench
+.build/release/HostRulesBench host-rules-bench-results.md
+```
+
+Results (machine specs, iteration counts, and a concurrent-build caveat
+included) are in `host-rules-bench-results.md`, next to this file.
+
 The grammar files `js/loader_node.mjs` reads off disk (`grammar/vocabulary.json`,
 `grammar/messages/amber.json`, `grammar/core.json`) are embedded verbatim in
 `Sources/Planes/Generated/GrammarData.swift`, so the library runs where this repo
