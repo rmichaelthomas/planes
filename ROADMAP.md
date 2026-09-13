@@ -1,6 +1,6 @@
 # Planes roadmap
 
-**Updated:** September 13, 2026, after the Track 0 and register walkthroughs. The open register is empty (base `c4400ad`, addendum v37.1)
+**Updated:** September 13, 2026, after the Track 0, register and parked-item walkthroughs. Nothing on the chain is open (base `c4400ad`, addendum v37.1)
 **Supersedes as the working roadmap:** `reports/planes_handoff_2026_08_01_language_and_performance_roadmap.md`. That file is archival and unedited. Its phase order still stands, and each phase's current status is below.
 **Near-term work:** [`docs/planes_sprint_2026_09_hardening.md`](docs/planes_sprint_2026_09_hardening.md)
 
@@ -38,6 +38,7 @@ No semantics change. See the sprint doc. In short:
 - the module rename bug ([#108](https://github.com/rmichaelthomas/planes/issues/108))
 - a four-way `sine` agreement test, then the "same numbers everywhere" README claim
 - a README performance section
+- every corpus program checked against its own effect surface, including after harmless edits
 
 ## Next — Sprint B: the effect vocabulary grows to eight, and the rule plane catches up
 
@@ -63,7 +64,7 @@ Each item says where it came from and what it waits on. The Aug 1 handoff's phas
 
 | Item | Status | Waits on |
 |---|---|---|
-| Versioned release contract: language, grammar, host interface, protocol versions, dependency hashes | Not built. The World IR (`world-v1.json`, #83) proved the pattern for a protocol. | Handoff open question 1: manifest syntax |
+| Release versioning | **Decided: no header or manifest syntax in programs.** A tagged release pins language, grammar, host and protocols together. The drawing and sound protocols keep their own version lines. | — |
 | Canonical AST serialization and a public conformance corpus | Partial. The canonical form exists in Python, JS and Swift, and agreement suites run it. Not yet published as fixtures a stranger can run. | Sprint A tag |
 | Structured run receipt: sources, seed, host, surface, observed effects, rule decisions | Partial. The record plane (#7), fingerprints and the event log (#85) exist; nothing is signed. | Omniglot O-Q3 and 5xFive refusal receipts want surface→receipt wiring |
 | `planes describe`, a manifest of manifests | Admitted at v18.0 §200, not built | — |
@@ -73,13 +74,13 @@ Each item says where it came from and what it waits on. The Aug 1 handoff's phas
 
 | Item | Status | Waits on |
 |---|---|---|
-| Requested → granted → observed effects, host-enforced allowlists | Not built. `foreign … doing` is still a claim. | A design session; linear capabilities (unbound v1.1 §25) trigger with the first multi-principal program |
+| Requested → granted → observed effects, host-enforced allowlists | Not built. `foreign … doing` is still a claim. | A design session. Enforcement lives at the host; linear capability types are withdrawn. |
 | Resource budgets: steps, depth, rational size, output bytes, effect counts | Only `_WHY_SEARCH_BUDGET` exists | — |
 | **A beneficiary on rules**: who a rule protects | Not built. Asked by TAOS (OL-Q1), Koncord v0.13 §96.3 and the Cloudflare contribution; Undertow built its own `for=`. | Architect: language or Liminate |
 | Rules about data reaching a send (`customer emails may not derive into any send`) | Partial. Named subjects resolve through derivation (A-Q22); data in a URL is traced (v37.0 §520). A request body can't be expressed until P-Q25. | Sprint B |
 | Rule-set consistency beyond conflict and vacuity | 5xFive runs Z3 on Liminate, not on Planes rules | — |
 | Retroactive re-check of stored derivations against new rules | Brainstormed (DeepSeek) | — (expiring rules were declined at Track 0 #4) |
-| Dynamic record lookup with a missing-key contract; precedence diagnostics | Not built | Handoff open question 3 |
+| Dynamic record lookup; precedence diagnostics | Not built. **Decided:** a missing looked-up field gives `nothing`, exactly as `person.age` does today. | — |
 
 ### 3. The language itself
 
@@ -99,8 +100,8 @@ These are gaps real programs hit, each with a witness. Per standing rule, work i
 | A dead `Builtin` node in `lexer.py` | `ADDENDUM_SPRINT` §6 (reported) |
 
 Held on purpose, with their triggers:
-- **Structured concurrency:** Tier 5; trigger is the first parallel-I/O program.
-- **No type system:** v9.1 §118, always cited with §119's linear-capability exception.
+- **One step at a time:** structured concurrency (v4.2 §70.1, Tier 5) is withdrawn. Planes programs run sequentially, which is what keeps `why` and replay exact. An app that needs parallel work does it around Planes, as 5xFive and Koncord do.
+- **No type system, with no exceptions:** v9.1 §118. §119's linear-capability candidate (unbound v1.1 §25, v4.2 §70.2) is withdrawn. Authority, if ever enforced, is checked at the host (requested → granted → observed).
 - **No `hash` builtin:** v32.0.
 - **No private functions** (A-Q6c): every function a module defines stays visible; a clash is fixed by renaming at the point of use, which #108 makes correct.
 - **No versions in the language** (A-Q6a): `use` names a file; versions come from tagged releases, and `--diff` shows what changed between two.
@@ -123,8 +124,9 @@ Held on purpose, with their triggers:
 | Retention tail and GC stalls | Python fixed (#88); JS windowed tail residue unconfirmed against a dense scene |
 | `_cut` redesign | Phase-2-gated, to be decided against a real cell's per-tick shape (v33.0) |
 | Published benchmarks (A-Q1, decided) | Two sets in a README Performance section, measured once on the architect's Mac with the machine named. **Set A:** four ordinary jobs (word count, record updates, invoice arithmetic, a file transform) in Planes, Python and JS. **Set B:** effect-surface time over the 51 corpus programs, with the fraction that crosses a foreign boundary. Unflattering numbers included. |
-| Benchmark platforms for gates | Every gate is still provisional, set on the dev machine (handoff question 4). Firefox never measured. |
-| Bytecode, Wasm, JIT | Rejected as measured-unnecessary for the kernel (v33.0). Reconsider only after profiling a real workload. |
+| Reference machine | **Decided: the architect's Mac**, named in every published number and gate. School-hardware recalibration happens only if Planes is deployed on school computers. Firefox never measured. |
+| Bytecode, Wasm, JIT | **Decided: neither.** Measured unnecessary (v33.0: kernel p95 1.6 ms against a 5 ms gate), and a compiled form would build the same derivations. Planes runs on its interpreters. |
+| Provenance retained per run | **Decided, as built:** ordinary runs keep full history. Long-running programs keep a window and seal older history (#77); `why` on sealed values replays on demand (#79), gated on byte-identical agreement. |
 
 ### 6. Ports and embedding
 
@@ -168,7 +170,7 @@ Held by inception v2.0: build → descend → inhabit, movement first, one small
 | 1 engine kernel and renderer | Done (#87–#91). Rapier, audio buses and the asset compositor deferred until content needs them. |
 | 2 playable cell | In progress: input seam (#93), crossing port (#95), walk slice (#97). Still owed: |
 | | – visual acceptance against the look-dev frame |
-| | – Breeze/Harbor gates on named school hardware |
+| | – Breeze/Harbor gates on school hardware, only if Planes is deployed there |
 | | – `pixi_performer.mjs`'s hard-coded hydrofoil and single environment image |
 | | – a seed the page can re-roll (`world-init` takes no parameters) |
 | | – the real Ala Eriri cell |
@@ -204,12 +206,15 @@ Open alongside it: the R2 machine-export provenance bound (v29.0 §454) must be 
 
 Each answer is recorded where it lands above, and in the sprint doc's decision tables.
 
-Parked or untracked, not closed (next walkthrough):
-- I-Q5, I-Q6, I-Q7: whole-corpus effect-log oracle, metamorphic tests, mutation tests. The Swift port did mutation testing informally.
-- R-Q1
-- linearity for capabilities
-- Tier 5 concurrency
-- handoff open questions 1–5
+**The parked items are closed too** (parked-item walkthrough, same day):
+- **I-Q5 and I-Q6:** one new test runs every corpus program, checks its runtime effects against its effect surface, and checks that renaming, commenting and reordering leave the surface unchanged (sprint H8).
+- **I-Q7:** no mutation-testing tool. Each fix PR breaks its own change once and shows the tests catch it.
+- **Tier 5 concurrency:** withdrawn.
+- **R-Q1:** a record carries one time, the crossing time, as built.
+- **Linearity for capabilities:** withdrawn.
+- **Handoff questions 1–5:** no version header; provenance as built; missing looked-up field is `nothing`; the architect's Mac is the reference machine; no bytecode or Wasm.
+
+Nothing on the Planes chain is open. New questions start fresh.
 
 ## Standing terms any item on this page inherits
 

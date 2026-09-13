@@ -57,6 +57,26 @@ The architect answered the sixteen questions left after Track 0 in the same sess
 
 Found while verifying these: F8 below ([issue #108](https://github.com/rmichaelthomas/planes/issues/108)).
 
+---
+
+## Parked items — decided (walkthrough, September 13, 2026)
+
+The architect closed the long-parked, never-registered items in the same session. **Nothing on the chain is open.**
+
+| # | Question | Decision | Closes |
+|---|---|---|---|
+| 29 | Check every corpus program's runtime effects against its effect surface? | Yes (H8). | I-Q5 (v3.0) |
+| 30 | Check that harmless edits never change the surface? | Yes, in the same test (H8). | I-Q6 (v3.0) |
+| 31 | A mutation-testing tool? | No. Each fix PR breaks its own change once and shows the tests catch it, as #102–#104 did. | I-Q7 (v3.0) |
+| 32 | Programs doing several things at once? | No. Structured concurrency is withdrawn; programs run one step at a time. | v4.2 §70.1 (Tier 5) |
+| 33 | Does a record carry write time as well as crossing time? | One time, the crossing time, as built (`Record.when`). | R-Q1 (v6.1 §86) |
+| 34 | Linear types for capabilities? | Withdrawn. Authority, if ever enforced, is checked at the host. "No type system" has no exceptions. | unbound v1.1 §25; v9.1 §119 |
+| 35 | Language-release header and manifest syntax? | None. Tagged releases pin versions. | Handoff Q1 |
+| 36 | Minimum provenance every run retains? | As built: full history by default; window, seals and replay on demand for long runs (#77, #79). | Handoff Q2 |
+| 37 | Missing key in dynamic record lookup? | `nothing`, as static field access gives today. | Handoff Q3 |
+| 38 | Which platform defines performance budgets? | The architect's Mac, named in every number. School hardware only if deployed there. | Handoff Q4 |
+| 39 | First portable execution target: bytecode, Wasm, or both? | Neither. Planes runs on its interpreters. | Handoff Q5 |
+
 For the next checkpoint's register (bookkeeping only):
 - P-Q17 has been used three times: v2.0 §36 fingerprints, v14.0 §159 host seam, v37.0 rule-target matching.
 - P-Q16 and P-Q23 have each been used twice.
@@ -153,6 +173,11 @@ PR #101 replaced `trim()` with Python's whitespace set in the lexer, and listed 
 **H7. The published benchmarks** (#21). Add a README Performance section, measured once on the architect's Mac with the machine named.
 - **Set A:** word count, record updates, invoice arithmetic and a file transform, each written in Planes, Python and JS. Unflattering results are published.
 - **Set B:** effect-surface time across the 51 corpus programs, stating the fraction that crosses a foreign boundary.
+
+**H8. Every corpus program, checked against its own surface.** `test_coverage.py` runs the oracle (every runtime effect appears in the static surface) over one case per node type, not over the corpus (#29, #30).
+- Run each of the 51 corpus programs under the stubbed host `test_corpus.py` already uses, and assert its runtime effects are covered by its surface.
+- For each program, rename a local name, add a comment, and reorder its function definitions, and assert the surface is unchanged.
+- Run it in Python and JS. It is the net that should have caught F8.
 
 ### Consumers: make Planes easy to embed and to pin
 
