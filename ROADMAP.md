@@ -1,6 +1,6 @@
 # Planes roadmap
 
-**Updated:** September 13, 2026, after the Track 0, register and parked-item walkthroughs. Nothing on the chain is open (base `c4400ad`, addendum v37.1)
+**Updated:** September 13, 2026, after the Track 0, register and parked-item walkthroughs, and after Sprint A merged (PRs #111–#131). Nothing on the chain is open (base `c4400ad`, addendum v37.1)
 **Supersedes as the working roadmap:** `reports/planes_handoff_2026_08_01_language_and_performance_roadmap.md`. That file is archival and unedited. Its phase order still stands, and each phase's current status is below.
 **Near-term work:** [`docs/planes_sprint_2026_09_hardening.md`](docs/planes_sprint_2026_09_hardening.md)
 
@@ -10,8 +10,8 @@ It is also used by other projects now, so this roadmap tracks their needs as wel
 
 | Project | How it uses Planes | Pinned at |
 |---|---|---|
-| 5xFive | Automations compile to Planes and run on the JS interpreter in a Cloudflare Worker; compliance rules compile to Planes rules | `1d8a833` (vendored) |
-| Koncord | Swift `HostRules`: a page's requests checked against `rules.planes` | `9ec3cfa` (checkpoint-verified) |
+| 5xFive | Automations compile to Planes and run on the JS interpreter in a Cloudflare Worker; compliance rules compile to Planes rules | `1d8a833` (vendored); can move to the Sprint A tag and `js/embed.mjs` |
+| Koncord | Swift `HostRules`: a page's requests checked against `rules.planes` | `9ec3cfa` (checkpoint-verified); can move to the Sprint A tag through the root `Package.swift` |
 | Omniglot, Cartouche | A `.planes` manifest analysed, never run, with the Python CLI | — |
 | Undertow, Cutter | Re-implement the surface JSON format and effect vocabulary in TypeScript | format 1, by hand |
 | Motif | Ported the tutor's typing loop and why-card; a Planes voice is planned | `1d8a833` (copied JS) |
@@ -19,26 +19,15 @@ It is also used by other projects now, so this roadmap tracks their needs as wel
 
 ---
 
-## Now — Sprint A: fix and harden
+## Done — Sprint A: fix and harden
 
-No semantics change. See the sprint doc. In short:
-- the hash-seed-dependent line in the reference
-- `text of` on a list
-- the reserved-word message
-- false tutor copy
-- the unaudited JS `trim()`s
-- `--rules` in `--json`
-- the audit tool covering rule-plane relations
-- the MCP demo committed
-- `HostRules` cost measured
-- the surface format published with a schema
-- a JS embedding entry point with types
-- a root `Package.swift`
-- a tagged release downstream projects can pin
-- the module rename bug ([#108](https://github.com/rmichaelthomas/planes/issues/108))
-- a four-way `sine` agreement test, then the "same numbers everywhere" README claim
-- a README performance section
-- every corpus program checked against its own effect surface, including after harmless edits
+Built and merged September 13, 2026. `scripts/ci.sh` passed in full on the result. Item by item, with PRs and what the sprint found, in the sprint doc. In short:
+- **Wrong answers fixed:** the hash-seed line, `text of` a list (and the surface now predicts it), the reserved-word message, false tutor copy, the JS protocol whitespace, records across `structuredClone`, and the module rename bug ([#108](https://github.com/rmichaelthomas/planes/issues/108)), which also under-reported reach in all three analysers.
+- **Held in place:** `--rules` in `--json`; the audit covers rule-plane relations; the MCP demo committed with a test; `sine` and `root` agree across four hosts; every corpus program checked against its own surface.
+- **Easier to embed:** the surface format published with a schema; `js/embed.mjs` with types; a root `Package.swift` for macOS and iOS; a documented Node/Swift checker.
+- **Measured:** `HostRules` cost; a README Performance section.
+
+Left outside this repo: E5, moving 5xFive and Koncord to the tag.
 
 ## Next — Sprint B: the effect vocabulary grows to eight, and the rule plane catches up
 
@@ -68,7 +57,7 @@ Each item says where it came from and what it waits on. The Aug 1 handoff's phas
 | Canonical AST serialization and a public conformance corpus | Partial. The canonical form exists in Python, JS and Swift, and agreement suites run it. Not yet published as fixtures a stranger can run. | Sprint A tag |
 | Structured run receipt: sources, seed, host, surface, observed effects, rule decisions | Partial. The record plane (#7), fingerprints and the event log (#85) exist; nothing is signed. | Omniglot O-Q3 and 5xFive refusal receipts want surface→receipt wiring |
 | `planes describe`, a manifest of manifests | Admitted at v18.0 §200, not built | — |
-| Surface format versioning beyond format 1 | Starts with Sprint A E1 | Sprint B's eighth kind |
+| Surface format versioning beyond format 1 | Format 1 published with a schema (`docs/surface-format-v1.md`, Sprint A E1) | Sprint B's eighth kind |
 
 ### 2. Authority, budgets and the rule plane (handoff P1)
 
@@ -94,6 +83,8 @@ These are gaps real programs hit, each with a witness. Per standing rule, work i
 | No native `clock`, `env` or date arithmetic; `random`/`env` aren't host methods | Dashboard, neglect-score and token programs (DeepSeek); `ADDENDUM_SPRINT` §6 |
 | Numeric recursion hits `recursion-too-deep` and its advice fails | v22.2 §288 |
 | No exponentiation, so equal temperament can't be written | v20.0 §233 |
+| `plus` copies the list on every append, so building a list element by element is quadratic | Sprint A H7: 50 s against 5.6 s for the same word count |
+| `foreign` names aren't checked for reserved words, in any host | Sprint A F3 |
 | String escapes are only `\" \\ \n \t`; JSON's `\r \b \f \uXXXX` are refused | `grammar/json.planes:23`; the tutor's `because` can't hold a `"` |
 | `why` is a statement, not a value a program can branch on | DeepSeek; wanted for click-to-explain and audits |
 | A host `ask` must return synchronously | 5xFive v3.2 §264a works around it with a prefetched address |
@@ -114,6 +105,7 @@ Held on purpose, with their triggers:
 - The 54 error messages never audited (v22.2 §291).
 - Teaching-grade tags: the tutor softens only 4.
 - Messages are a four-host byte-identical contract (Swift README rule 4), so every message change costs four edits.
+- The Swift CLI refuses a file as `shapes: line N: …` with exit 2; Python and Node print `syntax error — line N: …` with exit 1 (Sprint A E4).
 
 ### 5. Performance (handoff P2–P3)
 
@@ -123,7 +115,8 @@ Held on purpose, with their triggers:
 | Explicit stack instead of host recursion | **Done for `explain`** (#79). The interpreter still recurses; metacircular ceiling 178–199 frames. |
 | Retention tail and GC stalls | Python fixed (#88); JS windowed tail residue unconfirmed against a dense scene |
 | `_cut` redesign | Phase-2-gated, to be decided against a real cell's per-tick shape (v33.0) |
-| Published benchmarks (A-Q1, decided) | Two sets in a README Performance section, measured once on the architect's Mac with the machine named. **Set A:** four ordinary jobs (word count, record updates, invoice arithmetic, a file transform) in Planes, Python and JS. **Set B:** effect-surface time over the 51 corpus programs, with the fraction that crosses a foreign boundary. Unflattering numbers included. |
+| Published benchmarks (A-Q1, decided) | **Done (Sprint A H7).** README Performance section, measured on the M1 Pro at `6b0499e`: on the four ordinary jobs, `planes.py` is 10–167x plain Python and the JS interpreter 2–12x plain Node; effect surfaces take a median 57 ms per corpus file in Python; 3 of 51 corpus programs cross a foreign boundary. |
+| `HostRules` cost | **Measured (Sprint A H4):** 1.1–3.0 ms p50 to check a 150-request page against 50–200 rules |
 | Reference machine | **Decided: the architect's Mac**, named in every published number and gate. School-hardware recalibration happens only if Planes is deployed on school computers. Firefox never measured. |
 | Bytecode, Wasm, JIT | **Decided: neither.** Measured unnecessary (v33.0: kernel p95 1.6 ms against a 5 ms gate), and a compiled form would build the same derivations. Planes runs on its interpreters. |
 | Provenance retained per run | **Decided, as built:** ordinary runs keep full history. Long-running programs keep a window and seal older history (#77); `why` on sealed values replays on demand (#79), gated on byte-identical agreement. |
@@ -133,10 +126,11 @@ Held on purpose, with their triggers:
 | Item | Status |
 |---|---|
 | Swift interpreter | Not ported. `planes-swift` can't run a program. Needed if a SwiftUI app runs Planes, not only checks rules. |
-| iOS target | `Package.swift` is macOS 14 only |
+| iOS target | **Done (Sprint A E3):** the root `Package.swift` declares macOS 14 and iOS 17, and the library builds for iOS |
+| Running a program against the real filesystem from the JS CLI | Missing: `run` and `run-file` use an in-memory host (Sprint A H7) |
 | Self-hosted world emission | A named follow-on (`test_world_runtime_conformance.py`) |
 | `grammar/interp.planes` dynamic `host.resolve` | The `foreign.planes` gap (v25.0 §360) |
-| Workers-ready JS bundle, TypeScript types, structured-clone-safe records | Sprint A E2 and F6 start it |
+| Workers-ready JS bundle, TypeScript types, structured-clone-safe records | **Done (Sprint A E2, F6):** `js/embed.mjs` needs no loading step or filesystem, `js/embed.d.mts` types it, and a record entry has `toPlain()` |
 | Effect extraction from non-Planes code (JS, HTML, Python) | **Not Planes' job** (A-Q11, decided). Planes analyses Planes programs only; other languages are Cutter's, which already maps TS and Python reach in Planes' vocabulary. Asked by Koncord §98 and Omniglot O-Q4. |
 | Foreign target names across hosts (A-Q17, decided) | The eight names in `sharedTargets()` (`js/host.mjs`) are the portable set, and every host that runs programs supports them, Swift included once it has an interpreter. Any other name works only where that host provides it, and fails elsewhere with "cannot find". |
 
@@ -151,7 +145,7 @@ Decided in the register walkthrough:
 - **No registry (A-Q8).** `--json` and `--diff` publish and compare a surface wherever the code lives.
 - **Public home (A-Q5):** the GitHub Pages site, `rmichaelthomas.github.io/planes`.
 - **The tool keeps the name `shapes` (A-Q10).** The feature is always "the effect surface" in writing.
-- **Determinism (A-Q24):** Planes publicly claims the same numbers on every machine and in every implementation, once a test sweeping `sine` across Python, JS, `grammar/interp.planes` and Swift passes.
+- **Determinism (A-Q24):** Planes publicly claims the same numbers on every machine and in every implementation. The four-host `sine` and `root` test passed (Sprint A H6), and the README says so.
 - **No determinism-market artifact (A-Q25):** no reference model, no generated trig table.
 - **Analysing other languages (A-Q11)** is not Planes' job (§6).
 
