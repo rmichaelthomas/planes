@@ -1,7 +1,7 @@
 # Planes — hardening, fixing and additive sprint (September 2026)
 
 **Date:** September 13, 2026
-**Status:** Sprint A built and merged the same day (PRs #111–#131, tag below). Sprint B not started.
+**Status:** Sprint A built and merged the same day (PRs #111–#132), tagged `sprint-a-2026-09` at `01be2c0`, and both downstream pins moved to the tag (E5). Sprint B not started.
 **Base:** `main` at `c4400ad` (addendum v37.1)
 **Inputs:** every Planes checkpoint and addendum from v37.1 back to the `unbound` inception (vault, plus `docs/`); the Horizon design docs; the DeepSeek brainstorm transcripts; `reports/`; PRs #100–#104; the playtest, persona and crosswalk documents; and every portfolio document that uses Planes (5xFive, Koncord in `~/browser-concordance/checkpoints/`, Omniglot, Cartouche, CueCue, Undertow, Cutter, Motif, MuseSky, TAOS).
 **Companion:** [`ROADMAP.md`](../ROADMAP.md) holds everything past this sprint.
@@ -111,7 +111,7 @@ Every in-repo item merged, and `scripts/ci.sh` passed in full on the result.
 | E1 | #126 | `docs/surface-format-v1.md` and `grammar/protocols/surface-v1.json`; all three hosts' output validates |
 | E2 | #121 | `js/embed.mjs` (grammar loaded on import, no `fs` or `fetch`) and `js/embed.d.mts`, type-checked under `tsc --strict` against a consumer |
 | E4 | #128 | README: checking a file with Node or Swift. `node js/cli.mjs shapes` now refuses a syntax error in one line, as `shapes_cli.py` does |
-| E5 | — | Outside this repo. 5xFive and Koncord can now move to the tag |
+| E5 | 5xfive #73; koncord-shared-agency `6eb59a9` | **5xFive** vendors the tag's JS (15 modules; `python_unicode*.mjs` are new dependencies), with `.d.mts` updated for `toPlain` and `asJson`. Its checks pass: typecheck, lint, 1,207 tests. Two compliance tests had pinned the false computed-target match #104 removed, and were corrected. **Koncord** depends on `https://github.com/rmichaelthomas/planes.git` at `revision: "sprint-a-2026-09"` instead of `~/planes/swift`: 781 tests, 0 failures. The dependency exists only on Koncord's networking-layer branch, so the pin lands in its `main` with that branch. Follow-ups in 5xFive: `toPlain` could replace its `sanitizeRecords`; `js/embed.mjs` could replace `load-grammar.ts`; the `{...}` wildcard waits for B2 |
 
 Four PRs fixed what parallel branches broke together: #114 and #122 made the repo walks skip hidden directories (agent worktrees), #127 regenerated `grammar/errors.json`, and #129 reconciled the corpus count, the README catalogue counts and a self-hosted test harness.
 
