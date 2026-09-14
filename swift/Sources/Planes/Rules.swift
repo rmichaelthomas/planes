@@ -218,35 +218,229 @@ public struct RuleResults: RandomAccessCollection {
     public subscript(_ i: Int) -> Violation { violations[i] }
 }
 
-/// Does rule `b` cover a strict subset of what rule `a` ranges over? (v2.0 §30.)
-/// Kind and target only, never assertion.
+/// Finds `needle` (unicode scalars) in `hay` at or after `from`, code-point
+/// exact — the scalar-array counterpart of `String.range(of:)`, which this
+/// file avoids for the reason `PlanesText.swift` states: canonical
+/// equivalence would let a composed character match a decomposed one.
+private func findScalars(_ needle: [Unicode.Scalar], in hay: [Unicode.Scalar], from: Int = 0) -> Int? {
+    if needle.isEmpty { return from <= hay.count ? from : nil }
+    guard from + needle.count <= hay.count else { return nil }
+    var i = from
+    while i + needle.count <= hay.count {
+        if hay[i..<(i + needle.count)].elementsEqual(needle) { return i }
+        i += 1
+    }
+    return nil
+}
+
+/// Case-folded scalars, for the one comparison B2 asks to be case-
+/// insensitive (scheme and host) — everything else in this file (path,
+/// name, target-as-address) stays code-point exact.
+private func lowerScalars(_ s: ArraySlice<Unicode.Scalar>) -> [Unicode.Scalar] {
+    Array(String(String.UnicodeScalarView(s)).lowercased().unicodeScalars)
+}
+private func lowerScalars(_ s: [Unicode.Scalar]) -> [Unicode.Scalar] { lowerScalars(s[...]) }
+
+/// Is `s` a legal URL scheme (`ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )`,
+/// RFC 3986 §3.1)? ASCII-only by construction, so a plain ASCII check.
+private func isSchemeScalars(_ s: ArraySlice<Unicode.Scalar>) -> Bool {
+    guard let first = s.first else { return false }
+    func isAsciiLetter(_ c: Unicode.Scalar) -> Bool {
+        (c.value >= 0x41 && c.value <= 0x5A) || (c.value >= 0x61 && c.value <= 0x7A)
+    }
+    guard isAsciiLetter(first) else { return false }
+    for ch in s.dropFirst() {
+        if isAsciiLetter(ch) || (ch.value >= 0x30 && ch.value <= 0x39) || ch == "+" || ch == "-" || ch == "." {
+            continue
+        }
+        return false
+    }
+    return true
+}
+
+/// Splits `target` into (scheme, host, path, query, fragment) if it has the
+/// shape `scheme://host[:port][/path][?query][#fragment]` (B2); `nil`
+/// otherwise — a file path, a `queue:send`-style name, or console text, none
+/// of which are addresses this matches by host and path (B2 keeps those on
+/// today's exact-string matching, unchanged).
+///
+/// `query` and `fragment` carry their leading `?`/`#` when present. No
+/// percent-decoding, no Unicode normalisation, no default-port folding:
+/// every piece is exactly the substring as written (B2). rules.py's
+/// `_parse_url_target` and js/rules.mjs's `parseUrlTarget` must agree with
+/// this.
+func parseURLTarget(_ target: String) -> (scheme: String, host: String, path: String, query: String?, fragment: String?)? {
+    let scalars = Array(target.unicodeScalars)
+    let sepMarker = Array("://".unicodeScalars)
+    guard let sep = findScalars(sepMarker, in: scalars), sep > 0, isSchemeScalars(scalars[0..<sep]) else {
+        return nil
+    }
+    let scheme = String(String.UnicodeScalarView(scalars[0..<sep]))
+    let rest = Array(scalars[(sep + 3)...])
+
+    var hostEnd = rest.count
+    for i in 0..<rest.count where rest[i] == "/" || rest[i] == "?" || rest[i] == "#" {
+        hostEnd = i
+        break
+    }
+    let host = String(String.UnicodeScalarView(rest[0..<hostEnd]))
+    let tail = Array(rest[hostEnd...])
+
+    let path: [Unicode.Scalar]
+    let remainder: [Unicode.Scalar]
+    if tail.first == "?" || tail.first == "#" {
+        path = []
+        remainder = tail
+    } else {
+        var pathEnd = tail.count
+        for i in 0..<tail.count where tail[i] == "?" || tail[i] == "#" {
+            pathEnd = i
+            break
+        }
+        path = Array(tail[0..<pathEnd])
+        remainder = Array(tail[pathEnd...])
+    }
+
+    var query: String?
+    var fragment: String?
+    if remainder.first == "#" {
+        fragment = String(String.UnicodeScalarView(remainder))
+    } else if remainder.first == "?" {
+        if let hashAt = remainder.firstIndex(of: "#") {
+            query = String(String.UnicodeScalarView(remainder[0..<hashAt]))
+            fragment = String(String.UnicodeScalarView(remainder[hashAt...]))
+        } else {
+            query = String(String.UnicodeScalarView(remainder))
+        }
+    }
+    return (scheme, host, String(String.UnicodeScalarView(path)), query, fragment)
+}
+
+/// Does `rulePath` cover `effectPath` at a "/" boundary (B2)? An empty path
+/// or "/" in the rule covers every path on the host. Otherwise `rulePath`
+/// must be a prefix of `effectPath`, and either they're equal, `rulePath`
+/// itself already ends in "/" (everything under it is covered), or the next
+/// character of `effectPath` past the prefix is "/". Compared code-point
+/// exact — no percent-decoding, no Unicode normalisation.
+func pathCovers(_ rulePath: String, _ effectPath: String) -> Bool {
+    if rulePath.isEmpty || rulePath == "/" { return true }
+    if sameText(effectPath, rulePath) { return true }
+    let rule = Array(rulePath.unicodeScalars)
+    let effect = Array(effectPath.unicodeScalars)
+    guard effect.count >= rule.count, effect[0..<rule.count].elementsEqual(rule) else { return false }
+    if rule.last == "/" { return true }
+    return effect.count > rule.count && effect[rule.count] == "/"
+}
+
+/// Does the URL-shaped `ruleTarget` cover the URL-shaped `effectTarget`
+/// (B2)? Same scheme and host, compared case-insensitively; port is part of
+/// the host and compared exactly as written -- no default-port folding, so
+/// `https://x` and `https://x:443` differ. The effect's own query and
+/// fragment are ignored entirely -- only its path is compared, against the
+/// rule's path, by `pathCovers`.
+func urlCovers(_ ruleTarget: String, _ effectTarget: String) -> Bool {
+    guard let r = parseURLTarget(ruleTarget), let e = parseURLTarget(effectTarget) else { return false }
+    // Case-insensitive, but still code-point exact (never `String`'s `==`,
+    // which is canonical-equivalence: a composed and a decomposed host must
+    // NOT be treated as the same host).
+    if lowerScalars(Array(r.scheme.unicodeScalars)) != lowerScalars(Array(e.scheme.unicodeScalars)) {
+        return false
+    }
+    if lowerScalars(Array(r.host.unicodeScalars)) != lowerScalars(Array(e.host.unicodeScalars)) {
+        return false
+    }
+    return pathCovers(r.path, e.path)
+}
+
+/// Does every address `narrow` (a target string, or `nil`) ranges over also
+/// fall inside `wide`'s range (B2)? `nil` is the top of the lattice -- every
+/// target of the kind. Identical strings are always the same scope. A
+/// URL-shaped pair compares by `urlCovers`; anything else -- a target that
+/// isn't URL-shaped, or a URL paired with a non-URL -- only ever covers its
+/// own exact string, exactly as before B2.
+func scopeCovers(_ wide: String?, _ narrow: String?) -> Bool {
+    guard let wide else { return true }
+    guard let narrow else { return false }
+    if sameText(wide, narrow) { return true }
+    guard parseURLTarget(wide) != nil, parseURLTarget(narrow) != nil else { return false }
+    return urlCovers(wide, narrow)
+}
+
+/// Do `a` and `b` (two rule targets, or `nil`) range over exactly the same
+/// addresses (B2)? Equal by mutual coverage rather than `==`, so
+/// `"https://x"` and `"https://x/"` -- two spellings of "every path on x"
+/// -- are the same scope even though the strings differ.
+func sameScope(_ a: String?, _ b: String?) -> Bool {
+    scopeCovers(a, b) && scopeCovers(b, a)
+}
+
+/// Does rule `b` cover a strict subset of what rule `a` ranges over? (v2.0
+/// §30; re-proven for host/path covering at B2.) Kind and target only,
+/// never assertion. `b` narrows `a` when `a`'s covered set contains `b`'s
+/// and the two aren't the same scope -- the pre-B2 case (`a` has no target,
+/// `b` does) is one instance of this; a rule whose covered address set is
+/// strictly inside another's target now is too.
 public func narrows(_ b: AST.Rule, _ a: AST.Rule) -> Bool {
     if sameText(a.name, b.name) { return false }
     if !sameText(a.effectKind, b.effectKind) { return false }
-    return a.target == nil && b.target != nil
+    return scopeCovers(a.target, b.target) && !scopeCovers(b.target, a.target)
 }
 
-/// (matched, uncertain).
+/// (matched, uncertain). No target on the rule means every target of the
+/// kind -- always a certain match. Otherwise, for a computed effect target:
+/// a possible match unless its known chunks rule the rule's target out
+/// (v37.0 §513, B2's `patternExcludes`). For a literal effect target: when
+/// both it and the rule's target are URL-shaped, the rule's target must
+/// COVER the effect's -- the same address, or anything under it (B2), the
+/// effect's own query and fragment ignored; otherwise (a file path, a
+/// `queue:send`-style name, console text) an exact string match, exactly as
+/// before B2.
 func targetMatches(_ rule: AST.Rule, _ effect: Effect) -> (Bool, Bool) {
     guard let target = rule.target else { return (true, false) }
     if effect.computed {
         if patternExcludes(target, effect.target) { return (false, false) }
         return (true, true)
     }
+    if parseURLTarget(target) != nil && parseURLTarget(effect.target) != nil {
+        return (urlCovers(target, effect.target), false)
+    }
     return (sameText(effect.target, target), false)
 }
 
-/// rules.py's `_pattern_excludes`, which this must agree with: can a computed
-/// target provably never equal the rule's target? Its known chunks must appear
-/// in the rule's target in order, the first at the start and the last at the
-/// end, a hole standing for any text including none. A target with no hole, or
-/// a foreign's "(destination not stated)", excludes nothing. Compared scalar by
-/// scalar, never by `String`'s canonical equivalence.
+/// rules.py's `_pattern_excludes`, which this must agree with: can a
+/// computed target provably never be COVERED by the rule's target (B2;
+/// originally "never equal", v37.0 §513)? When the rule's target isn't
+/// URL-shaped, covering is exact-string equality, unchanged since v37.0
+/// (`exactPatternExcludes`). When it is, B2 re-proves the guard for
+/// host/path covering (`urlPatternExcludes`). A target with no hole, or a
+/// foreign's "(destination not stated)", excludes nothing either way.
 func patternExcludes(_ ruleTarget: String, _ effectTarget: String) -> Bool {
+    let hole = Array("{...}".unicodeScalars)
+    let effect = Array(effectTarget.unicodeScalars)
+    let noDestination = Array(" (destination not stated)".unicodeScalars)
+    if effect.count >= noDestination.count && effect.suffix(noDestination.count).elementsEqual(noDestination) {
+        return false
+    }
+    guard findScalars(hole, in: effect) != nil else { return false }
+
+    guard let ruleURL = parseURLTarget(ruleTarget) else {
+        return exactPatternExcludes(ruleTarget, effectTarget)
+    }
+    return urlPatternExcludes(ruleURL.scheme, ruleURL.host, ruleURL.path, effectTarget)
+}
+
+/// The v37.0 §513 algorithm, unchanged: can this pattern never equal
+/// `ruleTarget` as a flat string? Its known chunks must appear in it in
+/// order — the first anchored to the start, the last to the end, unless the
+/// pattern opens or closes with a hole — with a hole free to stand for any
+/// text, including none. Still what governs a rule target B2 leaves on
+/// exact matching (not URL-shaped: a file path, a `queue:send`-style name,
+/// console text). Compared scalar by scalar, never by `String`'s canonical
+/// equivalence.
+func exactPatternExcludes(_ ruleTarget: String, _ effectTarget: String) -> Bool {
     let hole = Array("{...}".unicodeScalars)
     let rule = Array(ruleTarget.unicodeScalars)
     let effect = Array(effectTarget.unicodeScalars)
-    let noDestination = Array(" (destination not stated)".unicodeScalars)
 
     func find(_ needle: [Unicode.Scalar], in hay: [Unicode.Scalar], from: Int, to: Int) -> Int? {
         if needle.isEmpty { return from <= to ? from : nil }
@@ -258,9 +452,6 @@ func patternExcludes(_ ruleTarget: String, _ effectTarget: String) -> Bool {
         return nil
     }
 
-    if effect.count >= noDestination.count && effect.suffix(noDestination.count).elementsEqual(noDestination) {
-        return false
-    }
     var chunks: [[Unicode.Scalar]] = []
     var start = 0
     while let at = find(hole, in: effect, from: start, to: effect.count) {
@@ -282,6 +473,66 @@ func patternExcludes(_ ruleTarget: String, _ effectTarget: String) -> Bool {
         pos = at + chunk.count
     }
     return false
+}
+
+/// B2's re-proof of the v37.0 §513 guard for a URL-shaped rule target: can
+/// this computed target's KNOWN prefix -- the literal text before its first
+/// hole, which is a true, certain prefix of whatever the hole goes on to
+/// produce (v37.0 §511) -- prove no completion could ever be covered by the
+/// rule?
+///
+/// Reasons from that one chunk only. It's the one piece of the pattern
+/// guaranteed to survive regardless of what any hole produces, so a proof
+/// built from it alone is sound: it can only prove exclusions that are
+/// real. A later chunk could in principle prove more, but skipping it only
+/// means staying uncertain more often -- the conservative side of the
+/// guarantee ("when in doubt, don't exclude").
+func urlPatternExcludes(_ rScheme: String, _ rHost: String, _ rPath: String, _ effectTarget: String) -> Bool {
+    let hole = Array("{...}".unicodeScalars)
+    let effect = Array(effectTarget.unicodeScalars)
+    guard let holeAt = findScalars(hole, in: effect) else { return false }
+    let first = Array(effect[0..<holeAt])
+
+    let sepMarker = Array("://".unicodeScalars)
+    guard let sep = findScalars(sepMarker, in: first), sep > 0, isSchemeScalars(first[0..<sep]) else {
+        return false
+    }
+    if lowerScalars(first[0..<sep]) != lowerScalars(Array(rScheme.unicodeScalars)) { return true }
+
+    let remainder = Array(first[(sep + 3)...])
+    var term = remainder.count
+    for i in 0..<remainder.count where remainder[i] == "/" || remainder[i] == "?" || remainder[i] == "#" {
+        term = i
+        break
+    }
+    let rHostLower = lowerScalars(Array(rHost.unicodeScalars))
+    if term == remainder.count {
+        // The host itself isn't fully known here -- only a prefix of it is,
+        // from this chunk. Whatever it resolves to will still start with
+        // this prefix, so a rule host that does NOT start with it can
+        // never be that host.
+        return !rHostLower.starts(with: lowerScalars(remainder))
+    }
+
+    let eHost = Array(remainder[0..<term])
+    let rest = Array(remainder[term...])
+    if lowerScalars(eHost) != rHostLower { return true }
+
+    if rest.first == "?" || rest.first == "#" {
+        // The path is fully known here, from certain text -- and empty.
+        return !(rPath.isEmpty || rPath == "/")
+    }
+
+    let knownPath = rest
+    if rPath.isEmpty || rPath == "/" { return false }
+    let rPathScalars = Array(rPath.unicodeScalars)
+    let lr = rPathScalars.count
+    if knownPath.count < lr {
+        return !knownPath.elementsEqual(rPathScalars[0..<knownPath.count])
+    }
+    if !knownPath[0..<lr].elementsEqual(rPathScalars) { return true }
+    if knownPath.count == lr { return false }
+    return knownPath[lr] != "/"
 }
 
 func resolveSubject(_ rule: AST.Rule, _ surface: Surface, _ declaringFile: String?) throws {
@@ -362,12 +613,31 @@ func resolveActive(_ rules: [AST.Rule]) throws -> [AST.Rule] {
     return rules.filter { !dropped.contains(CodePoints($0.name)) }
 }
 
+/// B2: a rule target names an address, not a request. The matcher ignores
+/// an EFFECT's own query string and fragment (B2 §3) -- but a query or
+/// fragment written into the RULE's own target is an authoring mistake, not
+/// something to silently drop, so a URL-shaped target carrying one is
+/// refused before any matching runs. Checked for every declared rule,
+/// forbid or permit, superseded or not.
+func checkTargetIsAnAddress(_ rule: AST.Rule) throws {
+    guard let target = rule.target else { return }
+    guard let parsed = parseURLTarget(target) else { return }
+    if parsed.query == nil && parsed.fragment == nil { return }
+    throw RuleConflict(
+        "rule [\(rule.name)] (line \(rule.line)): target " +
+            "\"\(escapeStringLiteral(target))\" has a query string or " +
+            "fragment — a rule target names an address, and only an " +
+            "effect's own query and fragment are ever ignored, never the " +
+            "rule's\n" +
+            "  drop everything from the \"?\" or \"#\" onward")
+}
+
 func checkPermitsAreRelated(_ active: [AST.Rule]) throws {
     let forbids = active.filter { sameText($0.assertion, "forbid") }
     for p in active where sameText(p.assertion, "permit") {
         let related = forbids.contains { f in
             sameText(f.effectKind, p.effectKind) &&
-                (sameOptionalText(p.supersedes, f.name) || narrows(p, f) || sameOptionalText(p.target, f.target))
+                (sameOptionalText(p.supersedes, f.name) || narrows(p, f) || sameScope(p.target, f.target))
         }
         if !related {
             throw RuleConflict(
@@ -384,7 +654,7 @@ func checkPermitsAreRelated(_ active: [AST.Rule]) throws {
 func checkConflicts(_ active: [AST.Rule]) throws {
     for (i, a) in active.enumerated() {
         for b in active[(i + 1)...] {
-            if !sameText(a.effectKind, b.effectKind) || !sameOptionalText(a.target, b.target) { continue }
+            if !sameText(a.effectKind, b.effectKind) || !sameScope(a.target, b.target) { continue }
             if narrows(a, b) || narrows(b, a) { continue }
             if sameOptionalText(a.supersedes, b.name) || sameOptionalText(b.supersedes, a.name) { continue }
 
@@ -419,6 +689,10 @@ func checkConflicts(_ active: [AST.Rule]) throws {
 /// named-subject resolution: nil matches a surface built with no file.
 /// Throws RuleNotSupported or RuleConflict.
 public func check(_ rules: [AST.Rule], _ surface: Surface, declaringFile: String? = nil) throws -> RuleResults {
+    for rule in rules {
+        try checkTargetIsAnAddress(rule)
+    }
+
     var resolvedSubjects: [String] = []
     for rule in rules where !sameText(rule.subject, "anything") {
         try resolveSubject(rule, surface, declaringFile)

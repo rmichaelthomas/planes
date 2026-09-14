@@ -324,10 +324,19 @@ prefix, known statically) concatenated with a parameter the analyser could
 not resolve to a constant. `{...}` is a hole standing for *any* text,
 including none — a pattern that opens or closes with a hole is not anchored
 on that end (`rules.py`'s `_pattern_excludes`, which uses exactly this
-convention to decide whether a rule's target can *never* match a computed
-one). This is the same `{...}` a rule-matching implementation must
+convention to decide whether a rule's target can *never* be reached by a
+computed one). This is the same `{...}` a rule-matching implementation must
 recognise — `js/rules.mjs`'s `patternExcludes` and `Rules.swift`'s
 `patternExcludes` must agree with `shapes.py`'s `_pattern_excludes` on it.
+
+For a rule target that parses as `scheme://host[:port][/path]`, a rule
+covers that address **and everything under it** (B2), not only the exact
+address: `_pattern_excludes` was re-proven for that weaker condition, so a
+computed target is excluded only when its known chunks prove no completion
+could ever be *covered* by the rule — not merely that it could never *equal*
+the rule's target outright. A target that isn't URL-shaped (a file path, a
+`queue:send`-style name, console text) still matches exactly, as every rule
+target did before B2.
 
 ### 4.2 `(destination not stated)`
 
