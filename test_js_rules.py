@@ -362,10 +362,12 @@ def test_json_rules_agree_on_a_contradiction():
     assert contradiction_docs[0] == {
         "rule": "no-sends",
         "effect": {"kind": "ask", "boundary": "network",
-                   "target": "https://x.example.com", "line": 6},
+                   "target": "https://x.example.com", "line": 6,
+                   "computed": False, "declared": False},
         "with_rule": "no-writes",
         "with_effect": {"kind": "write", "boundary": "file",
-                        "target": "out.txt", "line": 5},
+                        "target": "out.txt", "line": 5,
+                        "computed": False, "declared": False},
     }
 
 

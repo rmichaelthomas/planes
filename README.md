@@ -180,6 +180,25 @@ checking) under their real names, plus `Interpreter` and the rest of what
 host one. Hand-written types ship alongside it in `js/embed.d.mts`, documenting
 the exact-rational number representation among the rest.
 
+**Writing your own wording (B4).** `check()` returns `Violation`s whose
+`asJson()` is typed precisely as `ViolationJson` in `js/embed.d.mts` — every
+field `render()`'s text is built from, so a host writes its own sentence
+straight from the fields instead of parsing `render()`'s prose:
+
+```js
+for (const v of check(rules, surface)) {
+  if (v.cleared_by) continue;               // excepted -- not a refusal
+  const doc = v.asJson();
+  const reason = doc.because ?? "this destination is not allowed here";
+  console.log(`refused: ${reason} (${doc.effect?.target ?? doc.subject})`);
+}
+```
+
+`render()` itself is defined this same way — `renderViolation(this.asJson())`
+— a pure function of the `ViolationJson` document, exported alongside `check`
+for a host that wants Planes' own wording without re-deriving it, or wants to
+prove its own wording covers the same fields.
+
 The grammar data itself is generated, the way Swift embeds it in
 `GrammarData.swift`: `python3 scripts/js_grammar_gen.py` projects
 `grammar/vocabulary.json`, `grammar/messages/amber.json` and
@@ -579,6 +598,13 @@ incompatibility, distinct from the structural conflict the checker detects
 on its own. When both rules of a declared pair apply to the same program,
 the checker reports it as a contradiction, counted the same as a real
 violation.
+
+**`--json --rules` reports every fact above as a structured field, not only
+as `render()`'s prose** (B4) — a rule's own subject, an effect's `computed`/
+`declared` flags, a vacuous rule's situation, a contradiction's two sides —
+so a host writes its own wording without parsing rendered text. See
+[`docs/surface-format-v2.md`](docs/surface-format-v2.md)'s "Writing your own
+wording".
 
 ---
 

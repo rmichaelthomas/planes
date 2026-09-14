@@ -18,9 +18,10 @@ beside the class list it governs:
   error    the entry constructs one of the seven error classes the reference
            implementation defines. Measured here.
   report   the entry is text a plane renders for a person without raising —
-           rules.py's `Violation.render` and `_render_vacuous`. Counted and
-           listed, never measured: an error stops a program and leaves its
-           author needing a next move, and a report does not.
+           rules.py's `render_violation` and `_render_vacuous_text` (B4;
+           `Violation.render()`/`Violation.as_json()` delegate to these).
+           Counted and listed, never measured: an error stops a program and
+           leaves its author needing a next move, and a report does not.
 
 Four report lines used to be counted as passes, which inflated the 70 S8
 measured. They are not errors, and the number that matters is the one that is

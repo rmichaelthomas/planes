@@ -194,6 +194,101 @@ export function fingerprint(rule: PlanesNode): string;
  * e.g. `program may not write to "refunds.json"`. */
 export function condition(rule: PlanesNode): string;
 
+/** One matched effect, as a violation's `effect`/`cleared_by`/`contradiction`
+ * fields carry it (docs/surface-format-v2.md §2.7) — `kind`/`boundary` are
+ * the effect's ACTUAL kind/boundary (which can differ from the violated
+ * rule's own declared `kind`: forbidding `ask` also forbids `send`, B1),
+ * `line` is its source line, and `computed`/`declared` are `Effect#computed`/
+ * `Effect#claimed` (B4) — the facts the rendered text's `" (computed)"` /
+ * `" (declared, not verified)"` suffixes come from. */
+export interface EffectJson {
+  kind: string;
+  boundary: string;
+  target: string;
+  line: number;
+  computed: boolean;
+  declared: boolean;
+}
+
+/** `{rule, line}` — the identity of another rule, nothing else. Used for
+ * `cleared_by` (the permit that excepted a match) and each entry of
+ * `narrowed_by` (a sibling forbid rule with a narrower scope that also
+ * matched). */
+export interface RuleRef {
+  rule: string;
+  line: number;
+}
+
+/** One entry in `origins`: every name/file a matched effect's target
+ * provably derives from (alphabetically sorted and deduplicated the same
+ * way the rendered "derived from:" line is). `file` is `null` when the
+ * name has no associated file. */
+export interface OriginJson {
+  name: string;
+  file: string | null;
+}
+
+/** B3's contradiction shape (docs/surface-format-v2.md §2.10): both rules
+ * of a declared `contradicts` pair matched at least one effect. `rule`/
+ * `effect` name the rule that wrote the `contradicts` clause and the effect
+ * it matched — the same values the violation's own top-level `rule`/`effect`
+ * fields carry, repeated here so a consumer reading only this key gets both
+ * sides of the pair. `with_rule`/`with_effect` name the rule `contradicts`
+ * pointed at and the effect THAT rule matched. */
+export interface ContradictionJson {
+  rule: string;
+  effect: EffectJson | null;
+  with_rule: string;
+  with_effect: EffectJson;
+}
+
+/**
+ * `Violation#asJson()`'s exact document (H1, B4; docs/surface-format-v2.md
+ * §2.6) — every field `render()`'s text is built from, so a host never has
+ * to parse `message`/`render()` to get at a fact this interface already
+ * names. Five shapes, told apart by `contradiction` (non-null), `vacuous`
+ * (true), `cleared_by` (non-null), and `narrowed_by` (non-empty) — none set
+ * is a plain, genuine violation.
+ *
+ * `subject` (B4) is the rule's own named subject (`"anything"` for the
+ * wildcard) — present because the vacuous shapes' text uses it raw, never
+ * folded into `condition` the way `assertion`/`kind`/`target` are.
+ * `message` is `render()`'s own text, included verbatim so a host can print
+ * exactly what text mode prints without re-deriving it; `renderViolation`
+ * (below) is what proves every OTHER field here is enough to reconstruct it.
+ */
+export interface ViolationJson {
+  rule: string;
+  rule_line: number;
+  subject: string;
+  assertion: "forbid" | "permit";
+  kind: string;
+  target: string | null;
+  condition: string;
+  because: string | null;
+  is_violation: boolean;
+  vacuous: boolean;
+  vacuous_situation: 1 | 2 | 3 | null;
+  uncertain: boolean;
+  effect: EffectJson | null;
+  cleared_by: RuleRef | null;
+  narrowed_by: RuleRef[];
+  contradiction: ContradictionJson | null;
+  origins: OriginJson[];
+  message: string;
+}
+
+/** `render()`'s text, computed purely from a `ViolationJson` document (B4)
+ * — never from a `Violation`/rule/effect object. `Violation#render()` is
+ * itself defined as `renderViolation(this.asJson())`; a host can call this
+ * directly on its own copy of `asJson()`'s output (including one round-
+ * tripped through `JSON.stringify`/`JSON.parse`, or received over the wire
+ * from `shapes_cli.py --json --rules`) to get the identical text without
+ * re-deriving it — or, more to B4's point, skip this entirely and build its
+ * own wording straight from the fields (see README's "Embedding from
+ * JavaScript" and docs/surface-format-v2.md's "Writing your own wording"). */
+export function renderViolation(fields: ViolationJson): string;
+
 /** One `forbid` rule matched — or, for the vacuous shape, not matched
  * against anything at all — against the traced effect surface. */
 export class Violation {
@@ -214,9 +309,13 @@ export class Violation {
    * both read. */
   readonly is_violation: boolean;
   /** The human-readable finding, the same text `shapes_cli.py --rules`
-   * prints for this violation. */
+   * prints for this violation — equivalent to `renderViolation(this.
+   * asJson())`. */
   render(): string;
   toString(): string;
+  /** Every field `render()` reads, as data rather than prose (H1, B4) — see
+   * `ViolationJson`. */
+  asJson(): ViolationJson;
 }
 
 /** `check()`'s return value: every rule's result, plus which rule subjects

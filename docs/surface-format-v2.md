@@ -45,7 +45,7 @@ object with these fields."
 
 Format 1's record is [`docs/surface-format-v1.md`](surface-format-v1.md),
 frozen as the `sprint-a-2026-09` tag's format — unchanged since, apart from
-the pointer line at its own top. Three sprint-B items changed the format,
+the pointer line at its own top. Four sprint-B items changed the format,
 one of which (B1) is the reason it bumped at all:
 
 1. **`send` joined the effect vocabulary, and `ask`'s meaning narrowed**
@@ -95,6 +95,16 @@ one of which (B1) is the reason it bumped at all:
    `supersedes` also became stricter in this sprint: a `supersedes` clause
    naming no fingerprint at all is now refused, where format 1 only
    checked a fingerprint that was present (§2.2 is otherwise unchanged).
+4. **Every fact `render()`'s text stated is now a field, not only prose**
+   (B4): a rule's own `subject` (§2.6) and a matched effect's `computed`/
+   `declared` (§2.7, also inside `contradiction`'s two effects, §2.10) were
+   readable before only inside `message`'s rendered sentence — never as
+   their own key. `render()` itself is now defined as a pure function of
+   these fields (`render_violation`/`renderViolation`), so a host writes
+   its own wording without parsing `message` — see §8, "Writing your own
+   wording". Purely additive: no existing field's meaning changed, and a
+   consumer that ignores the two new fields sees the same document format 2
+   always gave it.
 
 ---
 
@@ -245,15 +255,19 @@ appears here exactly as an undeclared `ask` would.
 
 ### 2.6 One entry in `rules.violations`
 
-One `Violation.as_json()` (`rules.py`), sixteen keys in this order — one
+One `Violation.as_json()` (`rules.py`), eighteen keys in this order — one
 per forbid rule matched against one effect, against nothing at all (the
 vacuous shape), or one declared `contradicts` pair where both rules apply
-(the contradiction shape, B3):
+(the contradiction shape, B3). **B4 added `subject` here, and `computed`/
+`declared` inside `effect`/§2.7** — every one of them a fact `render()`'s
+text already stated, but only as prose, before this: see §8, "Writing your
+own wording".
 
 | key | type | meaning |
 |---|---|---|
 | `rule` | string | the rule's name — the forbid rule for the first four shapes, or the rule that wrote the `contradicts` clause for the contradiction shape |
 | `rule_line` | integer | the line the rule is declared on |
+| `subject` (B4) | string | the rule's own named subject (`"anything"` for the wildcard) — used raw in the vacuous shapes' text (§4.6), never folded into `condition` the way `assertion`/`kind`/`target` are |
 | `assertion` | string enum: `"forbid"` \| `"permit"` | `"forbid"` for the first four shapes — only a forbid rule ever produces one of those. For the contradiction shape this is `rule`'s own assertion, which may be `"permit"`: `contradicts` can be declared on either kind of rule |
 | `kind` | string, one of the eight vocabulary kinds (never `"unknown"` — the parser rejects any other word here at parse time) | the rule's **own declared** effect kind — see §2.7 for why this can differ from the matched effect's actual kind |
 | `target` | string or `null` | the rule's declared target, or `null` when the rule names none (matches every target of its kind) |
@@ -288,7 +302,8 @@ example, where the telemetry call is exactly this case.
 ### 2.7 `effect` (inside a violation)
 
 ```
-{ "kind": "ask", "boundary": "network", "target": "https://…", "line": 9 }
+{ "kind": "ask", "boundary": "network", "target": "https://…", "line": 9,
+  "computed": false, "declared": false }
 ```
 
 `kind` and `boundary` are drawn from the same closed set as a rule's own
@@ -296,6 +311,15 @@ example, where the telemetry call is exactly this case.
 written against one of the eight vocabulary kinds. `line` is the effect's
 source line. This `kind` is the effect's **actual** kind, which is not
 always the rule's own `kind` — see the B1 note in §2.6.
+
+**`computed` and `declared` (B4)** are `Effect.computed`/`Effect.claimed` —
+the same two booleans, same names, as the top-level surface's own
+`effects[]` entries (§2.3). Before B4 these were readable only as the text
+rendering's `" (computed)"` / `" (declared, not verified)"` suffixes (§4.2);
+now the fact is in the JSON directly, whether or not the match itself is
+`uncertain` (§2.6) — a `declared`, non-`computed` effect (a `foreign`
+declaration with a literal destination) still needs `declared` to render
+correctly, even though `uncertain` never applies to it.
 
 ### 2.8 `cleared_by` and one entry in `narrowed_by`
 
@@ -359,9 +383,11 @@ rather than in shape.
 ```
 {
   "rule": "no-sends",
-  "effect": { "kind": "ask", "boundary": "network", "target": "https://x.example.com", "line": 11 },
+  "effect": { "kind": "ask", "boundary": "network", "target": "https://x.example.com",
+              "line": 11, "computed": false, "declared": false },
   "with_rule": "no-writes",
-  "with_effect": { "kind": "write", "boundary": "file", "target": "out.txt", "line": 10 }
+  "with_effect": { "kind": "write", "boundary": "file", "target": "out.txt",
+                   "line": 10, "computed": false, "declared": false }
 }
 ```
 
@@ -674,6 +700,7 @@ committed at `demo/mcp/v2.surface.json` and gated by `test_mcp_demo.py`):
       {
         "rule": "no-telemetry-exfiltration",
         "rule_line": 1,
+        "subject": "anything",
         "assertion": "forbid",
         "kind": "ask",
         "target": "https://telemetry.example.com/collect",
@@ -684,7 +711,8 @@ committed at `demo/mcp/v2.surface.json` and gated by `test_mcp_demo.py`):
         "vacuous_situation": null,
         "uncertain": false,
         "effect": {"kind": "send", "boundary": "network",
-                   "target": "https://telemetry.example.com/collect", "line": 9},
+                   "target": "https://telemetry.example.com/collect", "line": 9,
+                   "computed": false, "declared": true},
         "cleared_by": null,
         "narrowed_by": [],
         "contradiction": null,
@@ -723,3 +751,55 @@ matching didn't change at all.
 `supersedes`: `audit-allowed`'s clause now reads `supersedes
 [no-external-sends] @960178` — a fingerprint is mandatory, and omitting it
 is refused with the exact value to write.
+
+## 8. Writing your own wording (B4)
+
+Three downstream hosts each write their own sentence for a violation today,
+and each one gets there by parsing `message` — 5xFive translates it into
+operator language (checkpoint v3.2 §267), MuseSky wants amber without
+jargon, Koncord keeps Planes backstage and shows only its own refusal line.
+Parsing rendered prose is brittle in a way a structured field never is: a
+wording change to `render()` (a typo fix, a clearer phrase) is invisible to
+`is_violation`/`vacuous`/`cleared_by` and every other field, but it can
+silently break a regex written against `message`.
+
+**Every fact `render()`'s text states is a field in §2.6/§2.7/§2.10 — never
+only in `message` or `condition`.** `render_violation`
+(`js/rules.mjs`'s `renderViolation`, `Rules.swift`'s `renderViolation(_:)`)
+is `render()`'s own implementation, and it is a pure function of exactly
+these fields — nothing else reaches the text. Test suites in all three
+hosts pin this: given `as_json()`'s output, round-tripped through
+`json.dumps`/`json.loads` (`JSON.stringify`/`JSON.parse` in JS; a Swift
+host's own `GrammarJSON.parse` of the CLI's JSON text), `render_violation`
+of that document equals `render()` byte for byte, over every violation
+shape and every rule-bearing fixture in the repo. If a fact ever existed in
+`message` that these fields could not reconstruct, that test would fail —
+which is exactly why a host can trust the fields instead of the prose.
+
+One sentence per shape, built only from fields — no `message`, no
+`condition`, no regex:
+
+- **Real violation** (`is_violation: true`, `cleared_by`/`vacuous`/
+  `contradiction` all falsy/null): `f"{effect.kind} to {effect.target} at
+  line {effect.line} is blocked by rule {rule} ({assertion} {kind})"` — a
+  computed, `uncertain: true` match reads "may be blocked" instead of "is
+  blocked"; sibling rules in `narrowed_by` can be listed as "also matched
+  by: …".
+- **Cleared** (`cleared_by` non-`null`, `is_violation: false`): `f"{rule}
+  would have blocked this, but {cleared_by.rule} (line {cleared_by.line})
+  allows it"`.
+- **Vacuous** (`vacuous: true`): `f"rule {rule} never triggered for
+  '{subject}'"`, with `vacuous_situation` choosing the rest of the
+  sentence — `1`: "the program never performs '{kind}' at all"; `2`:
+  "'{subject}' never reaches a '{kind}' effect"; `3`: "'{subject}' reaches
+  '{kind}', but never at '{target}'".
+- **Contradiction** (`contradiction` non-`null`, `is_violation: true`):
+  `f"{contradiction.rule} and {contradiction.with_rule} must never both
+  apply, but both do here"`, with `because` (the declaring rule's own, if
+  present) appended as the reason.
+
+None of these read `message`. A host free to keep Planes entirely backstage
+(Koncord) never constructs any of these sentences at all — it reads
+`is_violation`/`cleared_by`/`because` and prints its own fixed refusal line,
+which is the point: the fields carry enough to build ANY wording, including
+none.

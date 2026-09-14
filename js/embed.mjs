@@ -59,8 +59,19 @@ export {
   FORMAT_VERSION as SURFACE_FORMAT_VERSION,
 } from "./shapes.mjs";
 
-// ---- rule checking (js/rules.mjs)
-export { check, fingerprint, condition, RuleConflict, RuleNotSupported } from "./rules.mjs";
+// ---- rule checking (js/rules.mjs). `renderViolation` (B4) is the pure
+// function `Violation#render()` is itself defined in terms of — a host can
+// call it directly on a `Violation#asJson()` document (its own, or one
+// round-tripped through JSON.stringify/JSON.parse) instead of re-deriving
+// text from the structured fields by hand.
+export {
+  check,
+  fingerprint,
+  condition,
+  renderViolation,
+  RuleConflict,
+  RuleNotSupported,
+} from "./rules.mjs";
 
 // ---- running programs (js/interp.mjs). `Traced`/`lit` are the wrapper
 // `Interpreter#env.get(name)` returns and the way to build one from a plain

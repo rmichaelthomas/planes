@@ -130,6 +130,10 @@
             "properties": {
               "rule": { "type": "string" },
               "rule_line": { "type": "integer" },
+              "subject": {
+                "type": "string",
+                "description": "B4: the rule's own named subject ('anything' for the wildcard) -- present because the vacuous shapes' rendered text uses it raw, never folded into 'condition' the way assertion/kind/target are."
+              },
               "assertion": {
                 "type": "string",
                 "enum": ["forbid", "permit"],
@@ -171,9 +175,17 @@
                         "enum": ["ambient", "console", "file", "network"]
                       },
                       "target": { "type": "string" },
-                      "line": { "type": "integer" }
+                      "line": { "type": "integer" },
+                      "computed": {
+                        "type": "boolean",
+                        "description": "B4: Effect.computed -- the text rendering's ' (computed)' suffix comes from this, not from parsing 'target'."
+                      },
+                      "declared": {
+                        "type": "boolean",
+                        "description": "B4: Effect.claimed -- the text rendering's ' (declared, not verified)' suffix comes from this. Same name as the top-level surface's own effects[] entries (docs/surface-format-v2.md §2.3)."
+                      }
                     },
-                    "required": ["kind", "boundary", "target", "line"],
+                    "required": ["kind", "boundary", "target", "line", "computed", "declared"],
                     "additionalProperties": false
                   },
                   { "type": "null" }
@@ -226,9 +238,11 @@
                                 "enum": ["ambient", "console", "file", "network"]
                               },
                               "target": { "type": "string" },
-                              "line": { "type": "integer" }
+                              "line": { "type": "integer" },
+                              "computed": { "type": "boolean" },
+                              "declared": { "type": "boolean" }
                             },
-                            "required": ["kind", "boundary", "target", "line"],
+                            "required": ["kind", "boundary", "target", "line", "computed", "declared"],
                             "additionalProperties": false
                           },
                           { "type": "null" }
@@ -247,9 +261,11 @@
                             "enum": ["ambient", "console", "file", "network"]
                           },
                           "target": { "type": "string" },
-                          "line": { "type": "integer" }
+                          "line": { "type": "integer" },
+                          "computed": { "type": "boolean" },
+                          "declared": { "type": "boolean" }
                         },
-                        "required": ["kind", "boundary", "target", "line"],
+                        "required": ["kind", "boundary", "target", "line", "computed", "declared"],
                         "additionalProperties": false
                       }
                     },
@@ -276,10 +292,10 @@
               "message": { "type": "string" }
             },
             "required": [
-              "rule", "rule_line", "assertion", "kind", "target", "condition",
-              "because", "is_violation", "vacuous", "vacuous_situation",
-              "uncertain", "effect", "cleared_by", "narrowed_by",
-              "contradiction", "origins", "message"
+              "rule", "rule_line", "subject", "assertion", "kind", "target",
+              "condition", "because", "is_violation", "vacuous",
+              "vacuous_situation", "uncertain", "effect", "cleared_by",
+              "narrowed_by", "contradiction", "origins", "message"
             ],
             "additionalProperties": false
           }

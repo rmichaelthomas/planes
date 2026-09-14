@@ -10,7 +10,15 @@ import sys
 from interp import Interpreter
 from lexer import EFFECT_KINDS, Rule
 from parser import PlanesSyntaxError, parse, scan_names
-from rules import RuleConflict, RuleNotSupported, check, condition, fingerprint, narrows
+from rules import (
+    RuleConflict,
+    RuleNotSupported,
+    check,
+    condition,
+    fingerprint,
+    narrows,
+    render_violation,
+)
 from shapes import Effect, analyse
 
 
@@ -1551,10 +1559,12 @@ def test_contradiction_as_json_names_both_rules_and_effects():
     assert doc["contradiction"] == {
         "rule": "no-sends",
         "effect": {"kind": "ask", "boundary": "network",
-                   "target": "https://x.example.com", "line": 6},
+                   "target": "https://x.example.com", "line": 6,
+                   "computed": False, "declared": False},
         "with_rule": "no-writes",
         "with_effect": {"kind": "write", "boundary": "file",
-                        "target": "out.txt", "line": 5},
+                        "target": "out.txt", "line": 5,
+                        "computed": False, "declared": False},
     }
 
 
@@ -1771,6 +1781,7 @@ def test_violation_as_json_reports_every_structured_field():
     doc = v.as_json()
     assert doc["rule"] == "no-net"
     assert doc["rule_line"] == 2
+    assert doc["subject"] == "anything"
     assert doc["assertion"] == "forbid"
     assert doc["kind"] == "ask"
     assert doc["target"] is None
@@ -1781,7 +1792,8 @@ def test_violation_as_json_reports_every_structured_field():
     assert doc["vacuous_situation"] is None
     assert doc["uncertain"] is False
     assert doc["effect"] == {"kind": "ask", "boundary": "network",
-                             "target": "https://example.com/a.json", "line": 3}
+                             "target": "https://example.com/a.json", "line": 3,
+                             "computed": False, "declared": False}
     assert doc["cleared_by"] is None
     assert doc["narrowed_by"] == []
     assert doc["origins"] == []
@@ -1983,6 +1995,142 @@ def test_permit_rule_presence_also_does_not_change_output_or_effects():
     assert i1.output == i2.output
     assert i1.effects == i2.effects
     assert i1.fs == i2.fs
+
+
+# ================================================================ B4: render() is pure over fields
+
+def _assert_render_matches_fields(v):
+    """B4's proof, one violation at a time: `render_violation` fed the
+    JSON round-tripped through `json.dumps`/`json.loads` (exactly what a
+    `--json --rules` consumer would see, `message` key and all) must equal
+    `v.render()` byte for byte. If some fact the text states were missing
+    from `as_json()`, this would be where it showed up as a mismatch, not
+    as a vague claim in a docstring."""
+    doc = v.as_json()
+    doc2 = json.loads(json.dumps(doc))
+    got = render_violation(doc2)
+    assert got == v.render(), (
+        f"render_violation(json round-trip) != v.render()\n"
+        f"  got:  {got!r}\n  want: {v.render()!r}")
+
+
+def test_render_is_a_pure_function_of_fields_over_every_violation_shape():
+    """One program per shape -- real, narrowed, cleared, all three vacuous
+    situations, uncertain, and a contradiction with and without `because`
+    -- every one of which `Violation.render()` has its own branch for."""
+    programs = []
+
+    # real (uncertain) + narrowed: "no-net" is narrowed by "no-telemetry",
+    # and "no-telemetry" itself matches a computed (uncertain) target.
+    programs.append(
+        'use http\n'
+        'to send of payload:\n'
+        '  give ask "https://collector.example.com/?d=" + payload\n\n'
+        'rule [no-net] anything may not ask\n'
+        'rule [no-telemetry] anything may not ask '
+        'to "https://collector.example.com"\n'
+        'x = send of "secret"\n')
+
+    # cleared by a permit
+    deny_src = 'rule [no-external-sends] anything may not ask'
+    fp = fingerprint(parse(deny_src)[0])
+    programs.append(
+        f'use http\n{deny_src}\n'
+        f'rule [audit-allowed] anything may ask to "https://audit.internal" '
+        f'supersedes [no-external-sends] @{fp}\n'
+        f'x = ask "https://audit.internal"\n')
+
+    # vacuous situation 1 -- no effect of the kind at all
+    programs.append(
+        'use file\nlet secret = "value"\nshow secret\n'
+        'rule [no-secret-uploads] secret may not ask\n')
+
+    # vacuous situation 2 -- effects of the kind exist, none derive from the subject
+    programs.append(
+        'use http\nuse file\n\n'
+        'let endpoint = "https://api.example.com/data"\n'
+        'let readings = read of "sensor.txt"\n\n'
+        'show readings\nask endpoint\n\n'
+        'rule [no-reading-uploads] readings may not ask\n')
+
+    # vacuous situation 3 -- subject reaches the kind, target excludes it
+    programs.append(
+        'use http\nlet payload = "secret"\n'
+        'let full = "https://collector.example.com/?d=" + payload\n'
+        'rule [no-other-leak] payload may not ask '
+        'to "https://different.example.com"\n'
+        'x = ask full\n')
+
+    # contradiction, with `because`
+    programs.append(
+        'use http\nuse file\n'
+        'rule [no-writes] anything may not write\n'
+        'rule [no-sends] anything may not ask contradicts [no-writes]\n'
+        '  because "no exfiltration once state has changed"\n'
+        'write 1 to "out.txt"\n'
+        'x = ask "https://x.example.com"\n')
+
+    # contradiction, no `because`
+    programs.append(
+        'use http\nuse file\n'
+        'rule [no-writes2] anything may not write\n'
+        'rule [no-sends2] anything may not ask contradicts [no-writes2]\n'
+        'write 1 to "out.txt"\n'
+        'x = ask "https://x.example.com"\n')
+
+    shapes_seen = set()
+    for src in programs:
+        for v in rule_violations(src):
+            _assert_render_matches_fields(v)
+            if v.contradicts_rule is not None:
+                shapes_seen.add("contradiction")
+                if v.rule.annotation is not None:
+                    shapes_seen.add("contradiction-because")
+            elif v.vacuous:
+                shapes_seen.add(f"vacuous-{v.vacuous_situation}")
+            elif v.cleared_by is not None:
+                shapes_seen.add("cleared")
+            elif v.narrowed_by:
+                shapes_seen.add("narrowed")
+            else:
+                shapes_seen.add("real")
+            if v.uncertain:
+                shapes_seen.add("uncertain")
+
+    assert shapes_seen == {
+        "real", "narrowed", "cleared", "vacuous-1", "vacuous-2", "vacuous-3",
+        "contradiction", "contradiction-because", "uncertain",
+    }, shapes_seen
+
+
+RULE_CORPUS_FILES = [
+    "annotated.planes",
+    "demo/rules/clean.planes",
+    "demo/rules/violation.planes",
+    "demo/rules/exception.planes",
+    "demo/mcp/v1.planes",
+    "demo/mcp/v2.planes",
+    "corpus/allowed-hosts.planes",
+    "corpus/audit-log.planes",
+]
+
+
+def test_render_is_a_pure_function_of_fields_over_the_rule_corpus():
+    """The same proof, over every real rule-bearing fixture in the repo,
+    through the same shapes_cli.py --rules path (analyse_file(follow),
+    declaring_file = the file's abspath) the other agreement suites use --
+    not just the hand-picked shapes above."""
+    import os
+
+    from shapes import analyse_file
+
+    for path in RULE_CORPUS_FILES:
+        src = open(path, encoding="utf-8").read()
+        found = [s for s in parse(src) if isinstance(s, Rule)]
+        surface = analyse_file(path, follow=True)
+        results = check(found, surface, declaring_file=os.path.abspath(path))
+        for v in results:
+            _assert_render_matches_fields(v)
 
 
 if __name__ == "__main__":

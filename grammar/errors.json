@@ -1462,57 +1462,57 @@
       ]
     },
     {
-      "id": "rules.render.branch-1",
+      "id": "rules._render_vacuous_text.branch-1",
       "kind": "report",
       "class": null,
       "tag": null,
-      "source": "rules.py:177-180",
-      "raised_in": "render",
-      "template": "[{self.rule.name}] would have been violated at line {self.effect.site} \u2014 excepted by [{self.cleared_by.name}] (line {self.cleared_by.line})",
+      "source": "rules.py:323-329",
+      "raised_in": "_render_vacuous_text",
+      "template": "[{name}] (line {line}) checked nothing \u2014 subject '{subject}' resolves in this file, but the program performs no '{kind}' effect at all\nthe rule is inert against this program as written\ncheck the program still performs the effect you expect, or remove the rule if it no longer applies",
       "slots": [],
       "assembled": true
     },
     {
-      "id": "rules.render.branch-2",
+      "id": "rules._render_vacuous_text.branch-2",
       "kind": "report",
       "class": null,
       "tag": null,
-      "source": "rules.py:182-198",
-      "raised_in": "render",
-      "template": "[{self.rule.name}] violated at line {self.effect.site}.\n  {self.effect}\n  target could not be pinned down statically \u2014 this computed value may or may not be \"{escape_string_literal(self.rule.target)}\"\n  rule declared at line {self.rule.line}: {condition(self.rule)}\n  narrowed here by {names}\n  derived from: {', '.join(parts)}",
+      "source": "rules.py:331-339",
+      "raised_in": "_render_vacuous_text",
+      "template": "[{name}] (line {line}) checked nothing \u2014 subject '{subject}' derives a '{kind}' effect, but the rule's target excludes every one\n'{subject}' reaches this effect kind, but never at \"{escape_string_literal(target)}\"\ncheck the target matches where '{subject}' actually goes, or remove the target to check every '{kind}' effect '{subject}' reaches",
       "slots": [],
       "assembled": true
     },
     {
-      "id": "rules._render_vacuous.branch-1",
+      "id": "rules._render_vacuous_text.branch-3",
       "kind": "report",
       "class": null,
       "tag": null,
-      "source": "rules.py:299-305",
-      "raised_in": "_render_vacuous",
-      "template": "[{rule.name}] (line {rule.line}) checked nothing \u2014 subject '{rule.subject}' resolves in this file, but the program performs no '{rule.kind}' effect at all\nthe rule is inert against this program as written\ncheck the program still performs the effect you expect, or remove the rule if it no longer applies",
+      "source": "rules.py:341-347",
+      "raised_in": "_render_vacuous_text",
+      "template": "[{name}] (line {line}) checked nothing \u2014 subject '{subject}' resolves in this file, but no '{kind}' effect derives from it\nthe program performs '{kind}', but to a target that does not derive from '{subject}'\ncheck the subject names the value you meant, or write the rule against 'anything'",
       "slots": [],
       "assembled": true
     },
     {
-      "id": "rules._render_vacuous.branch-2",
+      "id": "rules.render_violation.branch-2",
       "kind": "report",
       "class": null,
       "tag": null,
-      "source": "rules.py:307-315",
-      "raised_in": "_render_vacuous",
-      "template": "[{rule.name}] (line {rule.line}) checked nothing \u2014 subject '{rule.subject}' derives a '{rule.kind}' effect, but the rule's target excludes every one\n'{rule.subject}' reaches this effect kind, but never at \"{escape_string_literal(rule.target)}\"\ncheck the target matches where '{rule.subject}' actually goes, or remove the target to check every '{rule.kind}' effect '{rule.subject}' reaches",
+      "source": "rules.py:353-408",
+      "raised_in": "render_violation",
+      "template": "[{fields['rule']}] violated at line {effect['line']}.\n  {_render_effect_text(effect)}\n  target could not be pinned down statically \u2014 this computed value may or may not be \"{escape_string_literal(fields['target'])}\"\n  rule declared at line {fields['rule_line']}: {fields['condition']}\n  narrowed here by {names}\n  derived from: {', '.join(parts)}",
       "slots": [],
       "assembled": true
     },
     {
-      "id": "rules._render_vacuous.branch-3",
+      "id": "rules.render_violation.branch-1",
       "kind": "report",
       "class": null,
       "tag": null,
-      "source": "rules.py:317-323",
-      "raised_in": "_render_vacuous",
-      "template": "[{rule.name}] (line {rule.line}) checked nothing \u2014 subject '{rule.subject}' resolves in this file, but no '{rule.kind}' effect derives from it\nthe program performs '{rule.kind}', but to a target that does not derive from '{rule.subject}'\ncheck the subject names the value you meant, or write the rule against 'anything'",
+      "source": "rules.py:385-388",
+      "raised_in": "render_violation",
+      "template": "[{fields['rule']}] would have been violated at line {fields['effect']['line']} \u2014 excepted by [{cleared_by['rule']}] (line {cleared_by['line']})",
       "slots": [],
       "assembled": true
     },
@@ -1521,7 +1521,7 @@
       "kind": "error",
       "class": "RuleNotSupported",
       "tag": null,
-      "source": "rules.py:733",
+      "source": "rules.py:813",
       "raised_in": "_resolve_subject",
       "template": "rule [{rule.name}] (line {rule.line}): subject '{rule.subject}' only resolves in {other}, not in the file that declares this rule \u2014 a rule cannot reach across an import boundary to a name it never saw declared\n  write the rule in {other} instead, or name a subject local to this file",
       "slots": [
@@ -1537,7 +1537,7 @@
       "kind": "error",
       "class": "RuleNotSupported",
       "tag": null,
-      "source": "rules.py:740",
+      "source": "rules.py:820",
       "raised_in": "_resolve_subject",
       "template": "rule [{rule.name}] (line {rule.line}): subject '{rule.subject}' does not resolve to anything in the traced effect surface \u2014 checking it needs a value this file's derivation graph can reach\n  check the name is spelled as it appears in this file, or write the rule against 'anything' instead",
       "slots": [
@@ -1551,7 +1551,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:780",
+      "source": "rules.py:860",
       "raised_in": "_check_target_is_an_address",
       "template": "rule [{rule.name}] (line {rule.line}): target \"{escape_string_literal(rule.target)}\" has a query string or fragment \u2014 a rule target names an address, and only an effect's own query and fragment are ever ignored, never the rule's\n  drop everything from the \"?\" or \"#\" onward",
       "slots": [
@@ -1565,7 +1565,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:827",
+      "source": "rules.py:907",
       "raised_in": "_resolve_active",
       "template": "two rules are both named [{r.name}] (line {other.line} and line {r.line}) \u2014 a rule name must be unique\n  rename one of them",
       "slots": [
@@ -1579,7 +1579,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:838",
+      "source": "rules.py:918",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes itself\n  supersedes should name an earlier, different rule",
       "slots": [
@@ -1592,7 +1592,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:842",
+      "source": "rules.py:922",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes [{r.supersedes}], which is not a rule in this file\n  check the name, or remove the supersedes clause",
       "slots": [
@@ -1606,7 +1606,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:850",
+      "source": "rules.py:930",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes [{r.supersedes}] (line {target_rule.line}) without its fingerprint\n  write supersedes [{r.supersedes}] @{actual}",
       "slots": [
@@ -1623,7 +1623,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:856",
+      "source": "rules.py:936",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes [{r.supersedes}] (line {target_rule.line}) as of @{r.supersedes_fingerprint}, but [{r.supersedes}] is now @{actual} \u2014 it changed after [{r.name}] was written to override it\n  confirm the override still means what it meant, then update the fingerprint to @{actual}",
       "slots": [
@@ -1643,7 +1643,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:873",
+      "source": "rules.py:953",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) contradicts itself\n  contradicts should name a different rule",
       "slots": [
@@ -1656,7 +1656,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:877",
+      "source": "rules.py:957",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) contradicts [{r.contradicts}], which is not a rule in this file\n  check the name, or remove the contradicts clause",
       "slots": [
@@ -1670,7 +1670,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:885",
+      "source": "rules.py:965",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) contradicts [{r.contradicts}], but [{first.name}] (line {first.line}) already contradicts [{first.contradicts}] \u2014 the pair only needs declaring once\n  remove the contradicts clause from one of them",
       "slots": [
@@ -1687,7 +1687,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:936",
+      "source": "rules.py:1016",
       "raised_in": "_check_permits_are_related",
       "template": "rule [{p.name}] (line {p.line}) permits '{p.kind}' but excepts no forbid rule \u2014 a permit only has force against a prohibition it supersedes or narrows\n  add 'supersedes [name-of-the-forbid-rule]' to [{p.name}], or give it a target that narrows one of the forbid rules over '{p.kind}'",
       "slots": [
@@ -1703,7 +1703,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:1027",
+      "source": "rules.py:1107",
       "raised_in": "_check_conflicts",
       "template": "rule [{forbid.name}] (line {forbid.line}) and rule [{permit.name}] (line {permit.line}) demand opposite things over {where} \u2014 one forbids it, the other permits it, and neither narrows nor supersedes the other\n  add 'supersedes [{forbid.name}]' to [{permit.name}] to make the exception explicit, or give one of them a target the other lacks",
       "slots": [
@@ -1721,7 +1721,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:1036",
+      "source": "rules.py:1116",
       "raised_in": "_check_conflicts",
       "template": "rule [{a.name}] (line {a.line}) and rule [{b.name}] (line {b.line}) are equally specific over {where} \u2014 neither narrows nor supersedes the other\n  add 'supersedes [{a.name}]' to [{b.name}] (or the reverse), or give one of them a target the other lacks",
       "slots": [
@@ -1996,62 +1996,62 @@
     "parser.planessyntaxerror-site.prescan_funcs-2": [
       "parser.py:1427"
     ],
-    "rules.render.branch-1": [
-      "rules.py:177-180"
+    "rules._render_vacuous_text.branch-1": [
+      "rules.py:323-329"
     ],
-    "rules.render.branch-2": [
-      "rules.py:182-198"
+    "rules._render_vacuous_text.branch-2": [
+      "rules.py:331-339"
     ],
-    "rules._render_vacuous.branch-1": [
-      "rules.py:299-305"
+    "rules._render_vacuous_text.branch-3": [
+      "rules.py:341-347"
     ],
-    "rules._render_vacuous.branch-2": [
-      "rules.py:307-315"
+    "rules.render_violation.branch-2": [
+      "rules.py:353-408"
     ],
-    "rules._render_vacuous.branch-3": [
-      "rules.py:317-323"
+    "rules.render_violation.branch-1": [
+      "rules.py:385-388"
     ],
     "rules.rulenotsupported-site._resolve_subject-1": [
-      "rules.py:733"
+      "rules.py:813"
     ],
     "rules.rulenotsupported-site._resolve_subject-2": [
-      "rules.py:740"
+      "rules.py:820"
     ],
     "rules.ruleconflict-site._check_target_is_an_address": [
-      "rules.py:780"
+      "rules.py:860"
     ],
     "rules.ruleconflict-site._resolve_active-1": [
-      "rules.py:827"
+      "rules.py:907"
     ],
     "rules.ruleconflict-site._resolve_active-2": [
-      "rules.py:838"
+      "rules.py:918"
     ],
     "rules.ruleconflict-site._resolve_active-3": [
-      "rules.py:842"
+      "rules.py:922"
     ],
     "rules.ruleconflict-site._resolve_active-4": [
-      "rules.py:850"
+      "rules.py:930"
     ],
     "rules.ruleconflict-site._resolve_active-5": [
-      "rules.py:856"
-    ],
-    "rules.ruleconflict-site._resolve_active-6": [
-      "rules.py:873"
-    ],
-    "rules.ruleconflict-site._resolve_active-7": [
-      "rules.py:877"
-    ],
-    "rules.ruleconflict-site._resolve_active-8": [
-      "rules.py:885"
-    ],
-    "rules.ruleconflict-site._check_permits_are_related": [
       "rules.py:936"
     ],
+    "rules.ruleconflict-site._resolve_active-6": [
+      "rules.py:953"
+    ],
+    "rules.ruleconflict-site._resolve_active-7": [
+      "rules.py:957"
+    ],
+    "rules.ruleconflict-site._resolve_active-8": [
+      "rules.py:965"
+    ],
+    "rules.ruleconflict-site._check_permits_are_related": [
+      "rules.py:1016"
+    ],
     "rules.ruleconflict-site._check_conflicts-1": [
-      "rules.py:1027"
+      "rules.py:1107"
     ],
     "rules.ruleconflict-site._check_conflicts-2": [
-      "rules.py:1036"
+      "rules.py:1116"
     ]
   }
 }
