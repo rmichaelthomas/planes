@@ -1,6 +1,7 @@
 # Planes — hardening, fixing and additive sprint (September 2026)
 
 **Date:** September 13, 2026
+**Status:** Sprint A built and merged the same day (PRs #111–#131, tag below). Sprint B not started.
 **Base:** `main` at `c4400ad` (addendum v37.1)
 **Inputs:** every Planes checkpoint and addendum from v37.1 back to the `unbound` inception (vault, plus `docs/`); the Horizon design docs; the DeepSeek brainstorm transcripts; `reports/`; PRs #100–#104; the playtest, persona and crosswalk documents; and every portfolio document that uses Planes (5xFive, Koncord in `~/browser-concordance/checkpoints/`, Omniglot, Cartouche, CueCue, Undertow, Cutter, Motif, MuseSky, TAOS).
 **Companion:** [`ROADMAP.md`](../ROADMAP.md) holds everything past this sprint.
@@ -86,6 +87,44 @@ For the next checkpoint's register (bookkeeping only):
 ---
 
 ## Sprint A — fix and harden (no semantics change)
+
+### Done (September 13, 2026)
+
+Every in-repo item merged, and `scripts/ci.sh` passed in full on the result.
+
+| Item | PR | What landed |
+|---|---|---|
+| F1 | #113 | A repeated destination names its first line on every hash seed; pinned across eight seeds against Swift |
+| F2, F7 | #125 | `text of` a list or record gives its contents, and the effect surface predicts that exact text in Python, JS and Swift (or widens to `{...}`). The `nothing` comparison's fix clause splits into its whole-value and inner-value cases |
+| F3 | #118 | A reserved word inside a function name quotes the whole name and suggests a hyphen. `grammar/parser.planes` gained the check it lacked |
+| F4 | #111 | The four approved tutor lines, pinned by a test |
+| F5, F6 | #123 | The three JS protocol parsers strip both whitespace sets (none has a Python counterpart). A record entry has `toPlain()`, which survives `structuredClone` and JSON |
+| F8 | #124 | A module's own calls resolve to its own definitions first, by a table lookup, in Python and JS. The same flaw in all three analysers' rename tables, which under-reported reach, is fixed. Closes #108. `grammar/interp.planes` has no modules |
+| H1 | #119 | `--json --rules` carries a `rules` object with structured violation fields in Python, JS and Swift. Format stays 1 |
+| H2 | #115 | The audit checks `supersedes` and `permit` (built), `contradicts` and mandatory fingerprints (not built, scheduled B3), and lists `until` as withdrawn |
+| H3 | #116 | `demo/mcp/v1.planes` and `v2.planes`, reconstructed from v37.0, with surfaces and a test: `--diff` exits 1, the telemetry host is flagged, the registry host isn't |
+| H4, E3 | #120 | A root `Package.swift` (macOS 14 and iOS 17, both verified by building). `HostRules` costs 1.1 ms (50 rules) to 3.0 ms (200 rules) p50 per 150-request page on the M1 Pro (`swift/host-rules-bench-results.md`) |
+| H5 | #112 | The identity sheet cites where each lock was made: v8.0 for type, palette and lockup; v7.0 §87 for the provisional plane colours |
+| H6 | #117 | `sine` (1,724 values) and `root` (237) agree across all four hosts; no disagreement found. The README states the claim |
+| H7 | #131 | README Performance section; harness and results in `benchmarks/published/` |
+| H8 | #130 | All 51 corpus programs and #108's reproductions pass the runtime-vs-surface check in Python and JS. Renaming and comments leave every surface unchanged; reordering applies to the one program with two or more functions |
+| E1 | #126 | `docs/surface-format-v1.md` and `grammar/protocols/surface-v1.json`; all three hosts' output validates |
+| E2 | #121 | `js/embed.mjs` (grammar loaded on import, no `fs` or `fetch`) and `js/embed.d.mts`, type-checked under `tsc --strict` against a consumer |
+| E4 | #128 | README: checking a file with Node or Swift. `node js/cli.mjs shapes` now refuses a syntax error in one line, as `shapes_cli.py` does |
+| E5 | — | Outside this repo. 5xFive and Koncord can now move to the tag |
+
+Four PRs fixed what parallel branches broke together: #114 and #122 made the repo walks skip hidden directories (agent worktrees), #127 regenerated `grammar/errors.json`, and #129 reconciled the corpus count, the README catalogue counts and a self-hosted test harness.
+
+### Found while building Sprint A
+
+- **`plus` copies the list on every append**, so building a list one element at a time is quadratic. A first word-count benchmark took 50 s where counting inline took 5.6 s (H7).
+- **The JS CLI can't run a program against the real filesystem.** `run` and `run-file` use an in-memory host; `NodeHost` is wired only to the `host` probe (H7).
+- **`foreign` names aren't checked for reserved words** in any of the four hosts (F3).
+- **The Swift CLI words a refused file differently:** `shapes: line 1: …` and exit 2, where Python and Node print `syntax error — line 1: …` and exit 1 (E4).
+- **Only one corpus program has two or more top-level functions**, so H8's reorder check has one real subject.
+- **`demo/mcp/v2.planes`'s telemetry call is a POST labelled `doing ask`.** B1 relabels it with the others.
+
+### The plan as written
 
 Order within Sprint A is by risk: wrong answers first, then agreement, then consumers, then docs. Each item names its gate.
 
@@ -220,7 +259,7 @@ Every agreement suite (JS and Swift) must cover each fixed branch. Tag the resul
   - The vocabulary is `ask clock env random read send show write`.
   - `send` is on the network boundary with `ask`. Its note: a request that carries the program's data out.
 - **Documentation states the one rule:** data going out is `send`; fetch-only is `ask`. Nothing checks beyond the declared label, the same trust every `doing` claim has.
-- **Relabel** `README.md:548`, `demo/fdiff/v1.planes` and `demo/fdiff/v2.planes` to `doing send`.
+- **Relabel** the README's `foreign` POST example (`README.md:548` at `c4400ad`), `demo/fdiff/v1.planes`, `demo/fdiff/v2.planes` and `demo/mcp/v2.planes`'s telemetry call to `doing send`.
 - **`--diff` reports a kind change** (`ask` → `send` on the same destination) as a change, exit 1.
 - **Rules:**
   - `may not ask to X` forbids both `ask` and `send` to X.
