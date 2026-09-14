@@ -526,6 +526,17 @@ MORE_RULE_PROGRAMS = [
      'a = ask "https://\u03b1\u03c2.example"\nb = ask "https://\u03b1\u03c3.example"\n'),
     ('use http\nrule [t] anything may not ask to "https://x"\n'
      'a = ask "https://x:443"\n'),
+    # B2: the conflict check compares rule scopes the same way -- two
+    # spellings of one scope conflict; a port, or a non-ASCII host's case,
+    # makes a different scope that doesn't
+    ('use http\nrule [a] anything may not ask to "HTTPS://X.example"\n'
+     'rule [b] anything may not ask to "https://x.example/"\n'),
+    ('use http\nrule [a] anything may not ask to "https://x"\n'
+     'rule [b] anything may not ask to "https://x:443"\n'
+     'x = ask "https://x:443/p"\n'),
+    ('use http\nrule [a] anything may not ask to "https://ΑΣ.example"\n'
+     'rule [b] anything may not ask to "https://ασ.example"\n'
+     'x = ask "https://ασ.example/p"\n'),
     # B2: the effect's own query and fragment are ignored
     ('use http\nrule [t] anything may not ask to "https://x/ingest"\n'
      'a = ask "https://x/ingest?pkg=requests"\nb = ask "https://x/ingest#frag"\n'),
