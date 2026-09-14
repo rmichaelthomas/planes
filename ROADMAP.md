@@ -11,7 +11,7 @@ It is also used by other projects now, so this roadmap tracks their needs as wel
 | Project | How it uses Planes | Pinned at |
 |---|---|---|
 | 5xFive | Automations compile to Planes and run on the JS interpreter in a Cloudflare Worker; compliance rules compile to Planes rules | `sprint-a-2026-09` (vendored, 5xfive #73) |
-| Koncord | Swift `HostRules`: a page's requests checked against `rules.planes` (the `koncord-shared-agency` package, from its networking layer on) | `sprint-a-2026-09` through the root `Package.swift` (commit `6eb59a9`, merging with the networking layer) |
+| Koncord | Swift `HostRules`: a page's requests checked against `rules.planes` (the `koncord-shared-agency` package, from its networking layer on) | `sprint-a-2026-09` through the root `Package.swift` (koncord-shared-agency #38) |
 | Omniglot, Cartouche | A `.planes` manifest analysed, never run, with the Python CLI | — |
 | Undertow, Cutter | Re-implement the surface JSON format and effect vocabulary in TypeScript | format 1, by hand |
 | Motif | Ported the tutor's typing loop and why-card; a Planes voice is planned | `1d8a833` (copied JS) |
