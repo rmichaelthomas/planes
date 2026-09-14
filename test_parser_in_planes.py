@@ -511,7 +511,7 @@ def test_corpus_agreement_is_full():
     results = run()
     not_passing = [(f, status, detail) for f, status, detail in results if status != "PASS"]
     assert not not_passing, f"corpus agreement regressed: {not_passing}"
-    assert len(results) == 31, f"corpus size changed: {len(results)} files"
+    assert len(results) == 33, f"corpus size changed: {len(results)} files"
 
 
 def test_self_parse_vocabulary_agrees():

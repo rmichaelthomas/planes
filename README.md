@@ -523,14 +523,14 @@ every error names its fix, and that is counted rather than asserted:
 
 ```
 $ python3 errors_coverage.py
-  names a fix                  111 of 116  (96%)
-  deliberately names none        5 of 116  (4%)
-  should name one and does not   0 of 116  (0%)
+  names a fix                  112 of 117  (96%)
+  deliberately names none        5 of 117  (4%)
+  should name one and does not   0 of 117  (0%)
 
-  116 raise sites across interp.planes, parser.planes, lexer.planes, json.planes:
-  names a fix                   76 of 116  (66%)
-  deliberately names none       40 of 116  (34%)
-  should name one and does not   0 of 116  (0%)
+  120 raise sites across interp.planes, parser.planes, lexer.planes, json.planes:
+  names a fix                   80 of 120  (67%)
+  deliberately names none       40 of 120  (33%)
+  should name one and does not   0 of 120  (0%)
 ```
 
 **Both work lists are zero** — the commitment is kept in the reference
