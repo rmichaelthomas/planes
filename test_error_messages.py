@@ -561,7 +561,11 @@ def test_the_reference_work_list_is_still_empty_too():
     cov = ec.coverage()
     assert cov["counts"][ec.SHORTFALL] == 0
     # F7 split equal()'s single nothing-refusal raise into two -- 116 + 1.
-    assert cov["errors"] == 117, cov["errors"]
+    # B2 added one new raise site, _check_target_is_an_address's RuleConflict
+    # on a query string or fragment in a rule target -- 117 + 1. It names a
+    # fix ("drop everything from the '?' or '#' onward"), so the shortfall
+    # stays 0.
+    assert cov["errors"] == 118, cov["errors"]
 
 
 def test_every_deliberate_self_hosted_silence_states_a_reason():

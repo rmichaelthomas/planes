@@ -11,7 +11,7 @@ from interp import Interpreter
 from lexer import EFFECT_KINDS, Rule
 from parser import PlanesSyntaxError, parse, scan_names
 from rules import RuleConflict, RuleNotSupported, check, condition, fingerprint, narrows
-from shapes import analyse
+from shapes import Effect, analyse
 
 
 def rule_violations(src):
@@ -19,6 +19,13 @@ def rule_violations(src):
     found = [s for s in prog if isinstance(s, Rule)]
     surface = analyse(src)
     return check(found, surface)
+
+
+def lit(target):
+    """A literal (non-computed) `ask` effect naming `target` — enough of
+    an `Effect` for `_target_matches`/`narrows`, which read only `.kind`
+    (unused here), `.target` and `.computed`."""
+    return Effect("ask", "network", target, computed=False)
 
 
 def expect_conflict(src):
@@ -240,16 +247,41 @@ def test_a_computed_target_that_could_still_be_the_rule_target_stays_possible():
 
 
 def test_pattern_exclusion_anchors_both_ends_and_orders_the_middle():
+    """The pre-B2 exact-match anchoring algorithm, unchanged: still what
+    governs a rule target that isn't URL-shaped (B2 leaves those on
+    exact matching)."""
     from rules import _pattern_excludes
     assert _pattern_excludes("https://a/x", "{...}") is False
-    assert _pattern_excludes("https://a/x.json", "https://{...}.json") is False
-    assert _pattern_excludes("https://a/x.json", "https://{...}.xml") is True
-    assert _pattern_excludes("https://a/x.json", "http://{...}") is True
     assert _pattern_excludes("aXbYc", "a{...}b{...}c") is False
     assert _pattern_excludes("acb", "a{...}b{...}c") is True
     # a hole may be empty, and a chunk may not overlap its neighbour
     assert _pattern_excludes("ab", "a{...}b") is False
     assert _pattern_excludes("a", "a{...}a") is True
+
+
+def test_pattern_exclusion_still_anchors_the_scheme_for_a_url_rule_target():
+    """A URL-shaped rule target's scheme is known before any hole, so a
+    mismatch there is still provable under B2's host/path covering."""
+    from rules import _pattern_excludes
+    assert _pattern_excludes("https://a/x.json", "http://{...}") is True
+
+
+def test_b2_covering_makes_a_pre_b2_exclusion_uncertain():
+    """B2 (Sprint B) re-proves #104's guard for covering, not equality —
+    strictly weaker. Pre-B2, a rule target was matched by exact string
+    equality, so a pattern whose trailing chunk couldn't be the literal
+    target's own suffix was excluded. Under B2, `_url_pattern_excludes`
+    only reasons from the certain text before the first hole (B2's
+    documented, sound simplification); it does not see the trailing
+    ".xml" chunk at all, so it correctly stays uncertain here — and
+    rightly so: `n = "x.json/report"` produces
+    "https://a/x.json/report.xml", whose path "/x.json/report.xml" IS
+    covered by rule path "/x.json" (the "/" boundary right after it).
+    v37.0 pinned the opposite answer for this exact pair when rule
+    targets matched by equality alone; B2 supersedes it.
+    """
+    from rules import _pattern_excludes
+    assert _pattern_excludes("https://a/x.json", "https://{...}.xml") is False
 
 
 def test_a_foreign_with_no_stated_destination_is_never_excluded():
@@ -430,6 +462,217 @@ def test_violation_render_omits_derivation_line_when_not_traceable():
     assert "derived from:" not in rendered
 
 
+# ================================================================ B2: URL covers matching
+
+def test_b2_rule_path_covers_itself_and_beneath_it_but_not_a_longer_word():
+    """`/ingest` covers `/ingest` and `/ingest/v2`, but not `/ingestion`."""
+    from rules import _target_matches
+    rule = Rule("r", "anything", "ask", "https://x/ingest", 1)
+
+    assert _target_matches(rule, lit("https://x/ingest")) == (True, False)
+    assert _target_matches(rule, lit("https://x/ingest/v2")) == (True, False)
+    assert _target_matches(rule, lit("https://x/ingestion")) == (False, False)
+
+
+def test_b2_empty_or_slash_path_covers_every_path_on_the_host():
+    from rules import _target_matches
+
+    for rule_target in ("https://x", "https://x/"):
+        rule = Rule("r", "anything", "ask", rule_target, 1)
+        assert _target_matches(rule, lit("https://x"))[0] is True
+        assert _target_matches(rule, lit("https://x/"))[0] is True
+        assert _target_matches(rule, lit("https://x/anything/at/all"))[0] is True
+
+
+def test_b2_trailing_slash_covers_beneath_but_not_the_bare_path():
+    """`/ingest/` covers `/ingest/` and everything under it, but not the
+    bare `/ingest` (which lacks the trailing slash)."""
+    from rules import _target_matches
+    rule = Rule("r", "anything", "ask", "https://x/ingest/", 1)
+
+    assert _target_matches(rule, lit("https://x/ingest/"))[0] is True
+    assert _target_matches(rule, lit("https://x/ingest/v2"))[0] is True
+    assert _target_matches(rule, lit("https://x/ingest"))[0] is False
+
+
+def test_b2_a_different_host_or_a_subdomain_is_never_covered():
+    from rules import _target_matches
+
+    tracker = Rule("r", "anything", "ask", "https://tracker.example", 1)
+    assert _target_matches(tracker, lit("https://tracker.example.evil.com"))[0] is False
+
+    host_rule = Rule("r2", "anything", "ask", "https://x.com", 1)
+    assert _target_matches(host_rule, lit("https://api.x.com"))[0] is False
+
+
+def test_b2_scheme_and_host_are_case_insensitive_but_path_is_not():
+    from rules import _target_matches
+
+    rule = Rule("r", "anything", "ask", "https://X.example/Ingest", 1)
+    assert _target_matches(rule, lit("HTTPS://x.EXAMPLE/Ingest"))[0] is True
+    assert _target_matches(rule, lit("https://x.example/ingest"))[0] is False
+
+
+def test_b2_case_insensitivity_is_ascii_only_not_full_unicode():
+    """DNS case-insensitivity is ASCII-only, so scheme/host comparison
+    folds only A-Z to a-z (`_ascii_lower`), never a full Unicode
+    `.lower()`. A capital-Sigma host compares exactly against BOTH
+    plausible Unicode lowerings of it -- a final-sigma reading (some
+    case-folding rules turn a word-final capital Sigma into U+03C2) and a
+    plain-sigma reading (others give U+03C3) -- because non-ASCII
+    characters are left exactly as written, not covered by either. A
+    full Unicode lower would (in general, and does on at least one
+    engine/version pairing) pick one of the two readings, matching one
+    host and not the other, and there is no guarantee two hosts' Unicode
+    tables would even agree on which -- exactly the byte-for-byte
+    agreement this avoids depending on. js/rules.mjs's and Rules.swift's
+    identically-named `asciiLower` must give the same answers.
+    """
+    from rules import _ascii_lower, _target_matches
+
+    # ASCII is folded...
+    assert _ascii_lower("AbC-123") == "abc-123"
+    # ...and non-ASCII passes through untouched, whatever its case.
+    assert _ascii_lower("ΑΣ") == "ΑΣ"
+
+    rule = Rule("r", "anything", "ask", "https://ΑΣ.example", 1)
+    final_sigma = lit("https://ας.example")   # a lower(), final sigma
+    plain_sigma = lit("https://ασ.example")   # a lower(), plain sigma
+    assert _target_matches(rule, final_sigma)[0] is False
+    assert _target_matches(rule, plain_sigma)[0] is False
+    # The exact same (unfolded) host still matches.
+    assert _target_matches(rule, lit("https://ΑΣ.example"))[0] is True
+
+
+def test_b2_no_default_port_folding():
+    """`https://x` and `https://x:443` differ — port is part of the host
+    and compared exactly as written, with no default-port normalisation."""
+    from rules import _target_matches
+
+    rule = Rule("r", "anything", "ask", "https://x", 1)
+    assert _target_matches(rule, lit("https://x:443"))[0] is False
+    assert _target_matches(rule, lit("https://x"))[0] is True
+
+
+def test_b2_effect_query_and_fragment_are_ignored():
+    from rules import _target_matches
+
+    rule = Rule("r", "anything", "ask", "https://x/ingest", 1)
+    assert _target_matches(rule, lit("https://x/ingest?pkg=requests"))[0] is True
+    assert _target_matches(rule, lit("https://x/ingest#frag"))[0] is True
+    assert _target_matches(rule, lit("https://x/ingest/v2?pkg=requests#f"))[0] is True
+
+
+def test_b2_a_rule_target_with_a_query_or_fragment_is_refused():
+    src = 'rule [bad] anything may not ask to "https://x/ingest?pkg=1"\n'
+    prog = parse(src)
+    found = [s for s in prog if isinstance(s, Rule)]
+    surface = analyse(src)
+    try:
+        check(found, surface)
+        assert False, "should raise"
+    except RuleConflict as e:
+        msg = str(e)
+        assert "bad" in msg
+        assert "query string or fragment" in msg
+        assert "drop everything" in msg
+
+
+def test_b2_a_rule_target_with_a_fragment_is_refused_identically():
+    src = 'rule [bad] anything may not ask to "https://x/ingest#frag"\n'
+    prog = parse(src)
+    found = [s for s in prog if isinstance(s, Rule)]
+    surface = analyse(src)
+    try:
+        check(found, surface)
+        assert False, "should raise"
+    except RuleConflict as e:
+        assert "query string or fragment" in str(e)
+
+
+def test_b2_a_non_url_target_keeps_exact_matching():
+    """A rule target that isn't URL-shaped (a file path here) keeps
+    exact-string matching, unchanged by B2."""
+    from rules import _target_matches
+
+    rule = Rule("r", "anything", "write", "refunds.json", 1)
+    assert _target_matches(rule, lit("refunds.json"))[0] is True
+    assert _target_matches(rule, lit("refunds.json.bak"))[0] is False
+
+
+def test_b2_end_to_end_permit_narrows_a_broad_forbid_by_path():
+    """Straight from the spec: a broad forbid on a bare host, narrowed by
+    a permit scoped to one subtree under it — the subtree is permitted,
+    everything else under the host stays forbidden."""
+    from rules import fingerprint
+    deny_src = 'rule [deny] anything may not ask to "https://x"\n'
+    deny_rule = parse(deny_src)[0]
+    fp = fingerprint(deny_rule)
+    src = (f'use http\n{deny_src}'
+          f'rule [ok] anything may ask to "https://x/public" '
+          f'supersedes [deny] @{fp}\n'
+          f'a = ask "https://x/public/a"\n'
+          f'b = ask "https://x/private"\n')
+    v = rule_violations(src)
+    by_target = {viol.effect.target: viol for viol in v}
+    assert by_target["https://x/public/a"].is_violation is False
+    assert by_target["https://x/private"].is_violation is True
+
+
+# ---- B2: computed-target exclusion re-proven for covering (not equality)
+
+def test_b2_pattern_hole_right_after_the_rule_path_stays_uncertain():
+    """`https://x/ingest{...}` vs rule `https://x/ingest`: not excluded,
+    since the hole may produce "" (equal) or "/v2" (covered)."""
+    from rules import _pattern_excludes
+    assert _pattern_excludes("https://x/ingest", "https://x/ingest{...}") is False
+
+
+def test_b2_pattern_with_a_longer_word_before_the_hole_is_excluded():
+    """`https://x/ingestion/{...}` vs rule `https://x/ingest`: excluded —
+    the known text already breaks the "/" boundary ("ingestion" continues
+    past "ingest" with "i", not "/")."""
+    from rules import _pattern_excludes
+    assert _pattern_excludes("https://x/ingest", "https://x/ingestion/{...}") is True
+
+
+def test_b2_pattern_with_an_unresolved_host_stays_uncertain():
+    """`https://{...}/ingest` vs rule `https://x/ingest`: not excluded —
+    the hole may still resolve the host to "x"."""
+    from rules import _pattern_excludes
+    assert _pattern_excludes("https://x/ingest", "https://{...}/ingest") is False
+
+
+def test_b2_pattern_whose_known_host_prefix_cannot_match_is_excluded():
+    """`https://api.{...}/` vs rule `https://x/`: excluded — whatever the
+    hole produces, the host will start with "api.", which "x" can never
+    equal."""
+    from rules import _pattern_excludes
+    assert _pattern_excludes("https://x/", "https://api.{...}/") is True
+
+
+def test_b2_pattern_whose_known_path_is_a_short_prefix_stays_uncertain():
+    """`https://x/{...}` vs rule `https://x/a`: not excluded — the hole
+    may produce "a"."""
+    from rules import _pattern_excludes
+    assert _pattern_excludes("https://x/a", "https://x/{...}") is False
+
+
+def test_b2_a_hole_less_computed_target_excludes_nothing():
+    """#104's guard, restated: a computed target with no hole at all
+    (nothing left to reason about) is never excluded."""
+    from rules import _pattern_excludes
+    assert _pattern_excludes("https://x/ingest", "https://x/other") is False
+
+
+def test_b2_a_scheme_or_host_that_is_fully_literal_and_different_is_excluded():
+    from rules import _pattern_excludes
+    # scheme fully literal and different
+    assert _pattern_excludes("https://x/a", "http://x/{...}") is True
+    # host fully literal (terminated by "/") and different
+    assert _pattern_excludes("https://x/a", "https://y/{...}") is True
+
+
 # ================================================================ narrows / supersedes / conflict
 
 def test_rule_with_a_target_narrows_one_without():
@@ -449,6 +692,42 @@ def test_same_target_does_not_narrow_either_way():
 def test_different_kinds_do_not_narrow():
     a = Rule("net", "anything", "ask", None, 1)
     b = Rule("clk", "anything", "clock", None, 2)
+    assert not narrows(a, b)
+    assert not narrows(b, a)
+
+
+def test_b2_a_url_path_narrows_a_broader_one_on_the_same_host():
+    """`narrows` re-proven for host/path covering (B2): a target strictly
+    inside another's covered set narrows it, even though neither target
+    is `None`."""
+    broad = Rule("broad", "anything", "ask", "https://x", 1)
+    narrow = Rule("narrow", "anything", "ask", "https://x/public", 2)
+    assert narrows(narrow, broad)
+    assert not narrows(broad, narrow)
+
+
+def test_b2_trailing_slash_path_narrows_the_bare_host_the_same_way():
+    broad = Rule("broad", "anything", "ask", "https://x/", 1)
+    narrow = Rule("narrow", "anything", "ask", "https://x/ingest", 2)
+    assert narrows(narrow, broad)
+    assert not narrows(broad, narrow)
+
+
+def test_b2_disjoint_paths_on_the_same_host_do_not_narrow_either_way():
+    """Two path prefixes that neither contain the other (B2's "laminar,
+    never partial" covering) are simply unrelated, not a narrowing."""
+    a = Rule("a", "anything", "ask", "https://x/alpha", 1)
+    b = Rule("b", "anything", "ask", "https://x/beta", 2)
+    assert not narrows(a, b)
+    assert not narrows(b, a)
+
+
+def test_b2_different_spellings_of_the_same_scope_do_not_narrow_either_way():
+    """`"https://x"` and `"https://x/"` are two spellings of "every path
+    on x" — the same scope, so neither narrows the other (B2's
+    `_same_scope`, not `==`)."""
+    a = Rule("a", "anything", "ask", "https://x", 1)
+    b = Rule("b", "anything", "ask", "https://x/", 2)
     assert not narrows(a, b)
     assert not narrows(b, a)
 
@@ -555,6 +834,38 @@ def test_supersedes_resolves_what_would_otherwise_conflict():
     v = rule_violations(src)
     assert len(v) == 1
     assert v[0].rule.name == "b"
+
+
+def test_b2_two_spellings_of_the_same_scope_still_conflict():
+    """`"https://x"` and `"https://x/"` mean the same covered set (every
+    path on x) — B2's `_same_scope` in place of `==` still calls this
+    equally specific, the same as if the strings were identical."""
+    src = ('use http\n'
+           'rule [a] anything may not ask to "https://x"\n'
+           'rule [b] anything may not ask to "https://x/"\n'
+           'y = ask "https://x"\n')
+    prog = parse(src)
+    found = [s for s in prog if isinstance(s, Rule)]
+    surface = analyse(src)
+    try:
+        check(found, surface)
+        assert False, "should raise"
+    except RuleConflict as e:
+        assert "[a]" in str(e) and "[b]" in str(e)
+
+
+def test_b2_a_narrower_permit_under_a_forbid_is_a_narrowing_not_a_conflict():
+    """A permit strictly inside a forbid's covered set clears that
+    subtree without raising — narrowing, not a collision (B2)."""
+    src = ('use http\n'
+           'rule [deny] anything may not ask to "https://x"\n'
+           'rule [ok] anything may ask to "https://x/public"\n'
+           'a = ask "https://x/public/report"\n'
+           'b = ask "https://x/private"\n')
+    v = rule_violations(src)
+    by_target = {viol.effect.target: viol for viol in v}
+    assert by_target["https://x/public/report"].is_violation is False
+    assert by_target["https://x/private"].is_violation is True
 
 
 # ================================================================ exception resolution (§3)

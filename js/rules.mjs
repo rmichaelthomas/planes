@@ -229,23 +229,180 @@ export function RuleResults(items = [], resolvedSubjects = []) {
   return arr;
 }
 
-// Does rule `b` cover a strict subset of what rule `a` ranges over? (v2.0 §30.)
-// Kind and target only, never assertion.
+// Folds only ASCII A-Z to a-z; every other character is left exactly as
+// written (B2 follow-up). Scheme and host are DNS-shaped, and DNS
+// case-insensitivity is ASCII-only -- a full Unicode lower (String.
+// toLowerCase()) can map a character context-dependently (a final Greek
+// sigma U+03A3 becomes U+03C2 under some case-folding rules, U+03C3 under
+// others), and there is no guarantee another host's Unicode tables agree
+// with this one's on the exact mapping. That would silently break the
+// byte-for-byte agreement the three hosts promise. Used only where B2 asks
+// for case-insensitive comparison (scheme, host); a rule's path stays
+// case-sensitive and untouched by this function. Plain UTF-16 code-unit
+// indexing is safe here: every code unit this touches (0x41-0x5A) is ASCII
+// and can never be half of a surrogate pair. rules.py's and Rules.swift's
+// identically-named function must agree with this one.
+function asciiLower(text) {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    out += code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : text[i];
+  }
+  return out;
+}
+
+// Is `text` a legal URL scheme (ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ),
+// RFC 3986 §3.1)? ASCII-only by construction, so a plain ASCII check.
+function isScheme(text) {
+  if (!text) return false;
+  const first = asciiLower(text[0]);
+  if (!(first >= "a" && first <= "z")) return false;
+  for (const ch of text.slice(1)) {
+    const lower = asciiLower(ch);
+    if ((lower >= "a" && lower <= "z") || (ch >= "0" && ch <= "9") || ch === "+" || ch === "-" || ch === ".") {
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+// Split `target` into [scheme, host, path, query, fragment] if it has the
+// shape scheme://host[:port][/path][?query][#fragment] (B2); null otherwise
+// — a file path, a queue:send-style name, or console text, none of which are
+// addresses this matches by host and path (B2 keeps those on today's
+// exact-string matching, unchanged).
+//
+// query and fragment carry their leading "?"/"#" when present, else null. No
+// percent-decoding, no Unicode normalisation, no default-port folding: every
+// piece is exactly the substring as written (B2). rules.py's
+// _parse_url_target and Rules.swift's parseURLTarget must agree with this.
+function parseUrlTarget(target) {
+  const sep = target.indexOf("://");
+  if (sep <= 0 || !isScheme(target.slice(0, sep))) return null;
+  const scheme = target.slice(0, sep);
+  const rest = target.slice(sep + 3);
+  let hostEnd = rest.length;
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === "/" || rest[i] === "?" || rest[i] === "#") {
+      hostEnd = i;
+      break;
+    }
+  }
+  const host = rest.slice(0, hostEnd);
+  const tail = rest.slice(hostEnd);
+  let path, remainder;
+  if (tail[0] === "?" || tail[0] === "#") {
+    path = "";
+    remainder = tail;
+  } else {
+    let pathEnd = tail.length;
+    for (let i = 0; i < tail.length; i++) {
+      if (tail[i] === "?" || tail[i] === "#") {
+        pathEnd = i;
+        break;
+      }
+    }
+    path = tail.slice(0, pathEnd);
+    remainder = tail.slice(pathEnd);
+  }
+  let query, fragment;
+  if (remainder[0] === "#") {
+    query = null;
+    fragment = remainder;
+  } else if (remainder[0] === "?") {
+    const hashAt = remainder.indexOf("#");
+    if (hashAt < 0) {
+      query = remainder;
+      fragment = null;
+    } else {
+      query = remainder.slice(0, hashAt);
+      fragment = remainder.slice(hashAt);
+    }
+  } else {
+    query = null;
+    fragment = null;
+  }
+  return [scheme, host, path, query, fragment];
+}
+
+// Does rulePath cover effectPath at a "/" boundary (B2)? An empty path or "/"
+// in the rule covers every path on the host. Otherwise rulePath must be a
+// prefix of effectPath, and either they're equal, rulePath itself already
+// ends in "/" (everything under it is covered), or the next character of
+// effectPath past the prefix is "/". Compared case-sensitively, exactly as
+// written.
+function pathCovers(rulePath, effectPath) {
+  if (rulePath === "" || rulePath === "/") return true;
+  if (effectPath === rulePath) return true;
+  if (!effectPath.startsWith(rulePath)) return false;
+  if (rulePath.endsWith("/")) return true;
+  return effectPath.slice(rulePath.length, rulePath.length + 1) === "/";
+}
+
+// Does the URL-shaped ruleTarget cover the URL-shaped effectTarget (B2)? Same
+// scheme and host, compared case-insensitively; port is part of the host and
+// compared exactly as written -- no default-port folding, so "https://x" and
+// "https://x:443" differ. The effect's own query and fragment are ignored
+// entirely -- only its path is compared, against the rule's path.
+function urlCovers(ruleTarget, effectTarget) {
+  const [rScheme, rHost, rPath] = parseUrlTarget(ruleTarget);
+  const [eScheme, eHost, ePath] = parseUrlTarget(effectTarget);
+  if (asciiLower(rScheme) !== asciiLower(eScheme)) return false;
+  if (asciiLower(rHost) !== asciiLower(eHost)) return false;
+  return pathCovers(rPath, ePath);
+}
+
+// Does every address `narrow` (a target string, or null/undefined) ranges
+// over also fall inside `wide`'s range (B2)? null/undefined is the top of
+// the lattice -- every target of the kind. Identical strings are always the
+// same scope. A URL-shaped pair compares by urlCovers; anything else -- a
+// target that isn't URL-shaped, or a URL paired with a non-URL -- only ever
+// covers its own exact string, exactly as before B2.
+function scopeCovers(wide, narrow) {
+  if (wide === null || wide === undefined) return true;
+  if (narrow === null || narrow === undefined) return false;
+  if (wide === narrow) return true;
+  if (parseUrlTarget(wide) === null || parseUrlTarget(narrow) === null) return false;
+  return urlCovers(wide, narrow);
+}
+
+// Do a and b (two rule targets, or null/undefined) range over exactly the
+// same addresses (B2)? Equal by mutual coverage rather than ===, so
+// "https://x" and "https://x/" -- two spellings of "every path on x" -- are
+// the same scope even though the strings differ.
+function sameScope(a, b) {
+  return scopeCovers(a, b) && scopeCovers(b, a);
+}
+
+// Does rule `b` cover a strict subset of what rule `a` ranges over? (v2.0
+// §30; re-proven for host/path covering at B2.) Kind and target only, never
+// assertion. `b` narrows `a` when `a`'s covered set contains `b`'s and the
+// two aren't the same scope -- the pre-B2 case (`a` has no target, `b` does)
+// is one instance of this; a rule whose covered address set is strictly
+// inside another's target now is too.
 export function narrows(b, a) {
   if (a.name === b.name) return false;
   if (a.kind !== b.kind) return false;
-  return (
-    (a.target === null || a.target === undefined) &&
-    b.target !== null &&
-    b.target !== undefined
-  );
+  return scopeCovers(a.target, b.target) && !scopeCovers(b.target, a.target);
 }
 
+// (matched, uncertain). No target on the rule means every target of the kind
+// -- always a certain match. Otherwise, for a computed effect target: a
+// possible match unless its known chunks rule the rule's target out (v37.0
+// §513, B2's patternExcludes). For a literal effect target: when both it and
+// the rule's target are URL-shaped, the rule's target must COVER the
+// effect's -- the same address, or anything under it (B2), the effect's own
+// query and fragment ignored; otherwise (a file path, a queue:send-style
+// name, console text) an exact string match, exactly as before B2.
 function targetMatches(rule, effect) {
   if (rule.target === null || rule.target === undefined) return [true, false];
   if (effect.computed) {
     if (patternExcludes(rule.target, effect.target)) return [false, false];
     return [true, true];
+  }
+  if (parseUrlTarget(rule.target) !== null && parseUrlTarget(effect.target) !== null) {
+    return [urlCovers(rule.target, effect.target), false];
   }
   return [effect.target === rule.target, false];
 }
@@ -254,14 +411,29 @@ const HOLE = "{...}";
 const NO_DESTINATION = " (destination not stated)";
 
 // rules.py's _pattern_excludes, which this must agree with: can a computed
-// target provably never equal the rule's target? Its known chunks must appear
-// in the rule's target in order, the first at the start and the last at the
-// end, a hole standing for any text including none. A target with no hole, or
-// a foreign's "(destination not stated)", excludes nothing. Plain string
-// search is code-point exact here: a well-formed chunk cannot match across a
-// surrogate pair.
+// target provably never be covered by the rule's target (B2; originally
+// "never equal", v37.0 §513)? When the rule's target isn't URL-shaped,
+// covering is exact-string equality, unchanged since v37.0
+// (exactPatternExcludes). When it is, B2 re-proves the guard for host/path
+// covering (urlPatternExcludes). A target with no hole, or a foreign's
+// "(destination not stated)", excludes nothing either way.
 function patternExcludes(ruleTarget, effectTarget) {
   if (!effectTarget.includes(HOLE) || effectTarget.endsWith(NO_DESTINATION)) return false;
+  const ruleUrl = parseUrlTarget(ruleTarget);
+  if (ruleUrl === null) return exactPatternExcludes(ruleTarget, effectTarget);
+  const [rScheme, rHost, rPath] = ruleUrl;
+  return urlPatternExcludes(rScheme, rHost, rPath, effectTarget);
+}
+
+// The v37.0 §513 algorithm, unchanged: can this pattern never equal
+// ruleTarget as a flat string? Its known chunks must appear in it in order --
+// the first anchored to the start, the last to the end, unless the pattern
+// opens or closes with a hole -- with a hole free to stand for any text,
+// including none. Still what governs a rule target B2 leaves on exact
+// matching (not URL-shaped: a file path, a queue:send-style name, console
+// text). Plain string search is code-point exact here: a well-formed chunk
+// cannot match across a surrogate pair.
+function exactPatternExcludes(ruleTarget, effectTarget) {
   const chunks = effectTarget.split(HOLE);
   const first = chunks[0];
   const last = chunks[chunks.length - 1];
@@ -275,6 +447,58 @@ function patternExcludes(ruleTarget, effectTarget) {
     pos = at + chunk.length;
   }
   return false;
+}
+
+// B2's re-proof of the v37.0 §513 guard for a URL-shaped rule target: can
+// this computed target's KNOWN prefix -- the literal text before its first
+// hole, which is a true, certain prefix of whatever the hole goes on to
+// produce (v37.0 §511) -- prove no completion could ever be covered by the
+// rule?
+//
+// Reasons from that one chunk only. It's the one piece of the pattern
+// guaranteed to survive regardless of what any hole produces, so a proof
+// built from it alone is sound: it can only prove exclusions that are real.
+// A later chunk could in principle prove more, but skipping it only means
+// staying uncertain more often -- the conservative side of the guarantee
+// ("when in doubt, don't exclude").
+function urlPatternExcludes(rScheme, rHost, rPath, effectTarget) {
+  const first = effectTarget.split(HOLE)[0];
+  const sep = first.indexOf("://");
+  if (sep <= 0 || !isScheme(first.slice(0, sep))) return false;
+  if (asciiLower(first.slice(0, sep)) !== asciiLower(rScheme)) return true;
+
+  const remainder = first.slice(sep + 3);
+  let term = remainder.length;
+  for (let i = 0; i < remainder.length; i++) {
+    if (remainder[i] === "/" || remainder[i] === "?" || remainder[i] === "#") {
+      term = i;
+      break;
+    }
+  }
+  if (term === remainder.length) {
+    // The host itself isn't fully known here -- only a prefix of it is,
+    // from this chunk. Whatever it resolves to will still start with this
+    // prefix, so a rule host that does NOT start with it can never be
+    // that host.
+    return !asciiLower(rHost).startsWith(asciiLower(remainder));
+  }
+
+  const eHost = remainder.slice(0, term);
+  const rest = remainder.slice(term);
+  if (asciiLower(eHost) !== asciiLower(rHost)) return true;
+
+  if (rest[0] === "?" || rest[0] === "#") {
+    // The path is fully known here, from certain text -- and empty.
+    return rPath !== "" && rPath !== "/";
+  }
+
+  const knownPath = rest;
+  if (rPath === "" || rPath === "/") return false;
+  const lr = rPath.length;
+  if (knownPath.length < lr) return knownPath !== rPath.slice(0, knownPath.length);
+  if (knownPath.slice(0, lr) !== rPath) return true;
+  if (knownPath.length === lr) return false;
+  return knownPath[lr] !== "/";
 }
 
 // Code-point string compare, matching Python's sorted() (see shapes.mjs).
@@ -378,6 +602,28 @@ function resolveActive(rules) {
   return rules.filter((r) => !dropped.has(r.name));
 }
 
+// B2: a rule target names an address, not a request. The matcher ignores an
+// EFFECT's own query string and fragment (B2 §3) -- but a query or fragment
+// written into the RULE's own target is an authoring mistake, not something
+// to silently drop, so a URL-shaped target carrying one is refused before
+// any matching runs. Checked for every declared rule, forbid or permit,
+// superseded or not.
+function checkTargetIsAnAddress(rule) {
+  if (rule.target === null || rule.target === undefined) return;
+  const parsed = parseUrlTarget(rule.target);
+  if (parsed === null) return;
+  const [, , , query, fragment] = parsed;
+  if (query === null && fragment === null) return;
+  throw new RuleConflict(
+    `rule [${rule.name}] (line ${rule.line}): target ` +
+      `"${escapeStringLiteral(rule.target)}" has a query string or ` +
+      `fragment — a rule target names an address, and only an ` +
+      `effect's own query and fragment are ever ignored, never the ` +
+      `rule's\n` +
+      `  drop everything from the "?" or "#" onward`,
+  );
+}
+
 function checkPermitsAreRelated(active) {
   const forbids = active.filter((r) => r.assertion === "forbid");
   for (const p of active) {
@@ -385,7 +631,7 @@ function checkPermitsAreRelated(active) {
     const related = forbids.some(
       (f) =>
         f.kind === p.kind &&
-        (p.supersedes === f.name || narrows(p, f) || p.target === f.target),
+        (p.supersedes === f.name || narrows(p, f) || sameScope(p.target, f.target)),
     );
     if (!related) {
       throw new RuleConflict(
@@ -405,7 +651,7 @@ function checkConflicts(active) {
     const a = active[i];
     for (let j = i + 1; j < active.length; j++) {
       const b = active[j];
-      if (a.kind !== b.kind || a.target !== b.target) continue;
+      if (a.kind !== b.kind || !sameScope(a.target, b.target)) continue;
       if (narrows(a, b) || narrows(b, a)) continue;
       if (a.supersedes === b.name || b.supersedes === a.name) continue;
 
@@ -437,6 +683,10 @@ function checkConflicts(active) {
 }
 
 export function check(rules, surface, declaringFile = null) {
+  for (const rule of rules) {
+    checkTargetIsAnAddress(rule);
+  }
+
   const resolvedSubjects = [];
   for (const rule of rules) {
     if (rule.subject !== "anything") {

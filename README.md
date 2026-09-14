@@ -535,6 +535,23 @@ later rule that loosens an earlier one has to say which one, and the pair is
 reported rather than resolved by declaration order. A rule that could never
 fire is reported as vacuous rather than passing silently.
 
+A rule's target covers that address **and everything under it** (B2). For a
+target that parses as `scheme://host[:port][/path]`, `rule [x] anything may
+not ask to "https://api.example.com/ingest"` also forbids
+`https://api.example.com/ingest/v2`, but not
+`https://api.example.com/ingestion` (the path must match at a `/` boundary)
+and not `https://tracker.example.com/ingest` or
+`https://api.example.com.evil.com/ingest` (scheme and host must match,
+case-insensitively; a different host, or a subdomain, is never covered). A
+bare host (no path, or `/`) covers every path on it; a path ending in `/`
+covers everything under it but not the bare path itself. Ports are part of
+the host and compared exactly as written — `https://x` and `https://x:443`
+are different targets, with no default-port folding. The effect's own query
+string and fragment are ignored, but a rule's own target may not carry one —
+`rule [x] ... to "https://x?y=1"` is refused at check time. A target that
+isn't URL-shaped (a file path, a `queue:send`-style name, console text)
+still matches exactly, as every rule target did before B2.
+
 ---
 
 ## Annotations
@@ -573,9 +590,9 @@ every error names its fix, and that is counted rather than asserted:
 
 ```
 $ python3 errors_coverage.py
-  names a fix                  112 of 117  (96%)
-  deliberately names none        5 of 117  (4%)
-  should name one and does not   0 of 117  (0%)
+  names a fix                  113 of 118  (96%)
+  deliberately names none        5 of 118  (4%)
+  should name one and does not   0 of 118  (0%)
 
   120 raise sites across interp.planes, parser.planes, lexer.planes, json.planes:
   names a fix                   80 of 120  (67%)

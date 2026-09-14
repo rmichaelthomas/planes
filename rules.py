@@ -53,13 +53,17 @@ class RuleConflict(Exception):
       written against it (v2.0 §29).
     - A permit rule excepts no forbid rule — it neither supersedes nor
       narrows one of the same kind, so it has no force against anything.
-    - Two distinct rules are equally specific — same kind, same target —
-      and neither narrows nor supersedes the other. If they share an
-      assertion, that is the pre-existing ambiguity: nothing says which
-      is authoritative. If they don't, that is v2.0 §32's "two rules
-      demand opposite things" — one forbids exactly what the other
+    - Two distinct rules are equally specific — same kind, same covered
+      set — and neither narrows nor supersedes the other. If they share
+      an assertion, that is the pre-existing ambiguity: nothing says
+      which is authoritative. If they don't, that is v2.0 §32's "two
+      rules demand opposite things" — one forbids exactly what the other
       permits, expressible for the first time now that a permitting
       assertion exists.
+    - A rule's target is URL-shaped and carries a query string or
+      fragment (B2) — a rule target names an address, and only an
+      effect's own query and fragment are ever ignored, never the
+      rule's.
     """
     pass
 
@@ -287,36 +291,197 @@ class RuleResults(list):
         self.resolved_subjects = list(resolved_subjects)
 
 
+def _ascii_lower(text):
+    """Fold only ASCII A-Z to a-z; every other character is left exactly
+    as written (B2 follow-up). Scheme and host are DNS-shaped, and DNS
+    case-insensitivity is ASCII-only — a full Unicode lower (`str.lower`)
+    can map a character context-dependently (a final Greek sigma `Σ`
+    becomes `ς` under some case-folding rules, `σ` under
+    others), and there is no guarantee another host's Unicode tables
+    agree with this one's on the exact mapping. That would silently
+    break the byte-for-byte agreement the three hosts promise. Used only
+    where B2 asks for case-insensitive comparison (scheme, host); a
+    rule's path stays case-sensitive and untouched by this function.
+    js/rules.mjs's and Rules.swift's identically-named function must
+    agree with this one.
+    """
+    return "".join(
+        chr(ord(ch) + 32) if "A" <= ch <= "Z" else ch for ch in text)
+
+
+def _is_scheme(text):
+    """Is `text` a legal URL scheme (`ALPHA *( ALPHA / DIGIT / "+" / "-" /
+    "." )`, RFC 3986 §3.1) — the one piece of a `scheme://host/path`
+    target ASCII-only by construction, so this is a plain ASCII check,
+    never a code-point one.
+    """
+    if not text:
+        return False
+    first = _ascii_lower(text[0])
+    if not ("a" <= first <= "z"):
+        return False
+    for ch in text[1:]:
+        lower = _ascii_lower(ch)
+        if ("a" <= lower <= "z") or ("0" <= ch <= "9") or ch in "+-.":
+            continue
+        return False
+    return True
+
+
+def _parse_url_target(target):
+    """Split `target` into (scheme, host, path, query, fragment) if it has
+    the shape `scheme://host[:port][/path][?query][#fragment]` (B2); `None`
+    otherwise — a file path, a `queue:send`-style name, or console text,
+    none of which are addresses this matches by host and path (B2 keeps
+    those on today's exact-string matching, unchanged).
+
+    `query` and `fragment` carry their leading `?`/`#` when present, else
+    `None`. No percent-decoding, no Unicode normalisation, no default-port
+    folding: every piece is exactly the substring as written (B2). Compared
+    by `js/rules.mjs`'s and `Rules.swift`'s identically-named function,
+    which must agree with this one.
+    """
+    sep = target.find("://")
+    if sep <= 0 or not _is_scheme(target[:sep]):
+        return None
+    scheme = target[:sep]
+    rest = target[sep + 3:]
+    host_end = len(rest)
+    for i, ch in enumerate(rest):
+        if ch in "/?#":
+            host_end = i
+            break
+    host = rest[:host_end]
+    tail = rest[host_end:]
+    if tail[:1] in ("?", "#"):
+        path, remainder = "", tail
+    else:
+        path_end = len(tail)
+        for i, ch in enumerate(tail):
+            if ch in "?#":
+                path_end = i
+                break
+        path, remainder = tail[:path_end], tail[path_end:]
+    if remainder[:1] == "#":
+        query, fragment = None, remainder
+    elif remainder[:1] == "?":
+        hash_at = remainder.find("#")
+        query, fragment = (remainder, None) if hash_at < 0 else (
+            remainder[:hash_at], remainder[hash_at:])
+    else:
+        query, fragment = None, None
+    return scheme, host, path, query, fragment
+
+
+def _path_covers(rule_path, effect_path):
+    """Does `rule_path` cover `effect_path` at a "/" boundary (B2)?
+
+    An empty path or "/" in the rule covers every path on the host.
+    Otherwise `rule_path` must be a prefix of `effect_path`, and either
+    they're equal, `rule_path` itself already ends in "/" (a rule path
+    ending in "/" covers everything under it, including a path that adds
+    more path straight after the slash), or the next character of
+    `effect_path` past the prefix is "/". Compared case-sensitively,
+    exactly as written — no percent-decoding, no Unicode normalisation.
+    """
+    if rule_path in ("", "/"):
+        return True
+    if effect_path == rule_path:
+        return True
+    if not effect_path.startswith(rule_path):
+        return False
+    if rule_path.endswith("/"):
+        return True
+    return effect_path[len(rule_path):len(rule_path) + 1] == "/"
+
+
+def _url_covers(rule_target, effect_target):
+    """Does the URL-shaped `rule_target` cover the URL-shaped
+    `effect_target` (B2)? Same scheme and host, compared case-
+    insensitively; port is part of the host and compared exactly as
+    written — no default-port folding, so `https://x` and `https://x:443`
+    differ. The effect's own query and fragment are ignored entirely —
+    only its path is compared, against the rule's path, by `_path_covers`.
+    """
+    r_scheme, r_host, r_path, _, _ = _parse_url_target(rule_target)
+    e_scheme, e_host, e_path, _, _ = _parse_url_target(effect_target)
+    if _ascii_lower(r_scheme) != _ascii_lower(e_scheme):
+        return False
+    if _ascii_lower(r_host) != _ascii_lower(e_host):
+        return False
+    return _path_covers(r_path, e_path)
+
+
+def _scope_covers(wide, narrow):
+    """Does every address `narrow` (a target string, or `None`) ranges
+    over also fall inside `wide`'s range (B2)? `None` is the top of the
+    lattice — every target of the kind. Identical strings are always the
+    same scope. A URL-shaped pair compares by `_url_covers`; anything
+    else — a target that isn't URL-shaped, or a URL paired with a
+    non-URL — only ever covers its own exact string, exactly as before
+    B2.
+    """
+    if wide is None:
+        return True
+    if narrow is None:
+        return False
+    if wide == narrow:
+        return True
+    if _parse_url_target(wide) is None or _parse_url_target(narrow) is None:
+        return False
+    return _url_covers(wide, narrow)
+
+
+def _same_scope(a, b):
+    """Do `a` and `b` (two rule targets, or `None`) range over exactly
+    the same addresses (B2)? Equal by mutual coverage rather than by
+    `==`, so `"https://x"` and `"https://x/"` — two spellings of "every
+    path on x" — are the same scope even though the strings differ.
+    """
+    return _scope_covers(a, b) and _scope_covers(b, a)
+
+
 def narrows(b, a):
     """Does rule `b` cover a strict subset of what rule `a` ranges over?
 
-    (v2.0 §30.) A pure scope comparison — kind and target only, never
-    assertion — so the same function resolves specificity between two
-    forbids, two permits, or a permit and the forbid it excepts.
-    Comparable only within the same kind. A rule naming a target narrows
-    one that does not: `a` ranges over every target of a kind, `b` over
-    one, so `b`'s scope is a subset of `a`'s. Two rules with the same
-    target (including both unrestricted) are equally specific — neither
-    narrows the other, even if their names differ.
+    (v2.0 §30; re-proven for host/path covering at B2.) A pure scope
+    comparison — kind and target only, never assertion — so the same
+    function resolves specificity between two forbids, two permits, or a
+    permit and the forbid it excepts. Comparable only within the same
+    kind. `b` narrows `a` when `a`'s covered set contains `b`'s and the
+    two aren't the same scope (B2's `_scope_covers`) — the pre-B2 case
+    (`a` has no target, `b` does) is one instance of this; a rule whose
+    covered address set is strictly inside another's target now is too
+    (`rule [ok] ... to "https://x/public"` narrows `rule [deny] ... to
+    "https://x"`). Two rules of the same scope (including both
+    unrestricted, or two spellings of the same address family) are
+    equally specific — neither narrows the other, even if their names or
+    exact target strings differ.
     """
     if a.name == b.name:
         return False
     if a.kind != b.kind:
         return False
-    return a.target is None and b.target is not None
+    return _scope_covers(a.target, b.target) and not _scope_covers(b.target, a.target)
 
 
 def _target_matches(rule, effect):
     """Does this rule's target reach this effect?
 
     Returns (matched, uncertain). No target on the rule means every
-    target of the kind — always a certain match. Otherwise: an exact
-    string match is certain; an effect whose own target is computed=True
-    (the analyser could not pin it down) is a possible match, not a
-    confirmed one — conservative at the boundary (v2.0 §34): widening is
-    sound, assuming a computed target is safe is not — unless its known
-    chunks rule the rule's target out, which is a certain non-match
-    (v37.0 §513, _pattern_excludes below).
+    target of the kind — always a certain match. Otherwise, for an
+    effect whose own target is computed=True (the analyser could not pin
+    it down): a possible match, not a confirmed one — conservative at
+    the boundary (v2.0 §34): widening is sound, assuming a computed
+    target is safe is not — unless its known chunks rule the rule's
+    target out, which is a certain non-match (v37.0 §513, B2's
+    `_pattern_excludes` below). For a literal effect target: when both
+    it and the rule's target are URL-shaped (`scheme://host/path`), the
+    rule's target must *cover* the effect's — the same address, or
+    anything under it (B2) — with the effect's own query and fragment
+    ignored; otherwise (a file path, a `queue:send`-style name, console
+    text — either target not URL-shaped) an exact string match, exactly
+    as before B2.
     """
     if rule.target is None:
         return True, False
@@ -324,6 +489,9 @@ def _target_matches(rule, effect):
         if _pattern_excludes(rule.target, effect.target):
             return False, False
         return True, True
+    if (_parse_url_target(rule.target) is not None
+            and _parse_url_target(effect.target) is not None):
+        return _url_covers(rule.target, effect.target), False
     return effect.target == rule.target, False
 
 
@@ -332,27 +500,42 @@ NO_DESTINATION = " (destination not stated)"
 
 
 def _pattern_excludes(rule_target, effect_target):
-    """Can this computed target provably never equal the rule's target?
+    """Can this computed target provably never be covered by the rule's
+    target (B2; originally "never equal", v37.0 §513)?
 
     A computed target is not an unknown one (v37.0 §511): shapes.py keeps
-    every statically known chunk and marks only the unknown spans `{...}`.
-    Those chunks are facts. The rule's target can equal the effect's only if
-    they appear in it in order — the first at the start and the last at the
-    end, unless the pattern opens or closes with a hole — with a hole free to
-    stand for any text, including none. When they cannot, the match is
-    impossible and this returns True.
+    every statically known chunk and marks only the unknown spans `{...}`,
+    and those chunks are facts. When the rule's target isn't URL-shaped,
+    covering is exact-string equality, unchanged since v37.0:
+    `_exact_pattern_excludes` below. When it is, B2 re-proves the guard for
+    host/path covering in `_url_pattern_excludes`.
 
     Only ever removes matches that could not occur (v37.0 §514): anything
     this cannot rule out stays a possible match. A pattern that is nothing
-    but holes excludes nothing. Neither does a computed target that is not a
-    pattern at all: a foreign function that states no destination reports
-    `<host function> (destination not stated)`, which names where the claim
-    came from, not where the request goes. Text that happens to spell `{...}`
-    is read as a hole, which can only make exclusion rarer. js/rules.mjs's
+    but holes excludes nothing, and neither does a computed target that is
+    not a pattern at all — a foreign function with no stated destination
+    (`<host function> (destination not stated)`), which names where the
+    claim came from, not where the request goes. js/rules.mjs's
     patternExcludes and Rules.swift's patternExcludes must agree with this.
     """
     if HOLE not in effect_target or effect_target.endswith(NO_DESTINATION):
         return False
+    rule_url = _parse_url_target(rule_target)
+    if rule_url is None:
+        return _exact_pattern_excludes(rule_target, effect_target)
+    r_scheme, r_host, r_path, _, _ = rule_url
+    return _url_pattern_excludes(r_scheme, r_host, r_path, effect_target)
+
+
+def _exact_pattern_excludes(rule_target, effect_target):
+    """The v37.0 §513 algorithm, unchanged: can this pattern never equal
+    `rule_target` as a flat string? Its known chunks must appear in it in
+    order — the first anchored to the start, the last to the end, unless
+    the pattern opens or closes with a hole — with a hole free to stand
+    for any text, including none. Still what governs a rule target B2
+    leaves on exact matching (not URL-shaped: a file path, a
+    `queue:send`-style name, console text).
+    """
     chunks = effect_target.split(HOLE)
     first, middle, last = chunks[0], chunks[1:-1], chunks[-1]
     if len(first) + len(last) > len(rule_target):
@@ -366,6 +549,69 @@ def _pattern_excludes(rule_target, effect_target):
             return True
         pos = at + len(chunk)
     return False
+
+
+def _url_pattern_excludes(r_scheme, r_host, r_path, effect_target):
+    """B2's re-proof of the v37.0 §513 guard for a URL-shaped rule target:
+    can this computed target's KNOWN prefix — the literal text before its
+    first hole, which is a true, certain prefix of whatever the hole goes
+    on to produce (v37.0 §511) — prove no completion could ever be covered
+    by the rule?
+
+    Reasons from that one chunk only. It's the one piece of the pattern
+    guaranteed to survive regardless of what any hole produces, so a proof
+    built from it alone is sound: it can only prove exclusions that are
+    real. A later chunk could in principle prove more, but skipping it
+    only means staying uncertain more often — the conservative side of the
+    guarantee ("when in doubt, don't exclude").
+
+    Scheme and host are compared case-insensitively (B2's `_url_covers`);
+    a hole overlapping the scheme, or extending past what the known chunk
+    resolves of the host, leaves that piece unproven rather than assumed
+    to fail — an unresolved host must still match on the substring that IS
+    known: `https://api.{...}/` can't cover `https://x/`, because the
+    host's known prefix `api.` is longer than, and a mismatch against,
+    `x`, no matter what the hole fills in after it.
+    """
+    first = effect_target.split(HOLE, 1)[0]
+    sep = first.find("://")
+    if sep <= 0 or not _is_scheme(first[:sep]):
+        return False
+    if _ascii_lower(first[:sep]) != _ascii_lower(r_scheme):
+        return True
+
+    remainder = first[sep + 3:]
+    term = len(remainder)
+    for i, ch in enumerate(remainder):
+        if ch in "/?#":
+            term = i
+            break
+    if term == len(remainder):
+        # The host itself isn't fully known here -- only a prefix of it
+        # is, from this chunk. Whatever it resolves to will still start
+        # with this prefix, so a rule host that does NOT start with it
+        # can never be that host.
+        return not _ascii_lower(r_host).startswith(_ascii_lower(remainder))
+
+    e_host, rest = remainder[:term], remainder[term:]
+    if _ascii_lower(e_host) != _ascii_lower(r_host):
+        return True
+
+    if rest[:1] in ("?", "#"):
+        # The path is fully known here, from certain text -- and empty.
+        return r_path not in ("", "/")
+
+    known_path = rest
+    if r_path in ("", "/"):
+        return False
+    lr = len(r_path)
+    if len(known_path) < lr:
+        return known_path != r_path[:len(known_path)]
+    if known_path[:lr] != r_path:
+        return True
+    if len(known_path) == lr:
+        return False
+    return known_path[lr] != "/"
 
 
 def _resolve_subject(rule, surface, declaring_file):
@@ -420,6 +666,32 @@ def _subject_matches(rule, effect, surface, declaring_file):
         return True
     origins = surface.origins_of(effect)
     return any(n == rule.subject and f == declaring_file for n, f in origins)
+
+
+def _check_target_is_an_address(rule):
+    """B2: a rule target names an address, not a request.
+
+    The matcher ignores an EFFECT's own query string and fragment (B2 §3)
+    — but a query or fragment written into the RULE's own target is an
+    authoring mistake, not something to silently drop, so a URL-shaped
+    target carrying one is refused before any matching runs. Checked for
+    every declared rule, forbid or permit, superseded or not.
+    """
+    if rule.target is None:
+        return
+    parsed = _parse_url_target(rule.target)
+    if parsed is None:
+        return
+    _, _, _, query, fragment = parsed
+    if query is None and fragment is None:
+        return
+    raise RuleConflict(
+        f"rule [{rule.name}] (line {rule.line}): target "
+        f"\"{escape_string_literal(rule.target)}\" has a query string or "
+        f"fragment — a rule target names an address, and only an "
+        f"effect's own query and fragment are ever ignored, never the "
+        f"rule's\n"
+        f"  drop everything from the \"?\" or \"#\" onward")
 
 
 def _resolve_active(rules):
@@ -500,11 +772,12 @@ def _check_permits_are_related(active):
     rule the author believed was doing something — the same failure
     `RuleNotSupported` exists to prevent for named subjects.
 
-    Equally-specific (same target) counts as related here, even though
-    `narrows` itself says no — that pair is not unrelated, it is a
-    conflict, and `_check_conflicts` gives the precise diagnostic for it.
-    Excluding it here would let this check's coarser "excepts no forbid
-    rule" message fire first and hide the more accurate one.
+    Equally-specific (same covered set — B2's `_same_scope`, subsuming the
+    pre-B2 same-target case) counts as related here, even though `narrows`
+    itself says no — that pair is not unrelated, it is a conflict, and
+    `_check_conflicts` gives the precise diagnostic for it. Excluding it
+    here would let this check's coarser "excepts no forbid rule" message
+    fire first and hide the more accurate one.
     """
     forbids = [r for r in active if r.assertion == "forbid"]
     for p in active:
@@ -512,7 +785,8 @@ def _check_permits_are_related(active):
             continue
         related = any(
             f.kind == p.kind and
-            (p.supersedes == f.name or narrows(p, f) or p.target == f.target)
+            (p.supersedes == f.name or narrows(p, f)
+             or _same_scope(p.target, f.target))
             for f in forbids)
         if not related:
             raise RuleConflict(
@@ -525,12 +799,14 @@ def _check_permits_are_related(active):
 
 
 def _check_conflicts(active):
-    """Equal-specificity conflicts among the active rules (v2.0 §32).
+    """Equal-specificity conflicts among the active rules (v2.0 §32; B2's
+    `_same_scope` in place of `==` on the target).
 
-    Two distinct rules of the same kind and the same target (including
-    both unrestricted), with neither narrowing nor explicitly superseding
-    the other, are equally specific — nothing in the rule set says which
-    one is authoritative:
+    Two distinct rules of the same kind and the same covered set
+    (including both unrestricted, or two spellings of the same address
+    family — B2, e.g. `"https://x"` and `"https://x/"`), with neither
+    narrowing nor explicitly superseding the other, are equally specific
+    — nothing in the rule set says which one is authoritative:
 
     - Same assertion: the original ambiguity — two rules that agree, with
       no way to tell which is the intended, current one.
@@ -540,14 +816,21 @@ def _check_conflicts(active):
 
     Related rules are not conflicts. `narrows` alone resolves the common
     nesting case (v2.0 §30 — a rule strictly more specific than another
-    need not also declare `supersedes`); an explicit `supersedes`
-    resolves an equal-specificity pair even when neither narrows the
-    other, which is the only way two rules of identical target and kind
-    can coexist.
+    need not also declare `supersedes`; B2 extends this to a rule whose
+    covered address set is strictly inside another's, e.g. a `/public`
+    permit under a host-wide forbid); an explicit `supersedes` resolves
+    an equal-specificity pair even when neither narrows the other, which
+    is the only way two rules of the same scope and kind can coexist.
+
+    Two URL-shaped targets on the same scheme and host can never overlap
+    without one covering the other or the two being the same scope — a
+    "/" boundary prefix relation is laminar, never partial — so B2 needs
+    no additional overlap-without-narrowing case here beyond widening
+    what "equally specific" means.
     """
     for i, a in enumerate(active):
         for b in active[i + 1:]:
-            if a.kind != b.kind or a.target != b.target:
+            if a.kind != b.kind or not _same_scope(a.target, b.target):
                 continue
             if narrows(a, b) or narrows(b, a):
                 continue
@@ -616,6 +899,9 @@ def check(rules, surface, declaring_file=None):
     `_resolve_subject`, in order, for a caller to read back rather than
     re-derive (P-Q20).
     """
+    for rule in rules:
+        _check_target_is_an_address(rule)
+
     resolved_subjects = []
     for rule in rules:
         if rule.subject != "anything":

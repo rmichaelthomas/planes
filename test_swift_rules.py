@@ -367,6 +367,46 @@ MORE_RULE_PROGRAMS = [
     # a rule whose target is empty text
     ('use http\nrule [a] anything may not ask to ""\nrule [b] anything may not ask to ""\n'
      'x = ask ""\n'),
+    # B2: a narrower permit under a broader host-wide forbid narrows it
+    # rather than conflicting, and clears only the subtree it names
+    ('use http\nrule [deny] anything may not ask to "https://x"\n'
+     'rule [ok] anything may ask to "https://x/public"\n'
+     'a = ask "https://x/public/report"\nb = ask "https://x/private"\n'),
+    # B2: a trailing-slash rule path covers everything under it but not the
+    # bare path
+    ('use http\nrule [t] anything may not ask to "https://x/ingest/"\n'
+     'a = ask "https://x/ingest/v2"\nb = ask "https://x/ingest"\n'),
+    # B2: a different host, and a subdomain, are never covered
+    ('use http\nrule [t] anything may not ask to "https://x.com"\n'
+     'a = ask "https://api.x.com"\nb = ask "https://x.com/y"\n'),
+    # B2: scheme and host are case-insensitive, port is not folded
+    ('use http\nrule [t] anything may not ask to "https://X.example/Ingest"\n'
+     'a = ask "HTTPS://x.EXAMPLE/Ingest"\nb = ask "https://x.example/ingest"\n'),
+    # B2: case-insensitivity is ASCII-only -- a non-ASCII host compares
+    # exactly, even where two different full-Unicode lowerings of it
+    # (a final-sigma reading and a plain-sigma reading of a trailing
+    # capital Sigma) would disagree with each other
+    ('use http\nrule [t] anything may not ask to "https://\u0391\u03a3.example"\n'
+     'a = ask "https://\u03b1\u03c2.example"\nb = ask "https://\u03b1\u03c3.example"\n'),
+    ('use http\nrule [t] anything may not ask to "https://x"\n'
+     'a = ask "https://x:443"\n'),
+    # B2: the effect's own query and fragment are ignored
+    ('use http\nrule [t] anything may not ask to "https://x/ingest"\n'
+     'a = ask "https://x/ingest?pkg=requests"\nb = ask "https://x/ingest#frag"\n'),
+    # B2: a rule target carrying a query string or fragment is refused
+    ('rule [bad] anything may not ask to "https://x/ingest?pkg=1"\n'),
+    ('rule [bad] anything may not ask to "https://x/ingest#frag"\n'),
+    # B2: computed-target exclusion re-proven for covering, not equality
+    ('use http\nrule [t] anything may not ask to "https://x/ingest"\n'
+     'to get of n:\n  give ask "https://x/ingest" + n\n\nx = for each i in ["a"]: get of i\n'),
+    ('use http\nrule [t] anything may not ask to "https://x/ingest"\n'
+     'to get of n:\n  give ask "https://x/ingestion/" + n\n\nx = for each i in ["a"]: get of i\n'),
+    ('use http\nrule [t] anything may not ask to "https://x/ingest"\n'
+     'to get of n:\n  give ask "https://" + n + "/ingest"\n\nx = for each i in ["a"]: get of i\n'),
+    ('use http\nrule [t] anything may not ask to "https://x/"\n'
+     'to get of n:\n  give ask "https://api." + n + "/"\n\nx = for each i in ["a"]: get of i\n'),
+    ('use http\nrule [t] anything may not ask to "https://x/a"\n'
+     'to get of n:\n  give ask "https://x/" + n\n\nx = for each i in ["a"]: get of i\n'),
 ]
 
 
