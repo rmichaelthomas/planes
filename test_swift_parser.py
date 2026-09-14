@@ -230,6 +230,10 @@ SYNTAX_ERRORS = [
     "rule [r] x may not ask supersedes [1]\n",
     "rule [r] x may not ask supersedes [q] @12\n",
     "rule [r] x may not ask supersedes [q] @\n",
+    "rule [r] x may not ask contradicts q\n",
+    "rule [r] x may not ask contradicts [1]\n",
+    "rule [r] x may not ask contradicts [\n",
+    "rule [r] x may ask contradicts [q] supersedes [p] @abcdef\n",
     "x = 1 because 2\n",
     "x = 1\n  because\n",
     "note: from 1\n",
@@ -266,6 +270,11 @@ CLEAN = [
     "to f:\n  xs = [1,\n    2]\n  r = { a: 1,\n      b: 2 }\n  give xs\nshow f\n",
     'rule [a] anything may not ask to "x.com"\n'
     'rule [b] anything may ask supersedes [a] @3f9c2d because "ok"\n',
+    'rule [a] anything may not write\n'
+    'rule [b] anything may not ask contradicts [a]\n',
+    'rule [a] anything may not ask to "x.com"\n'
+    'rule [b] anything may ask supersedes [a] @3f9c2d contradicts [c] '
+    'because "ok"\n',
     'note:\n  from "somewhere"\n  derives-from [a]\n',
     "note: derives-from [a]\n",
     'r = { to: 1, from: 2, in: 3 }\nshow r.to + r.first\n',

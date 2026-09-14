@@ -47,11 +47,13 @@ public func condition(_ rule: AST.Rule) -> String {
 }
 
 /// One forbid rule matched against one effect — or, for the vacuous shape,
-/// matched against nothing at all. Four shapes, told apart by `clearedBy` /
-/// `narrowedBy` / `vacuous`: a real violation (none set); a violation narrowed by
-/// a more specific sibling forbid; a prohibition a permit cleared (`isViolation`
-/// false, still rendered); and a named-subject rule that matched nothing
-/// (`vacuous`, no effect).
+/// matched against nothing at all. Five shapes, told apart by `clearedBy` /
+/// `narrowedBy` / `vacuous` / `contradictsRule`: a real violation (none set); a
+/// violation narrowed by a more specific sibling forbid; a prohibition a permit
+/// cleared (`isViolation` false, still rendered); a named-subject rule that
+/// matched nothing (`vacuous`, no effect); and a contradiction (B3, Track 0 #5)
+/// — both rules of a declared `contradicts` pair matched at least one effect.
+/// `isViolation` is true for a contradiction, same as a real violation.
 public final class Violation: CustomStringConvertible {
     public let rule: AST.Rule
     public let effect: Effect?
@@ -65,9 +67,14 @@ public final class Violation: CustomStringConvertible {
     /// from the subject; 3 = the subject derives an effect of the kind, but the
     /// rule's target excludes every one.
     public internal(set) var vacuousSituation: Int?
+    /// The other rule of a declared `contradicts` pair, and the effect IT
+    /// matched — set only for the contradiction shape (B3).
+    public let contradictsRule: AST.Rule?
+    public let contradictsEffect: Effect?
 
     public init(_ rule: AST.Rule, _ effect: Effect?, uncertain: Bool = false, clearedBy: AST.Rule? = nil,
-                narrowedBy: [AST.Rule] = [], origins: [(name: String, file: String?)] = [], vacuous: Bool = false) {
+                narrowedBy: [AST.Rule] = [], origins: [(name: String, file: String?)] = [], vacuous: Bool = false,
+                contradictsRule: AST.Rule? = nil, contradictsEffect: Effect? = nil) {
         self.rule = rule
         self.effect = effect
         self.uncertain = uncertain
@@ -75,11 +82,14 @@ public final class Violation: CustomStringConvertible {
         self.narrowedBy = narrowedBy
         self.origins = origins
         self.vacuous = vacuous
+        self.contradictsRule = contradictsRule
+        self.contradictsEffect = contradictsEffect
     }
 
-    public var isViolation: Bool { clearedBy == nil && !vacuous }
+    public var isViolation: Bool { contradictsRule != nil ? true : (clearedBy == nil && !vacuous) }
 
     public func render() -> String {
+        if let contradictsRule { return renderContradiction(contradictsRule) }
         if vacuous { return renderVacuous() }
         let site = effect?.site ?? 0
 
@@ -113,6 +123,29 @@ public final class Violation: CustomStringConvertible {
         return lines.joined(separator: "\n")
     }
 
+    /// B3 (Track 0 #5): both rules of a declared `contradicts` pair matched at
+    /// least one effect in this surface. `rule`/`effect` are the rule that
+    /// wrote the `contradicts` clause and the effect it matched; `other` is
+    /// the named rule and `contradictsEffect` its own match. Names both
+    /// rules, one effect each matched, and the declaring rule's `because` if
+    /// it has one — never the named rule's, since the declaration belongs to
+    /// the rule that wrote the clause.
+    private func renderContradiction(_ other: AST.Rule) -> String {
+        let ea = effect, eb = contradictsEffect
+        let eaText = ea.map { String(describing: $0) } ?? "None"
+        let ebText = eb.map { String(describing: $0) } ?? "None"
+        let line = "[\(rule.name)] contradicts [\(other.name)]: both apply to this " +
+            "program — [\(rule.name)] at line \(ea?.site ?? 0) (\(eaText)), " +
+            "[\(other.name)] at line \(eb?.site ?? 0) (\(ebText))"
+        guard let annotation = rule.annotation else { return line }
+        return line + "\n  [\(rule.name)] because \"\(annotation.text)\""
+    }
+
+    private static func effectJSON(_ e: Effect) -> GrammarJSON {
+        .object([("kind", .string(e.kind)), ("boundary", .string(e.boundary)),
+                 ("target", .string(e.target)), ("line", .number(String(e.site)))])
+    }
+
     /// Every field `render()` reads, as data rather than prose (H1). A
     /// `--json --rules` consumer gets the rule name, the rule's own
     /// kind/target/assertion/`because`, the specific effect (kind, boundary,
@@ -125,6 +158,11 @@ public final class Violation: CustomStringConvertible {
     /// `Violation.asJson` must agree with this field for field). `origins`
     /// dedupes the same way `render()`'s derivation line does — by the
     /// formatted "name (file)" string, not by the raw pair.
+    ///
+    /// `contradiction` (B3) is null except for the contradiction shape,
+    /// where it names both rules of the declared pair and one effect each
+    /// matched — self-contained, so a consumer reading only this key gets
+    /// both sides without also reading the top-level `rule`/`effect`.
     public func asJSON() -> GrammarJSON {
         var seenKeys = Set<String>()
         var pairs: [(key: String, name: String, file: String?)] = []
@@ -135,7 +173,21 @@ public final class Violation: CustomStringConvertible {
         let originsJSON = stableSorted(pairs) { pyLess($0.key, $1.key) }.map { p in
             GrammarJSON.object([("name", .string(p.name)), ("file", p.file.map { GrammarJSON.string($0) } ?? .null)])
         }
-        return .object([
+        let clearedByJSON: GrammarJSON = clearedBy.map { c in
+            .object([("rule", .string(c.name)), ("line", .number(String(c.line)))])
+        } ?? .null
+        let narrowedByJSON: GrammarJSON = .array(narrowedBy.map { r in
+            .object([("rule", .string(r.name)), ("line", .number(String(r.line)))])
+        })
+        let contradictionJSON: GrammarJSON = contradictsRule.map { other in
+            GrammarJSON.object([
+                ("rule", .string(rule.name)),
+                ("effect", effect.map { Violation.effectJSON($0) } ?? .null),
+                ("with_rule", .string(other.name)),
+                ("with_effect", contradictsEffect.map { Violation.effectJSON($0) } ?? .null),
+            ])
+        } ?? .null
+        let fields: [(String, GrammarJSON)] = [
             ("rule", .string(rule.name)),
             ("rule_line", .number(String(rule.line))),
             ("assertion", .string(rule.assertion)),
@@ -147,19 +199,14 @@ public final class Violation: CustomStringConvertible {
             ("vacuous", .bool(vacuous)),
             ("vacuous_situation", vacuousSituation.map { GrammarJSON.number(String($0)) } ?? .null),
             ("uncertain", .bool(uncertain)),
-            ("effect", effect.map { e in
-                GrammarJSON.object([("kind", .string(e.kind)), ("boundary", .string(e.boundary)),
-                                    ("target", .string(e.target)), ("line", .number(String(e.site)))])
-            } ?? .null),
-            ("cleared_by", clearedBy.map { c in
-                GrammarJSON.object([("rule", .string(c.name)), ("line", .number(String(c.line)))])
-            } ?? .null),
-            ("narrowed_by", .array(narrowedBy.map { r in
-                .object([("rule", .string(r.name)), ("line", .number(String(r.line)))])
-            })),
+            ("effect", effect.map { Violation.effectJSON($0) } ?? .null),
+            ("cleared_by", clearedByJSON),
+            ("narrowed_by", narrowedByJSON),
+            ("contradiction", contradictionJSON),
             ("origins", .array(originsJSON)),
             ("message", .string(render())),
-        ])
+        ]
+        return .object(fields)
     }
 
     private func renderVacuous() -> String {
@@ -602,21 +649,61 @@ func resolveActive(_ rules: [AST.Rule]) throws -> [AST.Rule] {
                     "  check the name, or remove the supersedes clause")
         }
 
-        if let expected = r.supersedesFingerprint {
-            let actual = fingerprint(targetRule)
-            if !sameText(actual, expected) {
-                throw RuleConflict(
-                    "rule [\(r.name)] (line \(r.line)) supersedes " +
-                        "[\(supersedes)] (line \(targetRule.line)) as of " +
-                        "@\(expected), but [\(supersedes)] " +
-                        "is now @\(actual) — it changed after [\(r.name)] was " +
-                        "written to override it\n" +
-                        "  confirm the override still means what it meant, " +
-                        "then update the fingerprint to @\(actual)")
-            }
+        let actual = fingerprint(targetRule)
+        // B3 (Track 0 #3): a supersedes clause with no fingerprint at all is
+        // refused — the parser cannot know the other rule's fingerprint, so
+        // this is where the requirement is enforced, with the named rule
+        // actually in hand to compute one from.
+        guard let expected = r.supersedesFingerprint else {
+            throw RuleConflict(
+                "rule [\(r.name)] (line \(r.line)) supersedes " +
+                    "[\(supersedes)] (line \(targetRule.line)) without its " +
+                    "fingerprint\n" +
+                    "  write supersedes [\(supersedes)] @\(actual)")
+        }
+        if !sameText(actual, expected) {
+            throw RuleConflict(
+                "rule [\(r.name)] (line \(r.line)) supersedes " +
+                    "[\(supersedes)] (line \(targetRule.line)) as of " +
+                    "@\(expected), but [\(supersedes)] " +
+                    "is now @\(actual) — it changed after [\(r.name)] was " +
+                    "written to override it\n" +
+                    "  confirm the override still means what it meant, " +
+                    "then update the fingerprint to @\(actual)")
         }
 
         if sameText(targetRule.assertion, r.assertion) { dropped.insert(CodePoints(supersedes)) }
+    }
+
+    // B3 (Track 0 #5): `contradicts` resolution — same error class as
+    // supersedes above. Checked against byName (every named rule), whether
+    // or not either side later gets dropped above, since these are facts
+    // about the clause as written.
+    var contradictedPairs: [CodePoints: AST.Rule] = [:]
+    for r in rules {
+        guard let contradicts = r.contradicts else { continue }
+        if sameText(contradicts, r.name) {
+            throw RuleConflict(
+                "rule [\(r.name)] (line \(r.line)) contradicts itself\n" +
+                    "  contradicts should name a different rule")
+        }
+        guard byName[contradicts] != nil else {
+            throw RuleConflict(
+                "rule [\(r.name)] (line \(r.line)) contradicts " +
+                    "[\(contradicts)], which is not a rule in this file\n" +
+                    "  check the name, or remove the contradicts clause")
+        }
+        let pairKey = CodePoints(r.name) < CodePoints(contradicts)
+            ? "\(r.name)\u{1F}\(contradicts)" : "\(contradicts)\u{1F}\(r.name)"
+        if let first = contradictedPairs[CodePoints(pairKey)] {
+            throw RuleConflict(
+                "rule [\(r.name)] (line \(r.line)) contradicts " +
+                    "[\(contradicts)], but [\(first.name)] (line " +
+                    "\(first.line)) already contradicts [\(first.contradicts ?? "")] " +
+                    "— the pair only needs declaring once\n" +
+                    "  remove the contradicts clause from one of them")
+        }
+        contradictedPairs[CodePoints(pairKey)] = r
     }
 
     return rules.filter { !dropped.contains(CodePoints($0.name)) }
@@ -689,6 +776,50 @@ func checkConflicts(_ active: [AST.Rule]) throws {
                     "reverse), or give one of them a target the other lacks")
         }
     }
+}
+
+/// Does this rule's condition match at least one effect in the surface (B3,
+/// Track 0 #5)? A rule *applies* when it matches, whether as a forbid rule
+/// that would be violated or cleared, or as a permit rule that matched an
+/// effect; a rule matching nothing (vacuous) does not apply. For a forbid
+/// rule this is the same widen-on-uncertainty rule the vacuous check uses;
+/// for a permit rule an uncertain match must NOT count — the conservatism
+/// flips at the permit boundary (v2.0 §34b), the same asymmetry `clearer`
+/// matching in `check` uses. Returns (applies, firstMatchingEffectOrNil) —
+/// the first effect by `surface.declared`'s existing ordering.
+func ruleApplies(_ rule: AST.Rule, _ surface: Surface, _ declaringFile: String?) -> (Bool, Effect?) {
+    for effect in surface.declared {
+        if !sameText(effect.kind, rule.effectKind) { continue }
+        let (matched, uncertain) = targetMatches(rule, effect)
+        if !matched { continue }
+        if sameText(rule.assertion, "permit") && uncertain { continue }
+        if !subjectMatches(rule, effect, surface, declaringFile) { continue }
+        return (true, effect)
+    }
+    return (false, nil)
+}
+
+/// Contradiction violations (B3, Track 0 #5): every declared `contradicts`
+/// pair where both rules apply to this surface. Iterates `active` in its
+/// existing order, so this is deterministic and identical across hosts given
+/// the same source. `resolveActive` already refused declaring the same pair
+/// from both sides, so at most one of the two rules carries the
+/// `contradicts` clause and no pair is ever reported twice. A pair naming a
+/// rule `resolveActive` dropped (superseded away) can never fire: a dropped
+/// rule is not in `active` and so cannot apply.
+func checkContradictions(_ active: [AST.Rule], _ surface: Surface, _ declaringFile: String?) -> [Violation] {
+    var byName = NameMap<AST.Rule>()
+    for r in active { byName[r.name] = r }
+    var results: [Violation] = []
+    for r in active {
+        guard let contradicts = r.contradicts, let other = byName[contradicts] else { continue }
+        let (applies, effect) = ruleApplies(r, surface, declaringFile)
+        if !applies { continue }
+        let (otherApplies, otherEffect) = ruleApplies(other, surface, declaringFile)
+        if !otherApplies { continue }
+        results.append(Violation(r, effect, contradictsRule: other, contradictsEffect: otherEffect))
+    }
+    return results
 }
 
 /// Every violation of every rule, given a computed effect surface. A forbid rule
@@ -765,6 +896,8 @@ public func check(_ rules: [AST.Rule], _ surface: Surface, declaringFile: String
             results.append(vacuous)
         }
     }
+
+    results.append(contentsOf: checkContradictions(active, surface, declaringFile))
 
     return RuleResults(results, resolvedSubjects: resolvedSubjects)
 }

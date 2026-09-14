@@ -498,11 +498,37 @@ public final class Parser {
                     "line \(at_tok.line): a fingerprint must be exactly " +
                         "six hex characters after '@', found " +
                         "'\(orEndOfLine(bad.value))'\n" +
-                        "  try: \(form) supersedes [\(superseded)] @abcdef " +
-                        "— or omit it for an unverified override")
+                        "  try: \(form) supersedes [\(superseded)] @abcdef")
             }
         }
-        return AST.Rule(name, subject, kind, target, rule_tok.line, supersedes, assertion, supersedes_fingerprint)
+        // B3 (Track 0 #5): `contradicts [other-name]` — no fingerprint. It
+        // declares an incompatibility with the OTHER rule itself, not a
+        // claim about its current text, so unlike supersedes there is
+        // nothing here for a later edit to invalidate. Fixed order: read
+        // only after supersedes above.
+        var contradicts: String?
+        if at("NAME", "contradicts") {
+            next()
+            if !at("OP", "[") {
+                let g = peek()
+                throw PlanesSyntaxError(
+                    "line \(g.line): 'contradicts' needs a bracketed rule " +
+                        "name, found '\(orEndOfLine(g.value))'\n" +
+                        "  try: \(form) contradicts [other-rule-name]")
+            }
+            next()
+            if !at("NAME") {
+                let g = peek()
+                throw PlanesSyntaxError(
+                    "line \(g.line): 'contradicts' needs a bracketed rule " +
+                        "name, found '\(orEndOfLine(g.value))'\n" +
+                        "  try: \(form) contradicts [other-rule-name]")
+            }
+            contradicts = next().value
+            try expect("OP", "]")
+        }
+        return AST.Rule(name, subject, kind, target, rule_tok.line, supersedes, assertion, supersedes_fingerprint,
+                        nil, contradicts)
     }
 
     func parse_funcdef() throws -> AST.Node {

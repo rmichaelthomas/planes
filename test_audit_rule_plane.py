@@ -1,24 +1,31 @@
-"""H2 — the audit tool learns rule-plane relations.
+"""H2 — the audit tool learns rule-plane relations; B3 flips two to BUILT.
 
 `audit_locked_vs_built.py` used to check LANGUAGE constructs only: a keyword,
 an AST node, an interpreter branch. It had no evidence category that could
 see a RULE-PLANE relation (`supersedes`, `permit`, `contradicts`, a mandatory
 fingerprint) at all — which is exactly why `until` and `contradicts` went
 unflagged as locked-but-unchecked from checkpoint v5.0 to this sprint. This
-file exercises the new "RULE-PLANE RELATIONS" section directly against the
+file exercises the "RULE-PLANE RELATIONS" section directly against the
 audit's own helpers and, end to end, against its printed output and exit
 code.
 
-The two things this pins:
+The three things this pins:
   1. `supersedes` and `permit` really are BUILT — real pointers into
      parser.py/js/parser.mjs/swift/.../Parser.swift AND
      rules.py/js/rules.mjs/swift/.../Rules.swift, not a hard-coded True.
-  2. `contradicts` and the mandatory-fingerprint requirement report NOT
-     BUILT today, on the scheduled-B3 allowance (so they don't turn CI red
-     on main), and `until` is WITHDRAWN, not a locked construct — and a bare
-     prose mention of a relation's name is never mistaken for the relation
-     being handled, so flipping `contradicts` to BUILT later requires real
-     parser/checker support, not a documentation edit.
+  2. B3 built `contradicts` and the mandatory-fingerprint requirement, so
+     the audit now reports both BUILT, with real evidence, on the "normal"
+     (CI-gating) allowance rather than the scheduled-B3 one H2 recorded —
+     and `until` is WITHDRAWN, not a locked construct. A bare prose mention
+     of a relation's name is never mistaken for the relation being handled:
+     `contradicts` reads BUILT only because real parser/checker support
+     exists, not because a comment names it.
+  3. The audit's own evidence functions distinguish "the clause parses and
+     resolves" from "a contradiction is actually reported": the dedicated
+     `contradicts_reported` check looks for the Violation-shape field
+     (`contradicts_rule`/`contradictsRule`) that only exists once the
+     both-apply reporting path is built, not merely once the clause is
+     validated at parse/resolve time.
 """
 import os
 import subprocess
@@ -71,30 +78,68 @@ def test_supersedes_and_permit_are_normal_not_scheduled():
     assert by_name["permit"] == "normal"
 
 
-# ============================================================ contradicts / fingerprint: scheduled
+# ============================================================ contradicts / fingerprint: now BUILT
 
-def test_contradicts_reports_not_built_today():
+def test_contradicts_has_real_three_way_parse_evidence():
     py, js, sw = audit.evaluate_rule_relation("rule_parse", "contradicts")
-    assert py is None and js is None and sw is None
-    py2, js2, sw2 = audit.evaluate_rule_relation("rule_identifier", "contradicts")
-    assert py2 is None and js2 is None and sw2 is None
+    assert py and py.startswith("parser.py:")
+    assert js and js.startswith("js/parser.mjs:")
+    assert sw and sw.startswith("swift/Sources/Planes/Parser.swift:")
 
 
-def test_contradicts_is_on_the_scheduled_b3_allowance():
+def test_contradicts_has_real_three_way_checker_evidence():
+    py, js, sw = audit.evaluate_rule_relation("rule_identifier", "contradicts")
+    assert py and py.startswith("rules.py:")
+    assert js and js.startswith("js/rules.mjs:")
+    assert sw and sw.startswith("swift/Sources/Planes/Rules.swift:")
+
+
+def test_contradicts_has_real_three_way_reported_evidence():
+    """The stronger check (B3): a contradiction is actually a reported
+    Violation shape, not merely a validated clause."""
+    py, js, sw = audit.evaluate_rule_relation("contradicts_reported", None)
+    assert py and py.startswith("rules.py:")
+    assert js and js.startswith("js/rules.mjs:")
+    assert sw and sw.startswith("swift/Sources/Planes/Rules.swift:")
+
+
+def test_contradicts_is_normal_not_scheduled():
     entry = next(e for e in audit.RULE_RELATION_CHECKS if e[0] == "contradicts")
     _, _, ci_status, _ = entry
-    assert ci_status == "scheduled:B3"
+    assert ci_status == "normal"
 
 
-def test_mandatory_fingerprint_reports_not_built_today():
+def test_mandatory_fingerprint_has_real_three_way_evidence():
     py, js, sw = audit.evaluate_rule_relation("mandatory_fingerprint", None)
-    assert py is None and js is None and sw is None
+    assert py and py.startswith("rules.py:")
+    assert js and js.startswith("js/rules.mjs:")
+    assert sw and sw.startswith("swift/Sources/Planes/Rules.swift:")
 
 
-def test_mandatory_fingerprint_is_on_the_scheduled_b3_allowance():
+def test_mandatory_fingerprint_is_normal_not_scheduled():
     entry = next(e for e in audit.RULE_RELATION_CHECKS
                  if e[0] == "supersedes: mandatory fingerprint")
-    assert entry[2] == "scheduled:B3"
+    assert entry[2] == "normal"
+
+
+def test_contradicts_reported_is_absent_before_the_field_exists():
+    """The regression this stronger check exists to catch: resolution
+    validation alone (a rule referencing `r.contradicts` to check for an
+    unknown name or self-reference) must not read as BUILT -- only the
+    Violation-shape field the both-apply reporting path adds does."""
+    resolution_only = (
+        "def _resolve_active(rules):\n"
+        "    for r in rules:\n"
+        "        if r.contradicts == r.name:\n"
+        "            raise RuleConflict('contradicts itself')\n")
+    assert audit.check_contradicts_reported_py(resolution_only) is None
+
+
+def test_contradicts_reported_is_present_once_the_field_exists():
+    real = (
+        "results.append(Violation(r, effect, contradicts_rule=other,\n"
+        "                         contradicts_effect=other_effect))\n")
+    assert audit.check_contradicts_reported_py(real) is not None
 
 
 # ============================================================ until: withdrawn, not locked
@@ -144,24 +189,28 @@ def test_real_parse_shape_is_parse_evidence():
 
 # ============================================================ end to end
 
-def test_cli_exits_zero_with_two_scheduled_and_one_withdrawn():
-    """The whole point of the scheduled/withdrawn allowances: a decided,
-    already-tracked, not-yet-built rule-plane relation must not turn CI red
-    on main."""
+def test_cli_exits_zero_with_every_relation_built_and_until_withdrawn():
+    """B3 built both relations H2 had scheduled: nothing is left on the
+    scheduled allowance, and the audit still passes clean."""
     out, code = _run_cli()
     assert code == 0, out
     assert "[BUILT    ] supersedes" in out
     assert "[BUILT    ] permit" in out
-    assert "[NOT BUILT (scheduled B3)] contradicts" in out
-    assert "[NOT BUILT (scheduled B3)] supersedes: mandatory fingerprint" in out
+    assert "[BUILT    ] contradicts" in out
+    assert "[BUILT    ] supersedes: mandatory fingerprint" in out
     assert "[WITHDRAWN] until" in out
 
 
-def test_cli_scheduled_section_names_both_gaps():
+def test_cli_reports_no_scheduled_gaps_left():
+    """With both former scheduled-B3 relations now built, the "DECIDED, NOT
+    YET BUILT" section has nothing to name -- the audit's own "every
+    relation has real evidence" message prints instead."""
     out, code = _run_cli()
     assert code == 0, out
-    assert "DECIDED, NOT YET BUILT" in out
-    assert "sprint item B3" in out
+    assert "DECIDED, NOT YET BUILT" not in out
+    assert "sprint item B3" not in out
+    assert ("Every rule-plane relation that isn't scheduled or withdrawn has"
+            in out)
 
 
 if __name__ == "__main__":

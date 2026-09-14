@@ -442,9 +442,17 @@ public enum AST {
         public let assertion: String
         public let supersedesFingerprint: String?
         public var annotation: Because?
+        /// Name of a rule this one is declared incompatible with (B3, Track 0
+        /// #5): the two must never both apply. No fingerprint -- unlike
+        /// supersedes, this declares an incompatibility with the OTHER rule
+        /// itself, not a claim about its current text, so editing that rule
+        /// doesn't invalidate the declaration. Appended last, after
+        /// annotation, matching lexer.py's Rule dataclass field order.
+        public let contradicts: String?
         public init(_ name: String, _ subject: String, _ kind: String, _ target: String? = nil, _ line: Int = 0,
                     _ supersedes: String? = nil, _ assertion: String = "forbid",
-                    _ supersedesFingerprint: String? = nil, _ annotation: Because? = nil) {
+                    _ supersedesFingerprint: String? = nil, _ annotation: Because? = nil,
+                    _ contradicts: String? = nil) {
             self.name = name
             self.subject = subject
             effectKind = kind
@@ -454,13 +462,14 @@ public enum AST {
             self.assertion = assertion
             self.supersedesFingerprint = supersedesFingerprint
             self.annotation = annotation
+            self.contradicts = contradicts
             super.init(.Rule)
         }
         override public var fields: [(name: String, value: ASTValue)] {
             [("name", .string(name)), ("subject", .string(subject)), ("kind", .string(effectKind)),
              ("target", optional(target)), ("line", .int(line)), ("supersedes", optional(supersedes)),
              ("assertion", .string(assertion)), ("supersedes_fingerprint", optional(supersedesFingerprint)),
-             ("annotation", optional(annotation))]
+             ("annotation", optional(annotation)), ("contradicts", optional(contradicts))]
         }
     }
 

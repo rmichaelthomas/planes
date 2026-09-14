@@ -765,11 +765,12 @@ def test_nested_rules_do_not_conflict():
 
 
 def test_supersedes_drops_the_superseded_rule():
-    src = ('use http\n'
-           'rule [old] anything may not ask to "https://a.example.com"\n'
-           'rule [new] anything may not ask to "https://b.example.com" '
-           'supersedes [old]\n'
-           'x = ask "https://a.example.com"\n')
+    old_src = 'rule [old] anything may not ask to "https://a.example.com"'
+    fp = fingerprint(parse(old_src)[0])
+    src = (f'use http\n{old_src}\n'
+          f'rule [new] anything may not ask to "https://b.example.com" '
+          f'supersedes [old] @{fp}\n'
+          f'x = ask "https://a.example.com"\n')
     # [old] is superseded, so its restriction on a.example.com no longer
     # applies; [new] restricts a different target and does not match.
     assert rule_violations(src) == []
@@ -826,11 +827,12 @@ def test_conflict_message_re_escapes_a_quote_in_the_shared_target():
 def test_supersedes_resolves_what_would_otherwise_conflict():
     """Same rule set as the conflict test above, but [b] now supersedes
     [a] — the ambiguity is resolved, not just silenced."""
-    src = ('use http\n'
-           'rule [a] anything may not ask to "https://x.example.com"\n'
-           'rule [b] anything may not ask to "https://x.example.com" '
-           'supersedes [a]\n'
-           'y = ask "https://x.example.com"\n')
+    a_src = 'rule [a] anything may not ask to "https://x.example.com"'
+    fp = fingerprint(parse(a_src)[0])
+    src = (f'use http\n{a_src}\n'
+          f'rule [b] anything may not ask to "https://x.example.com" '
+          f'supersedes [a] @{fp}\n'
+          f'y = ask "https://x.example.com"\n')
     v = rule_violations(src)
     assert len(v) == 1
     assert v[0].rule.name == "b"
@@ -871,11 +873,12 @@ def test_b2_a_narrower_permit_under_a_forbid_is_a_narrowing_not_a_conflict():
 # ================================================================ exception resolution (§3)
 
 def test_permit_that_supersedes_a_forbid_clears_it():
-    src = ('use http\n'
-           'rule [no-external-sends] anything may not ask\n'
-           'rule [audit-allowed] anything may ask to '
-           '"https://audit.internal" supersedes [no-external-sends]\n'
-           'x = ask "https://audit.internal"\n')
+    deny_src = 'rule [no-external-sends] anything may not ask'
+    fp = fingerprint(parse(deny_src)[0])
+    src = (f'use http\n{deny_src}\n'
+          f'rule [audit-allowed] anything may ask to '
+          f'"https://audit.internal" supersedes [no-external-sends] @{fp}\n'
+          f'x = ask "https://audit.internal"\n')
     v = rule_violations(src)
     assert len(v) == 1
     assert v[0].is_violation is False
@@ -966,11 +969,12 @@ def test_opposite_assertion_conflict_message_differs_from_same_assertion():
 
 
 def test_supersedes_resolves_an_opposite_assertion_conflict():
-    src = ('use http\n'
-           'rule [a] anything may not ask to "https://x.example.com"\n'
-           'rule [b] anything may ask to "https://x.example.com" '
-           'supersedes [a]\n'
-           'y = ask "https://x.example.com"\n')
+    a_src = 'rule [a] anything may not ask to "https://x.example.com"'
+    fp = fingerprint(parse(a_src)[0])
+    src = (f'use http\n{a_src}\n'
+          f'rule [b] anything may ask to "https://x.example.com" '
+          f'supersedes [a] @{fp}\n'
+          f'y = ask "https://x.example.com"\n')
     v = rule_violations(src)
     assert len(v) == 1
     assert v[0].is_violation is False
@@ -980,11 +984,12 @@ def test_supersedes_resolves_an_opposite_assertion_conflict():
 # ================================================================ reporting (§4)
 
 def test_cleared_violation_renders_the_excepted_by_line():
-    src = ('use http\n'
-           'rule [no-external-sends] anything may not ask\n'
-           'rule [audit-allowed] anything may ask to '
-           '"https://audit.internal" supersedes [no-external-sends]\n'
-           'x = ask "https://audit.internal"\n')
+    deny_src = 'rule [no-external-sends] anything may not ask'
+    fp = fingerprint(parse(deny_src)[0])
+    src = (f'use http\n{deny_src}\n'
+          f'rule [audit-allowed] anything may ask to '
+          f'"https://audit.internal" supersedes [no-external-sends] @{fp}\n'
+          f'x = ask "https://audit.internal"\n')
     v = rule_violations(src)
     rendered = v[0].render()
     assert rendered.startswith("[no-external-sends] would have been "
@@ -993,11 +998,12 @@ def test_cleared_violation_renders_the_excepted_by_line():
 
 
 def test_cleared_violations_do_not_count_toward_a_pass_fail_result():
-    src = ('use http\n'
-           'rule [no-external-sends] anything may not ask\n'
-           'rule [audit-allowed] anything may ask to '
-           '"https://audit.internal" supersedes [no-external-sends]\n'
-           'x = ask "https://audit.internal"\n')
+    deny_src = 'rule [no-external-sends] anything may not ask'
+    fp = fingerprint(parse(deny_src)[0])
+    src = (f'use http\n{deny_src}\n'
+          f'rule [audit-allowed] anything may ask to '
+          f'"https://audit.internal" supersedes [no-external-sends] @{fp}\n'
+          f'x = ask "https://audit.internal"\n')
     v = rule_violations(src)
     assert len(v) == 1              # still returned, so it's visible
     assert not any(r.is_violation for r in v)   # but nothing failed
@@ -1058,17 +1064,225 @@ def test_mismatched_fingerprint_raises_naming_both_rules():
     assert "@000000" in msg
 
 
-def test_absent_fingerprint_behaves_exactly_as_before():
-    """No fingerprint on a supersedes clause is unverified, not invalid —
-    today's behavior, and it must keep working unchanged."""
-    src = ('use http\n'
-           'rule [old] anything may not ask to "https://x.example.com"\n'
-           'rule [new] anything may ask to "https://x.example.com" '
-           'supersedes [old]\n'
-           'y = ask "https://x.example.com"\n')
+def test_absent_fingerprint_is_refused():
+    """B3 (Track 0 #3): a supersedes clause naming no fingerprint at all is
+    refused, not treated as an unverified-but-legal override — the parser
+    cannot know the other rule's fingerprint, so this is enforced here,
+    where supersedes resolves, with the same error class the mismatch
+    check below uses. The message names the fix: the exact fingerprint to
+    add."""
+    old_src = 'rule [old] anything may not ask to "https://x.example.com"'
+    fp = fingerprint(parse(old_src)[0])
+    src = (f'use http\n{old_src}\n'
+          f'rule [new] anything may ask to "https://x.example.com" '
+          f'supersedes [old]\n'
+          f'y = ask "https://x.example.com"\n')
+    e = expect_conflict(src)
+    msg = str(e)
+    assert "[new]" in msg and "[old]" in msg
+    assert "supersedes [old] (line 2) without its fingerprint" in msg
+    assert f"write supersedes [old] @{fp}" in msg
+
+
+# ================================================================ contradicts (B3, Track 0 #5)
+
+def test_contradicts_parses_and_carries_the_name():
+    prog = parse('rule [a] anything may not ask contradicts [b]')
+    assert prog[0].contradicts == "b"
+    assert prog[0].supersedes is None
+
+
+def test_contradicts_follows_supersedes_in_fixed_order():
+    """supersedes first, then contradicts -- both on one rule."""
+    fp = fingerprint(parse('rule [old] anything may not write')[0])
+    prog = parse(f'rule [new] anything may ask supersedes [old] @{fp} '
+                f'contradicts [other]')
+    r = prog[0]
+    assert r.supersedes == "old"
+    assert r.supersedes_fingerprint == fp
+    assert r.contradicts == "other"
+
+
+def test_contradicts_before_supersedes_is_refused():
+    """The reverse order is not accepted -- contradicts is read only after
+    supersedes, so a contradicts clause first leaves supersedes as trailing
+    text the grammar does not expect."""
+    try:
+        parse('rule [new] anything may ask contradicts [other] '
+             'supersedes [old] @abcdef')
+        assert False, "should raise"
+    except PlanesSyntaxError:
+        pass
+
+
+def test_contradicts_missing_bracket_names_the_fix():
+    try:
+        parse('rule [a] anything may not ask contradicts b')
+        assert False, "should raise"
+    except PlanesSyntaxError as e:
+        msg = str(e)
+        assert "contradicts" in msg and "bracketed rule" in msg
+        assert "contradicts [other-rule-name]" in msg
+
+
+def test_contradicts_missing_name_names_the_fix():
+    try:
+        parse('rule [a] anything may not ask contradicts [')
+        assert False, "should raise"
+    except PlanesSyntaxError as e:
+        msg = str(e)
+        assert "contradicts" in msg and "bracketed rule" in msg
+
+
+def test_contradicts_unknown_rule_is_a_compile_error():
+    src = 'rule [a] anything may not ask contradicts [ghost]\n'
+    e = expect_conflict(src)
+    msg = str(e)
+    assert "[a]" in msg and "[ghost]" in msg
+    assert "which is not a rule in this file" in msg
+    assert "remove the contradicts clause" in msg
+
+
+def test_contradicts_itself_is_a_compile_error():
+    src = 'rule [a] anything may not ask contradicts [a]\n'
+    e = expect_conflict(src)
+    msg = str(e)
+    assert "contradicts itself" in msg
+    assert "contradicts should name a different rule" in msg
+
+
+def test_contradicts_declared_from_both_sides_is_a_compile_error():
+    """Same pair, declared twice: A contradicts B and B contradicts A. The
+    second one encountered is refused, naming the first."""
+    src = ('rule [a] anything may not ask contradicts [b]\n'
+           'rule [b] anything may not write contradicts [a]\n')
+    e = expect_conflict(src)
+    msg = str(e)
+    assert "[b]" in msg and "[a]" in msg
+    assert "already contradicts" in msg
+    assert "only needs declaring once" in msg
+
+
+def test_contradicts_has_no_fingerprint_field_to_go_stale():
+    """Unlike supersedes, contradicts declares an incompatibility with the
+    OTHER rule itself, not a claim about its current text -- so editing the
+    named rule's condition never invalidates the declaration, and there is
+    no fingerprint mismatch to raise."""
+    src = ('rule [a] anything may not ask to "https://x.example.com"\n'
+           'rule [b] anything may not write contradicts [a]\n')
+    prog = parse(src)
+    b = next(r for r in prog if r.name == "b")
+    assert b.contradicts == "a"
+    # Editing [a]'s target does not change [b]'s declaration at all --
+    # there is nothing on the clause that could go stale.
+    src2 = ('rule [a] anything may not ask to "https://changed.example.com"\n'
+            'rule [b] anything may not write contradicts [a]\n')
+    found = [s for s in parse(src2) if isinstance(s, Rule)]
+    surface = analyse(src2)
+    check(found, surface)  # does not raise
+
+
+def test_a_pair_that_both_apply_is_reported_as_a_contradiction():
+    """A rule *applies* when its condition matches at least one effect --
+    a forbid rule violated, or a permit rule matched. When both rules of a
+    declared pair apply, the checker reports the contradiction, naming the
+    DECLARING rule's `because` (the rule that wrote the `contradicts`
+    clause) -- never the named rule's, since the declaration belongs to
+    whichever rule wrote it."""
+    src = ('use http\nuse file\n'
+           'rule [no-writes] anything may not write\n'
+           'rule [no-sends] anything may not ask contradicts [no-writes]\n'
+           '  because "writes are audited separately"\n'
+           'write 1 to "out.txt"\n'
+           'x = ask "https://x.example.com"\n')
     v = rule_violations(src)
+    contradictions = [r for r in v if r.contradicts_rule is not None]
+    assert len(contradictions) == 1
+    c = contradictions[0]
+    assert c.is_violation is True
+    assert c.rule.name == "no-sends"
+    assert c.contradicts_rule.name == "no-writes"
+    assert c.effect.target == "https://x.example.com"
+    assert c.contradicts_effect.target == "out.txt"
+    rendered = c.render()
+    assert rendered.startswith(
+        "[no-sends] contradicts [no-writes]: both apply to this program")
+    assert "[no-sends] at line 7 (ask https://x.example.com)" in rendered
+    assert "[no-writes] at line 6 (write out.txt)" in rendered
+    assert '[no-sends] because "writes are audited separately"' in rendered
+
+
+def test_a_pair_where_one_is_vacuous_is_not_reported():
+    """[no-writes] never matches -- the program performs no write -- so it
+    does not apply, and the declared contradiction never fires even though
+    [no-sends] does apply."""
+    src = ('use http\n'
+           'rule [no-writes] anything may not write\n'
+           'rule [no-sends] anything may not ask contradicts [no-writes]\n'
+           'x = ask "https://x.example.com"\n')
+    v = rule_violations(src)
+    assert not any(r.contradicts_rule is not None for r in v)
     assert len(v) == 1
-    assert v[0].cleared_by.name == "new"
+    assert v[0].rule.name == "no-sends"
+    assert v[0].is_violation is True
+
+
+def test_a_contradiction_involving_a_permit_rule():
+    """contradicts may be declared on, or point at, a permit rule -- a
+    permit that clears one forbid can still be declared incompatible with
+    a completely unrelated forbid rule."""
+    deny_fp = fingerprint(parse('rule [no-sends] anything may not ask')[0])
+    src = (f'use http\nuse file\n'
+          f'rule [no-sends] anything may not ask\n'
+          f'rule [audit-allowed] anything may ask to '
+          f'"https://audit.internal" supersedes [no-sends] @{deny_fp}\n'
+          f'rule [no-writes] anything may not write '
+          f'contradicts [audit-allowed]\n'
+          f'x = ask "https://audit.internal"\n'
+          f'write 1 to "out.txt"\n')
+    v = rule_violations(src)
+    contradictions = [r for r in v if r.contradicts_rule is not None]
+    assert len(contradictions) == 1
+    c = contradictions[0]
+    assert c.rule.name == "no-writes"
+    assert c.contradicts_rule.name == "audit-allowed"
+    assert c.contradicts_rule.assertion == "permit"
+    assert c.is_violation is True
+    # the permit's own match is still cleared -- contradicts changes no
+    # rule's outcome, only adds a new reported fact
+    cleared = next(r for r in v if r.rule.name == "no-sends")
+    assert cleared.is_violation is False
+    assert cleared.cleared_by.name == "audit-allowed"
+
+
+def test_contradiction_as_json_names_both_rules_and_effects():
+    src = ('use http\nuse file\n'
+           'rule [no-writes] anything may not write\n'
+           'rule [no-sends] anything may not ask contradicts [no-writes]\n'
+           'write 1 to "out.txt"\n'
+           'x = ask "https://x.example.com"\n')
+    v = rule_violations(src)
+    c = next(r for r in v if r.contradicts_rule is not None)
+    doc = c.as_json()
+    assert doc["is_violation"] is True
+    assert doc["vacuous"] is False
+    assert doc["cleared_by"] is None
+    assert doc["message"] == c.render()
+    assert doc["contradiction"] == {
+        "rule": "no-sends",
+        "effect": {"kind": "ask", "boundary": "network",
+                   "target": "https://x.example.com", "line": 6},
+        "with_rule": "no-writes",
+        "with_effect": {"kind": "write", "boundary": "file",
+                        "target": "out.txt", "line": 5},
+    }
+
+
+def test_non_contradiction_violation_as_json_has_a_null_contradiction():
+    src = ('use http\nrule [no-net] anything may not ask\n'
+           'x = ask "https://example.com/a.json"\n')
+    v = rule_violations(src)[0]
+    assert v.as_json()["contradiction"] is None
 
 
 # ================================================================ vacuous named subjects (P-Q19)
@@ -1304,11 +1518,12 @@ def test_violation_as_json_reports_because():
 
 
 def test_violation_as_json_reports_a_permit_exception_as_cleared_by():
-    src = ('use http\n'
-           'rule [no-external-sends] anything may not ask\n'
-           'rule [audit-allowed] anything may ask to "https://audit.internal" '
-           'supersedes [no-external-sends]\n'
-           'x = ask "https://audit.internal"\n')
+    deny_src = 'rule [no-external-sends] anything may not ask'
+    fp = fingerprint(parse(deny_src)[0])
+    src = (f'use http\n{deny_src}\n'
+          f'rule [audit-allowed] anything may ask to "https://audit.internal" '
+          f'supersedes [no-external-sends] @{fp}\n'
+          f'x = ask "https://audit.internal"\n')
     v = rule_violations(src)[0]
     doc = v.as_json()
     assert doc["is_violation"] is False

@@ -368,7 +368,14 @@ to canonical-of-rule of node, indent:
   with-sup = with-line + "\n" + (canonical-of-optional-field of "supersedes", node.supersedes, indent)
   with-assert = with-sup + "\n" + indent + "  assertion: " + (render-string of node.assertion)
   with-fp = with-assert + "\n" + (canonical-of-optional-field of "supersedes_fingerprint", node.supersedes-fingerprint, indent)
-  give with-fp + "\n" + (canonical-of-annotation of node.annotation, indent)
+  with-ann = with-fp + "\n" + (canonical-of-annotation of node.annotation, indent)
+  # `contradicts` is rendered LAST, matching lexer.py's Rule dataclass field
+  # order (appended after `annotation`, for the same reason
+  # `supersedes_fingerprint` was: every existing positional Rule(...)
+  # construction keeps working) -- test_parser_in_planes.py's canonical()
+  # walks __dataclass_fields__ in declaration order, so this emitter must
+  # match that order field for field, not the source's clause order.
+  give with-ann + "\n" + (canonical-of-optional-field of "contradicts", node.contradicts, indent)
 
 to canonical-of-effect-item of effect, indent:
   if effect.target-tag == "literal":
@@ -2144,9 +2151,11 @@ to parse-foreign of cursor:
     give { node: node, cursor: target-expect.cursor }
 
 # ---- rule: `rule [name] subject may[ not] kind [to "target"]
-# [supersedes [other] [@fp]] [because "..."]`. Never executes; the checker
-# reads it. `may`, `supersedes` and `because` are read positionally, so
-# none is reserved (positional_words in grammar/vocabulary.json).
+# [supersedes [other] [@fp]] [contradicts [other]] [because "..."]`. Never
+# executes; the checker reads it. `may`, `supersedes`, `contradicts` and
+# `because` are read positionally, so none is reserved (positional_words in
+# grammar/vocabulary.json). Fixed order: supersedes, then contradicts (B3,
+# Track 0 #5).
 
 to drop-first-char of s:
   result = ""
@@ -2181,6 +2190,21 @@ to parse-rule-supersedes of cursor:
   else:
     give { supersedes: nothing, fingerprint: nothing, cursor: cursor }
 
+to parse-rule-contradicts of cursor:
+  # B3 (Track 0 #5): `contradicts [other]` — no fingerprint. It declares an
+  # incompatibility with the OTHER rule itself, not a claim about its
+  # current text, so unlike supersedes there is nothing here for a later
+  # edit to invalidate.
+  is-con = (tok-at of cursor, "NAME") and (current of cursor).text == "contradicts"
+  if is-con:
+    after-con = advance of cursor
+    open-expect = expect-op of after-con, "["
+    name-expect = expect-kind of open-expect.cursor, "NAME"
+    close-expect = expect-op of name-expect.cursor, "]"
+    give { contradicts: name-expect.token.text, cursor: close-expect.cursor }
+  else:
+    give { contradicts: nothing, cursor: cursor }
+
 to parse-rule of cursor:
   rule-tok = current of cursor
   open-expect = expect-op of (advance of cursor), "["
@@ -2208,8 +2232,9 @@ to parse-rule of cursor:
     kind-result = read-effect-word of after-assertion, ("'" + verb + "'"), false
     target-result = parse-rule-target of kind-result.cursor
     sup-result = parse-rule-supersedes of target-result.cursor
-    node = { kind: "Rule", name: name-expect.token.text, subject: subject-expect.token.text, rule-kind: kind-result.word, target: target-result.target, line: rule-tok.line, supersedes: sup-result.supersedes, assertion: assertion, supersedes-fingerprint: sup-result.fingerprint, annotation: nothing }
-    give { node: node, cursor: sup-result.cursor }
+    con-result = parse-rule-contradicts of sup-result.cursor
+    node = { kind: "Rule", name: name-expect.token.text, subject: subject-expect.token.text, rule-kind: kind-result.word, target: target-result.target, line: rule-tok.line, supersedes: sup-result.supersedes, assertion: assertion, supersedes-fingerprint: sup-result.fingerprint, annotation: nothing, contradicts: con-result.contradicts }
+    give { node: node, cursor: con-result.cursor }
 
 # ---- note: `note:` then an indented block of `from "..."` and
 # `derives-from [rule]` entries, or a single inline entry. Never executes.

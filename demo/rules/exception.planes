@@ -1,6 +1,6 @@
 rule [no-external-sends] anything may not ask
   because "default-deny keeps audit events from leaking to an unapproved endpoint"
-rule [audit-allowed] anything may ask to "https://audit.internal" supersedes [no-external-sends]
+rule [audit-allowed] anything may ask to "https://audit.internal" supersedes [no-external-sends] @960178
   because "the internal audit collector is the one approved exception"
 
 note:

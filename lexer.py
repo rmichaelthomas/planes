@@ -435,6 +435,14 @@ class Rule:
     supersedes_fingerprint: Optional[str] = None  # the @xxxxxx a supersedes
                                                    # clause was written against
     annotation: Any = None       # a Because, or None — the rationale, never evaluated
+    # Name of a rule this one is declared incompatible with (B3, Track 0
+    # #5): the two must never both apply. No fingerprint — unlike
+    # supersedes, this declares an incompatibility with the OTHER rule
+    # itself, not a claim about its current text, so editing that rule
+    # doesn't invalidate the declaration. Appended last, after annotation,
+    # for the same reason supersedes_fingerprint was: every existing
+    # positional Rule(...) construction keeps working unchanged.
+    contradicts: Optional[str] = None
 
 
 @dataclass

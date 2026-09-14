@@ -125,6 +125,13 @@ export const Rule = (
   assertion = "forbid",
   supersedes_fingerprint = null,
   annotation = null,
+  // Name of a rule this one is declared incompatible with (B3, Track 0
+  // #5): the two must never both apply. No fingerprint — unlike
+  // supersedes, this declares an incompatibility with the OTHER rule
+  // itself, not a claim about its current text. Appended last, after
+  // annotation, for the same reason supersedes_fingerprint was: every
+  // existing positional Rule(...) construction keeps working unchanged.
+  contradicts = null,
 ) => ({
   __node: "Rule",
   name,
@@ -136,6 +143,7 @@ export const Rule = (
   assertion,
   supersedes_fingerprint,
   annotation,
+  contradicts,
 });
 export const Because = (text, line = 0) => ({ __node: "Because", text, line });
 export const Note = (entries, line = 0) => ({ __node: "Note", entries, line });

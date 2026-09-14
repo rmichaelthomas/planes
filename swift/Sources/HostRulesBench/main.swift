@@ -58,6 +58,11 @@ private let tlds = ["com", "internal", "io", "net"]
 
 func makeRulesFixture(ruleCount: Int) -> RuleFixture {
     precondition(ruleCount >= 2, "need at least the default-deny plus one permit")
+    // B3 (Track 0 #3): supersedes now requires a fingerprint. Computed with
+    // the same fingerprint(_:) the checker itself uses — never hand-typed —
+    // against the deny rule exactly as declared two lines below, so a future
+    // edit to that rule's shape recomputes this rather than going stale.
+    let denyFingerprint = fingerprint(AST.Rule("no-external-sends", "anything", "ask"))
     var lines: [String] = [
         "rule [no-external-sends] anything may not ask",
         "  because \"default-deny keeps outbound requests to an unapproved endpoint\"",
@@ -70,7 +75,7 @@ func makeRulesFixture(ruleCount: Int) -> RuleFixture {
         let tld = tlds[i % tlds.count]
         let target = "https://\(cat)-\(i).example.\(tld)\(path)"
         permitted.append(target)
-        lines.append("rule [allow-\(i)] anything may ask to \"\(target)\" supersedes [no-external-sends]")
+        lines.append("rule [allow-\(i)] anything may ask to \"\(target)\" supersedes [no-external-sends] @\(denyFingerprint)")
         lines.append("  because \"the \(cat) endpoint is an approved integration (ticket OPS-\(1000 + i))\"")
         lines.append("")
     }

@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generated_by": "grammar_gen.py",
-  "count": 123,
+  "count": 129,
   "entries": [
     {
       "id": "interp.cannot-compare.equal-1",
@@ -1096,7 +1096,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:450",
+      "source": "parser.py:456",
       "raised_in": "parse_rule",
       "template": "line {g.line}: a rule needs a bracketed name, found '{g.value or 'end of line'}'\n  try: rule [name-here] subject may not effect-kind",
       "slots": [
@@ -1109,7 +1109,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:457",
+      "source": "parser.py:463",
       "raised_in": "parse_rule",
       "template": "line {g.line}: a rule's bracketed name must be a word, found '{g.value or 'end of line'}'\n  try: rule [name-here] subject may not effect-kind",
       "slots": [
@@ -1122,7 +1122,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:468",
+      "source": "parser.py:474",
       "raised_in": "parse_rule",
       "template": "line {g.line}: expected 'may not' or 'may' after a rule's subject, found '{g.value or 'end of line'}'\n  try: rule [{name}] {subject} may not effect-kind  (forbid)\n    or: rule [{name}] {subject} may effect-kind  (permit)",
       "slots": [
@@ -1139,7 +1139,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:499",
+      "source": "parser.py:505",
       "raised_in": "parse_rule",
       "template": "line {g.line}: 'supersedes' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: {form} supersedes [other-rule-name]",
       "slots": [
@@ -1153,7 +1153,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:506",
+      "source": "parser.py:512",
       "raised_in": "parse_rule",
       "template": "line {g.line}: 'supersedes' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: {form} supersedes [other-rule-name]",
       "slots": [
@@ -1167,9 +1167,9 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:518",
+      "source": "parser.py:524",
       "raised_in": "parse_rule",
-      "template": "line {at_tok.line}: a fingerprint must be exactly six hex characters after '@', found '{bad.value or 'end of line'}'\n  try: {form} supersedes [{supersedes}] @abcdef \u2014 or omit it for an unverified override",
+      "template": "line {at_tok.line}: a fingerprint must be exactly six hex characters after '@', found '{bad.value or 'end of line'}'\n  try: {form} supersedes [{supersedes}] @abcdef",
       "slots": [
         "at_tok.line",
         "bad.value or 'end of line'",
@@ -1178,11 +1178,39 @@
       ]
     },
     {
+      "id": "parser.planessyntaxerror-site.parse_rule-7",
+      "kind": "error",
+      "class": "PlanesSyntaxError",
+      "tag": null,
+      "source": "parser.py:540",
+      "raised_in": "parse_rule",
+      "template": "line {g.line}: 'contradicts' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: {form} contradicts [other-rule-name]",
+      "slots": [
+        "g.line",
+        "g.value or 'end of line'",
+        "form"
+      ]
+    },
+    {
+      "id": "parser.planessyntaxerror-site.parse_rule-8",
+      "kind": "error",
+      "class": "PlanesSyntaxError",
+      "tag": null,
+      "source": "parser.py:547",
+      "raised_in": "parse_rule",
+      "template": "line {g.line}: 'contradicts' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: {form} contradicts [other-rule-name]",
+      "slots": [
+        "g.line",
+        "g.value or 'end of line'",
+        "form"
+      ]
+    },
+    {
       "id": "parser.planessyntaxerror-site.finish_because",
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:656",
+      "source": "parser.py:685",
       "raised_in": "finish_because",
       "template": "line {g.line}: 'because' needs a quoted reason\n  try: cap = 200 because \"the reason\"",
       "slots": [
@@ -1194,7 +1222,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:687",
+      "source": "parser.py:716",
       "raised_in": "parse_note_entry",
       "template": "line {g.line}: 'from' in a note needs a quoted source\n  try: from \"the source\"",
       "slots": [
@@ -1206,7 +1234,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:695",
+      "source": "parser.py:724",
       "raised_in": "parse_note_entry",
       "template": "line {g.line}: 'derives-from' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: derives-from [rule-name]",
       "slots": [
@@ -1219,7 +1247,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:702",
+      "source": "parser.py:731",
       "raised_in": "parse_note_entry",
       "template": "line {g.line}: 'derives-from' needs a bracketed rule name, found '{g.value or 'end of line'}'\n  try: derives-from [rule-name]",
       "slots": [
@@ -1232,7 +1260,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:710",
+      "source": "parser.py:739",
       "raised_in": "parse_note_entry",
       "template": "line {g.line}: unrecognised entry in a note, found '{g.value or 'end of line'}'\n  try: from \"source\"  or  derives-from [rule-name]",
       "slots": [
@@ -1245,7 +1273,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:768",
+      "source": "parser.py:797",
       "raised_in": "parse_with_field",
       "template": "line {t.line}: expected a field name, found '{t.value or 'end of line'}'\n  try: with name: value",
       "slots": [
@@ -1258,7 +1286,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:865",
+      "source": "parser.py:894",
       "raised_in": "parse_postfix",
       "template": "line {g.line}: '[' has no meaning here \u2014 Planes has no index or slice syntax\n  try: first n of x \u2014 takes the first n code points or items; there is no way to take one position or a range",
       "slots": [
@@ -1270,7 +1298,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:889",
+      "source": "parser.py:918",
       "raised_in": "read_multiword_name",
       "template": "line {g.line}: expected a name, found '{g.value or 'end of line'}'\n  a name here is one or more plain words \u2014 the old or the new spelling in a `use ... with <old> as <new>` rename; a quoted string, a number, or a punctuation mark cannot stand for one",
       "slots": [
@@ -1283,7 +1311,7 @@
       "kind": "error",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:919",
+      "source": "parser.py:948",
       "raised_in": "check_rename_name_ambiguity",
       "template": null,
       "slots": [],
@@ -1295,7 +1323,7 @@
       "kind": "error",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:978",
+      "source": "parser.py:1007",
       "raised_in": "raise_amber_multiword",
       "template": null,
       "slots": [],
@@ -1307,7 +1335,7 @@
       "kind": "error",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:988",
+      "source": "parser.py:1017",
       "raised_in": "raise_amber_juxtaposition",
       "template": null,
       "slots": [],
@@ -1319,7 +1347,7 @@
       "kind": "error",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:998",
+      "source": "parser.py:1027",
       "raised_in": "raise_amber_juxtaposition_unknown",
       "template": null,
       "slots": [],
@@ -1331,7 +1359,7 @@
       "kind": "error",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:1040",
+      "source": "parser.py:1069",
       "raised_in": "check_paren_arglist_ambiguity",
       "template": null,
       "slots": [],
@@ -1343,7 +1371,7 @@
       "kind": "error",
       "class": "PlanesAmbiguity",
       "tag": null,
-      "source": "parser.py:1052",
+      "source": "parser.py:1081",
       "raised_in": "check_paren_arglist_ambiguity",
       "template": null,
       "slots": [],
@@ -1355,7 +1383,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1090",
+      "source": "parser.py:1119",
       "raised_in": "parse_record_field",
       "template": "line {t.line}: expected a field name, found '{t.value or 'end of line'}'\n  try: { name: value }",
       "slots": [
@@ -1368,7 +1396,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1141",
+      "source": "parser.py:1170",
       "raised_in": "parse_when_pattern_entry",
       "template": "line {t.line}: expected a field name, found '{t.value or 'end of line'}'\n  try: { name: value }  or  { name }",
       "slots": [
@@ -1381,7 +1409,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1219",
+      "source": "parser.py:1248",
       "raised_in": "parse_primary",
       "template": "line {t.line}: field '{k}' appears twice in this record\n  keep one of the two; to change a field's value later, build a new record from this one \u2014 `r with {k}: value`",
       "slots": [
@@ -1395,7 +1423,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1323",
+      "source": "parser.py:1352",
       "raised_in": "parse_primary",
       "template": "line {t.line}: expected a value, found '{t.value or 'end of line'}'\n  a value starts with a number, a quoted string, true, false, nothing, a name, `not`, a list, a record, or a parenthesised expression \u2014 a statement word like `show` or `write` cannot stand in for one",
       "slots": [
@@ -1408,7 +1436,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1394",
+      "source": "parser.py:1423",
       "raised_in": "prescan_funcs",
       "template": "line {word.line}: '{word.value}' is a reserved word and cannot start the function name '{full_name}'\n  {fix}",
       "slots": [
@@ -1423,7 +1451,7 @@
       "kind": "error",
       "class": "PlanesSyntaxError",
       "tag": null,
-      "source": "parser.py:1398",
+      "source": "parser.py:1427",
       "raised_in": "prescan_funcs",
       "template": "line {word.line}: '{word.value}' is a reserved word and cannot appear in the function name '{full_name}'\n  {fix}",
       "slots": [
@@ -1438,7 +1466,7 @@
       "kind": "report",
       "class": null,
       "tag": null,
-      "source": "rules.py:158-161",
+      "source": "rules.py:177-180",
       "raised_in": "render",
       "template": "[{self.rule.name}] would have been violated at line {self.effect.site} \u2014 excepted by [{self.cleared_by.name}] (line {self.cleared_by.line})",
       "slots": [],
@@ -1449,7 +1477,7 @@
       "kind": "report",
       "class": null,
       "tag": null,
-      "source": "rules.py:163-179",
+      "source": "rules.py:182-198",
       "raised_in": "render",
       "template": "[{self.rule.name}] violated at line {self.effect.site}.\n  {self.effect}\n  target could not be pinned down statically \u2014 this computed value may or may not be \"{escape_string_literal(self.rule.target)}\"\n  rule declared at line {self.rule.line}: {condition(self.rule)}\n  narrowed here by {names}\n  derived from: {', '.join(parts)}",
       "slots": [],
@@ -1460,7 +1488,7 @@
       "kind": "report",
       "class": null,
       "tag": null,
-      "source": "rules.py:241-247",
+      "source": "rules.py:299-305",
       "raised_in": "_render_vacuous",
       "template": "[{rule.name}] (line {rule.line}) checked nothing \u2014 subject '{rule.subject}' resolves in this file, but the program performs no '{rule.kind}' effect at all\nthe rule is inert against this program as written\ncheck the program still performs the effect you expect, or remove the rule if it no longer applies",
       "slots": [],
@@ -1471,7 +1499,7 @@
       "kind": "report",
       "class": null,
       "tag": null,
-      "source": "rules.py:249-257",
+      "source": "rules.py:307-315",
       "raised_in": "_render_vacuous",
       "template": "[{rule.name}] (line {rule.line}) checked nothing \u2014 subject '{rule.subject}' derives a '{rule.kind}' effect, but the rule's target excludes every one\n'{rule.subject}' reaches this effect kind, but never at \"{escape_string_literal(rule.target)}\"\ncheck the target matches where '{rule.subject}' actually goes, or remove the target to check every '{rule.kind}' effect '{rule.subject}' reaches",
       "slots": [],
@@ -1482,7 +1510,7 @@
       "kind": "report",
       "class": null,
       "tag": null,
-      "source": "rules.py:259-265",
+      "source": "rules.py:317-323",
       "raised_in": "_render_vacuous",
       "template": "[{rule.name}] (line {rule.line}) checked nothing \u2014 subject '{rule.subject}' resolves in this file, but no '{rule.kind}' effect derives from it\nthe program performs '{rule.kind}', but to a target that does not derive from '{rule.subject}'\ncheck the subject names the value you meant, or write the rule against 'anything'",
       "slots": [],
@@ -1493,7 +1521,7 @@
       "kind": "error",
       "class": "RuleNotSupported",
       "tag": null,
-      "source": "rules.py:641",
+      "source": "rules.py:699",
       "raised_in": "_resolve_subject",
       "template": "rule [{rule.name}] (line {rule.line}): subject '{rule.subject}' only resolves in {other}, not in the file that declares this rule \u2014 a rule cannot reach across an import boundary to a name it never saw declared\n  write the rule in {other} instead, or name a subject local to this file",
       "slots": [
@@ -1509,7 +1537,7 @@
       "kind": "error",
       "class": "RuleNotSupported",
       "tag": null,
-      "source": "rules.py:648",
+      "source": "rules.py:706",
       "raised_in": "_resolve_subject",
       "template": "rule [{rule.name}] (line {rule.line}): subject '{rule.subject}' does not resolve to anything in the traced effect surface \u2014 checking it needs a value this file's derivation graph can reach\n  check the name is spelled as it appears in this file, or write the rule against 'anything' instead",
       "slots": [
@@ -1523,7 +1551,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:688",
+      "source": "rules.py:746",
       "raised_in": "_check_target_is_an_address",
       "template": "rule [{rule.name}] (line {rule.line}): target \"{escape_string_literal(rule.target)}\" has a query string or fragment \u2014 a rule target names an address, and only an effect's own query and fragment are ever ignored, never the rule's\n  drop everything from the \"?\" or \"#\" onward",
       "slots": [
@@ -1537,7 +1565,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:725",
+      "source": "rules.py:793",
       "raised_in": "_resolve_active",
       "template": "two rules are both named [{r.name}] (line {other.line} and line {r.line}) \u2014 a rule name must be unique\n  rename one of them",
       "slots": [
@@ -1551,7 +1579,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:736",
+      "source": "rules.py:804",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes itself\n  supersedes should name an earlier, different rule",
       "slots": [
@@ -1564,7 +1592,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:740",
+      "source": "rules.py:808",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes [{r.supersedes}], which is not a rule in this file\n  check the name, or remove the supersedes clause",
       "slots": [
@@ -1578,7 +1606,24 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:749",
+      "source": "rules.py:816",
+      "raised_in": "_resolve_active",
+      "template": "rule [{r.name}] (line {r.line}) supersedes [{r.supersedes}] (line {target_rule.line}) without its fingerprint\n  write supersedes [{r.supersedes}] @{actual}",
+      "slots": [
+        "r.name",
+        "r.line",
+        "r.supersedes",
+        "target_rule.line",
+        "r.supersedes",
+        "actual"
+      ]
+    },
+    {
+      "id": "rules.ruleconflict-site._resolve_active-5",
+      "kind": "error",
+      "class": "RuleConflict",
+      "tag": null,
+      "source": "rules.py:822",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes [{r.supersedes}] (line {target_rule.line}) as of @{r.supersedes_fingerprint}, but [{r.supersedes}] is now @{actual} \u2014 it changed after [{r.name}] was written to override it\n  confirm the override still means what it meant, then update the fingerprint to @{actual}",
       "slots": [
@@ -1594,11 +1639,55 @@
       ]
     },
     {
+      "id": "rules.ruleconflict-site._resolve_active-6",
+      "kind": "error",
+      "class": "RuleConflict",
+      "tag": null,
+      "source": "rules.py:839",
+      "raised_in": "_resolve_active",
+      "template": "rule [{r.name}] (line {r.line}) contradicts itself\n  contradicts should name a different rule",
+      "slots": [
+        "r.name",
+        "r.line"
+      ]
+    },
+    {
+      "id": "rules.ruleconflict-site._resolve_active-7",
+      "kind": "error",
+      "class": "RuleConflict",
+      "tag": null,
+      "source": "rules.py:843",
+      "raised_in": "_resolve_active",
+      "template": "rule [{r.name}] (line {r.line}) contradicts [{r.contradicts}], which is not a rule in this file\n  check the name, or remove the contradicts clause",
+      "slots": [
+        "r.name",
+        "r.line",
+        "r.contradicts"
+      ]
+    },
+    {
+      "id": "rules.ruleconflict-site._resolve_active-8",
+      "kind": "error",
+      "class": "RuleConflict",
+      "tag": null,
+      "source": "rules.py:851",
+      "raised_in": "_resolve_active",
+      "template": "rule [{r.name}] (line {r.line}) contradicts [{r.contradicts}], but [{first.name}] (line {first.line}) already contradicts [{first.contradicts}] \u2014 the pair only needs declaring once\n  remove the contradicts clause from one of them",
+      "slots": [
+        "r.name",
+        "r.line",
+        "r.contradicts",
+        "first.name",
+        "first.line",
+        "first.contradicts"
+      ]
+    },
+    {
       "id": "rules.ruleconflict-site._check_permits_are_related",
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:792",
+      "source": "rules.py:890",
       "raised_in": "_check_permits_are_related",
       "template": "rule [{p.name}] (line {p.line}) permits '{p.kind}' but excepts no forbid rule \u2014 a permit only has force against a prohibition it supersedes or narrows\n  add 'supersedes [name-of-the-forbid-rule]' to [{p.name}], or give it a target that narrows one of the forbid rules over '{p.kind}'",
       "slots": [
@@ -1614,7 +1703,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:845",
+      "source": "rules.py:943",
       "raised_in": "_check_conflicts",
       "template": "rule [{forbid.name}] (line {forbid.line}) and rule [{permit.name}] (line {permit.line}) demand opposite things over {where} \u2014 one forbids it, the other permits it, and neither narrows nor supersedes the other\n  add 'supersedes [{forbid.name}]' to [{permit.name}] to make the exception explicit, or give one of them a target the other lacks",
       "slots": [
@@ -1632,7 +1721,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:854",
+      "source": "rules.py:952",
       "raised_in": "_check_conflicts",
       "template": "rule [{a.name}] (line {a.line}) and rule [{b.name}] (line {b.line}) are equally specific over {where} \u2014 neither narrows nor supersedes the other\n  add 'supersedes [{a.name}]' to [{b.name}] (or the reverse), or give one of them a target the other lacks",
       "slots": [
@@ -1824,127 +1913,145 @@
       "parser.py:429"
     ],
     "parser.planessyntaxerror-site.parse_rule-1": [
-      "parser.py:450"
+      "parser.py:456"
     ],
     "parser.planessyntaxerror-site.parse_rule-2": [
-      "parser.py:457"
+      "parser.py:463"
     ],
     "parser.planessyntaxerror-site.parse_rule-3": [
-      "parser.py:468"
+      "parser.py:474"
     ],
     "parser.planessyntaxerror-site.parse_rule-4": [
-      "parser.py:499"
+      "parser.py:505"
     ],
     "parser.planessyntaxerror-site.parse_rule-5": [
-      "parser.py:506"
+      "parser.py:512"
     ],
     "parser.planessyntaxerror-site.parse_rule-6": [
-      "parser.py:518"
+      "parser.py:524"
+    ],
+    "parser.planessyntaxerror-site.parse_rule-7": [
+      "parser.py:540"
+    ],
+    "parser.planessyntaxerror-site.parse_rule-8": [
+      "parser.py:547"
     ],
     "parser.planessyntaxerror-site.finish_because": [
-      "parser.py:656"
+      "parser.py:685"
     ],
     "parser.planessyntaxerror-site.parse_note_entry-1": [
-      "parser.py:687"
+      "parser.py:716"
     ],
     "parser.planessyntaxerror-site.parse_note_entry-2": [
-      "parser.py:695"
+      "parser.py:724"
     ],
     "parser.planessyntaxerror-site.parse_note_entry-3": [
-      "parser.py:702"
+      "parser.py:731"
     ],
     "parser.planessyntaxerror-site.parse_note_entry-4": [
-      "parser.py:710"
+      "parser.py:739"
     ],
     "parser.planessyntaxerror-site.parse_with_field": [
-      "parser.py:768"
+      "parser.py:797"
     ],
     "parser.planessyntaxerror-site.parse_postfix": [
-      "parser.py:865"
+      "parser.py:894"
     ],
     "parser.planessyntaxerror-site.read_multiword_name": [
-      "parser.py:889"
+      "parser.py:918"
     ],
     "parser.planesambiguity-site.check_rename_name_ambiguity": [
-      "parser.py:919"
+      "parser.py:948"
     ],
     "parser.planesambiguity-site.raise_amber_multiword": [
-      "parser.py:978"
+      "parser.py:1007"
     ],
     "parser.planesambiguity-site.raise_amber_juxtaposition": [
-      "parser.py:988"
+      "parser.py:1017"
     ],
     "parser.planesambiguity-site.raise_amber_juxtaposition_unknown": [
-      "parser.py:998"
+      "parser.py:1027"
     ],
     "parser.planesambiguity-site.check_paren_arglist_ambiguity-1": [
-      "parser.py:1040"
+      "parser.py:1069"
     ],
     "parser.planesambiguity-site.check_paren_arglist_ambiguity-2": [
-      "parser.py:1052"
+      "parser.py:1081"
     ],
     "parser.planessyntaxerror-site.parse_record_field": [
-      "parser.py:1090"
+      "parser.py:1119"
     ],
     "parser.planessyntaxerror-site.parse_when_pattern_entry": [
-      "parser.py:1141"
+      "parser.py:1170"
     ],
     "parser.planessyntaxerror-site.parse_primary-1": [
-      "parser.py:1219"
+      "parser.py:1248"
     ],
     "parser.planessyntaxerror-site.parse_primary-2": [
-      "parser.py:1323"
+      "parser.py:1352"
     ],
     "parser.planessyntaxerror-site.prescan_funcs-1": [
-      "parser.py:1394"
+      "parser.py:1423"
     ],
     "parser.planessyntaxerror-site.prescan_funcs-2": [
-      "parser.py:1398"
+      "parser.py:1427"
     ],
     "rules.render.branch-1": [
-      "rules.py:158-161"
+      "rules.py:177-180"
     ],
     "rules.render.branch-2": [
-      "rules.py:163-179"
+      "rules.py:182-198"
     ],
     "rules._render_vacuous.branch-1": [
-      "rules.py:241-247"
+      "rules.py:299-305"
     ],
     "rules._render_vacuous.branch-2": [
-      "rules.py:249-257"
+      "rules.py:307-315"
     ],
     "rules._render_vacuous.branch-3": [
-      "rules.py:259-265"
+      "rules.py:317-323"
     ],
     "rules.rulenotsupported-site._resolve_subject-1": [
-      "rules.py:641"
+      "rules.py:699"
     ],
     "rules.rulenotsupported-site._resolve_subject-2": [
-      "rules.py:648"
+      "rules.py:706"
     ],
     "rules.ruleconflict-site._check_target_is_an_address": [
-      "rules.py:688"
+      "rules.py:746"
     ],
     "rules.ruleconflict-site._resolve_active-1": [
-      "rules.py:725"
+      "rules.py:793"
     ],
     "rules.ruleconflict-site._resolve_active-2": [
-      "rules.py:736"
+      "rules.py:804"
     ],
     "rules.ruleconflict-site._resolve_active-3": [
-      "rules.py:740"
+      "rules.py:808"
     ],
     "rules.ruleconflict-site._resolve_active-4": [
-      "rules.py:749"
+      "rules.py:816"
+    ],
+    "rules.ruleconflict-site._resolve_active-5": [
+      "rules.py:822"
+    ],
+    "rules.ruleconflict-site._resolve_active-6": [
+      "rules.py:839"
+    ],
+    "rules.ruleconflict-site._resolve_active-7": [
+      "rules.py:843"
+    ],
+    "rules.ruleconflict-site._resolve_active-8": [
+      "rules.py:851"
     ],
     "rules.ruleconflict-site._check_permits_are_related": [
-      "rules.py:792"
+      "rules.py:890"
     ],
     "rules.ruleconflict-site._check_conflicts-1": [
-      "rules.py:845"
+      "rules.py:943"
     ],
     "rules.ruleconflict-site._check_conflicts-2": [
-      "rules.py:854"
+      "rules.py:952"
     ]
   }
 }

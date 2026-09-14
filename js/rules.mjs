@@ -54,7 +54,11 @@ export function condition(rule) {
 }
 
 // One forbid rule matched against one effect — or, for the vacuous shape,
-// matched against nothing at all.
+// matched against nothing at all. A fifth shape, the contradiction (B3,
+// Track 0 #5), is told apart by contradicts_rule: both rules of a declared
+// `contradicts` pair matched at least one effect. is_violation is true for
+// it, same as a real violation — an authored incompatibility both sides
+// actually reach is a real problem with the program.
 export class Violation {
   constructor(rule, effect, {
     uncertain = false,
@@ -62,6 +66,8 @@ export class Violation {
     narrowed_by = null,
     origins = null,
     vacuous = false,
+    contradicts_rule = null,
+    contradicts_effect = null,
   } = {}) {
     this.rule = rule;
     this.effect = effect;
@@ -71,13 +77,20 @@ export class Violation {
     this.origins = origins || [];
     this.vacuous = vacuous;
     this.vacuous_situation = null;
+    // The other rule of a declared `contradicts` pair, and the effect IT
+    // matched — set only for the contradiction shape (B3).
+    this.contradicts_rule = contradicts_rule;
+    this.contradicts_effect = contradicts_effect;
   }
 
   get is_violation() {
+    if (this.contradicts_rule !== null) return true;
     return this.cleared_by === null && !this.vacuous;
   }
 
   render() {
+    if (this.contradicts_rule !== null) return this._renderContradiction();
+
     if (this.vacuous) return this._renderVacuous();
 
     if (this.cleared_by !== null) {
@@ -116,6 +129,26 @@ export class Violation {
     return lines.join("\n");
   }
 
+  // B3 (Track 0 #5): both rules of a declared `contradicts` pair matched
+  // at least one effect in this surface. this.rule is the rule that wrote
+  // the `contradicts` clause and this.effect is the effect it matched;
+  // contradicts_rule/contradicts_effect are the named rule's own match.
+  // Names both rules, one effect each matched, and the declaring rule's
+  // `because` if it has one — never the named rule's, since the
+  // declaration belongs to the rule that wrote the clause.
+  _renderContradiction() {
+    const a = this.rule;
+    const b = this.contradicts_rule;
+    const ea = this.effect;
+    const eb = this.contradicts_effect;
+    const line =
+      `[${a.name}] contradicts [${b.name}]: both apply to this ` +
+      `program — [${a.name}] at line ${ea.site} (${ea}), ` +
+      `[${b.name}] at line ${eb.site} (${eb})`;
+    if (!a.annotation) return line;
+    return line + `\n  [${a.name}] because "${a.annotation.text}"`;
+  }
+
   // Every field render() reads, as data rather than prose (H1). A
   // --json --rules consumer gets the rule name, the rule's own
   // kind/target/assertion/because, the specific effect (kind, boundary,
@@ -128,6 +161,11 @@ export class Violation {
   // must agree with this field for field). `origins` dedupes the same way
   // render()'s derivation line does — by the formatted "name (file)"
   // string, not by the raw pair.
+  //
+  // `contradiction` (B3) is null except for the contradiction shape,
+  // where it names both rules of the declared pair and one effect each
+  // matched — self-contained, so a consumer reading only this key gets
+  // both sides without also reading the top-level rule/effect.
   asJson() {
     const rule = this.rule;
     const effect = this.effect;
@@ -164,6 +202,26 @@ export class Violation {
         ? { rule: this.cleared_by.name, line: this.cleared_by.line }
         : null,
       narrowed_by: this.narrowed_by.map((r) => ({ rule: r.name, line: r.line })),
+      contradiction: this.contradicts_rule
+        ? {
+            rule: rule.name,
+            effect: effect
+              ? {
+                  kind: effect.kind,
+                  boundary: effect.boundary,
+                  target: effect.target,
+                  line: effect.site,
+                }
+              : null,
+            with_rule: this.contradicts_rule.name,
+            with_effect: {
+              kind: this.contradicts_effect.kind,
+              boundary: this.contradicts_effect.boundary,
+              target: this.contradicts_effect.target,
+              line: this.contradicts_effect.site,
+            },
+          }
+        : null,
       origins,
       message: this.render(),
     };
@@ -581,22 +639,66 @@ function resolveActive(rules) {
     }
 
     const targetRule = byName.get(r.supersedes);
-    if (r.supersedes_fingerprint !== null && r.supersedes_fingerprint !== undefined) {
-      const actual = fingerprint(targetRule);
-      if (actual !== r.supersedes_fingerprint) {
-        throw new RuleConflict(
-          `rule [${r.name}] (line ${r.line}) supersedes ` +
-            `[${r.supersedes}] (line ${targetRule.line}) as of ` +
-            `@${r.supersedes_fingerprint}, but [${r.supersedes}] ` +
-            `is now @${actual} — it changed after [${r.name}] was ` +
-            `written to override it\n` +
-            `  confirm the override still means what it meant, ` +
-            `then update the fingerprint to @${actual}`,
-        );
-      }
+    const actual = fingerprint(targetRule);
+    // B3 (Track 0 #3): a supersedes clause with no fingerprint at all is
+    // refused — the parser cannot know the other rule's fingerprint, so
+    // this is where the requirement is enforced, with the named rule
+    // actually in hand to compute one from.
+    if (r.supersedes_fingerprint === null || r.supersedes_fingerprint === undefined) {
+      throw new RuleConflict(
+        `rule [${r.name}] (line ${r.line}) supersedes ` +
+          `[${r.supersedes}] (line ${targetRule.line}) without its ` +
+          `fingerprint\n` +
+          `  write supersedes [${r.supersedes}] @${actual}`,
+      );
+    }
+    if (actual !== r.supersedes_fingerprint) {
+      throw new RuleConflict(
+        `rule [${r.name}] (line ${r.line}) supersedes ` +
+          `[${r.supersedes}] (line ${targetRule.line}) as of ` +
+          `@${r.supersedes_fingerprint}, but [${r.supersedes}] ` +
+          `is now @${actual} — it changed after [${r.name}] was ` +
+          `written to override it\n` +
+          `  confirm the override still means what it meant, ` +
+          `then update the fingerprint to @${actual}`,
+      );
     }
 
     if (targetRule.assertion === r.assertion) dropped.add(r.supersedes);
+  }
+
+  // B3 (Track 0 #5): `contradicts` resolution — same error class as
+  // supersedes above. Checked against byName (every named rule), whether
+  // or not either side later gets dropped above, since these are facts
+  // about the clause as written.
+  const contradictedPairs = new Map();
+  for (const r of rules) {
+    if (r.contradicts === null || r.contradicts === undefined) continue;
+    if (r.contradicts === r.name) {
+      throw new RuleConflict(
+        `rule [${r.name}] (line ${r.line}) contradicts itself\n` +
+          `  contradicts should name a different rule`,
+      );
+    }
+    if (!byName.has(r.contradicts)) {
+      throw new RuleConflict(
+        `rule [${r.name}] (line ${r.line}) contradicts ` +
+          `[${r.contradicts}], which is not a rule in this file\n` +
+          `  check the name, or remove the contradicts clause`,
+      );
+    }
+    const pairKey = [r.name, r.contradicts].sort().join("\x1f");
+    if (contradictedPairs.has(pairKey)) {
+      const first = contradictedPairs.get(pairKey);
+      throw new RuleConflict(
+        `rule [${r.name}] (line ${r.line}) contradicts ` +
+          `[${r.contradicts}], but [${first.name}] (line ` +
+          `${first.line}) already contradicts [${first.contradicts}] ` +
+          `— the pair only needs declaring once\n` +
+          `  remove the contradicts clause from one of them`,
+      );
+    }
+    contradictedPairs.set(pairKey, r);
   }
 
   return rules.filter((r) => !dropped.has(r.name));
@@ -682,6 +784,56 @@ function checkConflicts(active) {
   }
 }
 
+// Does this rule's condition match at least one effect in the surface (B3,
+// Track 0 #5)? A rule *applies* when it matches, whether as a forbid rule
+// that would be violated or cleared, or as a permit rule that matched an
+// effect; a rule matching nothing (vacuous) does not apply. For a forbid
+// rule this is the same widen-on-uncertainty rule the vacuous check uses;
+// for a permit rule an uncertain match must NOT count — the conservatism
+// flips at the permit boundary (v2.0 §34b), the same asymmetry `clearer`
+// matching above uses. Returns [applies, firstMatchingEffectOrNull] — the
+// first effect by surface.declared's existing ordering.
+function ruleApplies(rule, surface, declaringFile) {
+  for (const effect of surface.declared) {
+    if (effect.kind !== rule.kind) continue;
+    const [matched, uncertain] = targetMatches(rule, effect);
+    if (!matched) continue;
+    if (rule.assertion === "permit" && uncertain) continue;
+    if (!subjectMatches(rule, effect, surface, declaringFile)) continue;
+    return [true, effect];
+  }
+  return [false, null];
+}
+
+// Contradiction violations (B3, Track 0 #5): every declared `contradicts`
+// pair where both rules apply to this surface. Iterates `active` in its
+// existing order, so this is deterministic and identical across hosts given
+// the same source. resolveActive already refused declaring the same pair
+// from both sides, so at most one of the two rules carries the
+// `contradicts` clause and no pair is ever reported twice. A pair naming a
+// rule resolveActive dropped (superseded away) can never fire: a dropped
+// rule is not in `active` and so cannot apply.
+function checkContradictions(active, surface, declaringFile) {
+  const byName = new Map(active.map((r) => [r.name, r]));
+  const results = [];
+  for (const r of active) {
+    if (r.contradicts === null || r.contradicts === undefined) continue;
+    const other = byName.get(r.contradicts);
+    if (!other) continue;
+    const [applies, effect] = ruleApplies(r, surface, declaringFile);
+    if (!applies) continue;
+    const [otherApplies, otherEffect] = ruleApplies(other, surface, declaringFile);
+    if (!otherApplies) continue;
+    results.push(
+      new Violation(r, effect, {
+        contradicts_rule: other,
+        contradicts_effect: otherEffect,
+      }),
+    );
+  }
+  return results;
+}
+
 export function check(rules, surface, declaringFile = null) {
   for (const rule of rules) {
     checkTargetIsAnAddress(rule);
@@ -755,6 +907,8 @@ export function check(rules, surface, declaringFile = null) {
       results.push(vacuous);
     }
   }
+
+  results.push(...checkContradictions(active, surface, declaringFile));
 
   return RuleResults(results, resolvedSubjects);
 }

@@ -412,6 +412,31 @@ def check_mandatory_fingerprint_swift(text):
     return code[:m.start()].count("\n") + 1 if m else None
 
 
+def check_contradicts_reported_py(text):
+    """The 'both apply' semantics (B3): a contradiction is a reported
+    Violation shape, not just a parsed-and-validated clause. A rule_parse
+    hit proves the grammar recognizes `contradicts`; a bare rule_identifier
+    hit on the word 'contradicts' would already be satisfied by resolution
+    validation alone (`r.contradicts is None`, checked before any effect is
+    matched) — neither proves the checker ever REPORTS a pair that both
+    apply. This looks for the dedicated field the contradiction Violation
+    shape carries: `contradicts_rule`, which exists in the code only once
+    that reporting path is built."""
+    return find_code_line(text, r"\bcontradicts_rule\b")
+
+
+def check_contradicts_reported_js(text):
+    """JavaScript mirror of check_contradicts_reported_py."""
+    return find_code_line(text, r"\bcontradicts_rule\b")
+
+
+def check_contradicts_reported_swift(text):
+    """Swift mirror of check_contradicts_reported_py — camelCase, matching
+    Rules.swift's naming convention for every other Violation field
+    (clearedBy, narrowedBy, ...)."""
+    return find_code_line(text, r"\bcontradictsRule\b")
+
+
 def evaluate_rule_relation(kind, arg):
     """(py_pointer, js_pointer, swift_pointer) for one piece of rule-plane
     evidence — the three-implementation analogue of evaluate()/evaluate_js()
@@ -453,6 +478,15 @@ def evaluate_rule_relation(kind, arg):
                 f"js/rules.mjs:{js} ({note})" if js else None,
                 f"swift/Sources/Planes/Rules.swift:{sw} ({note})" if sw else None)
 
+    if kind == "contradicts_reported":
+        py = check_contradicts_reported_py(RULES_PY)
+        js = check_contradicts_reported_js(JS_RULES)
+        sw = check_contradicts_reported_swift(SWIFT_RULES)
+        note = "both-apply contradiction is a reported Violation shape"
+        return (f"rules.py:{py} ({note})" if py else None,
+                f"js/rules.mjs:{js} ({note})" if js else None,
+                f"swift/Sources/Planes/Rules.swift:{sw} ({note})" if sw else None)
+
     return (None, None, None)
 
 
@@ -473,10 +507,11 @@ RULE_RELATION_CHECKS = [
      "v2.0 §3 (exception mechanism)", "normal",
      [("permit_parse", None), ("rule_identifier", "permit")]),
     ("contradicts",
-     "Track 0 #5 (F-Q1), decided 2026-09-13 -- B3", "scheduled:B3",
-     [("rule_parse", "contradicts"), ("rule_identifier", "contradicts")]),
+     "Track 0 #5 (F-Q1), decided 2026-09-13 -- built B3", "normal",
+     [("rule_parse", "contradicts"), ("rule_identifier", "contradicts"),
+      ("contradicts_reported", None)]),
     ("supersedes: mandatory fingerprint",
-     "Track 0 #3 (P-Q17 / v2.0 §29), decided 2026-09-13 -- B3", "scheduled:B3",
+     "Track 0 #3 (P-Q17 / v2.0 §29), decided 2026-09-13 -- built B3", "normal",
      [("mandatory_fingerprint", None)]),
 ]
 

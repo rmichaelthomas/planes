@@ -552,6 +552,13 @@ string and fragment are ignored, but a rule's own target may not carry one —
 isn't URL-shaped (a file path, a `queue:send`-style name, console text)
 still matches exactly, as every rule target did before B2.
 
+A rule can also declare that it and another must never both apply —
+`rule [b] anything may not write contradicts [a]` — an authored
+incompatibility, distinct from the structural conflict the checker detects
+on its own. When both rules of a declared pair apply to the same program,
+the checker reports it as a contradiction, counted the same as a real
+violation.
+
 ---
 
 ## Annotations
@@ -590,9 +597,9 @@ every error names its fix, and that is counted rather than asserted:
 
 ```
 $ python3 errors_coverage.py
-  names a fix                  113 of 118  (96%)
-  deliberately names none        5 of 118  (4%)
-  should name one and does not   0 of 118  (0%)
+  names a fix                  119 of 124  (96%)
+  deliberately names none        5 of 124  (4%)
+  should name one and does not   0 of 124  (0%)
 
   120 raise sites across interp.planes, parser.planes, lexer.planes, json.planes:
   names a fix                   80 of 120  (67%)

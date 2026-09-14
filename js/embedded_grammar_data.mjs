@@ -313,7 +313,7 @@ export const vocabulary = JSON.parse(`{
     "WHY",
     "GIVE"
   ],
-  "positional_words_note": "Six words are load-bearing grammar, read positionally at exactly one site each, and deliberately kept OUT of \`keywords\` above to protect the reserved-word ceiling test_names.py enforces. This section is descriptive only -- the parser does not consult it; each word is still matched positionally in its own parse_* method, exactly as before. It exists because no other table in the repository records these words as grammar at all.",
+  "positional_words_note": "Seven words are load-bearing grammar, read positionally at exactly one site each, and deliberately kept OUT of \`keywords\` above to protect the reserved-word ceiling test_names.py enforces. This section is descriptive only -- the parser does not consult it; each word is still matched positionally in its own parse_* method, exactly as before. It exists because no other table in the repository records these words as grammar at all.",
   "positional_words": [
     {
       "word": "may",
@@ -342,6 +342,13 @@ export const vocabulary = JSON.parse(`{
       "attaches_to": "a rule's override clause, naming the earlier rule it replaces",
       "reserved": false,
       "note": "matched via \`self.at(\\"NAME\\", \\"supersedes\\")\`; positional like the others, so it never needed a reservation."
+    },
+    {
+      "word": "contradicts",
+      "read_at": "parser.py:parse_rule",
+      "attaches_to": "a rule's incompatibility clause, naming the other rule it must never both apply with (B3, Track 0 #5)",
+      "reserved": false,
+      "note": "matched via \`self.at(\\"NAME\\", \\"contradicts\\")\`, read after \`supersedes\` (fixed order); positional like the others, so it never needed a reservation."
     },
     {
       "word": "note",
