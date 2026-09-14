@@ -854,11 +854,17 @@ function checkConflicts(active) {
 // rule this is the same widen-on-uncertainty rule the vacuous check uses;
 // for a permit rule an uncertain match must NOT count — the conservatism
 // flips at the permit boundary (v2.0 §34b), the same asymmetry `clearer`
-// matching above uses. Returns [applies, firstMatchingEffectOrNull] — the
-// first effect by surface.declared's existing ordering.
+// matching above uses. coveredKinds(rule) (B1) replaces a literal
+// effect.kind === rule.kind: a `may not ask` rule that declares
+// `contradicts` applies when the surface only ever sends (never asks) --
+// send is inside what forbidding ask covers. A permit's own covered set is
+// always just {rule.kind} (permits never widen), so this is a no-op change
+// for permits. Returns [applies, firstMatchingEffectOrNull] — the first
+// effect by surface.declared's existing ordering.
 function ruleApplies(rule, surface, declaringFile) {
+  const covered = coveredKinds(rule);
   for (const effect of surface.declared) {
-    if (effect.kind !== rule.kind) continue;
+    if (!covered.has(effect.kind)) continue;
     const [matched, uncertain] = targetMatches(rule, effect);
     if (!matched) continue;
     if (rule.assertion === "permit" && uncertain) continue;

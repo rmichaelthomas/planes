@@ -564,6 +564,15 @@ string and fragment are ignored, but a rule's own target may not carry one —
 isn't URL-shaped (a file path, a `queue:send`-style name, console text)
 still matches exactly, as every rule target did before B2.
 
+Forbidding `ask` also forbids `send` to the same address (B1) — a rule
+written before `send` existed never weakens under the new kind. Forbidding
+`send` forbids only `send`; permitting `ask` permits only `ask`. A permit's
+kind must match an effect's actual kind exactly to clear it, never
+widened: `rule [deny] anything may not ask` plus
+`rule [ok] anything may ask to "https://a" supersedes [deny] @fp` still
+forbids a `send` to `https://a` — only a permit written against `send`
+itself excepts one.
+
 A rule can also declare that it and another must never both apply —
 `rule [b] anything may not write contradicts [a]` — an authored
 incompatibility, distinct from the structural conflict the checker detects

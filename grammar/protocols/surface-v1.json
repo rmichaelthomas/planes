@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/rmichaelthomas/planes/grammar/protocols/surface-v1.json",
   "title": "Planes effect-surface format 1",
-  "description": "shapes_cli.py --json [--rules] and its JS/Swift agreement oracles. See docs/surface-format-v1.md for the field-by-field specification this schema mirrors; that document is the source of truth in prose, this file is the machine-checkable form of the same fields. Deliberately written without $ref/definitions and using only anyOf for nullability, matching the subset test_surface_format.py's in-repo validator implements (no external JSON Schema library is a dependency of this project).",
+  "description": "shapes_cli.py --json [--rules] and its JS/Swift agreement oracles. See docs/surface-format-v1.md for the field-by-field specification this schema mirrors; that document is the source of truth in prose, this file is the machine-checkable form of the same fields. Deliberately written without $ref/definitions and using only anyOf for nullability, matching the subset test_surface_format.py's in-repo validator implements (no external JSON Schema library is a dependency of this project). Superseded: frozen as the sprint-a-2026-09 tag's record; current programs validate against grammar/protocols/surface-v2.json.",
   "type": "object",
   "properties": {
     "format": {
@@ -204,59 +204,6 @@
                   "additionalProperties": false
                 }
               },
-              "contradiction": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "rule": { "type": "string" },
-                      "effect": {
-                        "anyOf": [
-                          {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "enum": ["ask", "clock", "env", "random", "read", "show", "write"]
-                              },
-                              "boundary": {
-                                "type": "string",
-                                "enum": ["ambient", "console", "file", "network"]
-                              },
-                              "target": { "type": "string" },
-                              "line": { "type": "integer" }
-                            },
-                            "required": ["kind", "boundary", "target", "line"],
-                            "additionalProperties": false
-                          },
-                          { "type": "null" }
-                        ]
-                      },
-                      "with_rule": { "type": "string" },
-                      "with_effect": {
-                        "type": "object",
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "enum": ["ask", "clock", "env", "random", "read", "show", "write"]
-                          },
-                          "boundary": {
-                            "type": "string",
-                            "enum": ["ambient", "console", "file", "network"]
-                          },
-                          "target": { "type": "string" },
-                          "line": { "type": "integer" }
-                        },
-                        "required": ["kind", "boundary", "target", "line"],
-                        "additionalProperties": false
-                      }
-                    },
-                    "required": ["rule", "effect", "with_rule", "with_effect"],
-                    "additionalProperties": false
-                  },
-                  { "type": "null" }
-                ]
-              },
               "origins": {
                 "type": "array",
                 "items": {
@@ -276,8 +223,8 @@
             "required": [
               "rule", "rule_line", "assertion", "kind", "target", "condition",
               "because", "is_violation", "vacuous", "vacuous_situation",
-              "uncertain", "effect", "cleared_by", "narrowed_by",
-              "contradiction", "origins", "message"
+              "uncertain", "effect", "cleared_by", "narrowed_by", "origins",
+              "message"
             ],
             "additionalProperties": false
           }

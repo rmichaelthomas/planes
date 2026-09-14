@@ -851,11 +851,18 @@ func checkConflicts(_ active: [AST.Rule]) throws {
 /// rule this is the same widen-on-uncertainty rule the vacuous check uses;
 /// for a permit rule an uncertain match must NOT count — the conservatism
 /// flips at the permit boundary (v2.0 §34b), the same asymmetry `clearer`
-/// matching in `check` uses. Returns (applies, firstMatchingEffectOrNil) —
-/// the first effect by `surface.declared`'s existing ordering.
+/// matching in `check` uses. `coveredKinds(rule)` (B1) replaces a literal
+/// `effect.kind == rule.effectKind`: a `may not ask` rule that declares
+/// `contradicts` applies when the surface only ever sends (never asks) --
+/// `send` is inside what forbidding `ask` covers. A permit's own covered
+/// set is always just `{rule.effectKind}` (permits never widen), so this
+/// is a no-op change for permits. Returns (applies,
+/// firstMatchingEffectOrNil) — the first effect by `surface.declared`'s
+/// existing ordering.
 func ruleApplies(_ rule: AST.Rule, _ surface: Surface, _ declaringFile: String?) -> (Bool, Effect?) {
+    let covered = coveredKinds(rule)
     for effect in surface.declared {
-        if !sameText(effect.kind, rule.effectKind) { continue }
+        if !covered.contains(effect.kind) { continue }
         let (matched, uncertain) = targetMatches(rule, effect)
         if !matched { continue }
         if sameText(rule.assertion, "permit") && uncertain { continue }

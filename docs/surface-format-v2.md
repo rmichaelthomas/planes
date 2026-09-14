@@ -44,35 +44,57 @@ object with these fields."
 ## Changes from format 1
 
 Format 1's record is [`docs/surface-format-v1.md`](surface-format-v1.md),
-frozen as the `sprint-a-2026-09` tag's format. Two things changed, both from
-the same decision (B1, Sprint B, Track 0 #7–#11):
+frozen as the `sprint-a-2026-09` tag's format — unchanged since, apart from
+the pointer line at its own top. Three sprint-B items changed the format,
+one of which (B1) is the reason it bumped at all:
 
-1. **`send` joined the effect vocabulary** (§3): a `foreign`-only kind, like
+1. **`send` joined the effect vocabulary, and `ask`'s meaning narrowed**
+   (B1, Track 0 #7–#11; §3). `send` is a `foreign`-only kind, like
    `clock`/`random`/`env` — no keyword, no builtin, no host method, and it
-   stays usable as an ordinary function name. It shares the network boundary
-   with `ask`. Its note: "a request that carries the program's data out (a
-   message, form, upload or report)."
-2. **`ask`'s meaning narrowed.** Before this format, `ask` meant "a request
-   at the network boundary" — fetch or send, whichever the author actually
-   did, mislabelled the same way either way, because there was no second
-   word to reach for. As of format 2, `ask` means fetch-only: a request
-   expecting a response, never one that carries the program's data out.
-   **This is why the format bumped rather than staying at 1 with an added
-   kind**: an existing `"kind": "ask"` value in an OLD document could have
-   meant either; in a NEW one, it certainly means fetch-only. The meaning of
-   an existing field changed, which is precisely §6's bump rule.
-
-Everywhere `ask` appeared in format 1's kind enums (`kinds`, `effects[].kind`,
-`runs_on_load[].kind`, `effects_undeclared[].kind`, a rule's own `kind`, and a
-matched violation's `effect.kind`), `send` now appears beside it — nowhere
-else in the shape of the document changed. A rule written against `ask`
-before this format still matches everything it matched before: forbidding
-`ask` also forbids `send` (Track 0 #10), so a `may not ask` rule's coverage
-only ever widens, never narrows, under the new meaning.
-
-**`--diff` also changed to notice this**: a kind change on an otherwise
-unchanged destination (`ask` → `send`, most importantly) is now a significant
-change (`SurfaceDiff.is_significant()`, exit 1) — see §5.
+   stays usable as an ordinary function name. It shares the network
+   boundary with `ask`. Its note: "a request that carries the program's
+   data out (a message, form, upload or report)." Before this format,
+   `ask` meant "a request at the network boundary" — fetch or send,
+   whichever the author actually did, mislabelled the same way either way,
+   because there was no second word to reach for. As of format 2, `ask`
+   means fetch-only: a request expecting a response, never one that
+   carries the program's data out. **This is why the format bumped rather
+   than staying at 1 with an added kind**: an existing `"kind": "ask"`
+   value in an OLD document could have meant either; in a NEW one, it
+   certainly means fetch-only. The meaning of an existing field changed,
+   which is precisely §6's bump rule. Everywhere `ask` appeared in format
+   1's kind enums (`kinds`, `effects[].kind`, `runs_on_load[].kind`,
+   `effects_undeclared[].kind`, a rule's own `kind`, and a matched
+   violation's `effect.kind`), `send` now appears beside it. A rule
+   written against `ask` before this format still matches everything it
+   matched before: forbidding `ask` also forbids `send` (Track 0 #10), so
+   a `may not ask` rule's coverage only ever widens, never narrows, under
+   the new meaning. **`--diff` also changed to notice a pure relabelling**:
+   a kind change on an otherwise unchanged destination (`ask` → `send`,
+   most importantly) is now a significant change
+   (`SurfaceDiff.is_significant()`, exit 1) — see §5.
+2. **A rule's target covers that address and everything under it** (B2,
+   P-Q17 v37.0): `rule [x] anything may not ask to "https://api"` now also
+   matches `https://api/v1/users`, not only the exact string
+   `https://api`. Scheme and host compare case-insensitively (ASCII-only —
+   DNS's own case-insensitivity is ASCII, and a full Unicode fold is not
+   guaranteed to agree across hosts); a different host, or a subdomain, is
+   never covered; a query string or fragment on the *effect's* target is
+   ignored, and one on the *rule's* target is refused at check time. This
+   changes what `narrows` and the structural conflict check treat as
+   "equally specific" — see §2.9 — and re-proves `_pattern_excludes`'s
+   guard for the weaker, covering condition — see §4.1. Nothing in the
+   document's field SHAPES changed for this one; only what "the same
+   target" and "matches" mean for a URL-shaped target.
+3. **`contradicts` reports a fifth violation shape** (B3, Track 0 #5): an
+   authored declaration that two named rules must never both apply,
+   distinct from the structural conflict check (v2.0 §32), which can only
+   see rules with directly overlapping scope and kind — `contradicts`
+   reaches pairs incompatible in intent rather than in shape. One new
+   field, `contradiction` (§2.6, §2.10), `null` except for this shape.
+   `supersedes` also became stricter in this sprint: a `supersedes` clause
+   naming no fingerprint at all is now refused, where format 1 only
+   checked a fingerprint that was present (§2.2 is otherwise unchanged).
 
 ---
 
@@ -151,7 +173,7 @@ Its three keys, in this order:
 |---|---|---|
 | `checked` | integer | `len(found)` — how many top-level `rule` statements the file has, whether or not any resolved |
 | `resolved_subjects` | array of strings | every named subject (`rule [x] subject may …`) that resolved without raising, in rule order — read back from what `check()` actually did, never re-derived |
-| `violations` | array of objects (§2.6) | every `Violation`, in the exact order `check()` returned them: grouped by forbid rule in the order the rules were declared (after `supersedes` resolution), and within a rule, in the same `(boundary, kind, target)` order as `effects` |
+| `violations` | array of objects (§2.6) | every `Violation`, in the exact order `check()` returned them: grouped by forbid rule in the order the rules were declared (after `supersedes` resolution), then in the same `(boundary, kind, target)` order as `effects` within a rule, then every reported `contradicts` pair (B3, §2.10) last |
 
 `checked` is `0` and `violations` is `[]` for a file with no rules at all —
 `--json --rules` still returns a `rules` object in that case, it does not
@@ -159,8 +181,15 @@ fall back to a `--json`-only document (unlike bare `--rules` in text mode,
 which prints `"no rules found"` instead).
 
 The document's exit code is unaffected by `--json`: `1` if any violation has
-`is_violation: true`, `2` if none do but at least one is `vacuous: true`
-(a named-subject rule that resolved but matched nothing — P-Q19), else `0`.
+`is_violation: true` — a contradiction (B3) counts here, same as a real
+violation — `2` if none do but at least one is `vacuous: true` (a
+named-subject rule that resolved but matched nothing — P-Q19), else `0`.
+
+**B3: a `supersedes` clause naming no fingerprint at all is now refused**
+(where format 1 checked a fingerprint only when one was present) — the
+message names the fingerprint to write. This is a compile-time
+`RuleConflict`, so it never appears as a `violations` entry; it prevents
+the document from being produced at all.
 
 ### 2.3 One entry in `effects`
 
@@ -216,33 +245,38 @@ appears here exactly as an undeclared `ask` would.
 
 ### 2.6 One entry in `rules.violations`
 
-One `Violation.as_json()` (`rules.py`), fourteen keys in this order — one
-per forbid rule matched against one effect, or against nothing at all (the
-vacuous shape):
+One `Violation.as_json()` (`rules.py`), sixteen keys in this order — one
+per forbid rule matched against one effect, against nothing at all (the
+vacuous shape), or one declared `contradicts` pair where both rules apply
+(the contradiction shape, B3):
 
 | key | type | meaning |
 |---|---|---|
-| `rule` | string | the forbid rule's name |
+| `rule` | string | the rule's name — the forbid rule for the first four shapes, or the rule that wrote the `contradicts` clause for the contradiction shape |
 | `rule_line` | integer | the line the rule is declared on |
-| `assertion` | string enum: `"forbid"` \| `"permit"` | always `"forbid"` here — only a forbid rule ever produces a `Violation` |
+| `assertion` | string enum: `"forbid"` \| `"permit"` | `"forbid"` for the first four shapes — only a forbid rule ever produces one of those. For the contradiction shape this is `rule`'s own assertion, which may be `"permit"`: `contradicts` can be declared on either kind of rule |
 | `kind` | string, one of the eight vocabulary kinds (never `"unknown"` — the parser rejects any other word here at parse time) | the rule's **own declared** effect kind — see §2.7 for why this can differ from the matched effect's actual kind |
 | `target` | string or `null` | the rule's declared target, or `null` when the rule names none (matches every target of its kind) |
 | `condition` | string | the rule's condition rendered as source (`rules.condition()`) |
 | `because` | string or `null` | the rule's `because` annotation text, or `null` if it has none |
-| `is_violation` | boolean | `false` for a cleared (`cleared_by` set) or vacuous match — see below |
+| `is_violation` | boolean | `false` for a cleared (`cleared_by` set) or vacuous match; `true` for a real violation and for a contradiction — see below |
 | `vacuous` | boolean | `true` for the fourth shape: a named-subject rule that resolved but matched no effect at all |
 | `vacuous_situation` | integer (`1`, `2`, or `3`) or `null` | which of the three vacuous cases (§4.6), `null` unless `vacuous` is `true` |
 | `uncertain` | boolean | `true` when the match is against a computed target that could not be ruled out, not confirmed |
-| `effect` | object or `null` (§2.7) | the specific effect matched, `null` for the vacuous shape |
+| `effect` | object or `null` (§2.7) | the specific effect matched, `null` for the vacuous shape; for the contradiction shape, the effect `rule` itself matched |
 | `cleared_by` | object or `null` (§2.8) | the permit rule that excepted this match, or `null` |
 | `narrowed_by` | array of objects (§2.8) | sibling forbid rules with a narrower scope that also matched — reported as related, not independent |
-| `origins` | array of objects (§2.9) | every name/file the effect's target provably derives from, alphabetically sorted and deduplicated |
+| `contradiction` | object or `null` (§2.10) | `null` except for the contradiction shape, where it names both rules of the declared pair and one effect each matched |
+| `origins` | array of objects (§2.11) | every name/file the effect's target provably derives from, alphabetically sorted and deduplicated |
 | `message` | string | `render()`'s own text, verbatim — so a host can print exactly what `--rules` prints without re-deriving it |
 
 A violation is genuine — should fail a build — exactly when
 `is_violation` is `true`. `cleared_by` non-`null` and `vacuous` are the two
-reasons it can be `false`; both are still reported (so the reader sees the
-exception or the inert rule working), just not counted.
+reasons it can be `false` for the first four shapes; both are still
+reported (so the reader sees the exception or the inert rule working), just
+not counted. A contradiction (`contradiction` non-`null`) is always
+genuine: `is_violation` is `true`, the same as a real violation, and it
+counts toward a caller's exit code the same way.
 
 **B1: `kind` here and `effect.kind` (§2.7) can differ, and both are
 correct.** A `may not ask` rule's own `kind` is `"ask"`; when it matches a
@@ -267,17 +301,82 @@ always the rule's own `kind` — see the B1 note in §2.6.
 
 Both shapes are `{ "rule": "<name>", "line": <int> }` — the identity of
 another rule, nothing else. `cleared_by` is the permit that excepted this
-match (`supersedes` or narrower scope); `narrowed_by` lists every sibling
-forbid rule with a narrower scope that also matched the same effect.
+match (`supersedes` or narrower scope — B2 widens "scope" here to mean
+"address, and everything under it," not only the exact target string, see
+§4.1); `narrowed_by` lists every sibling forbid rule with a narrower scope
+that also matched the same effect.
 
 **B1: a permit's kind must match the effect's actual kind exactly to clear
 it — never widened.** `may ask to X` permits only `ask`; even a permit that
 `supersedes` a blanket `may not ask` rule at the exact target `X` does not
 clear a `send` to `X` (v37.1 §533's worked example). The only way to except
 a `send` from a broader `ask` forbid is a permit written against `send`
-itself, naming the forbid explicitly with `supersedes`.
+itself, naming the forbid explicitly with `supersedes` — unless its own
+scope is strictly narrower than the forbid's, in which case `narrows`
+excepts it automatically, the same way a same-kind narrower permit already
+did before B1 (§4.1's scope-covering, combined with kind-covering).
 
-### 2.9 One entry in `origins`
+### 2.9 `narrows`/`_check_conflicts`: kind AND scope combined (B1 x B2)
+
+A rule's specificity is now two-dimensional — which effect KINDS it covers
+(B1: forbidding `ask` also covers `send`; a permit never widens) and which
+address SCOPE it covers (B2: an address and everything under it). Both
+`narrows` (whether one rule's range sits strictly inside another's) and the
+structural conflict check (`_check_conflicts`, v2.0 §32) combine them:
+
+- A rule `b` narrows rule `a` when their covered kinds overlap AND `a`'s
+  scope strictly contains `b`'s. A `may send to X/public` permit narrows a
+  bare `may not ask` forbid exactly as a `may ask to X/public` permit
+  already did — no `supersedes` needed.
+- Two active rules conflict (equally specific, v2.0 §32) when their
+  assertions are opposite, their covered kinds overlap, their scopes are
+  the SAME (not merely overlapping — B2's `_same_scope`), and neither
+  `supersedes` the other. `rule [deny] anything may not ask to X` beside
+  `rule [also] anything may send to X`, with no `supersedes`, is exactly
+  such a pair — resolved the same way a same-kind equal-scope pair always
+  was: name the forbid explicitly.
+- Same assertion, different literal kind (two forbids, one `ask` one
+  `send`) never conflicts, at any scope — both prohibit, so stacking them
+  agrees about everything.
+
+### 2.10 `contradiction` (B3, Track 0 #5)
+
+An authored `contradicts [other-name]` clause declares that two rules must
+never both apply. A rule *applies* to a checked surface when its condition
+matches at least one effect there — whether as a forbid rule that would be
+violated or cleared, or as a permit rule that matched an effect; a rule
+matching nothing does not apply. (B1: a `may not ask` rule with a
+`contradicts` clause applies when the surface only ever sends, never asks —
+`send` is inside what forbidding `ask` covers, the same widening §2.9
+describes for matching generally.) When both rules of a declared pair
+apply, the checker reports the contradiction as a `Violation` in its own
+right, distinct from the four shapes above and distinct from the structural
+conflict detection `RuleConflict` performs at compile time (v2.0 §32):
+`contradicts` is an authored declaration that reaches pairs no structural
+check can see — different kinds, different targets, incompatible in intent
+rather than in shape.
+
+```
+{
+  "rule": "no-sends",
+  "effect": { "kind": "ask", "boundary": "network", "target": "https://x.example.com", "line": 11 },
+  "with_rule": "no-writes",
+  "with_effect": { "kind": "write", "boundary": "file", "target": "out.txt", "line": 10 }
+}
+```
+
+`rule` and `effect` name the rule that wrote the `contradicts` clause and
+the effect it matched — the same values the violation's own top-level
+`rule`/`effect` keys carry, repeated here so a consumer reading only this
+key gets both sides of the pair without also reading the top-level fields.
+`with_rule` and `with_effect` (§2.7's shape, never `null`) name the rule
+`contradicts` pointed at and the effect *that* rule matched. Only one rule
+of a declared pair ever carries the `contradicts` clause — the checker
+refuses declaring the same pair from both sides — so a contradiction is
+never reported twice for one pair, and `null` here means every other
+shape.
+
+### 2.11 One entry in `origins`
 
 ```
 { "name": "payload", "file": "/path/to/file.planes" }
@@ -395,13 +494,22 @@ prefix, known statically) concatenated with a parameter the analyser could
 not resolve to a constant. `{...}` is a hole standing for *any* text,
 including none — a pattern that opens or closes with a hole is not anchored
 on that end (`rules.py`'s `_pattern_excludes`, which uses exactly this
-convention to decide whether a rule's target can *never* match a computed
-one). This is the same `{...}` a rule-matching implementation must
+convention to decide whether a rule's target can *never* be reached by a
+computed one). This is the same `{...}` a rule-matching implementation must
 recognise — `js/rules.mjs`'s `patternExcludes` and `Rules.swift`'s
 `patternExcludes` must agree with `shapes.py`'s `_pattern_excludes` on it.
 This convention, and derivation generally, is unaffected by B1 — data
 carried in a URL is traced the same way whether the effect claiming it is
 `ask` or `send`.
+
+For a rule target that parses as `scheme://host[:port][/path]`, a rule
+covers that address **and everything under it** (B2), not only the exact
+address: `_pattern_excludes` was re-proven for that weaker condition, so a
+computed target is excluded only when its known chunks prove no completion
+could ever be *covered* by the rule — not merely that it could never *equal*
+the rule's target outright. A target that isn't URL-shaped (a file path, a
+`queue:send`-style name, console text) still matches exactly, as every rule
+target did before B2.
 
 ### 4.2 `(destination not stated)`
 
@@ -579,6 +687,7 @@ committed at `demo/mcp/v2.surface.json` and gated by `test_mcp_demo.py`):
                    "target": "https://telemetry.example.com/collect", "line": 9},
         "cleared_by": null,
         "narrowed_by": [],
+        "contradiction": null,
         "origins": [],
         "message": "[no-telemetry-exfiltration] violated at line 9.\n  send https://telemetry.example.com/collect (declared, not verified)\n  rule declared at line 1: anything may not ask to \"https://telemetry.example.com/collect\""
       }
@@ -599,10 +708,18 @@ under the wider `ask`-forbid coverage.
 
 A permit exception looks different in exactly one more way than format 1
 predicted: `demo/rules/exception.planes --json --rules` still produces a
-violation with `"is_violation": false`, `"target": null`, and
-`"cleared_by": {"rule": "audit-allowed", "line": 3}` exactly as before — but
-now, a permit written against `ask` at that same rule and target would
-**not** have cleared a `send` there (v37.1 §533): only a permit whose own
-`kind` is `send` clears a `send` effect. Kind-exact matching for permits is
-new to this format; target matching (whether a permit's target excepts a
-given effect at all) is unchanged.
+violation with `"is_violation": false`, `"target": null`,
+`"contradiction": null`, and `"cleared_by": {"rule": "audit-allowed",
+"line": 3}` exactly as before — but now, a permit written against `ask` at
+that same rule and target would **not** have cleared a `send` there (v37.1
+§533): only a permit whose own `kind` is `send` clears a `send` effect.
+Kind-exact matching for permits is new to this format (B1); WHETHER a
+permit's target excepts a given effect still asks the same question B2
+answers for `_target_matches` generally — covers, not merely equals — so
+this one example's answer happens not to change, not because target
+matching didn't change at all.
+
+`demo/rules/exception.planes --json --rules` also demonstrates B3's stricter
+`supersedes`: `audit-allowed`'s clause now reads `supersedes
+[no-external-sends] @960178` — a fingerprint is mandatory, and omitting it
+is refused with the exact value to write.

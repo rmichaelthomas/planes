@@ -182,6 +182,16 @@ RULE_PROGRAMS = [
      'rule [no-writes] anything may not write contradicts [audit-allowed]\n'
      'x = ask "https://audit.internal"\n'
      'write 1 to "out.txt"\n'),
+    # B1 x B3 interplay: a contradiction reaches through ask-covers-send --
+    # `no-sends` never literally asks, only sends, and _rule_applies must
+    # widen the same way check()'s main loop does or the contradiction goes
+    # unreported
+    ('foreign send-it of x from "m.post" doing send "https://x.example.com"\n'
+     'r = send-it of 1\nuse file\n'
+     'rule [no-writes] anything may not write\n'
+     '  because "writes are audited separately"\n'
+     'rule [no-sends] anything may not ask contradicts [no-writes]\n'
+     'write 1 to "out.txt"\n'),
     # B1 (Sprint B): forbid ask covers a send to the same target
     ('foreign send-it of x from "m.post" doing send "https://a.example.com"\n'
      'r = send-it of 1\n'
@@ -218,6 +228,28 @@ RULE_PROGRAMS = [
      'r = send-it of 1\n'
      'rule [deny-ask] anything may not ask to "https://f.example.com"\n'
      'rule [deny-send] anything may not send to "https://f.example.com"\n'),
+    # B1 x B2: an ask forbid's widened kind coverage meeting a send
+    # permit's scope generalisation. Automatic narrowing across BOTH
+    # dimensions, no supersedes needed:
+    ('foreign send-it of x from "m.post" doing send "https://host/sub"\n'
+     'r = send-it of 1\n'
+     'rule [deny] anything may not ask\n'
+     'rule [ok] anything may send to "https://host/sub"\n'),
+    # ...vs the SAME scope, which still collides and needs an explicit
+    # supersedes (kind and scope generalisation decided consistently)
+    ('rule [deny] anything may not ask to "https://host/path"\n'
+     'rule [also] anything may send to "https://host/path"\n'),
+    # a send forbid and an ask permit at the same target never interact --
+    # no covered-kind overlap -- even inside an otherwise valid program
+    # where an unrelated ask forbid/permit pair shares that exact target
+    ('foreign send-it of x from "m.post" doing send "https://host/path"\n'
+     'r = send-it of 1\n'
+     'foreign fetch-it of x from "m.get" doing ask "https://host/path"\n'
+     's = fetch-it of 1\n'
+     'rule [deny-send] anything may not send to "https://host/path"\n'
+     'rule [deny-ask] anything may not ask to "https://host/path"\n'
+     'rule [permit-ask] anything may ask to "https://host/path" '
+     'supersedes [deny-ask] @c5d290\n'),
 ]
 
 

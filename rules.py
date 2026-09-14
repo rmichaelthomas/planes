@@ -1057,12 +1057,21 @@ def _rule_applies(rule, surface, declaring_file):
     the permit as "applying" on it would be unsound the same way clearing
     a violation on it would be.
 
+    `_covered_kinds(rule)` (B1) replaces a literal `effect.kind ==
+    rule.kind`: a `may not ask` rule that DECLARES `contradicts` applies
+    when the surface only ever sends (never asks) — `send` is inside what
+    forbidding `ask` covers, so a `contradicts` clause on it must see that
+    reach too, or a contradiction real by widened kind coverage would go
+    unreported. A permit's own covered set is always just `{rule.kind}`
+    (permits never widen), so this is a no-op change for permits.
+
     Returns (applies, first_matching_effect_or_None) — the first effect by
     `surface.declared`'s existing ordering, for a caller that needs one to
     name in a message.
     """
+    covered = _covered_kinds(rule)
     for effect in surface.declared:
-        if effect.kind != rule.kind:
+        if effect.kind not in covered:
             continue
         matched, uncertain = _target_matches(rule, effect)
         if not matched:
