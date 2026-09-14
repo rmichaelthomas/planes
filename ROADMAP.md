@@ -10,8 +10,8 @@ It is also used by other projects now, so this roadmap tracks their needs as wel
 
 | Project | How it uses Planes | Pinned at |
 |---|---|---|
-| 5xFive | Automations compile to Planes and run on the JS interpreter in a Cloudflare Worker; compliance rules compile to Planes rules | `1d8a833` (vendored); can move to the Sprint A tag and `js/embed.mjs` |
-| Koncord | Swift `HostRules`: a page's requests checked against `rules.planes` | `9ec3cfa` (checkpoint-verified); can move to the Sprint A tag through the root `Package.swift` |
+| 5xFive | Automations compile to Planes and run on the JS interpreter in a Cloudflare Worker; compliance rules compile to Planes rules | `sprint-a-2026-09` (vendored, 5xfive #73) |
+| Koncord | Swift `HostRules`: a page's requests checked against `rules.planes` (the `koncord-shared-agency` package, from its networking layer on) | `sprint-a-2026-09` through the root `Package.swift` (commit `6eb59a9`, merging with the networking layer) |
 | Omniglot, Cartouche | A `.planes` manifest analysed, never run, with the Python CLI | — |
 | Undertow, Cutter | Re-implement the surface JSON format and effect vocabulary in TypeScript | format 1, by hand |
 | Motif | Ported the tutor's typing loop and why-card; a Planes voice is planned | `1d8a833` (copied JS) |
@@ -27,7 +27,7 @@ Built and merged September 13, 2026. `scripts/ci.sh` passed in full on the resul
 - **Easier to embed:** the surface format published with a schema; `js/embed.mjs` with types; a root `Package.swift` for macOS and iOS; a documented Node/Swift checker.
 - **Measured:** `HostRules` cost; a README Performance section.
 
-Left outside this repo: E5, moving 5xFive and Koncord to the tag.
+E5 is done too: 5xFive and Koncord both pin the tag.
 
 ## Next — Sprint B: the effect vocabulary grows to eight, and the rule plane catches up
 
