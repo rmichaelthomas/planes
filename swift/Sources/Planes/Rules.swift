@@ -233,13 +233,22 @@ private func findScalars(_ needle: [Unicode.Scalar], in hay: [Unicode.Scalar], f
     return nil
 }
 
-/// Case-folded scalars, for the one comparison B2 asks to be case-
-/// insensitive (scheme and host) — everything else in this file (path,
-/// name, target-as-address) stays code-point exact.
-private func lowerScalars(_ s: ArraySlice<Unicode.Scalar>) -> [Unicode.Scalar] {
-    Array(String(String.UnicodeScalarView(s)).lowercased().unicodeScalars)
+/// Folds only ASCII A-Z to a-z; every other scalar is left exactly as
+/// written (B2 follow-up). Scheme and host are DNS-shaped, and DNS
+/// case-insensitivity is ASCII-only -- a full Unicode fold (`String.
+/// lowercased()`) can map a scalar context-dependently (a final Greek
+/// sigma U+03A3 becomes U+03C2 under some case-folding rules, U+03C3
+/// under others), and there is no guarantee another host's Unicode
+/// tables agree with this one's on the exact mapping. That would
+/// silently break the byte-for-byte agreement the three hosts promise.
+/// Used only where B2 asks for case-insensitive comparison (scheme,
+/// host); a rule's path stays case-sensitive and untouched by this
+/// function. rules.py's and js/rules.mjs's identically-named function
+/// must agree with this one.
+private func asciiLower(_ s: ArraySlice<Unicode.Scalar>) -> [Unicode.Scalar] {
+    s.map { $0.value >= 0x41 && $0.value <= 0x5A ? Unicode.Scalar($0.value + 0x20)! : $0 }
 }
-private func lowerScalars(_ s: [Unicode.Scalar]) -> [Unicode.Scalar] { lowerScalars(s[...]) }
+private func asciiLower(_ s: [Unicode.Scalar]) -> [Unicode.Scalar] { asciiLower(s[...]) }
 
 /// Is `s` a legal URL scheme (`ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )`,
 /// RFC 3986 §3.1)? ASCII-only by construction, so a plain ASCII check.
@@ -343,10 +352,10 @@ func urlCovers(_ ruleTarget: String, _ effectTarget: String) -> Bool {
     // Case-insensitive, but still code-point exact (never `String`'s `==`,
     // which is canonical-equivalence: a composed and a decomposed host must
     // NOT be treated as the same host).
-    if lowerScalars(Array(r.scheme.unicodeScalars)) != lowerScalars(Array(e.scheme.unicodeScalars)) {
+    if asciiLower(Array(r.scheme.unicodeScalars)) != asciiLower(Array(e.scheme.unicodeScalars)) {
         return false
     }
-    if lowerScalars(Array(r.host.unicodeScalars)) != lowerScalars(Array(e.host.unicodeScalars)) {
+    if asciiLower(Array(r.host.unicodeScalars)) != asciiLower(Array(e.host.unicodeScalars)) {
         return false
     }
     return pathCovers(r.path, e.path)
@@ -497,7 +506,7 @@ func urlPatternExcludes(_ rScheme: String, _ rHost: String, _ rPath: String, _ e
     guard let sep = findScalars(sepMarker, in: first), sep > 0, isSchemeScalars(first[0..<sep]) else {
         return false
     }
-    if lowerScalars(first[0..<sep]) != lowerScalars(Array(rScheme.unicodeScalars)) { return true }
+    if asciiLower(first[0..<sep]) != asciiLower(Array(rScheme.unicodeScalars)) { return true }
 
     let remainder = Array(first[(sep + 3)...])
     var term = remainder.count
@@ -505,18 +514,18 @@ func urlPatternExcludes(_ rScheme: String, _ rHost: String, _ rPath: String, _ e
         term = i
         break
     }
-    let rHostLower = lowerScalars(Array(rHost.unicodeScalars))
+    let rHostLower = asciiLower(Array(rHost.unicodeScalars))
     if term == remainder.count {
         // The host itself isn't fully known here -- only a prefix of it is,
         // from this chunk. Whatever it resolves to will still start with
         // this prefix, so a rule host that does NOT start with it can
         // never be that host.
-        return !rHostLower.starts(with: lowerScalars(remainder))
+        return !rHostLower.starts(with: asciiLower(remainder))
     }
 
     let eHost = Array(remainder[0..<term])
     let rest = Array(remainder[term...])
-    if lowerScalars(eHost) != rHostLower { return true }
+    if asciiLower(eHost) != rHostLower { return true }
 
     if rest.first == "?" || rest.first == "#" {
         // The path is fully known here, from certain text -- and empty.

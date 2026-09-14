@@ -382,6 +382,12 @@ MORE_RULE_PROGRAMS = [
     # B2: scheme and host are case-insensitive, port is not folded
     ('use http\nrule [t] anything may not ask to "https://X.example/Ingest"\n'
      'a = ask "HTTPS://x.EXAMPLE/Ingest"\nb = ask "https://x.example/ingest"\n'),
+    # B2: case-insensitivity is ASCII-only -- a non-ASCII host compares
+    # exactly, even where two different full-Unicode lowerings of it
+    # (a final-sigma reading and a plain-sigma reading of a trailing
+    # capital Sigma) would disagree with each other
+    ('use http\nrule [t] anything may not ask to "https://\u0391\u03a3.example"\n'
+     'a = ask "https://\u03b1\u03c2.example"\nb = ask "https://\u03b1\u03c3.example"\n'),
     ('use http\nrule [t] anything may not ask to "https://x"\n'
      'a = ask "https://x:443"\n'),
     # B2: the effect's own query and fragment are ignored

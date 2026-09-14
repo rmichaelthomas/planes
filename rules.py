@@ -291,6 +291,24 @@ class RuleResults(list):
         self.resolved_subjects = list(resolved_subjects)
 
 
+def _ascii_lower(text):
+    """Fold only ASCII A-Z to a-z; every other character is left exactly
+    as written (B2 follow-up). Scheme and host are DNS-shaped, and DNS
+    case-insensitivity is ASCII-only — a full Unicode lower (`str.lower`)
+    can map a character context-dependently (a final Greek sigma `Σ`
+    becomes `ς` under some case-folding rules, `σ` under
+    others), and there is no guarantee another host's Unicode tables
+    agree with this one's on the exact mapping. That would silently
+    break the byte-for-byte agreement the three hosts promise. Used only
+    where B2 asks for case-insensitive comparison (scheme, host); a
+    rule's path stays case-sensitive and untouched by this function.
+    js/rules.mjs's and Rules.swift's identically-named function must
+    agree with this one.
+    """
+    return "".join(
+        chr(ord(ch) + 32) if "A" <= ch <= "Z" else ch for ch in text)
+
+
 def _is_scheme(text):
     """Is `text` a legal URL scheme (`ALPHA *( ALPHA / DIGIT / "+" / "-" /
     "." )`, RFC 3986 §3.1) — the one piece of a `scheme://host/path`
@@ -299,11 +317,11 @@ def _is_scheme(text):
     """
     if not text:
         return False
-    first = text[0]
-    if not ("a" <= first.lower() <= "z"):
+    first = _ascii_lower(text[0])
+    if not ("a" <= first <= "z"):
         return False
     for ch in text[1:]:
-        lower = ch.lower()
+        lower = _ascii_lower(ch)
         if ("a" <= lower <= "z") or ("0" <= ch <= "9") or ch in "+-.":
             continue
         return False
@@ -387,9 +405,9 @@ def _url_covers(rule_target, effect_target):
     """
     r_scheme, r_host, r_path, _, _ = _parse_url_target(rule_target)
     e_scheme, e_host, e_path, _, _ = _parse_url_target(effect_target)
-    if r_scheme.lower() != e_scheme.lower():
+    if _ascii_lower(r_scheme) != _ascii_lower(e_scheme):
         return False
-    if r_host.lower() != e_host.lower():
+    if _ascii_lower(r_host) != _ascii_lower(e_host):
         return False
     return _path_covers(r_path, e_path)
 
@@ -559,7 +577,7 @@ def _url_pattern_excludes(r_scheme, r_host, r_path, effect_target):
     sep = first.find("://")
     if sep <= 0 or not _is_scheme(first[:sep]):
         return False
-    if first[:sep].lower() != r_scheme.lower():
+    if _ascii_lower(first[:sep]) != _ascii_lower(r_scheme):
         return True
 
     remainder = first[sep + 3:]
@@ -573,10 +591,10 @@ def _url_pattern_excludes(r_scheme, r_host, r_path, effect_target):
         # is, from this chunk. Whatever it resolves to will still start
         # with this prefix, so a rule host that does NOT start with it
         # can never be that host.
-        return not r_host.lower().startswith(remainder.lower())
+        return not _ascii_lower(r_host).startswith(_ascii_lower(remainder))
 
     e_host, rest = remainder[:term], remainder[term:]
-    if e_host.lower() != r_host.lower():
+    if _ascii_lower(e_host) != _ascii_lower(r_host):
         return True
 
     if rest[:1] in ("?", "#"):

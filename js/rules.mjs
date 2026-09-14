@@ -229,14 +229,36 @@ export function RuleResults(items = [], resolvedSubjects = []) {
   return arr;
 }
 
+// Folds only ASCII A-Z to a-z; every other character is left exactly as
+// written (B2 follow-up). Scheme and host are DNS-shaped, and DNS
+// case-insensitivity is ASCII-only -- a full Unicode lower (String.
+// toLowerCase()) can map a character context-dependently (a final Greek
+// sigma U+03A3 becomes U+03C2 under some case-folding rules, U+03C3 under
+// others), and there is no guarantee another host's Unicode tables agree
+// with this one's on the exact mapping. That would silently break the
+// byte-for-byte agreement the three hosts promise. Used only where B2 asks
+// for case-insensitive comparison (scheme, host); a rule's path stays
+// case-sensitive and untouched by this function. Plain UTF-16 code-unit
+// indexing is safe here: every code unit this touches (0x41-0x5A) is ASCII
+// and can never be half of a surrogate pair. rules.py's and Rules.swift's
+// identically-named function must agree with this one.
+function asciiLower(text) {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    out += code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : text[i];
+  }
+  return out;
+}
+
 // Is `text` a legal URL scheme (ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ),
 // RFC 3986 §3.1)? ASCII-only by construction, so a plain ASCII check.
 function isScheme(text) {
   if (!text) return false;
-  const first = text[0].toLowerCase();
+  const first = asciiLower(text[0]);
   if (!(first >= "a" && first <= "z")) return false;
   for (const ch of text.slice(1)) {
-    const lower = ch.toLowerCase();
+    const lower = asciiLower(ch);
     if ((lower >= "a" && lower <= "z") || (ch >= "0" && ch <= "9") || ch === "+" || ch === "-" || ch === ".") {
       continue;
     }
@@ -326,8 +348,8 @@ function pathCovers(rulePath, effectPath) {
 function urlCovers(ruleTarget, effectTarget) {
   const [rScheme, rHost, rPath] = parseUrlTarget(ruleTarget);
   const [eScheme, eHost, ePath] = parseUrlTarget(effectTarget);
-  if (rScheme.toLowerCase() !== eScheme.toLowerCase()) return false;
-  if (rHost.toLowerCase() !== eHost.toLowerCase()) return false;
+  if (asciiLower(rScheme) !== asciiLower(eScheme)) return false;
+  if (asciiLower(rHost) !== asciiLower(eHost)) return false;
   return pathCovers(rPath, ePath);
 }
 
@@ -443,7 +465,7 @@ function urlPatternExcludes(rScheme, rHost, rPath, effectTarget) {
   const first = effectTarget.split(HOLE)[0];
   const sep = first.indexOf("://");
   if (sep <= 0 || !isScheme(first.slice(0, sep))) return false;
-  if (first.slice(0, sep).toLowerCase() !== rScheme.toLowerCase()) return true;
+  if (asciiLower(first.slice(0, sep)) !== asciiLower(rScheme)) return true;
 
   const remainder = first.slice(sep + 3);
   let term = remainder.length;
@@ -458,12 +480,12 @@ function urlPatternExcludes(rScheme, rHost, rPath, effectTarget) {
     // from this chunk. Whatever it resolves to will still start with this
     // prefix, so a rule host that does NOT start with it can never be
     // that host.
-    return !rHost.toLowerCase().startsWith(remainder.toLowerCase());
+    return !asciiLower(rHost).startsWith(asciiLower(remainder));
   }
 
   const eHost = remainder.slice(0, term);
   const rest = remainder.slice(term);
-  if (eHost.toLowerCase() !== rHost.toLowerCase()) return true;
+  if (asciiLower(eHost) !== asciiLower(rHost)) return true;
 
   if (rest[0] === "?" || rest[0] === "#") {
     // The path is fully known here, from certain text -- and empty.

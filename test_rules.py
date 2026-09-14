@@ -513,6 +513,37 @@ def test_b2_scheme_and_host_are_case_insensitive_but_path_is_not():
     assert _target_matches(rule, lit("https://x.example/ingest"))[0] is False
 
 
+def test_b2_case_insensitivity_is_ascii_only_not_full_unicode():
+    """DNS case-insensitivity is ASCII-only, so scheme/host comparison
+    folds only A-Z to a-z (`_ascii_lower`), never a full Unicode
+    `.lower()`. A capital-Sigma host compares exactly against BOTH
+    plausible Unicode lowerings of it -- a final-sigma reading (some
+    case-folding rules turn a word-final capital Sigma into U+03C2) and a
+    plain-sigma reading (others give U+03C3) -- because non-ASCII
+    characters are left exactly as written, not covered by either. A
+    full Unicode lower would (in general, and does on at least one
+    engine/version pairing) pick one of the two readings, matching one
+    host and not the other, and there is no guarantee two hosts' Unicode
+    tables would even agree on which -- exactly the byte-for-byte
+    agreement this avoids depending on. js/rules.mjs's and Rules.swift's
+    identically-named `asciiLower` must give the same answers.
+    """
+    from rules import _ascii_lower, _target_matches
+
+    # ASCII is folded...
+    assert _ascii_lower("AbC-123") == "abc-123"
+    # ...and non-ASCII passes through untouched, whatever its case.
+    assert _ascii_lower("ΑΣ") == "ΑΣ"
+
+    rule = Rule("r", "anything", "ask", "https://ΑΣ.example", 1)
+    final_sigma = lit("https://ας.example")   # a lower(), final sigma
+    plain_sigma = lit("https://ασ.example")   # a lower(), plain sigma
+    assert _target_matches(rule, final_sigma)[0] is False
+    assert _target_matches(rule, plain_sigma)[0] is False
+    # The exact same (unfolded) host still matches.
+    assert _target_matches(rule, lit("https://ΑΣ.example"))[0] is True
+
+
 def test_b2_no_default_port_folding():
     """`https://x` and `https://x:443` differ — port is part of the host
     and compared exactly as written, with no default-port normalisation."""
