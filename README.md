@@ -38,6 +38,7 @@ Not a single network call was made to produce that surface.
 |---|---|
 | [Run it](#run-it) | the three implementations, and a browser |
 | [Three implementations](#three-implementations) | what self-hosting buys, and what "they agree" means |
+| [Performance](#performance) | four ordinary jobs, measured on one named Mac |
 | [The vocabulary](#the-vocabulary) | 32 words, 13 builtins, 7 effect kinds |
 | [The language](#the-language) | syntax, in one page |
 | [Numbers are exact](#numbers-are-exact) | rationals, not floats |
@@ -184,6 +185,55 @@ The grammar data itself is generated, the way Swift embeds it in
 `grammar/vocabulary.json`, `grammar/messages/amber.json` and
 `grammar/core.json` into `js/embedded_grammar_data.mjs`, and `--check` (run by
 `test_js_grammar_data.py`) fails the suites on any drift.
+
+---
+
+## Performance
+
+Measured once on the architect's Mac (Apple M1 Pro, 10 cores, 16 GB, macOS
+26.5.2, Python 3.14.7, Node v22.23.1), commit `6b0499e`, 2026-09-13. Full
+method, per-file numbers, and how each job is shaped by the language (no
+`range`, no dict) are in
+[`benchmarks/published/results.md`](benchmarks/published/results.md); rerun
+with `python3 benchmarks/published/set_a_bench.py` and `python3
+benchmarks/published/set_b_bench.py`. Set A's job programs are generated,
+not committed (the metacircular suites glob every `.planes` file in the
+repo, and these are sized for a benchmark, not for that) — read them with
+`python3 benchmarks/published/gen_jobs.py --out DIR`.
+
+**Set A — four ordinary jobs**, each written in Planes, plain Python and
+plain Node, wall clock including process startup, median of 5 runs:
+
+| job | size | `planes.py` | `node js/cli.mjs run` | plain Python | plain Node | Planes/Python | Planes/Node |
+|---|---|---:|---:|---:|---:|---:|---:|
+| hello (baseline) | — | 78.6 ms | 80.1 ms | 27.2 ms | 66.8 ms | — | — |
+| word count | 50,000 words | 5624.9 ms | 391.1 ms | 33.7 ms | 82.1 ms | 167.1x | 4.8x |
+| record updates | 2,000 records × 50 `with` updates | 1381.8 ms | 263.2 ms | 32.7 ms | 68.6 ms | 42.2x | 3.8x |
+| invoice arithmetic | 5,000 lines | 568.4 ms | 162.4 ms | 58.7 ms | 69.7 ms | 9.7x | 2.3x |
+| file transform | 10,000 rows | 5361.8 ms | 951.9 ms | 43.2 ms | 80.1 ms | 124.2x | 11.9x |
+
+**Set B — effect-surface time**, all 51 `corpus/*.planes` programs, median
+per file and the total of those medians:
+
+| | `shapes_cli.py --json` | `node js/cli.mjs shapes` |
+|---|---:|---:|
+| median per file | 56.75 ms | 87.25 ms |
+| total | 2894.2 ms | 4450.0 ms |
+| process startup (separate) | 27.8 ms | 58.4 ms |
+
+Once startup is set aside, Python and Node spend about the same ~29 ms per
+file analysing a program. **3 of 51 corpus programs (5.88%) cross a foreign
+boundary** — a program whose surface has at least one effect with
+`"declared": true`, i.e. one that came from a `foreign … doing …` claim
+rather than a builtin the analyser understands.
+
+Planes is a tree-walking interpreter that tracks exact-rational arithmetic
+and full provenance on every value; plain Python and Node do neither. These
+numbers include that cost — they don't separate it from the interpreter's
+own per-node overhead — and show Planes running 2–170x slower than plain
+Python and 2–12x slower than plain Node on ordinary computation, depending
+on how much of the job is arithmetic (closer) versus per-element
+interpretation overhead (farther).
 
 ---
 
