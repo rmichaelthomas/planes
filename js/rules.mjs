@@ -471,11 +471,26 @@ function pathCovers(rulePath, effectPath) {
 // "https://x:443" differ. The effect's own query and fragment are ignored
 // entirely -- only its path is compared, against the rule's path.
 function urlCovers(ruleTarget, effectTarget) {
-  const [rScheme, rHost, rPath] = parseUrlTarget(ruleTarget);
-  const [eScheme, eHost, ePath] = parseUrlTarget(effectTarget);
-  if (asciiLower(rScheme) !== asciiLower(eScheme)) return false;
-  if (asciiLower(rHost) !== asciiLower(eHost)) return false;
-  return pathCovers(rPath, ePath);
+  return scopeCoversParsed(urlScope(ruleTarget), urlScope(effectTarget));
+}
+
+// A URL-shaped target reduced to what covering compares, parsed once: its
+// ASCII-folded "scheme://host" (unambiguous, since a scheme holds no ":" and
+// a host no "/") and its path; null when the target isn't URL-shaped.
+// Every scope comparison used to re-parse both targets, and the comparisons
+// run pairwise, which made a 50-rule check about 27x slower than exact
+// matching was (Rules.swift had the same pattern; Planes #140).
+function urlScope(target) {
+  if (target === null || target === undefined) return null;
+  const parsed = parseUrlTarget(target);
+  if (parsed === null) return null;
+  const [scheme, host, path] = parsed;
+  return { origin: `${asciiLower(scheme)}://${asciiLower(host)}`, path };
+}
+
+// urlCovers for two already-parsed URL scopes.
+function scopeCoversParsed(r, e) {
+  return r.origin === e.origin && pathCovers(r.path, e.path);
 }
 
 // Does every address `narrow` (a target string, or null/undefined) ranges
@@ -488,8 +503,10 @@ function scopeCovers(wide, narrow) {
   if (wide === null || wide === undefined) return true;
   if (narrow === null || narrow === undefined) return false;
   if (wide === narrow) return true;
-  if (parseUrlTarget(wide) === null || parseUrlTarget(narrow) === null) return false;
-  return urlCovers(wide, narrow);
+  const w = urlScope(wide);
+  const n = urlScope(narrow);
+  if (w === null || n === null) return false;
+  return scopeCoversParsed(w, n);
 }
 
 // Do a and b (two rule targets, or null/undefined) range over exactly the
@@ -497,7 +514,18 @@ function scopeCovers(wide, narrow) {
 // "https://x" and "https://x/" -- two spellings of "every path on x" -- are
 // the same scope even though the strings differ.
 function sameScope(a, b) {
-  return scopeCovers(a, b) && scopeCovers(b, a);
+  return sameScopeParsed(a, urlScope(a), b, urlScope(b));
+}
+
+// sameScope for targets whose URL scopes are already parsed (urlScope's
+// result), so a pairwise pass parses each rule once rather than per pair.
+function sameScopeParsed(a, pa, b, pb) {
+  const aNone = a === null || a === undefined;
+  const bNone = b === null || b === undefined;
+  if (aNone || bNone) return aNone && bNone;
+  if (a === b) return true;
+  if (pa === null || pb === null) return false;
+  return scopeCoversParsed(pa, pb) && scopeCoversParsed(pb, pa);
 }
 
 // The set of effect kinds this rule's declared kind matches against (B1,
@@ -551,15 +579,27 @@ export function narrows(b, a) {
 // query and fragment ignored; otherwise (a file path, a queue:send-style
 // name, console text) an exact string match, exactly as before B2.
 function targetMatches(rule, effect) {
-  if (rule.target === null || rule.target === undefined) return [true, false];
+  return targetMatchesParsed(
+    rule.target,
+    urlScope(rule.target),
+    effect,
+    effect.computed ? null : urlScope(effect.target),
+  );
+}
+
+// targetMatches with both targets' URL scopes already parsed (null when not
+// URL-shaped), so check parses each rule and each effect once rather than
+// once per rule-effect pair.
+function targetMatchesParsed(target, targetScope, effect, effectScope) {
+  if (target === null || target === undefined) return [true, false];
   if (effect.computed) {
-    if (patternExcludes(rule.target, effect.target)) return [false, false];
+    if (patternExcludes(target, effect.target)) return [false, false];
     return [true, true];
   }
-  if (parseUrlTarget(rule.target) !== null && parseUrlTarget(effect.target) !== null) {
-    return [urlCovers(rule.target, effect.target), false];
+  if (targetScope !== null && effectScope !== null) {
+    return [scopeCoversParsed(targetScope, effectScope), false];
   }
-  return [effect.target === rule.target, false];
+  return [effect.target === target, false];
 }
 
 const HOLE = "{...}";
@@ -864,11 +904,12 @@ function checkPermitsAreRelated(active) {
 // explicit supersedes naming the forbid. A strictly narrower scope needs no
 // supersedes at all, since narrows (generalised the same way) resolves it.
 function checkConflicts(active) {
+  const scopes = active.map((r) => urlScope(r.target));
   for (let i = 0; i < active.length; i++) {
     const a = active[i];
     for (let j = i + 1; j < active.length; j++) {
       const b = active[j];
-      if (!sameScope(a.target, b.target)) continue;
+      if (!sameScopeParsed(a.target, scopes[i], b.target, scopes[j])) continue;
       if (a.assertion === b.assertion) {
         if (a.kind !== b.kind) continue;
       } else if (![...coveredKinds(a)].some((k) => coveredKinds(b).has(k))) {
@@ -990,29 +1031,41 @@ export function check(rules, surface, declaringFile = null) {
   const forbids = active.filter((r) => r.assertion === "forbid");
   const permits = active.filter((r) => r.assertion === "permit");
 
+  const forbidScopes = forbids.map((r) => urlScope(r.target));
+  const permitScopes = permits.map((r) => urlScope(r.target));
+  const declared = surface.declared;
+  const effectScopes = declared.map((e) => (e.computed ? null : urlScope(e.target)));
+
   const results = [];
-  for (const rule of forbids) {
+  for (let ri = 0; ri < forbids.length; ri++) {
+    const rule = forbids[ri];
     const covered = coveredKinds(rule);
     let nKind = 0;
     let nKindSubject = 0;
     let matchedAny = false;
-    for (const effect of surface.declared) {
+    for (let ei = 0; ei < declared.length; ei++) {
+      const effect = declared[ei];
       if (!covered.has(effect.kind)) continue;
       nKind += 1;
-      const [matched, uncertain] = targetMatches(rule, effect);
+      const [matched, uncertain] = targetMatchesParsed(
+        rule.target, forbidScopes[ri], effect, effectScopes[ei],
+      );
       const subjectOk = subjectMatches(rule, effect, surface, declaringFile);
       if (subjectOk) nKindSubject += 1;
       if (!matched || !subjectOk) continue;
       matchedAny = true;
 
       let clearer = null;
-      for (const p of permits) {
+      for (let pi = 0; pi < permits.length; pi++) {
+        const p = permits[pi];
         // A permit never widens: it clears an effect only when its own
         // kind is the effect's actual kind, exactly -- "a permit for ask
         // never clears a forbidden send" (B1, Track 0 #10).
         if (p.kind !== effect.kind) continue;
         if (!(p.supersedes === rule.name || narrows(p, rule))) continue;
-        const [pMatched, pUncertain] = targetMatches(p, effect);
+        const [pMatched, pUncertain] = targetMatchesParsed(
+          p.target, permitScopes[pi], effect, effectScopes[ei],
+        );
         if (
           pMatched &&
           !pUncertain &&
@@ -1032,8 +1085,10 @@ export function check(rules, surface, declaringFile = null) {
       }
 
       const narrowers = forbids.filter(
-        (other) =>
-          other !== rule && narrows(other, rule) && targetMatches(other, effect)[0],
+        (other, oi) =>
+          other !== rule &&
+          narrows(other, rule) &&
+          targetMatchesParsed(other.target, forbidScopes[oi], effect, effectScopes[ei])[0],
       );
       results.push(
         new Violation(rule, effect, { uncertain, narrowed_by: narrowers, origins }),

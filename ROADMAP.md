@@ -38,7 +38,7 @@ Built and merged September 14, 2026 (PRs #135–#138). `scripts/ci.sh` passed in
 3. **`contradicts`, and mandatory supersession fingerprints** (#136). `supersedes` without the overridden rule's fingerprint is refused, printing the one to add. `contradicts [other]` reports a violation when both rules apply. The audit lists both as built; `until` stays withdrawn.
 4. **Structured violations** (#138). Every fact a rendered violation states is a field, and `render()` is computed from those fields in Python, JS and Swift. `js/embed.d.mts` types them; the README and `swift/README.md` show a host writing its own wording.
 
-Tagged `sprint-b-2026-09` (cc7b08f). Moving Koncord to it found a slowdown: B2 made Swift's `HostRules` check about 100× slower. #140 fixed it and is tagged `sprint-b-2026-09.1`. The JS matcher has the same pattern (28× on 50 rules), still unfixed.
+Tagged `sprint-b-2026-09` (cc7b08f). Moving Koncord to it found a slowdown: B2 made Swift's `HostRules` check about 100× slower. #140 fixed it and is tagged `sprint-b-2026-09.1`. The JS matcher had the same pattern (27× on 50 rules); #143 fixed it on `main`, after both tags.
 
 Downstream:
 - **5xFive** vendors `sprint-b-2026-09` (5xfive #74, merged). Its `{...}` wildcard stays: B2 covers only URL-shaped addresses, and 5xFive's are `5x:…`.

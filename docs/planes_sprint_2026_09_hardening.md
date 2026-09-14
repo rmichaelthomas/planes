@@ -279,7 +279,7 @@ Built in parallel on three branches, then B4; `scripts/ci.sh` passed in full on 
 | 5xFive | 5xfive #74, merged | Vendors `sprint-b-2026-09`: four modules and two grammar files changed, blobs verified. `rules.d.mts` types B3/B4. No wrapper code changed. **The `{...}` wildcard stays**: B2 covers only URL-shaped addresses, so a rule on `5x:acme:member:` matches no tagging write. A test holds that. Typecheck, lint, 1,208 tests, CI green |
 | Koncord | koncord-shared-agency #40, merged | The compiled list and page watch cover addresses, as two WebKit triggers per address (its URL filter has no `|`). `send` rules are left out, because Koncord checks requests as `ask`. Pinned at `sprint-b-2026-09.1`. 783 tests pass. Parity: Etsy and Airbnb fail on pixels as already accepted. The New York Times fails on fonts (12 vs 20), on `main` as well. The architect accepted it |
 
-Still open from this: `js/rules.mjs` has the same parsing pattern (0.049 → 1.38 ms on 50 rules), which matters once a JS host checks many rules.
+`js/rules.mjs` had the same parsing pattern: Koncord's 50-rule shape went from 0.050 ms to 1.37 ms, and a 150-request page with 200 rules from 1.93 ms to 45 ms. #143 parses each target once, into its folded origin and path, bringing them to 0.107 ms and 2.19 ms. It landed on `main` after both tags; 5xFive, the JS consumer, checks at most four rules.
 
 ### The plan as written
 
