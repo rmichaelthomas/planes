@@ -1,6 +1,6 @@
 # Planes roadmap
 
-**Updated:** September 13, 2026, after the Track 0, register and parked-item walkthroughs, and after Sprint A merged (PRs #111–#131). Nothing on the chain is open (base `c4400ad`, addendum v37.1)
+**Updated:** September 13, 2026, after the Track 0, register and parked-item walkthroughs, after Sprint A merged (PRs #111–#134), and after Sprint B merged (PRs #135–#138, September 14). Nothing on the chain is open (base `c4400ad`, addendum v37.1)
 **Supersedes as the working roadmap:** `reports/planes_handoff_2026_08_01_language_and_performance_roadmap.md`. That file is archival and unedited. Its phase order still stands, and each phase's current status is below.
 **Near-term work:** [`docs/planes_sprint_2026_09_hardening.md`](docs/planes_sprint_2026_09_hardening.md)
 
@@ -29,19 +29,16 @@ Built and merged September 13, 2026. `scripts/ci.sh` passed in full on the resul
 
 E5 is done too: 5xFive and Koncord both pin the tag.
 
-## Next — Sprint B: the effect vocabulary grows to eight, and the rule plane catches up
+## Done — Sprint B: the effect vocabulary grows to eight, and the rule plane catches up
 
-All decided at Track 0 (September 13, 2026). The full specification is in the sprint doc, B1–B4.
+Built and merged September 14, 2026 (PRs #135–#138). `scripts/ci.sh` passed in full on the result. Details in the sprint doc.
 
-1. **The send effect.** The network gets its `write`.
-   - `send` is an effect kind `foreign` functions declare. No keyword, no host method.
-   - The vocabulary goes from seven to eight.
-   - Data going out is `send`; fetch-only is `ask`.
-   - Existing mislabelled sends are relabelled, and `--diff` reports the change.
-   - Forbidding `ask` also forbids `send`, so no older rule weakens.
-2. **Rule-target matching.** A rule's address covers everything under it: same host, path at `/` boundaries, query ignored. Subdomains are separate. Built with `send`, so both network kinds match the same way. Settles Koncord PE-Q42.
-3. **`contradicts`, and mandatory supersession fingerprints.** `until` is withdrawn.
-4. **Structured violations.** Hosts write their own wording from fields, not by parsing rendered text.
+1. **The send effect** (#137). `send` is an eighth effect kind `foreign` functions declare: data going out. `ask` is fetch-only. Existing sends are relabelled; `--diff` reports an `ask` → `send` change; forbidding `ask` also forbids `send`. The surface format is now version 2 (`docs/surface-format-v2.md`); version 1 stays as the Sprint A tag's record.
+2. **Rule-target matching** (#135). A rule's address covers everything under it: same scheme and host (ASCII case-insensitive), path at `/` boundaries, query ignored, subdomains separate. A rule address with a query is refused. Non-URL targets still match exactly. Settles Koncord PE-Q42.
+3. **`contradicts`, and mandatory supersession fingerprints** (#136). `supersedes` without the overridden rule's fingerprint is refused, printing the one to add. `contradicts [other]` reports a violation when both rules apply. The audit lists both as built; `until` stays withdrawn.
+4. **Structured violations** (#138). Every fact a rendered violation states is a field, and `render()` is computed from those fields in Python, JS and Swift. `js/embed.d.mts` types them; the README and `swift/README.md` show a host writing its own wording.
+
+Downstream, not yet done: 5xFive and Koncord still pin `sprint-a-2026-09` (format 1). Moving them to Sprint B means format 2, Koncord's `AdmissionRules.swift` compiling rule targets as prefixes (`^` + escaped address + `(/|$|[?#])`), and 5xFive dropping its `{...}` wildcard workaround.
 
 ---
 
@@ -57,7 +54,7 @@ Each item says where it came from and what it waits on. The Aug 1 handoff's phas
 | Canonical AST serialization and a public conformance corpus | Partial. The canonical form exists in Python, JS and Swift, and agreement suites run it. Not yet published as fixtures a stranger can run. | Sprint A tag |
 | Structured run receipt: sources, seed, host, surface, observed effects, rule decisions | Partial. The record plane (#7), fingerprints and the event log (#85) exist; nothing is signed. | Omniglot O-Q3 and 5xFive refusal receipts want surface→receipt wiring |
 | `planes describe`, a manifest of manifests | Admitted at v18.0 §200, not built | — |
-| Surface format versioning beyond format 1 | Format 1 published with a schema (`docs/surface-format-v1.md`, Sprint A E1) | Sprint B's eighth kind |
+| Surface format versioning | Format 1 (Sprint A E1) and format 2 (Sprint B: `send`, address-covering rules, contradictions, full violation fields) published with schemas | — |
 
 ### 2. Authority, budgets and the rule plane (handoff P1)
 
@@ -66,7 +63,7 @@ Each item says where it came from and what it waits on. The Aug 1 handoff's phas
 | Requested → granted → observed effects, host-enforced allowlists | Not built. `foreign … doing` is still a claim. | A design session. Enforcement lives at the host; linear capability types are withdrawn. |
 | Resource budgets: steps, depth, rational size, output bytes, effect counts | Only `_WHY_SEARCH_BUDGET` exists | — |
 | **A beneficiary on rules**: who a rule protects | Not built. Asked by TAOS (OL-Q1), Koncord v0.13 §96.3 and the Cloudflare contribution; Undertow built its own `for=`. | Architect: language or Liminate |
-| Rules about data reaching a send (`customer emails may not derive into any send`) | Partial. Named subjects resolve through derivation (A-Q22); data in a URL is traced (v37.0 §520). A request body can't be expressed until P-Q25. | Sprint B |
+| Rules about data reaching a send (`customer emails may not derive into any send`) | Partial. `send` labels data leaving (Sprint B1); named subjects resolve through derivation (A-Q22); data in a URL is traced (v37.0 §520). A rule about which data derives into a `send` isn't built. | A design session |
 | Rule-set consistency beyond conflict and vacuity | 5xFive runs Z3 on Liminate, not on Planes rules | — |
 | Retroactive re-check of stored derivations against new rules | Brainstormed (DeepSeek) | — (expiring rules were declined at Track 0 #4) |
 | Dynamic record lookup; precedence diagnostics | Not built. **Decided:** a missing looked-up field gives `nothing`, exactly as `person.age` does today. | — |
