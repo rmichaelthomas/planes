@@ -396,6 +396,73 @@ private func isSchemeScalars(_ s: ArraySlice<Unicode.Scalar>) -> Bool {
     return true
 }
 
+/// A URL-shaped target's pieces, as views into the target's own storage.
+/// Every scope comparison parses both of its targets; building `String`s and
+/// scalar arrays for each piece made a 50-rule check two orders of magnitude
+/// slower than exact matching was (Koncord's pin to the Sprint B tag measured
+/// it). Views copy nothing, so a parse costs one walk over the target.
+///
+/// The views are UTF-8, not Unicode scalars, because walking bytes is far
+/// cheaper and gives the same answers here: every delimiter is ASCII, so a
+/// byte split falls on scalar boundaries; two texts are code-point equal
+/// exactly when their UTF-8 is byte equal; one is a code-point prefix of the
+/// other exactly when it is a byte prefix; and folding ASCII A-Z bytes folds
+/// exactly the scalars `asciiLower` folds, since no byte of a multi-byte
+/// scalar is below 0x80.
+struct URLPieces {
+    typealias Bytes = Substring.UTF8View
+    let scheme: Bytes
+    let host: Bytes
+    let path: Bytes
+    let query: Bytes?
+    let fragment: Bytes?
+}
+
+private let colon = UInt8(ascii: ":"), slash = UInt8(ascii: "/")
+private let question = UInt8(ascii: "?"), hash = UInt8(ascii: "#")
+
+/// `parseURLTarget`'s split, without copying (see `URLPieces`).
+func urlPieces(_ target: String) -> URLPieces? {
+    let all = target.utf8[...]
+    var sep: URLPieces.Bytes.Index?
+    var i = all.startIndex
+    while i < all.endIndex {
+        if all[i] == colon {
+            let j = all.index(after: i)
+            if j < all.endIndex, all[j] == slash {
+                let k = all.index(after: j)
+                if k < all.endIndex, all[k] == slash {
+                    sep = i
+                    break
+                }
+            }
+        }
+        i = all.index(after: i)
+    }
+    guard let sep, sep > all.startIndex, isSchemeBytes(all[..<sep]) else { return nil }
+    let rest = all[all.index(sep, offsetBy: 3)...]
+
+    let hostEnd = rest.firstIndex { $0 == slash || $0 == question || $0 == hash } ?? rest.endIndex
+    let tail = rest[hostEnd...]
+    let pathEnd = tail.firstIndex { $0 == question || $0 == hash } ?? tail.endIndex
+    let remainder = tail[pathEnd...]
+
+    var query: URLPieces.Bytes?
+    var fragment: URLPieces.Bytes?
+    if remainder.first == hash {
+        fragment = remainder
+    } else if remainder.first == question {
+        if let hashAt = remainder.firstIndex(of: hash) {
+            query = remainder[..<hashAt]
+            fragment = remainder[hashAt...]
+        } else {
+            query = remainder
+        }
+    }
+    return URLPieces(scheme: all[..<sep], host: rest[..<hostEnd], path: tail[..<pathEnd],
+                     query: query, fragment: fragment)
+}
+
 /// Splits `target` into (scheme, host, path, query, fragment) if it has the
 /// shape `scheme://host[:port][/path][?query][#fragment]` (B2); `nil`
 /// otherwise — a file path, a `queue:send`-style name, or console text, none
@@ -408,50 +475,9 @@ private func isSchemeScalars(_ s: ArraySlice<Unicode.Scalar>) -> Bool {
 /// `_parse_url_target` and js/rules.mjs's `parseUrlTarget` must agree with
 /// this.
 func parseURLTarget(_ target: String) -> (scheme: String, host: String, path: String, query: String?, fragment: String?)? {
-    let scalars = Array(target.unicodeScalars)
-    let sepMarker = Array("://".unicodeScalars)
-    guard let sep = findScalars(sepMarker, in: scalars), sep > 0, isSchemeScalars(scalars[0..<sep]) else {
-        return nil
-    }
-    let scheme = String(String.UnicodeScalarView(scalars[0..<sep]))
-    let rest = Array(scalars[(sep + 3)...])
-
-    var hostEnd = rest.count
-    for i in 0..<rest.count where rest[i] == "/" || rest[i] == "?" || rest[i] == "#" {
-        hostEnd = i
-        break
-    }
-    let host = String(String.UnicodeScalarView(rest[0..<hostEnd]))
-    let tail = Array(rest[hostEnd...])
-
-    let path: [Unicode.Scalar]
-    let remainder: [Unicode.Scalar]
-    if tail.first == "?" || tail.first == "#" {
-        path = []
-        remainder = tail
-    } else {
-        var pathEnd = tail.count
-        for i in 0..<tail.count where tail[i] == "?" || tail[i] == "#" {
-            pathEnd = i
-            break
-        }
-        path = Array(tail[0..<pathEnd])
-        remainder = Array(tail[pathEnd...])
-    }
-
-    var query: String?
-    var fragment: String?
-    if remainder.first == "#" {
-        fragment = String(String.UnicodeScalarView(remainder))
-    } else if remainder.first == "?" {
-        if let hashAt = remainder.firstIndex(of: "#") {
-            query = String(String.UnicodeScalarView(remainder[0..<hashAt]))
-            fragment = String(String.UnicodeScalarView(remainder[hashAt...]))
-        } else {
-            query = String(String.UnicodeScalarView(remainder))
-        }
-    }
-    return (scheme, host, String(String.UnicodeScalarView(path)), query, fragment)
+    guard let p = urlPieces(target) else { return nil }
+    func text(_ s: URLPieces.Bytes) -> String { String(Substring(s)) }
+    return (text(p.scheme), text(p.host), text(p.path), p.query.map(text), p.fragment.map(text))
 }
 
 /// Does `rulePath` cover `effectPath` at a "/" boundary (B2)? An empty path
@@ -461,13 +487,37 @@ func parseURLTarget(_ target: String) -> (scheme: String, host: String, path: St
 /// character of `effectPath` past the prefix is "/". Compared code-point
 /// exact — no percent-decoding, no Unicode normalisation.
 func pathCovers(_ rulePath: String, _ effectPath: String) -> Bool {
-    if rulePath.isEmpty || rulePath == "/" { return true }
-    if sameText(effectPath, rulePath) { return true }
-    let rule = Array(rulePath.unicodeScalars)
-    let effect = Array(effectPath.unicodeScalars)
-    guard effect.count >= rule.count, effect[0..<rule.count].elementsEqual(rule) else { return false }
-    if rule.last == "/" { return true }
-    return effect.count > rule.count && effect[rule.count] == "/"
+    pathCovers(rulePath.utf8[...], effectPath.utf8[...])
+}
+
+private func pathCovers(_ rule: URLPieces.Bytes, _ effect: URLPieces.Bytes) -> Bool {
+    if rule.isEmpty || (rule.count == 1 && rule.first == slash) { return true }
+    guard effect.starts(with: rule) else { return false }
+    if rule.last == slash { return true }
+    let after = effect.index(effect.startIndex, offsetBy: rule.count)
+    return after == effect.endIndex || effect[after] == slash
+}
+
+/// Case-insensitive for ASCII letters only (`asciiLower`), code-point exact
+/// otherwise — never `String`'s `==`, which is canonical equivalence: a
+/// composed and a decomposed host must NOT be treated as the same host.
+private func sameASCIIFolded(_ a: URLPieces.Bytes, _ b: URLPieces.Bytes) -> Bool {
+    a.count == b.count && a.elementsEqual(b) { foldASCII($0) == foldASCII($1) }
+}
+
+private func foldASCII(_ b: UInt8) -> UInt8 { b >= 0x41 && b <= 0x5A ? b + 0x20 : b }
+
+/// `isSchemeScalars` over UTF-8: a non-ASCII scalar's bytes are all 0x80 or
+/// above, so they fail the same ASCII test the scalar would.
+private func isSchemeBytes(_ s: URLPieces.Bytes) -> Bool {
+    guard let first = s.first else { return false }
+    func isLetter(_ c: UInt8) -> Bool { (c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A) }
+    guard isLetter(first) else { return false }
+    return s.dropFirst().allSatisfy { isLetter($0) || ($0 >= 0x30 && $0 <= 0x39) || $0 == 0x2B || $0 == 0x2D || $0 == 0x2E }
+}
+
+private func urlCovers(_ r: URLPieces, _ e: URLPieces) -> Bool {
+    sameASCIIFolded(r.scheme, e.scheme) && sameASCIIFolded(r.host, e.host) && pathCovers(r.path, e.path)
 }
 
 /// Does the URL-shaped `ruleTarget` cover the URL-shaped `effectTarget`
@@ -477,17 +527,8 @@ func pathCovers(_ rulePath: String, _ effectPath: String) -> Bool {
 /// fragment are ignored entirely -- only its path is compared, against the
 /// rule's path, by `pathCovers`.
 func urlCovers(_ ruleTarget: String, _ effectTarget: String) -> Bool {
-    guard let r = parseURLTarget(ruleTarget), let e = parseURLTarget(effectTarget) else { return false }
-    // Case-insensitive, but still code-point exact (never `String`'s `==`,
-    // which is canonical-equivalence: a composed and a decomposed host must
-    // NOT be treated as the same host).
-    if asciiLower(Array(r.scheme.unicodeScalars)) != asciiLower(Array(e.scheme.unicodeScalars)) {
-        return false
-    }
-    if asciiLower(Array(r.host.unicodeScalars)) != asciiLower(Array(e.host.unicodeScalars)) {
-        return false
-    }
-    return pathCovers(r.path, e.path)
+    guard let r = urlPieces(ruleTarget), let e = urlPieces(effectTarget) else { return false }
+    return urlCovers(r, e)
 }
 
 /// Does every address `narrow` (a target string, or `nil`) ranges over also
@@ -500,8 +541,8 @@ func scopeCovers(_ wide: String?, _ narrow: String?) -> Bool {
     guard let wide else { return true }
     guard let narrow else { return false }
     if sameText(wide, narrow) { return true }
-    guard parseURLTarget(wide) != nil, parseURLTarget(narrow) != nil else { return false }
-    return urlCovers(wide, narrow)
+    guard let w = urlPieces(wide), let n = urlPieces(narrow) else { return false }
+    return urlCovers(w, n)
 }
 
 /// Do `a` and `b` (two rule targets, or `nil`) range over exactly the same
@@ -509,7 +550,37 @@ func scopeCovers(_ wide: String?, _ narrow: String?) -> Bool {
 /// `"https://x"` and `"https://x/"` -- two spellings of "every path on x"
 /// -- are the same scope even though the strings differ.
 func sameScope(_ a: String?, _ b: String?) -> Bool {
-    scopeCovers(a, b) && scopeCovers(b, a)
+    sameScope(a, a.flatMap(urlPieces), b, b.flatMap(urlPieces))
+}
+
+/// A rule target parsed once for a pairwise pass: its pieces (`nil` when the
+/// target is `nil` or isn't URL-shaped) and its ASCII-folded
+/// `scheme://host`. Two URL-shaped targets can only share a scope when those
+/// origins are equal, so most pairs are told apart by one array compare.
+private struct ParsedScope {
+    let target: String?
+    let pieces: URLPieces?
+    let origin: [UInt8]
+
+    init(_ target: String?) {
+        self.target = target
+        pieces = target.flatMap(urlPieces)
+        origin = pieces.map { $0.scheme.map(foldASCII) + Array("://".utf8) + $0.host.map(foldASCII) } ?? []
+    }
+}
+
+private func sameScope(_ a: ParsedScope, _ b: ParsedScope) -> Bool {
+    if a.pieces != nil, b.pieces != nil, a.origin != b.origin { return false }
+    return sameScope(a.target, a.pieces, b.target, b.pieces)
+}
+
+/// `sameScope` for targets whose pieces are already parsed (`nil` when the
+/// target is `nil` or isn't URL-shaped).
+private func sameScope(_ a: String?, _ pa: URLPieces?, _ b: String?, _ pb: URLPieces?) -> Bool {
+    guard let a, let b else { return a == nil && b == nil }
+    if sameText(a, b) { return true }
+    guard let pa, let pb else { return false }
+    return urlCovers(pa, pb) && urlCovers(pb, pa)
 }
 
 /// The set of effect kinds this rule's declared kind matches against (B1,
@@ -567,13 +638,22 @@ public func narrows(_ b: AST.Rule, _ a: AST.Rule) -> Bool {
 /// `queue:send`-style name, console text) an exact string match, exactly as
 /// before B2.
 func targetMatches(_ rule: AST.Rule, _ effect: Effect) -> (Bool, Bool) {
-    guard let target = rule.target else { return (true, false) }
+    targetMatches(rule.target, rule.target.flatMap(urlPieces), effect,
+                  effect.computed ? nil : urlPieces(effect.target))
+}
+
+/// `targetMatches` with both targets' pieces already parsed (`nil` when not
+/// URL-shaped), so `check` parses each rule and each effect once rather than
+/// once per rule-effect pair.
+private func targetMatches(_ target: String?, _ targetPieces: URLPieces?,
+                           _ effect: Effect, _ effectPieces: URLPieces?) -> (Bool, Bool) {
+    guard let target else { return (true, false) }
     if effect.computed {
         if patternExcludes(target, effect.target) { return (false, false) }
         return (true, true)
     }
-    if parseURLTarget(target) != nil && parseURLTarget(effect.target) != nil {
-        return (urlCovers(target, effect.target), false)
+    if let targetPieces, let effectPieces {
+        return (urlCovers(targetPieces, effectPieces), false)
     }
     return (sameText(effect.target, target), false)
 }
@@ -832,7 +912,7 @@ func resolveActive(_ rules: [AST.Rule]) throws -> [AST.Rule] {
 /// forbid or permit, superseded or not.
 func checkTargetIsAnAddress(_ rule: AST.Rule) throws {
     guard let target = rule.target else { return }
-    guard let parsed = parseURLTarget(target) else { return }
+    guard let parsed = urlPieces(target) else { return }
     if parsed.query == nil && parsed.fragment == nil { return }
     throw RuleConflict(
         "rule [\(rule.name)] (line \(rule.line)): target " +
@@ -884,9 +964,10 @@ func checkPermitsAreRelated(_ active: [AST.Rule]) throws {
 /// narrower scope needs no supersedes at all, since `narrows` (generalised
 /// the same way) resolves it.
 func checkConflicts(_ active: [AST.Rule]) throws {
+    let scopes = active.map { ParsedScope($0.target) }
     for (i, a) in active.enumerated() {
-        for b in active[(i + 1)...] {
-            if !sameScope(a.target, b.target) { continue }
+        for (j, b) in active.enumerated().dropFirst(i + 1) {
+            if !sameScope(scopes[i], scopes[j]) { continue }
             if sameText(a.assertion, b.assertion) {
                 if !sameText(a.effectKind, b.effectKind) { continue }
             } else if coveredKinds(a).isDisjoint(with: coveredKinds(b)) {
@@ -1000,30 +1081,33 @@ public func check(_ rules: [AST.Rule], _ surface: Surface, declaringFile: String
 
     let forbids = active.filter { sameText($0.assertion, "forbid") }
     let permits = active.filter { sameText($0.assertion, "permit") }
+    let forbidPieces = forbids.map { $0.target.flatMap(urlPieces) }
+    let permitPieces = permits.map { $0.target.flatMap(urlPieces) }
+    let effectPieces = surface.declared.map { $0.computed ? nil : urlPieces($0.target) }
 
     var results: [Violation] = []
-    for rule in forbids {
+    for (ri, rule) in forbids.enumerated() {
         let covered = coveredKinds(rule)
         var nKind = 0
         var nKindSubject = 0
         var matchedAny = false
-        for effect in surface.declared {
+        for (ei, effect) in surface.declared.enumerated() {
             if !covered.contains(effect.kind) { continue }
             nKind += 1
-            let (matched, uncertain) = targetMatches(rule, effect)
+            let (matched, uncertain) = targetMatches(rule.target, forbidPieces[ri], effect, effectPieces[ei])
             let subjectOk = subjectMatches(rule, effect, surface, declaringFile)
             if subjectOk { nKindSubject += 1 }
             if !matched || !subjectOk { continue }
             matchedAny = true
 
             var clearer: AST.Rule?
-            for p in permits {
+            for (pi, p) in permits.enumerated() {
                 // A permit never widens: it clears an effect only when its
                 // own kind is the effect's actual kind, exactly — "a permit
                 // for ask never clears a forbidden send" (B1, Track 0 #10).
                 if !sameText(p.effectKind, effect.kind) { continue }
                 if !(sameOptionalText(p.supersedes, rule.name) || narrows(p, rule)) { continue }
-                let (pMatched, pUncertain) = targetMatches(p, effect)
+                let (pMatched, pUncertain) = targetMatches(p.target, permitPieces[pi], effect, effectPieces[ei])
                 // A computed permit target clears nothing: widening is safe for a
                 // prohibition, but widening an EXCEPTION is not.
                 if pMatched && !pUncertain && subjectMatches(p, effect, surface, declaringFile) {
@@ -1038,9 +1122,10 @@ public func check(_ rules: [AST.Rule], _ surface: Surface, declaringFile: String
                 continue
             }
 
-            let narrowers = forbids.filter { other in
-                other !== rule && narrows(other, rule) && targetMatches(other, effect).0
-            }
+            let narrowers = forbids.indices.filter { oi in
+                forbids[oi] !== rule && narrows(forbids[oi], rule) &&
+                    targetMatches(forbids[oi].target, forbidPieces[oi], effect, effectPieces[ei]).0
+            }.map { forbids[$0] }
             results.append(Violation(rule, effect, uncertain: uncertain, narrowedBy: narrowers, origins: origins))
         }
 
