@@ -175,14 +175,15 @@ def test_the_lexer_escape_messages_are_identical_in_javascript():
         assert _js_error(src) == _py_error(src), src
 
 
-def test_an_effect_name_names_the_seven_kinds():
+def test_an_effect_name_names_the_eight_kinds():
     """`doing frobnicate` said what was expected and not what the vocabulary
-    is. The seven kinds are the whole of it, so the clause can just list them —
+    is. The eight kinds are the whole of it, so the clause can just list them —
     and it names where `nothing` is allowed, which is not the same place."""
     msg = _py_error('foreign f of x from "m.f" doing 5\n')
     assert "expected an effect name after" in msg, msg
     fix = msg.split(FIX_CLAUSE, 1)[1]
-    for kind in ("ask", "clock", "env", "random", "read", "show", "write"):
+    for kind in ("ask", "clock", "env", "random", "read", "send", "show",
+                "write"):
         assert kind in fix, (kind, fix)
     assert "'nothing' after 'doing'" in fix, fix
 

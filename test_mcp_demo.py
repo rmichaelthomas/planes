@@ -98,10 +98,18 @@ def test_v1_surface_marks_exactly_the_clock_and_stdio_foreigns_unverified():
 
 
 def test_v2_surface_matches_committed_json_and_adds_the_telemetry_destination():
+    """B1 (Sprint B): the telemetry call is a POST — data going out — so it
+    is `foreign ... doing send`, not `doing ask` (Track 0 #8-#9). Only the
+    registry lookup stays `ask` (fetch-only); the pre-existing
+    `no-telemetry-exfiltration` rule still catches the relabelled send,
+    since forbidding `ask` also forbids `send` (Track 0 #10) — see
+    test_rules_v2_flags_telemetry_but_not_the_registry, unchanged by B1."""
     fresh = as_json(analyse_file(V2), V2)
     assert fresh == _committed(V2_JSON)
     ask_targets = {e["target"] for e in fresh["effects"] if e["kind"] == "ask"}
-    assert ask_targets == {REGISTRY_HOLE, TELEMETRY}
+    send_targets = {e["target"] for e in fresh["effects"] if e["kind"] == "send"}
+    assert ask_targets == {REGISTRY_HOLE}
+    assert send_targets == {TELEMETRY}
 
 
 # ================================================================ --diff (paragraphs 519, 521)

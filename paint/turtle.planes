@@ -54,7 +54,7 @@ to tree of branch-length, angle, remaining-depth, max-depth:
     line of 0, 0, 0, -branch-length
 
     let child-length = round (branch-length * 0.72) to 3 places because "each generation noticeably shorter than its parent is what makes the recursion read as a tree — rounded, because these numbers are exact rationals and eight compounded multiplications carry every coordinate out to thirty-odd digits, none of which a pixel can express and all of which the program pays to format and the renderer pays to read"
-    let other-length = round (child-length * 1.09) to 3 places because "the two children are NOT the same length. `random` is one of the seven effect kinds and this program declares none, so the irregularity that keeps the canopy from being a machined scallop has to come from a constant — one branch of every pair a ninth longer, compounded eight times, is the whole of it"
+    let other-length = round (child-length * 1.09) to 3 places because "the two children are NOT the same length. `random` is one of the eight effect kinds and this program declares none, so the irregularity that keeps the canopy from being a machined scallop has to come from a constant — one branch of every pair a ninth longer, compounded eight times, is the whole of it"
 
     push
     translate of 0, -branch-length

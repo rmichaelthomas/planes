@@ -796,14 +796,24 @@ public final class Analyser {
 
         if let c = node as? AST.Call {
             for a in c.args { out.union(walk(a, fnEffects, consts)) }
-            if let boundary = kindsTable[c.name], !funcs.has(c.name) {
-                let (target, computed, deriv) = describe(c.args.first, consts)
-                out.add(Effect(c.name, boundary, target, computed, site: c.line, derivation: deriv))
-                return out
-            }
+            // A foreign declaration is checked BEFORE the bare ambient/
+            // builtin fallback below (matches shapes.py's walk()): "clock",
+            // "random", "env" and (Sprint B) "send" are effect kinds with
+            // no native call of their own, reachable ONLY through a
+            // `foreign ... doing <kind>` declaration -- and "send" in
+            // particular must stay usable as an ordinary foreign/function
+            // name. Checking kindsTable[c.name] first would treat a call to
+            // a foreign literally named "send" (or "clock", etc.) as a bare
+            // ambient effect at the CALL SITE, hiding the foreign's real,
+            // declared destination.
             let target = local[currentFile]?[c.name] ?? c.name
             if let decl = foreigns[target] {
                 out.union(foreignEffects(decl, c.args, consts))
+                return out
+            }
+            if let boundary = kindsTable[c.name], !funcs.has(c.name) {
+                let (target2, computed, deriv) = describe(c.args.first, consts)
+                out.add(Effect(c.name, boundary, target2, computed, site: c.line, derivation: deriv))
                 return out
             }
             if fnEffects.has(target) {
@@ -1357,7 +1367,37 @@ public struct SurfaceDiff {
         return added.filter { !before.contains(CodePoints($0.target)) && !$0.computed }
     }
 
-    public func isSignificant() -> Bool { !newBoundaries.isEmpty || !newDestinations().isEmpty }
+    /// The same destination, reached by a different effect kind now (B1,
+    /// Sprint B) -- most importantly "ask" becoming "send" or the reverse.
+    /// Matched on (boundary, target, computed) so a coincidental target
+    /// shared by an unrelated boundary, or by a literal versus a computed
+    /// pattern, is never mistaken for a relabelling. newDestinations()
+    /// alone misses this: the target is not new. Must agree with
+    /// rules.py's -- rather, shapes.py's -- changed_kinds() and
+    /// js/shapes.mjs's changedKinds().
+    struct MatchKey: Hashable {
+        let boundary: TextKey
+        let target: TextKey
+        let computed: Bool
+    }
+
+    private func matchKey(_ e: Effect) -> MatchKey {
+        MatchKey(boundary: TextKey(e.boundary), target: TextKey(e.target), computed: e.computed)
+    }
+
+    public func changedKinds() -> [Effect] {
+        var removedByKey: [MatchKey: [Effect]] = [:]
+        for e in removed {
+            removedByKey[matchKey(e), default: []].append(e)
+        }
+        return added.filter { e in
+            (removedByKey[matchKey(e)] ?? []).contains { !sameText($0.kind, e.kind) }
+        }
+    }
+
+    public func isSignificant() -> Bool {
+        !newBoundaries.isEmpty || !newDestinations().isEmpty || !changedKinds().isEmpty
+    }
 
     public func render() -> String {
         if isEmpty() { return "no change to the effect surface" }
@@ -1368,6 +1408,17 @@ public struct SurfaceDiff {
         let fresh = newDestinations()
         if !fresh.isEmpty && newBoundaries.isEmpty {
             lines.append("NEW DESTINATIONS: " + pySortedUnique(fresh.map(\.target)).joined(separator: ", "))
+        }
+        let changed = changedKinds()
+        if !changed.isEmpty && newBoundaries.isEmpty {
+            var byRemoved: [MatchKey: Effect] = [:]
+            for e in removed { byRemoved[matchKey(e)] = e }
+            let parts = stableSorted(changed) { pyLess($0.target, $1.target) }
+                .map { e -> String in
+                    let r = byRemoved[matchKey(e)]!
+                    return "\(e.target) (\(r.kind) -> \(e.kind))"
+                }
+            lines.append("KIND CHANGED: " + parts.joined(separator: ", "))
         }
         for e in added { lines.append("  + \(e.boundary): \(e)") }
         for e in removed { lines.append("  - \(e.boundary): \(e)") }
@@ -1417,7 +1468,11 @@ private struct NameMapByKey {
 // as_json omits; both are plain structural serializations of the actual data.
 
 /// Bumped when a field's meaning changes; matches shapes_cli.FORMAT_VERSION.
-public let FORMAT_VERSION = 1
+///
+/// 2 (B1, Sprint B): `send` joined the effect vocabulary and `ask` narrowed
+/// to fetch-only -- the MEANING of an existing "ask" value changed. See
+/// docs/surface-format-v2.md's "Changes from format 1".
+public let FORMAT_VERSION = 2
 
 /// `os.path.basename`: the text after the last "/".
 func basename(_ p: String) -> String {

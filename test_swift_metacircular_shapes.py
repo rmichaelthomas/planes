@@ -6,10 +6,13 @@ grammar/parser.planes, and grammar/interp.planes, and compare against shapes.py
 on the same files. It needs only the analyser — nothing here runs the stages.
 
 A prediction is under test — made before interp.planes existed: a Planes
-interpreter's static effect surface is ALL SEVEN KINDS, always — sound,
-maximally imprecise, and correct rather than a failure of the analyser.
-shapes.py confirmed it, and the JavaScript analyser agreed. The Swift analyser
-should report the same seven, and if it does not, one of the analysers is wrong.
+interpreter's static effect surface is every effect kind it has a reason to
+claim, always — sound, maximally imprecise, and correct rather than a failure
+of the analyser. `send` (B1, Sprint B) is the one kind excepted by name:
+nothing in interp.planes's own graph carries the program's data out.
+shapes.py confirmed the rest, and the JavaScript analyser agreed. The Swift
+analyser should report the same set, and if it does not, one of the analysers
+is wrong.
 """
 import json
 import subprocess
@@ -38,16 +41,18 @@ def test_the_three_grammar_stage_surfaces_agree():
         assert sw == py, f"{path}:\n  py={json.dumps(py)}\n  swift={json.dumps(sw)}"
 
 
-def test_the_interpreter_static_surface_is_all_seven_kinds_on_both_analysers():
-    """The prediction, discharged by a second independent analyser."""
-    all_seven = sorted(EFFECT_KINDS)
-    assert len(all_seven) == 7, all_seven
+def test_the_interpreter_static_surface_is_all_but_send_kinds_on_both_analysers():
+    """The prediction, discharged by a second independent analyser. `send`
+    is excepted by name (B1) — see core_check.py's confirmation 2 for the
+    same exception, argued once."""
+    expected_kinds = sorted(set(EFFECT_KINDS) - {"send"})
+    assert len(expected_kinds) == 7, expected_kinds
 
     py = as_json(analyse_file("grammar/interp.planes"), "grammar/interp.planes")
     sw = _swift_shapes("grammar/interp.planes")
 
-    assert py["kinds"] == all_seven, f"shapes.py: {py['kinds']}"
-    assert sw["kinds"] == all_seven, f"EffectSurface.swift: {sw['kinds']}"
+    assert py["kinds"] == expected_kinds, f"shapes.py: {py['kinds']}"
+    assert sw["kinds"] == expected_kinds, f"EffectSurface.swift: {sw['kinds']}"
     assert sw["kinds"] == py["kinds"], "the two analysers must agree"
 
 

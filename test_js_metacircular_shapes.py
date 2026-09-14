@@ -6,11 +6,13 @@ grammar/parser.planes, and grammar/interp.planes, and compare against shapes.py
 on the same files.
 
 A prediction is under test — this chain's own, made before interp.planes
-existed: a Planes interpreter's static effect surface is ALL SEVEN KINDS,
-always — sound, maximally imprecise, and correct rather than a failure of the
-analyser. shapes.py confirmed it. shapes.js should report the same seven, and if
-it does not, one of the two analysers is wrong. Two analysers agreeing on an
-all-seven surface is stronger evidence than one.
+existed: a Planes interpreter's static effect surface is every effect kind it
+has a reason to claim, always — sound, maximally imprecise, and correct
+rather than a failure of the analyser. `send` (B1, Sprint B) is the one kind
+excepted by name: nothing in interp.planes's own graph carries the program's
+data out. shapes.py confirmed the rest. shapes.js should report the same set,
+and if it does not, one of the two analysers is wrong. Two analysers agreeing
+is stronger evidence than one.
 """
 import json
 import os
@@ -44,16 +46,18 @@ def test_the_three_grammar_stage_surfaces_agree():
         assert js == py, f"{path}:\n  py={json.dumps(py)}\n  js={json.dumps(js)}"
 
 
-def test_the_interpreter_static_surface_is_all_seven_kinds_on_both_analysers():
-    """The prediction, discharged by a second independent analyser."""
-    all_seven = sorted(EFFECT_KINDS)
-    assert len(all_seven) == 7, all_seven
+def test_the_interpreter_static_surface_is_all_but_send_kinds_on_both_analysers():
+    """The prediction, discharged by a second independent analyser. `send`
+    is excepted by name (B1) — see core_check.py's confirmation 2 for the
+    same exception, argued once."""
+    expected_kinds = sorted(set(EFFECT_KINDS) - {"send"})
+    assert len(expected_kinds) == 7, expected_kinds
 
     py = as_json(analyse_file("grammar/interp.planes"), "grammar/interp.planes")
     js = _js_shapes("grammar/interp.planes")
 
-    assert py["kinds"] == all_seven, f"shapes.py: {py['kinds']}"
-    assert js["kinds"] == all_seven, f"shapes.js: {js['kinds']}"
+    assert py["kinds"] == expected_kinds, f"shapes.py: {py['kinds']}"
+    assert js["kinds"] == expected_kinds, f"shapes.js: {js['kinds']}"
     assert js["kinds"] == py["kinds"], "the two analysers must agree"
 
 

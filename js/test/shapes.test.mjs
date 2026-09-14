@@ -64,3 +64,45 @@ test("diff detects a new network boundary", () => {
   assert.ok(!d.isEmpty());
   assert.ok(d.newBoundaries.includes("network"));
 });
+
+// B1 (Sprint B): a kind change on an unchanged destination is significant,
+// even though newDestinations() alone misses it (the target is not new) —
+// must agree with shapes.py's changed_kinds() and Rules.swift's Swift twin.
+test("diff of a pure ask-to-send kind change is significant", () => {
+  const before = analyse('foreign x from "m.post" doing ask "https://a.example.com"\nr = x\n');
+  const after = analyse('foreign x from "m.post" doing send "https://a.example.com"\nr = x\n');
+  const d = diff(before, after);
+  assert.ok(!d.isEmpty());
+  assert.deepEqual(d.newDestinations(), []);
+  assert.equal(d.newBoundaries.length, 0);
+  assert.ok(d.isSignificant());
+  assert.match(d.render(), /KIND CHANGED: https:\/\/a\.example\.com \(ask -> send\)/);
+});
+
+test("diff kind change does not confuse different boundaries", () => {
+  const before = analyse('use http\nx = ask "same-name"\n');
+  const after = analyse('show "same-name"\n');
+  const d = diff(before, after);
+  assert.deepEqual(d.changedKinds(), []);
+});
+
+// B1: a foreign literally named after an effect kind (matches shapes.py's
+// mirrored fix and test). Checking K.has(node.name) before the foreigns
+// table would double-count the call site as a second, bare ambient/builtin
+// effect on top of the one the foreign's own `doing` clause declares.
+test("a foreign literally named send is not double-counted", () => {
+  const s = analyse(
+    'foreign send of payload from "mylib.post" doing send "https://api.example.com/events"\n' +
+      "to report of data:\n  give send of data\n\nr = report of 1\n",
+  );
+  assert.equal(s.declared.length, 1);
+  assert.equal(s.declared[0].kind, "send");
+  assert.equal(s.declared[0].target, "https://api.example.com/events");
+});
+
+test("a foreign named clock is also not double-counted", () => {
+  const s = analyse('foreign clock of x from "m.f" doing read "file.txt"\nr = clock of 1\n');
+  assert.equal(s.declared.length, 1);
+  assert.equal(s.declared[0].kind, "read");
+  assert.equal(s.declared[0].target, "file.txt");
+});

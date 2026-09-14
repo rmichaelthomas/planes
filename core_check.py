@@ -25,7 +25,7 @@ single JSON source of truth (grammar/core.json), and fails closed.
 
   - a keyword token whose value is not in core.keywords  -> violation
   - a NAME token that is a builtin not in core.builtins   -> violation
-  - effect kinds are NEVER flagged: all seven are core (an interpreter
+  - effect kinds are NEVER flagged: all eight are core (an interpreter
     performs whatever it interprets; Phase 5's shapes surface confirms it)
 
 THE SECOND CHECK, AND WHY IT IS HERE. grammar/README.md splits grammar/ into
@@ -51,9 +51,10 @@ that is not this one" are different failures.
 Exit code is the count of entry-file violations, plus module-graph violations,
 plus drift findings (0 = all three clean), so it drops into CI as a gate. It
 also reports the two confirmations A.4 asks for -- whether `with` is used, and
-whether all seven effect kinds are used -- and the port surface's real size
-against the full 32/13/7 vocabulary, measured over the GRAPH, with the entry
-file's own smaller usage printed beside it and the difference named.
+whether every effect kind interp.planes has a reason to use is used (`send`
+excepted by design) -- and the port surface's real size against the full
+32/13/8 vocabulary, measured over the GRAPH, with the entry file's own
+smaller usage printed beside it and the difference named.
 
 Usage:  python3 core_check.py [file] [--core PATH]
         (defaults: grammar/interp.planes, grammar/core.json)
@@ -352,16 +353,25 @@ def main():
         print("NOT CONFIRMED: `with` is unused -- it should leave the core "
               "(reports/CORE_SUBSET.md §4's prediction was wrong).")
 
-    # --- A.4 confirmation 2: are all seven effect kinds used? (Phase 5 corrob.)
+    # --- A.4 confirmation 2: are all effect kinds interp.planes has a reason
+    # to use, used? (Phase 5 corrob.) `send` (B1, Sprint B) is a deliberate
+    # exception, not a gap: nothing in interp.planes's own graph carries the
+    # program's data out, so it never has occasion to declare a foreign
+    # `doing send` of its own -- unlike clock, random and env, which it MUST
+    # claim to read the ambient world at all (§391 above).
     surface = analyse_file(target, follow=True)
     kinds = {e.kind for e in surface.declared}
-    all_seven = set(EFFECT_KINDS)
-    if kinds >= all_seven:
-        print(f"CONFIRMED: all seven effect kinds are used {sorted(all_seven)} "
-              "-- the core includes them all (reports/CORE_SUBSET.md §2a).")
+    all_kinds = set(EFFECT_KINDS)
+    expected = all_kinds - {"send"}
+    if kinds >= expected:
+        print(f"CONFIRMED: {len(kinds)} of {len(all_kinds)} effect kinds are "
+              f"used {sorted(kinds)} -- every kind the core has a reason to "
+              "claim (reports/CORE_SUBSET.md §2a); 'send' is excluded by "
+              "design, since interp.planes never sends the program's data "
+              "anywhere.")
     else:
         print(f"NOT CONFIRMED: effect kinds used are {sorted(kinds)}, "
-              f"missing {sorted(all_seven - kinds)}.")
+              f"missing {sorted(expected - kinds)}.")
 
     # --- A.4 item 4: the core's real size -- the port surface for a 2nd host.
     #
@@ -381,9 +391,9 @@ def main():
           f"(unused: {sorted(set(KEYWORDS) - graph_kw)})")
     print(f"  builtins    : {len(graph_bi)} of {len(BUILTIN_NAMES)}  "
           f"(unused: {sorted(set(BUILTIN_NAMES) - graph_bi)})")
-    print(f"  effect kinds: {len(kinds & all_seven)} of {len(all_seven)}")
+    print(f"  effect kinds: {len(kinds & all_kinds)} of {len(all_kinds)}")
     print(f"  declared core.json: {len(core_keywords)} keywords, "
-          f"{len(core_builtins)} builtins, all 7 effect kinds")
+          f"{len(core_builtins)} builtins, all {len(all_kinds)} effect kinds")
     print()
     print(f"  {target} ALONE uses {len(entry_kw)} keywords and "
           f"{len(entry_bi)} builtins.")

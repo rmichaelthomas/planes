@@ -417,7 +417,7 @@ class Parser:
         One message, not two. `parse_rule` used to raise its own, saying the
         same thing in different words in three implementations — and the one
         kept here is the more informative of the pair, because it names where
-        `nothing` is allowed as well as the seven kinds.
+        `nothing` is allowed as well as the eight kinds.
         """
         t = self.peek()
         word = (t.value or "nothing"

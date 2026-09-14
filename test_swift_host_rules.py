@@ -48,10 +48,21 @@ def _swift(rules_path, effects):
 
 def program_for(effects):
     """The Planes program that performs `effects`: each on the line its site
-    names (its 1-based position when it names none), blank lines between."""
+    names (its 1-based position when it names none), blank lines between.
+
+    `send` (B1, Sprint B) has no native statement either -- only `foreign
+    ... doing send` claims it -- and unlike ask/read/write/show a foreign's
+    effect is always "declared, not verified" regardless of whether it is
+    called, which a bare top-level statement never is. So a `send`
+    HostEffect has no PROGRAM whose analysed surface is byte-identical to
+    hostSurface's synthetic, non-claimed Effect; it is exercised directly
+    against the Swift CLI instead (test_host_effect_send_is_checked_like_
+    the_others below), not through this byte-for-byte comparison.
+    """
     # not a vocabulary table: only the effect kinds that carry a literal
-    # destination have a program form. clock, env and random never do, so
-    # HostRules refuses them and there is no equivalent program to build.
+    # destination AND a native statement have a program form. clock, env,
+    # random and send never do, so HostRules refuses the first three (test
+    # below) and send is checked separately (see the docstring above).
     forms = {"ask": "ask {}", "read": "read {}", "write": "write 0 to {}", "show": "show {}"}
     lines = []
     for i, e in enumerate(effects):
@@ -206,6 +217,51 @@ def test_a_repeated_destination_is_reported_at_its_first_line():
         assert out["rules"]["violations"][0]["render"].startswith(first), (seed, out)
         assert out == sw, (f"seed={seed}\n  py={json.dumps(out, ensure_ascii=False)}\n"
                            f"  swift={json.dumps(sw, ensure_ascii=False)}")
+
+
+def test_host_effect_send_is_checked_like_the_others():
+    """B1 (Sprint B): `.send(_:site:)` is a real, checkable host intent, not
+    an ambient kind hostSurface must refuse (unlike clock/random/env, tested
+    below) — it just has no byte-identical Python program to compare
+    against (program_for's docstring explains why), so this exercises the
+    Swift CLI directly and checks the same three rule directions
+    test_rules.py pins for send: a forbid ask covers it, a permit ask never
+    clears it, and an explicit send-permit-with-supersedes does."""
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "rules.planes")
+
+        def run(rules_src, effects):
+            with open(p, "w", encoding="utf-8") as fh:
+                fh.write(rules_src)
+            return _swift(p, effects)
+
+        # forbid ask (no target) covers a send
+        out = run("rule [deny] anything may not ask\n",
+                  [{"kind": "send", "target": "https://a"}])
+        assert out["admitted"] is False
+        assert out["rules"]["exit"] == 1
+
+        # a permit for ask, even superseding the forbid at this exact
+        # target, never clears the send
+        out = run("rule [deny] anything may not ask\n"
+                  'rule [ok] anything may ask to "https://a" supersedes [deny] @960178\n',
+                  [{"kind": "send", "target": "https://a"}])
+        assert out["admitted"] is False
+        assert out["rules"]["exit"] == 1
+
+        # naming the forbid from a send permit does except it
+        out = run("rule [deny] anything may not ask\n"
+                  'rule [ok] anything may send to "https://a" supersedes [deny] @960178\n',
+                  [{"kind": "send", "target": "https://a"}])
+        assert out["admitted"] is True
+        assert out["rules"]["exit"] == 0
+        assert out["rules"]["violations"][0]["is_violation"] is False
+
+        # may not send forbids only send, never ask, at the same target
+        out = run('rule [deny-send] anything may not send to "https://b"\n',
+                  [{"kind": "ask", "target": "https://b"}])
+        assert out["admitted"] is True
+        assert out["rules"]["violations"] == []
 
 
 def test_effects_with_no_literal_destination_are_refused():

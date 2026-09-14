@@ -188,6 +188,42 @@ RULE_PROGRAMS = [
      'rule [no-writes] anything may not write contradicts [audit-allowed]\n'
      'x = ask "https://audit.internal"\n'
      'write 1 to "out.txt"\n'),
+    # B1 (Sprint B): forbid ask covers a send to the same target
+    ('foreign send-it of x from "m.post" doing send "https://a.example.com"\n'
+     'r = send-it of 1\n'
+     'rule [deny] anything may not ask to "https://a.example.com"\n'),
+    # forbid ask with no target forbids every send too
+    ('foreign send-it of x from "m.post" doing send "https://a.example.com"\n'
+     'r = send-it of 1\nrule [deny] anything may not ask\n'),
+    # forbid send forbids only send, not ask at the same target
+    ('foreign fetch-it of x from "m.get" doing ask "https://c.example.com"\n'
+     'r = fetch-it of 1\n'
+     'rule [deny-send] anything may not send to "https://c.example.com"\n'),
+    # a permit for ask, even with an explicit supersedes at the exact target,
+    # never clears a forbidden send (v37.1 §533's worked example)
+    ('foreign send-it of x from "m.post" doing send "https://a.example.com"\n'
+     'r = send-it of 1\nrule [deny] anything may not ask\n'
+     'rule [ok] anything may ask to "https://a.example.com" supersedes [deny] @960178\n'),
+    # the one way to except it: a send permit naming the forbid explicitly
+    ('foreign send-it of x from "m.post" doing send "https://a.example.com"\n'
+     'r = send-it of 1\nrule [deny] anything may not ask\n'
+     'rule [ok] anything may send to "https://a.example.com" supersedes [deny] @960178\n'),
+    # the structural collision: ask-forbid and send-permit, same target, no
+    # supersedes -- a RuleConflict, exactly like a same-kind equal-specificity
+    # pair
+    ('rule [deny] anything may not ask to "https://e.example.com"\n'
+     'rule [also] anything may send to "https://e.example.com"\n'),
+    # ...resolved by naming the forbid explicitly
+    ('foreign send-it of x from "m.post" doing send "https://e.example.com"\n'
+     'r = send-it of 1\n'
+     'rule [deny] anything may not ask to "https://e.example.com"\n'
+     'rule [also] anything may send to "https://e.example.com" supersedes [deny] @1e7b2b\n'),
+    # two forbids over overlapping kinds (ask covers send) never conflict
+    # with each other -- both simply apply
+    ('foreign send-it of x from "m.post" doing send "https://f.example.com"\n'
+     'r = send-it of 1\n'
+     'rule [deny-ask] anything may not ask to "https://f.example.com"\n'
+     'rule [deny-send] anything may not send to "https://f.example.com"\n'),
 ]
 
 

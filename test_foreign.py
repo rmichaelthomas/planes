@@ -367,9 +367,13 @@ def test_ambient_effects_are_in_the_closed_vocabulary():
 
 
 def test_effect_vocabulary_stays_closed():
-    """An open vocabulary cannot be searched or diffed across packages."""
+    """An open vocabulary cannot be searched or diffed across packages.
+
+    Eight kinds since Sprint B (B1, Track 0 #7-#11): `send` joined the
+    network boundary beside `ask` -- a foreign-only kind, like clock/
+    random/env, never a builtin or keyword."""
     assert set(EFFECT_KINDS) == {
-        "ask", "read", "write", "show", "clock", "random", "env"}
+        "ask", "send", "read", "write", "show", "clock", "random", "env"}
 
 
 # ================================================================ demo file
@@ -442,12 +446,12 @@ def test_nothing_is_valid_after_doing_and_not_in_a_rule():
 def test_every_effect_kind_is_still_accepted_in_both_positions():
     """The case a naive NAME-only check breaks: `show` and `write` arrive as
     reserved-word tokens, not NAME, so a membership check that only looked at
-    NAME would start refusing two of the seven."""
+    NAME would start refusing two of the eight."""
     for kind in sorted(EFFECT_KINDS):
         parse(f'foreign f of x from "m.f" doing {kind}\n')
         parse(f"rule [r] s may not {kind}\n")
         parse(f"rule [r] s may {kind}\n")
-    assert len(EFFECT_KINDS) == 7
+    assert len(EFFECT_KINDS) == 8
 
 
 def test_the_message_names_the_whole_closed_vocabulary():

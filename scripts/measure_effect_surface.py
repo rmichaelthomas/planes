@@ -2,18 +2,23 @@
 """S3d (build 3), Phase 5 — the effect surface of grammar/interp.planes.
 
 A.3 is a prediction made before interp.planes existed: a Planes interpreter's
-static effect surface is *all seven kinds, always*, because an interpreter
-performs whatever effects the program it runs performs. This script is the first
-chance to check it against the real artifact. It runs the static analyser
-(shapes.py) on grammar/interp.planes and reports:
+static effect surface is *every kind it has a reason to claim, always*,
+because an interpreter performs whatever effects the program it runs
+performs. This script is the first chance to check it against the real
+artifact. It runs the static analyser (shapes.py) on grammar/interp.planes
+and reports:
 
-  1. the surface exactly -- which kinds, and whether it is all seven;
+  1. the surface exactly -- which kinds, and whether it is all of them;
   2. whether the analyser stays total over the interpreter (no crash, a Surface
      out);
   3. origins_of behaviour across the interpreter's effects.
 
 A refutation would be the more valuable result (A.3); this reports what the
 analyser actually says, not what the prediction hoped.
+
+`send` (B1, Sprint B) is excepted by name, the same way core_check.py's own
+confirmation of this prediction excepts it: nothing in interp.planes's own
+graph carries the program's data out, so it never has occasion to claim one.
 
 Run:  .venv/bin/python3 scripts/measure_effect_surface.py
 """
@@ -23,13 +28,15 @@ sys.path.insert(0, ".")
 from lexer import EFFECT_KINDS  # noqa: E402
 from shapes import analyse_file  # noqa: E402
 
-ALL_SEVEN = set(EFFECT_KINDS)  # ask read write show clock random env
+ALL_KINDS = set(EFFECT_KINDS)  # ask clock env random read send show write
+EXPECTED_KINDS = ALL_KINDS - {"send"}
 TARGET = "grammar/interp.planes"
 
 
 def main():
     print(f"# effect surface of {TARGET} (Phase 5, A.3 under test)")
-    print(f"# the seven kinds: {sorted(ALL_SEVEN)}")
+    print(f"# the {len(ALL_KINDS)} kinds: {sorted(ALL_KINDS)}")
+    print(f"# expected here (send excepted by design): {sorted(EXPECTED_KINDS)}")
     print()
 
     # (2) totality: the analyser must not crash on the interpreter.
@@ -61,10 +68,10 @@ def main():
         print(f"  {kind:8} {boundary:8} : {targets}")
     print()
 
-    missing = ALL_SEVEN - kinds
-    extra = kinds - ALL_SEVEN
+    missing = EXPECTED_KINDS - kinds
+    extra = kinds - EXPECTED_KINDS
     print(f"KINDS PRESENT : {sorted(kinds)}")
-    print(f"ALL SEVEN?    : {kinds >= ALL_SEVEN}  "
+    print(f"ALL EXPECTED? : {kinds >= EXPECTED_KINDS}  "
           f"(missing: {sorted(missing) or 'none'}, "
           f"unexpected: {sorted(extra) or 'none'})")
     print(f"ANALYSER TOTAL: {total}")
@@ -80,11 +87,11 @@ def main():
             print(f"  {kind:8} target={eff.target!r:24} origins={shown}")
     print()
 
-    verdict = "HELD" if kinds >= ALL_SEVEN else "REFUTED"
+    verdict = "HELD" if kinds >= EXPECTED_KINDS else "REFUTED"
     print(f"A.3 PREDICTION: {verdict}")
     print(f"  the static effect surface of {TARGET} is "
-          f"{'all seven kinds' if kinds >= ALL_SEVEN else 'NOT all seven'}, "
-          f"{'as predicted' if kinds >= ALL_SEVEN else 'against the prediction'}.")
+          f"{'every kind expected' if kinds >= EXPECTED_KINDS else 'NOT every kind expected'}, "
+          f"{'as predicted' if kinds >= EXPECTED_KINDS else 'against the prediction'}.")
 
     # exit non-zero only if the analyser was not total (a real failure); a
     # refutation of the prediction is a valid, reportable outcome, not an error.

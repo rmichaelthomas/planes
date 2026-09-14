@@ -433,15 +433,45 @@ function sameScope(a, b) {
   return scopeCovers(a, b) && scopeCovers(b, a);
 }
 
+// The set of effect kinds this rule's declared kind matches against (B1,
+// Sprint B, Track 0 #10). Must agree with rules.py's _covered_kinds. Only a
+// FORBID on "ask" widens (forbidding ask also forbids send, the same
+// network boundary's outbound half); a PERMIT never widens ("may ask to X"
+// permits only ask, "may send to X" permits only send); a forbid on any
+// other kind, including "send" itself, covers only itself. Orthogonal to
+// B2's scope generalisation above: this is about which KINDS a rule's
+// declared kind stands for, scopeCovers/sameScope are about which ADDRESSES
+// its target stands for. narrows and checkConflicts combine both.
+export function coveredKinds(rule) {
+  if (rule.assertion === "forbid" && rule.kind === "ask") {
+    return new Set(["ask", "send"]);
+  }
+  return new Set([rule.kind]);
+}
+
+function overlaps(a, b) {
+  for (const k of a) if (b.has(k)) return true;
+  return false;
+}
+
 // Does rule `b` cover a strict subset of what rule `a` ranges over? (v2.0
-// §30; re-proven for host/path covering at B2.) Kind and target only, never
-// assertion. `b` narrows `a` when `a`'s covered set contains `b`'s and the
-// two aren't the same scope -- the pre-B2 case (`a` has no target, `b` does)
-// is one instance of this; a rule whose covered address set is strictly
-// inside another's target now is too.
+// §30; re-proven for host/path covering at B2, and for kind covering at
+// B1.) Two dimensions, both required, never assertion:
+//   - KIND: a's and b's covered kinds (coveredKinds, B1) must overlap.
+//     Comparable within the same literal kind (as before B1 -- coveredKinds
+//     always includes a rule's own kind); also comparable across ask/send
+//     when a forbid's widened coverage reaches a narrower rule's kind -- a
+//     `may send to X/public` permit can narrow a bare `may not ask` forbid
+//     the same way a `may ask to X/public` permit already did.
+//   - SCOPE: a's target must cover b's (B2's scopeCovers) and the two must
+//     not be the SAME scope -- the pre-B2 case (a has no target, b does) is
+//     one instance; a rule whose covered address set is strictly inside
+//     another's target now is too.
+// Two rules with overlapping kinds and the same scope are equally specific
+// -- neither narrows the other; that pair is checkConflicts's job.
 export function narrows(b, a) {
   if (a.name === b.name) return false;
-  if (a.kind !== b.kind) return false;
+  if (!overlaps(coveredKinds(a), coveredKinds(b))) return false;
   return scopeCovers(a.target, b.target) && !scopeCovers(b.target, a.target);
 }
 
@@ -730,9 +760,17 @@ function checkPermitsAreRelated(active) {
   const forbids = active.filter((r) => r.assertion === "forbid");
   for (const p of active) {
     if (p.assertion !== "permit") continue;
+    // B1: coveredKinds(f) replaces the old f.kind === p.kind -- a "send"
+    // permit can be related to (named in supersedes, share a scope with, or
+    // be strictly narrower in BOTH scope and kind than) an "ask" forbid,
+    // since forbidding ask also forbids send. narrows(p, f) is itself now
+    // generalised the same way (kind overlap, not literal equality), so a
+    // `may send to X/public` permit narrows a bare `may not ask` forbid
+    // automatically, no supersedes needed. Only an equal-scope cross-kind
+    // pair still demands an explicit supersedes -- checkConflicts's job.
     const related = forbids.some(
       (f) =>
-        f.kind === p.kind &&
+        coveredKinds(f).has(p.kind) &&
         (p.supersedes === f.name || narrows(p, f) || sameScope(p.target, f.target)),
     );
     if (!related) {
@@ -748,18 +786,43 @@ function checkPermitsAreRelated(active) {
   }
 }
 
+// Equal-specificity conflicts (v2.0 §32; B2's sameScope in place of === on
+// the target; B1's coveredKinds overlap in place of === on the kind for an
+// opposite-assertion pair). Same assertion + different literal kind (two
+// forbids, one ask one send) never conflicts -- both prohibit, so stacking
+// agrees about everything. Opposite assertion + overlapping covered kinds +
+// same scope does conflict -- "rule [deny] anything may not ask to X"
+// beside "rule [also] anything may send to X", with no supersedes, is
+// exactly such a pair -- resolved the same way as the same-kind case: an
+// explicit supersedes naming the forbid. A strictly narrower scope needs no
+// supersedes at all, since narrows (generalised the same way) resolves it.
 function checkConflicts(active) {
   for (let i = 0; i < active.length; i++) {
     const a = active[i];
     for (let j = i + 1; j < active.length; j++) {
       const b = active[j];
-      if (a.kind !== b.kind || !sameScope(a.target, b.target)) continue;
+      if (!sameScope(a.target, b.target)) continue;
+      if (a.assertion === b.assertion) {
+        if (a.kind !== b.kind) continue;
+      } else if (![...coveredKinds(a)].some((k) => coveredKinds(b).has(k))) {
+        continue;
+      }
       if (narrows(a, b) || narrows(b, a)) continue;
       if (a.supersedes === b.name || b.supersedes === a.name) continue;
 
-      const where =
-        `'${a.kind}'` +
-        (a.target ? ` to "${escapeStringLiteral(a.target)}"` : "");
+      let where;
+      if (a.kind === b.kind) {
+        where =
+          `'${a.kind}'` +
+          (a.target ? ` to "${escapeStringLiteral(a.target)}"` : "");
+      } else {
+        const overlap = [...coveredKinds(a)]
+          .filter((k) => coveredKinds(b).has(k))
+          .sort();
+        where =
+          `'${a.kind}' and '${b.kind}' (both reach ${overlap.join("/")})` +
+          (a.target ? ` to "${escapeStringLiteral(a.target)}"` : "");
+      }
       if (a.assertion !== b.assertion) {
         const [forbid, permit] = a.assertion === "forbid" ? [a, b] : [b, a];
         throw new RuleConflict(
@@ -856,11 +919,12 @@ export function check(rules, surface, declaringFile = null) {
 
   const results = [];
   for (const rule of forbids) {
+    const covered = coveredKinds(rule);
     let nKind = 0;
     let nKindSubject = 0;
     let matchedAny = false;
     for (const effect of surface.declared) {
-      if (effect.kind !== rule.kind) continue;
+      if (!covered.has(effect.kind)) continue;
       nKind += 1;
       const [matched, uncertain] = targetMatches(rule, effect);
       const subjectOk = subjectMatches(rule, effect, surface, declaringFile);
@@ -870,6 +934,10 @@ export function check(rules, surface, declaringFile = null) {
 
       let clearer = null;
       for (const p of permits) {
+        // A permit never widens: it clears an effect only when its own
+        // kind is the effect's actual kind, exactly -- "a permit for ask
+        // never clears a forbidden send" (B1, Track 0 #10).
+        if (p.kind !== effect.kind) continue;
         if (!(p.supersedes === rule.name || narrows(p, rule))) continue;
         const [pMatched, pUncertain] = targetMatches(p, effect);
         if (

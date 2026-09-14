@@ -1,0 +1,244 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/rmichaelthomas/planes/grammar/protocols/surface-v2.json",
+  "title": "Planes effect-surface format 2",
+  "description": "shapes_cli.py --json [--rules] and its JS/Swift agreement oracles. See docs/surface-format-v2.md for the field-by-field specification this schema mirrors; that document is the source of truth in prose, this file is the machine-checkable form of the same fields. Deliberately written without $ref/definitions and using only anyOf for nullability, matching the subset test_surface_format.py's in-repo validator implements (no external JSON Schema library is a dependency of this project). Format 2 (B1, Sprint B): the `send` kind joined the network boundary beside `ask`, and `ask` narrowed to fetch-only -- see docs/surface-format-v2.md's \"Changes from format 1\".",
+  "type": "object",
+  "properties": {
+    "format": {
+      "type": "integer",
+      "const": 2,
+      "description": "Bumped only when the meaning of an existing field changes, never for an added field."
+    },
+    "program": {
+      "type": "string",
+      "description": "os.path.basename(path) -- a file name, never a path."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["library", "pure", "program"]
+    },
+    "pure": { "type": "boolean" },
+    "complete": { "type": "boolean" },
+    "boundaries": {
+      "type": "array",
+      "description": "Alphabetically sorted, deduped. 'foreign' appears only alongside the 'unknown' sentinel kind (docs/surface-format-v2.md section 3.1), never as a boundary for one of the eight vocabulary kinds.",
+      "items": {
+        "type": "string",
+        "enum": ["ambient", "console", "file", "foreign", "network"]
+      }
+    },
+    "kinds": {
+      "type": "array",
+      "description": "Alphabetically sorted, deduped. 'unknown' is not one of the eight vocabulary kinds (docs/surface-format-v2.md section 3.1) -- an undeclared foreign function's sentinel.",
+      "items": {
+        "type": "string",
+        "enum": ["ask", "clock", "env", "random", "read", "send", "show", "unknown", "write"]
+      }
+    },
+    "effects": {
+      "type": "array",
+      "description": "Surface.declared -- every effect any function can perform if called, plus every top-level one and every foreign claim. Sorted by (boundary, kind, target).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["ask", "clock", "env", "random", "read", "send", "show", "unknown", "write"]
+          },
+          "boundary": {
+            "type": "string",
+            "enum": ["ambient", "console", "file", "foreign", "network"]
+          },
+          "target": { "type": "string" },
+          "computed": { "type": "boolean" },
+          "declared": { "type": "boolean" }
+        },
+        "required": ["kind", "boundary", "target", "computed", "declared"],
+        "additionalProperties": false
+      }
+    },
+    "runs_on_load": {
+      "type": "array",
+      "description": "Surface.effects -- what running the file's top level actually does. Sorted by (boundary, kind, target, site). No 'computed'/'declared' fields.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["ask", "clock", "env", "random", "read", "send", "show", "unknown", "write"]
+          },
+          "boundary": {
+            "type": "string",
+            "enum": ["ambient", "console", "file", "foreign", "network"]
+          },
+          "target": { "type": "string" }
+        },
+        "required": ["kind", "boundary", "target"],
+        "additionalProperties": false
+      }
+    },
+    "modules_declared": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "modules_unused": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "effects_undeclared": {
+      "type": "array",
+      "description": "Surface.used_but_undeclared() -- network/file-boundary effects performed without the matching `use`. No 'boundary', 'computed' or 'declared' field.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["ask", "clock", "env", "random", "read", "send", "show", "unknown", "write"]
+          },
+          "target": { "type": "string" }
+        },
+        "required": ["kind", "target"],
+        "additionalProperties": false
+      }
+    },
+    "unresolved_calls": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "approximate": {
+      "type": "array",
+      "description": "Each entry is one call-chain route from an entry point to `sine`/`root`, as an array of names.",
+      "items": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "description": "Present only when --json and --rules are both given (H1, PR #119). Absent entirely -- not null -- otherwise.",
+      "properties": {
+        "checked": { "type": "integer" },
+        "resolved_subjects": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule": { "type": "string" },
+              "rule_line": { "type": "integer" },
+              "assertion": {
+                "type": "string",
+                "enum": ["forbid", "permit"],
+                "description": "Always 'forbid' in practice -- check() only ever builds a Violation from a forbid rule."
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["ask", "clock", "env", "random", "read", "send", "show", "write"],
+                "description": "One of the eight vocabulary kinds only -- never 'unknown'; the parser rejects any other word in a rule's kind position. This is the RULE's own declared kind (e.g. 'ask'), which may differ from the matched effect's actual kind (e.g. 'send') -- forbidding 'ask' also forbids 'send' (B1, Track 0 #10). See 'effect' below."
+              },
+              "target": {
+                "anyOf": [{ "type": "string" }, { "type": "null" }]
+              },
+              "condition": { "type": "string" },
+              "because": {
+                "anyOf": [{ "type": "string" }, { "type": "null" }]
+              },
+              "is_violation": { "type": "boolean" },
+              "vacuous": { "type": "boolean" },
+              "vacuous_situation": {
+                "anyOf": [
+                  { "type": "integer", "enum": [1, 2, 3] },
+                  { "type": "null" }
+                ]
+              },
+              "uncertain": { "type": "boolean" },
+              "effect": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["ask", "clock", "env", "random", "read", "send", "show", "write"],
+                        "description": "The effect's ACTUAL kind, as performed -- may differ from the rule's own 'kind' above (a 'send' matched by an 'ask' forbid rule)."
+                      },
+                      "boundary": {
+                        "type": "string",
+                        "enum": ["ambient", "console", "file", "network"]
+                      },
+                      "target": { "type": "string" },
+                      "line": { "type": "integer" }
+                    },
+                    "required": ["kind", "boundary", "target", "line"],
+                    "additionalProperties": false
+                  },
+                  { "type": "null" }
+                ]
+              },
+              "cleared_by": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "rule": { "type": "string" },
+                      "line": { "type": "integer" }
+                    },
+                    "required": ["rule", "line"],
+                    "additionalProperties": false
+                  },
+                  { "type": "null" }
+                ]
+              },
+              "narrowed_by": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "rule": { "type": "string" },
+                    "line": { "type": "integer" }
+                  },
+                  "required": ["rule", "line"],
+                  "additionalProperties": false
+                }
+              },
+              "origins": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "file": {
+                      "anyOf": [{ "type": "string" }, { "type": "null" }]
+                    }
+                  },
+                  "required": ["name", "file"],
+                  "additionalProperties": false
+                }
+              },
+              "message": { "type": "string" }
+            },
+            "required": [
+              "rule", "rule_line", "assertion", "kind", "target", "condition",
+              "because", "is_violation", "vacuous", "vacuous_situation",
+              "uncertain", "effect", "cleared_by", "narrowed_by", "origins",
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["checked", "resolved_subjects", "violations"],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "format", "program", "kind", "pure", "complete", "boundaries", "kinds",
+    "effects", "runs_on_load", "modules_declared", "modules_unused",
+    "effects_undeclared", "unresolved_calls", "approximate"
+  ],
+  "additionalProperties": false
+}

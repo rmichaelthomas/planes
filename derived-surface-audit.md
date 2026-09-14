@@ -12,7 +12,7 @@ Named dict/object literals whose keys overlap >=3 with grammar/vocabulary.json's
 
 ### Sites examined
 
-- test_swift_host_rules.py -- 55 -- forms -- effect_kinds -- excluded (comment: 'not a vocabulary table: only the effect kinds that carry a literal destination have a program form. clock, env and rando')
+- test_swift_host_rules.py -- 66 -- forms -- effect_kinds -- excluded (comment: 'not a vocabulary table: only the effect kinds that carry a literal destination AND a native statement have a program for')
 - test_builtin_dispatch.py -- 41 -- PROBE -- builtins -- clean (full coverage)
 - js/browser_main.mjs -- 271 -- PROBE_ARGUMENT -- builtins -- clean (full coverage)
 - js/core_restrict.mjs -- 77 -- BINOP_KEYWORDS -- keywords -- excluded (comment: '`first N of L` is the one BinOp whose operator is spelled with two reserved words. The comparison operators (<, ==, ...)')

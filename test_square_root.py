@@ -263,7 +263,10 @@ def test_one_builtin_and_nothing_else():
     assert names.count("root") == 1
     assert len(names) == 13
     assert len(vocab["keywords"]) == 32, "no keyword was added"
-    assert len(vocab["effect_kinds"]) == 7, "no effect kind was added"
+    # 8 as of B1 (Sprint B): `send` joined the vocabulary, unrelated to root
+    # or this seam -- the assertion here is still "root's own build did not
+    # also add an effect kind," not that the count stays frozen forever.
+    assert len(vocab["effect_kinds"]) == 8, "no effect kind was added"
     entry = next(b for b in vocab["builtins"] if b["name"] == "root")
     assert entry["arity"] == 1, "every builtin is unary"
 

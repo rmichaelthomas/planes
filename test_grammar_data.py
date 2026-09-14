@@ -39,7 +39,7 @@ def test_counts_match_what_the_repo_actually_has():
     assert len(doc["token_classes"]) == 7
     assert len(doc["keywords"]) == 32
     assert len(doc["builtins"]) == 13
-    assert len(doc["effect_kinds"]) == 7
+    assert len(doc["effect_kinds"]) == 8
     assert len(doc["field_name_token_kinds"]) == 14
 
 

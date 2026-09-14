@@ -981,6 +981,171 @@ def test_supersedes_resolves_an_opposite_assertion_conflict():
     assert v[0].cleared_by.name == "b"
 
 
+# ============================== B1: the send effect (Sprint B, Track 0 #7-#11)
+#
+# `send` joined the vocabulary on the network boundary beside `ask`. Kind
+# MATCHING is the only thing B1 changes here — target matching is untouched
+# (B2's job). The five rules (v37.1 §533, hardening doc "Sprint B" B1 item 5):
+#   - `may not ask to X` forbids both `ask` and `send` to X.
+#   - `may not ask` with no target forbids every `ask` and every `send`.
+#   - `may not send to X` forbids only `send`.
+#   - `may ask to X` permits only `ask`.
+#   - `may send to X` permits `send`.
+# A permit for `ask` never clears a forbidden `send` — kind matching for a
+# permit is always exact, never widened.
+
+def _send_program(target="https://a.example.com"):
+    return (f'foreign send-it of x from "m.post" doing send "{target}"\n'
+           f'r = send-it of 1\n')
+
+
+def test_forbid_ask_with_target_also_forbids_send_to_that_target():
+    src = (_send_program() +
+          'rule [deny] anything may not ask to "https://a.example.com"\n')
+    v = rule_violations(src)
+    assert len(v) == 1 and v[0].is_violation
+    assert v[0].effect.kind == "send"
+    assert v[0].rule.kind == "ask"
+
+
+def test_forbid_ask_with_no_target_forbids_every_send_too():
+    src = _send_program() + 'rule [deny] anything may not ask\n'
+    v = rule_violations(src)
+    assert len(v) == 1 and v[0].is_violation
+    assert v[0].effect.kind == "send"
+
+
+def test_forbid_send_does_not_forbid_ask():
+    src = ('foreign fetch-it of x from "m.get" doing ask "https://b.example.com"\n'
+           'r = fetch-it of 1\n'
+           'rule [deny-send] anything may not send\n')
+    v = rule_violations(src)
+    assert v == []
+
+
+def test_forbid_send_with_target_forbids_only_send_not_ask_at_same_target():
+    src = ('foreign fetch-it of x from "m.get" doing ask "https://c.example.com"\n'
+           'r = fetch-it of 1\n'
+           'rule [deny-send] anything may not send to "https://c.example.com"\n')
+    v = rule_violations(src)
+    assert v == []
+
+
+def test_permit_ask_permits_only_ask_never_clears_a_forbidden_send():
+    """v37.1 §533's worked example: an `ask` permit that supersedes a
+    blanket `ask` forbid still leaves a `send` to the same target
+    forbidden — a permit's kind match is exact, never widened."""
+    src = (_send_program() +
+          'rule [deny] anything may not ask\n'
+          'rule [ok] anything may ask to "https://a.example.com" '
+          'supersedes [deny] @960178\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].is_violation is True
+    assert v[0].cleared_by is None
+    assert v[0].effect.kind == "send"
+    assert v[0].rule.kind == "ask"
+    assert v[0].rule.name == "deny"
+
+
+def test_permit_send_with_explicit_supersedes_does_clear_the_send():
+    """The one way to except a `send` from a broader `ask` forbid: name it
+    explicitly. Kind-exact match plus a named `supersedes` — never an
+    automatic cross-kind narrowing."""
+    src = (_send_program() +
+          'rule [deny] anything may not ask\n'
+          'rule [ok] anything may send to "https://a.example.com" '
+          'supersedes [deny] @960178\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].is_violation is False
+    assert v[0].cleared_by.name == "ok"
+
+
+def test_permit_send_permits_only_send():
+    """`may send to X` has no bearing on an `ask` to the same target."""
+    src = ('foreign fetch-it of x from "m.get" doing ask "https://d.example.com"\n'
+           'r = fetch-it of 1\n'
+           'rule [deny-ask] anything may not ask to "https://d.example.com"\n'
+           'rule [permit-send] anything may send to "https://d.example.com" '
+           'supersedes [deny-ask] @419159\n')
+    v = rule_violations(src)
+    assert len(v) == 1 and v[0].is_violation
+    assert v[0].effect.kind == "ask"
+    assert v[0].cleared_by is None
+
+
+def test_ask_forbid_and_send_permit_same_target_collide_without_supersedes():
+    """The structural conflict check (§32) extended: `may not ask to X`
+    beside `may send to X`, with no `supersedes`, is exactly as
+    unresolved as two same-kind rules of equal specificity — decided the
+    same way, by requiring an explicit `supersedes`."""
+    src = ('rule [deny] anything may not ask to "https://e.example.com"\n'
+          'rule [also] anything may send to "https://e.example.com"\n')
+    e = expect_conflict(src)
+    msg = str(e)
+    assert "[deny]" in msg and "[also]" in msg
+    assert "'ask' and 'send'" in msg
+    assert "opposite things" in msg
+
+
+def test_ask_forbid_and_send_permit_collision_resolved_by_supersedes():
+    src = (_send_program(target="https://e.example.com") +
+          'rule [deny] anything may not ask to "https://e.example.com"\n'
+          'rule [also] anything may send to "https://e.example.com" '
+          'supersedes [deny] @1e7b2b\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    assert v[0].is_violation is False
+    assert v[0].cleared_by.name == "also"
+
+
+def test_two_forbids_ask_and_send_same_target_do_not_conflict():
+    """Two forbids never disagree just because their coverage overlaps —
+    stacking `may not ask` and `may not send` to the same target is
+    consistent (both still forbid the send), not ambiguous."""
+    src = (_send_program(target="https://f.example.com") +
+          'rule [deny-ask] anything may not ask to "https://f.example.com"\n'
+          'rule [deny-send] anything may not send to "https://f.example.com"\n')
+    v = rule_violations(src)
+    assert len(v) == 2
+    assert all(x.is_violation for x in v)
+    assert {x.rule.name for x in v} == {"deny-ask", "deny-send"}
+
+
+def test_violation_names_the_effects_actual_kind_and_the_rules_kind():
+    """Rendered text and JSON must not conflate the two: the effect that
+    happened is `send`, the rule that forbids it is written against
+    `ask`."""
+    src = (_send_program() +
+          'rule [deny] anything may not ask\n')
+    v = rule_violations(src)
+    assert len(v) == 1
+    rendered = v[0].render()
+    assert "[deny] violated" in rendered
+    assert "send https://a.example.com" in rendered
+    assert 'may not ask' in rendered
+    j = v[0].as_json()
+    assert j["kind"] == "ask"                 # the rule's own kind
+    assert j["effect"]["kind"] == "send"      # the effect actually matched
+
+
+def test_a_pre_send_ask_rule_still_flags_a_relabelled_send():
+    """The regression pin: a `may not ask` rule written before `send`
+    existed flags AT LEAST what it flagged before, once a program's
+    `doing ask` claim is relabelled `doing send` (B1 item 5's mandate)."""
+    before = ('foreign send-it of x from "m.post" doing ask "https://g.example.com"\n'
+             'r = send-it of 1\n'
+             'rule [deny] anything may not ask to "https://g.example.com"\n')
+    after = ('foreign send-it of x from "m.post" doing send "https://g.example.com"\n'
+            'r = send-it of 1\n'
+            'rule [deny] anything may not ask to "https://g.example.com"\n')
+    v_before = rule_violations(before)
+    v_after = rule_violations(after)
+    assert len(v_before) == 1 and v_before[0].is_violation
+    assert len(v_after) == 1 and v_after[0].is_violation
+
+
 # ================================================================ reporting (§4)
 
 def test_cleared_violation_renders_the_excepted_by_line():

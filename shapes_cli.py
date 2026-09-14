@@ -39,7 +39,13 @@ from shapes import analyse, analyse_file, diff
 
 # Bumped when the meaning of a field changes. A consumer that does not
 # recognise the version should refuse the document rather than guess.
-FORMAT_VERSION = 1
+#
+# 2 (B1, Sprint B): `send` joined the effect vocabulary and `ask` narrowed
+# to fetch-only (Track 0 #7-#11) -- the MEANING of an existing "ask" value
+# changed (a value that was "an ask, could be a fetch or a send" is now
+# certainly a fetch), which is exactly what this field exists to flag. See
+# docs/surface-format-v2.md's "Changes from format 1".
+FORMAT_VERSION = 2
 
 
 def as_json(surface, path, rules=None):

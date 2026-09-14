@@ -507,7 +507,10 @@ def test_sine_is_unary_and_the_builtin_count_moved_by_exactly_one():
     assert entry["arity"] == 1, "the unary-builtin invariant holds"
     assert all(b["arity"] == 1 for b in vocab["builtins"]), "every builtin is unary"
     assert len(vocab["keywords"]) == 32, "no keyword was added"
-    assert len(vocab["effect_kinds"]) == 7, "no effect kind was added"
+    # 8 as of B1 (Sprint B): `send` joined the vocabulary, unrelated to sine
+    # or this seam -- the assertion here is still "sine's own build did not
+    # also add an effect kind," not that the count stays frozen forever.
+    assert len(vocab["effect_kinds"]) == 8, "no effect kind was added"
 
 
 def test_the_foreign_route_was_not_the_delivery_mechanism():

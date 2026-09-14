@@ -175,6 +175,14 @@ INLINE = [
     ('use http\nr = (ask "https://example.com/rec.json").a'),
     ('use http\nr = later\n\nto later:\n'
      '  give ask "https://example.com/late.json"'),
+    # B1 (Sprint B): send effects, and a foreign literally named after an
+    # effect kind (the ordering fix -- foreigns checked before the bare
+    # ambient/builtin fallback)
+    ('foreign send of payload from "mylib.post" doing send "https://api.example.com/events"\n'
+     'to report of data:\n  give send of data\n\nr = report of 1\n'),
+    'foreign clock of x from "m.f" doing read "file.txt"\nr = clock of 1\n',
+    ('foreign send-it of x from "m.post" doing send "https://a.example.com"\n'
+     'r = send-it of 1\n'),
 ]
 
 

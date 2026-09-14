@@ -1,4 +1,4 @@
-foreign send of payload from "mylib.post" doing ask "https://api.example.com/events"
+foreign send of payload from "mylib.post" doing send "https://api.example.com/events"
 
 to report of data:
   give send of data

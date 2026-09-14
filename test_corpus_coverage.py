@@ -32,7 +32,7 @@ def test_the_totals_come_from_the_grammar_not_a_literal():
     cov = cc.coverage([os.path.join(REPO, "*.planes")])
     assert cov["reserved_words"]["total"] == len(KEYWORDS) == 32
     assert cov["builtins"]["total"] == len(BUILTIN_NAMES) == 13
-    assert cov["effect_kinds"]["total"] == len(EFFECT_KINDS) == 7
+    assert cov["effect_kinds"]["total"] == len(EFFECT_KINDS) == 8
 
 
 def test_present_plus_absent_is_the_whole_universe():

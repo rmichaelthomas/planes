@@ -43,7 +43,7 @@ test("analyse: computes the effect surface without running the program", () => {
   const src = 'foreign fetch of u from "http.get" doing ask "https://example.com"\nshow fetch\n';
   const surface = analyse(src);
   const surfaceJson = asJson(surface, "inline.planes");
-  assert.equal(surfaceJson.format, 1);
+  assert.equal(surfaceJson.format, 2);
   assert.deepEqual(surfaceJson.boundaries.sort(), ["console", "network"]);
   assert.ok(
     surfaceJson.effects.some((e) => e.kind === "ask" && e.target === "https://example.com"),
