@@ -1,7 +1,7 @@
 # Planes — hardening, fixing and additive sprint (September 2026)
 
 **Date:** September 13, 2026
-**Status:** Sprint A built and merged the same day (PRs #111–#132), tagged `sprint-a-2026-09` at `01be2c0`, and both downstream pins moved to the tag (E5). Sprint B not started.
+**Status:** Sprint A built and merged the same day (PRs #111–#132), tagged `sprint-a-2026-09` at `01be2c0`, and both downstream pins moved to the tag (E5). Sprint B built and merged September 14, 2026 (PRs #135–#138).
 **Base:** `main` at `c4400ad` (addendum v37.1)
 **Inputs:** every Planes checkpoint and addendum from v37.1 back to the `unbound` inception (vault, plus `docs/`); the Horizon design docs; the DeepSeek brainstorm transcripts; `reports/`; PRs #100–#104; the playtest, persona and crosswalk documents; and every portfolio document that uses Planes (5xFive, Koncord in `~/browser-concordance/checkpoints/`, Omniglot, Cartouche, CueCue, Undertow, Cutter, Motif, MuseSky, TAOS).
 **Companion:** [`ROADMAP.md`](../ROADMAP.md) holds everything past this sprint.
@@ -252,6 +252,26 @@ Every agreement suite (JS and Swift) must cover each fixed branch. Tag the resul
 ---
 
 ## Sprint B — additive, decided at Track 0
+
+### Done (September 14, 2026)
+
+Built in parallel on three branches, then B4; `scripts/ci.sh` passed in full on the result.
+
+| Item | PR | What landed |
+|---|---|---|
+| B1 | #137 | `send` in `grammar/vocabulary.json` and every host, Swift `HostEffect.send` included. README, `demo/fdiff/` and `demo/mcp/v2.planes` relabelled. `SurfaceDiff` treats a changed kind on the same destination as significant. Rules: forbidding `ask` covers `send`, a permit clears only its own kind; opposite rules conflict when their covered kinds overlap on the same scope. Surface format 2 (`docs/surface-format-v2.md`, `grammar/protocols/surface-v2.json`); the v1 files are as tagged plus a pointer. The seven-kind pins now say eight |
+| B2 | #135 | One URL matcher in `rules.py`, `js/rules.mjs` and `Rules.swift` (and so `HostRules`): same scheme and host compared ASCII case-insensitively, port as written, path at `/` boundaries, effect query and fragment ignored. A rule target with `?` or `#` is refused. Narrowing is strict containment; equal scopes collide. `_pattern_excludes` re-proven for covering, conservatively |
+| B3 | #136 | `supersedes [x]` without `@fingerprint` is refused with the fingerprint to add; every fixture carries a computed one. `contradicts [x]` is a clause after `supersedes`, with no fingerprint; unknown, self and doubly-declared pairs are refused. When both rules apply, a contradiction violation names both and one effect each. The audit reports both relations built |
+| B4 | #138 | Two facts only the prose carried, a rule's subject and an effect's computed/declared flags, became fields. `render()` is `render_violation(as_json())` in Python, JS and Swift, pinned over every shape and fixture; `js/embed.d.mts` types `ViolationJson`; Swift has a `render-from-fields` oracle command |
+
+### Found while building Sprint B
+
+- **A `foreign` named after an effect kind was counted twice** by all three analysers (`foreign send of payload … doing send`). Fixed in B1.
+- **`contradicts` missed a rule that applies only through `ask` covering `send`.** Fixed when B1 was reconciled with B3.
+- **Full Unicode lowercasing disagrees across hosts** (a final Σ), so host comparison folds ASCII only. Fixed in B2.
+- **Downstream work B2 and B1 create:** Koncord's `AdmissionRules.swift` compiles rule targets to exact-URL regexes and needs prefix matching; 5xFive's `{...}` wildcard can go; both pin format 1 at `sprint-a-2026-09` until they move.
+
+### The plan as written
 
 **B1. The send effect (P-Q25).** Specified by Track 0 #7–#11:
 - `send` is an **effect kind that `foreign` declarations use**: `foreign post of message from "slack.post" doing send "https://hooks.slack.com/…"`.
