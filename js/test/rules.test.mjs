@@ -12,7 +12,13 @@ import assert from "node:assert/strict";
 import { loadGrammar } from "../loader_node.mjs";
 import { parse } from "../parser.mjs";
 import { analyse } from "../shapes.mjs";
-import { check, fingerprint, RuleConflict, RuleNotSupported } from "../rules.mjs";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { check, fingerprint, renderViolation, RuleConflict, RuleNotSupported } from "../rules.mjs";
+import { analyseFile } from "../shapes_node.mjs";
+
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 loadGrammar();
 
@@ -145,4 +151,145 @@ test("the same pair declared from both sides raises RuleConflict", () => {
     assert.match(e.message, /already contradicts/);
     return true;
   });
+});
+
+// ============================================================ B4: render() is pure over fields
+
+// B4's proof, one violation at a time: renderViolation fed the JSON round-
+// tripped through JSON.stringify/JSON.parse (exactly what a --json --rules
+// consumer would see, "message" property and all) must equal v.render()
+// byte for byte. If some fact the text states were missing from asJson(),
+// this is where it would show up as a mismatch.
+function assertRenderMatchesFields(v) {
+  const doc = v.asJson();
+  const doc2 = JSON.parse(JSON.stringify(doc));
+  const got = renderViolation(doc2);
+  assert.equal(got, v.render());
+}
+
+test("render() is a pure function of asJson()'s fields, over every violation shape", () => {
+  const programs = [];
+
+  // real (uncertain) + narrowed: "no-net" is narrowed by "no-telemetry",
+  // and "no-telemetry" itself matches a computed (uncertain) target.
+  programs.push(
+    "use http\n" +
+      "to send of payload:\n" +
+      '  give ask "https://collector.example.com/?d=" + payload\n\n' +
+      "rule [no-net] anything may not ask\n" +
+      "rule [no-telemetry] anything may not ask " +
+      'to "https://collector.example.com"\n' +
+      'x = send of "secret"\n',
+  );
+
+  // cleared by a permit
+  const denySrc = "rule [no-external-sends] anything may not ask";
+  const fp = fingerprint(rulesOf(denySrc)[0]);
+  programs.push(
+    `use http\n${denySrc}\n` +
+      `rule [audit-allowed] anything may ask to "https://audit.internal" ` +
+      `supersedes [no-external-sends] @${fp}\n` +
+      'x = ask "https://audit.internal"\n',
+  );
+
+  // vacuous situation 1 -- no effect of the kind at all
+  programs.push(
+    'use file\nlet secret = "value"\nshow secret\n' +
+      "rule [no-secret-uploads] secret may not ask\n",
+  );
+
+  // vacuous situation 2 -- effects of the kind exist, none derive from the subject
+  programs.push(
+    "use http\nuse file\n\n" +
+      'let endpoint = "https://api.example.com/data"\n' +
+      'let readings = read of "sensor.txt"\n\n' +
+      "show readings\nask endpoint\n\n" +
+      "rule [no-reading-uploads] readings may not ask\n",
+  );
+
+  // vacuous situation 3 -- subject reaches the kind, target excludes it
+  programs.push(
+    'use http\nlet payload = "secret"\n' +
+      'let full = "https://collector.example.com/?d=" + payload\n' +
+      "rule [no-other-leak] payload may not ask " +
+      'to "https://different.example.com"\n' +
+      "x = ask full\n",
+  );
+
+  // contradiction, with `because`
+  programs.push(
+    "use http\nuse file\n" +
+      "rule [no-writes] anything may not write\n" +
+      "rule [no-sends] anything may not ask contradicts [no-writes]\n" +
+      '  because "no exfiltration once state has changed"\n' +
+      'write 1 to "out.txt"\n' +
+      'x = ask "https://x.example.com"\n',
+  );
+
+  // contradiction, no `because`
+  programs.push(
+    "use http\nuse file\n" +
+      "rule [no-writes2] anything may not write\n" +
+      "rule [no-sends2] anything may not ask contradicts [no-writes2]\n" +
+      'write 1 to "out.txt"\n' +
+      'x = ask "https://x.example.com"\n',
+  );
+
+  const shapesSeen = new Set();
+  for (const src of programs) {
+    for (const v of check(rulesOf(src), analyse(src))) {
+      assertRenderMatchesFields(v);
+      if (v.contradicts_rule !== null) {
+        shapesSeen.add("contradiction");
+        if (v.rule.annotation) shapesSeen.add("contradiction-because");
+      } else if (v.vacuous) {
+        shapesSeen.add(`vacuous-${v.vacuous_situation}`);
+      } else if (v.cleared_by !== null) {
+        shapesSeen.add("cleared");
+      } else if (v.narrowed_by.length) {
+        shapesSeen.add("narrowed");
+      } else {
+        shapesSeen.add("real");
+      }
+      if (v.uncertain) shapesSeen.add("uncertain");
+    }
+  }
+
+  assert.deepEqual(
+    [...shapesSeen].sort(),
+    [
+      "cleared",
+      "contradiction",
+      "contradiction-because",
+      "narrowed",
+      "real",
+      "uncertain",
+      "vacuous-1",
+      "vacuous-2",
+      "vacuous-3",
+    ].sort(),
+  );
+});
+
+const RULE_CORPUS_FILES = [
+  "annotated.planes",
+  "demo/rules/clean.planes",
+  "demo/rules/violation.planes",
+  "demo/rules/exception.planes",
+  "demo/mcp/v1.planes",
+  "demo/mcp/v2.planes",
+  "corpus/allowed-hosts.planes",
+  "corpus/audit-log.planes",
+];
+
+test("render() is a pure function of asJson()'s fields, over the rule corpus", async () => {
+  for (const rel of RULE_CORPUS_FILES) {
+    const abspath = path.join(REPO, rel);
+    const src = readFileSync(abspath, "utf-8");
+    const found = rulesOf(src);
+    const surface = await analyseFile(abspath, true);
+    for (const v of check(found, surface, abspath)) {
+      assertRenderMatchesFields(v);
+    }
+  }
 });

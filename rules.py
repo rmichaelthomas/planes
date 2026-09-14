@@ -167,66 +167,39 @@ class Violation:
         return self.cleared_by is None and not self.vacuous
 
     def render(self):
-        if self.contradicts_rule is not None:
-            return self._render_contradiction()
-
-        if self.vacuous:
-            return self._render_vacuous()
-
-        if self.cleared_by is not None:
-            return (f"[{self.rule.name}] would have been violated at "
-                    f"line {self.effect.site} — excepted by "
-                    f"[{self.cleared_by.name}] "
-                    f"(line {self.cleared_by.line})")
-
-        lines = [f"[{self.rule.name}] violated at line {self.effect.site}."]
-        lines.append(f"  {self.effect}")
-        if self.uncertain:
-            lines.append(
-                "  target could not be pinned down statically — this "
-                f'computed value may or may not be '
-                f'"{escape_string_literal(self.rule.target)}"')
-        lines.append(f"  rule declared at line {self.rule.line}: "
-                     f"{condition(self.rule)}")
-        if self.narrowed_by:
-            names = ", ".join(f"[{r.name}] (line {r.line})"
-                              for r in self.narrowed_by)
-            lines.append(f"  narrowed here by {names}")
-        if self.origins:
-            parts = sorted({f"{n} ({f})" if f else n for n, f in self.origins})
-            lines.append(f"  derived from: {', '.join(parts)}")
-        return "\n".join(lines)
-
-    def _render_contradiction(self):
-        """B3 (Track 0 #5): both rules of a declared `contradicts` pair
-        matched at least one effect in this surface. `self.rule` is the
-        rule that wrote the `contradicts` clause and `self.effect` is the
-        effect it matched; `contradicts_rule`/`contradicts_effect` are the
-        named rule's own match. Names both rules, one effect each matched,
-        and the declaring rule's `because` if it has one — never the named
-        rule's, since the declaration belongs to the rule that wrote the
-        clause."""
-        a, b = self.rule, self.contradicts_rule
-        ea, eb = self.effect, self.contradicts_effect
-        line = (f"[{a.name}] contradicts [{b.name}]: both apply to this "
-                f"program — [{a.name}] at line {ea.site} ({ea}), "
-                f"[{b.name}] at line {eb.site} ({eb})")
-        if a.annotation is None:
-            return line
-        return line + f'\n  [{a.name}] because "{a.annotation.text}"'
+        """The human-readable finding — a pure function of `as_json()`'s
+        own fields (B4): see `render_violation` below, which this simply
+        calls. Proves the structured form is complete: nothing here reads
+        `self.rule`/`self.effect`/… directly any more, only what
+        `as_json()` already published."""
+        return render_violation(self.as_json())
 
     def as_json(self):
-        """Every field `render()` reads, as data rather than prose (H1).
+        """Every field `render()` reads, as data rather than prose (H1, B4).
 
         A `--json --rules` consumer gets the rule name, the rule's own
-        kind/target/assertion/`because`, the specific effect (kind, boundary,
-        target, line) it matched or None for the vacuous shape, and the
-        supersedes/permit outcome (`cleared_by`) or narrowing sibling
-        (`narrowed_by`) — every structural fact `render()`'s prose is built
-        from. `message` is `render()`'s own text, included verbatim beside
-        the fields so a host can print exactly what text mode prints without
-        re-deriving it (js/rules.mjs's Violation.asJson and Rules.swift's
-        Violation.asJSON must agree with this field for field).
+        subject/kind/target/assertion/`because`, the specific effect (kind,
+        boundary, target, line, `computed`, `declared`) it matched or None
+        for the vacuous shape, and the supersedes/permit outcome
+        (`cleared_by`) or narrowing sibling (`narrowed_by`) — every
+        structural fact `render()`'s prose is built from. `message` is
+        `render()`'s own text, included verbatim beside the fields so a host
+        can print exactly what text mode prints without re-deriving it
+        (js/rules.mjs's Violation.asJson and Rules.swift's Violation.asJSON
+        must agree with this field for field).
+
+        B4: `render()` is itself defined as `render_violation(self.
+        as_json())` (below) — every fact the rendered text states is one of
+        these fields, never something only `render()` itself knows. Two
+        fields exist only because of that proof: `subject` (rule.subject —
+        used raw in the vacuous shapes' prose, never folded into `condition`
+        the way the other three are) and the effect object's `computed`/
+        `declared` (`Effect.computed`/`Effect.claimed` — the source of the
+        text rendering's `" (computed)"` / `" (declared, not verified)"`
+        suffixes, §4.2 of docs/surface-format-v2.md). `message` is computed
+        from the fields built so far — before it is itself added to the
+        dict — so this is never circular: `render_violation` never reads
+        `fields["message"]`.
 
         `contradiction` (B3) is None except for the contradiction shape,
         where it names both rules of the declared pair and one effect
@@ -245,9 +218,10 @@ class Violation:
             key = f"{n} ({f})" if f else n
             seen.setdefault(key, (n, f))
         origins = [{"name": n, "file": f} for _, (n, f) in sorted(seen.items())]
-        return {
+        fields = {
             "rule": rule.name,
             "rule_line": rule.line,
+            "subject": rule.subject,
             "assertion": rule.assertion,
             "kind": rule.kind,
             "target": rule.target,
@@ -257,12 +231,7 @@ class Violation:
             "vacuous": self.vacuous,
             "vacuous_situation": self.vacuous_situation,
             "uncertain": self.uncertain,
-            "effect": None if effect is None else {
-                "kind": effect.kind,
-                "boundary": effect.boundary,
-                "target": effect.target,
-                "line": effect.site,
-            },
+            "effect": None if effect is None else _effect_json(effect),
             "cleared_by": None if self.cleared_by is None else {
                 "rule": self.cleared_by.name,
                 "line": self.cleared_by.line,
@@ -271,61 +240,172 @@ class Violation:
                            for r in self.narrowed_by],
             "contradiction": None if self.contradicts_rule is None else {
                 "rule": rule.name,
-                "effect": None if effect is None else {
-                    "kind": effect.kind,
-                    "boundary": effect.boundary,
-                    "target": effect.target,
-                    "line": effect.site,
-                },
+                "effect": None if effect is None else _effect_json(effect),
                 "with_rule": self.contradicts_rule.name,
-                "with_effect": {
-                    "kind": self.contradicts_effect.kind,
-                    "boundary": self.contradicts_effect.boundary,
-                    "target": self.contradicts_effect.target,
-                    "line": self.contradicts_effect.site,
-                },
+                "with_effect": _effect_json(self.contradicts_effect),
             },
             "origins": origins,
-            "message": self.render(),
         }
-
-    def _render_vacuous(self):
-        """§2's three situations, one message each — never the word
-        "violated": this is not one (§3.1)."""
-        rule = self.rule
-        situation = self.vacuous_situation
-
-        if situation == 1:
-            header = (f"[{rule.name}] (line {rule.line}) checked nothing "
-                      f"— subject '{rule.subject}' resolves in this file, "
-                      f"but the program performs no '{rule.kind}' effect "
-                      f"at all")
-            reason = "the rule is inert against this program as written"
-            fix = ("check the program still performs the effect you "
-                  "expect, or remove the rule if it no longer applies")
-        elif situation == 3:
-            header = (f"[{rule.name}] (line {rule.line}) checked nothing "
-                      f"— subject '{rule.subject}' derives a "
-                      f"'{rule.kind}' effect, but the rule's target "
-                      f"excludes every one")
-            reason = (f"'{rule.subject}' reaches this effect kind, but "
-                      f'never at "{escape_string_literal(rule.target)}"')
-            fix = (f"check the target matches where '{rule.subject}' "
-                  f"actually goes, or remove the target to check every "
-                  f"'{rule.kind}' effect '{rule.subject}' reaches")
-        else:
-            header = (f"[{rule.name}] (line {rule.line}) checked nothing "
-                      f"— subject '{rule.subject}' resolves in this file, "
-                      f"but no '{rule.kind}' effect derives from it")
-            reason = (f"the program performs '{rule.kind}', but to a "
-                      f"target that does not derive from '{rule.subject}'")
-            fix = ("check the subject names the value you meant, or "
-                  "write the rule against 'anything'")
-
-        return "\n".join([header, f"  {reason}", f"  {fix}"])
+        fields["message"] = render_violation(fields)
+        return fields
 
     def __str__(self):
         return self.render()
+
+
+def _effect_json(effect):
+    """One matched effect, as `as_json()` publishes it (H1, B4): `kind`,
+    `boundary`, `target`, `line` (the H1 fields, unchanged), plus `computed`
+    and `declared` — B4's fill for a gap `render()` always had: the text
+    rendering's `" (computed)"` and `" (declared, not verified)"` suffixes
+    (`Effect.__str__`) come from `effect.computed`/`effect.claimed`, which
+    were readable nowhere in the JSON before this. Same two booleans, same
+    names, as the top-level surface's own `effects[]` entries
+    (`shapes_cli.as_json`) — one convention across the whole document.
+    """
+    return {
+        "kind": effect.kind,
+        "boundary": effect.boundary,
+        "target": effect.target,
+        "line": effect.site,
+        "computed": effect.computed,
+        "declared": effect.claimed,
+    }
+
+
+def _render_effect_text(effect):
+    """The text `Effect.__str__` renders, rebuilt from an `_effect_json`
+    dict instead of an `Effect` object — `render_violation`'s equivalent of
+    `str(effect)`. Must stay byte-for-byte what `Effect.__str__` (shapes.py)
+    produces; js/rules.mjs's and Rules.swift's `renderViolation` port this
+    the same way against their own `Effect.toString`/`description`.
+    """
+    if effect["kind"] == "unknown":
+        return f'unknown — {effect["target"]} declares no effects'
+    t = effect["target"]
+    if effect["computed"] and not t.endswith(")"):
+        t += " (computed)"
+    if effect["declared"]:
+        t += " (declared, not verified)"
+    return f'{effect["kind"]} {t}'
+
+
+def _render_contradiction_text(fields, contradiction):
+    """The contradiction shape's text (B3), rebuilt from `contradiction`
+    (a `Violation.as_json()`-shaped dict's own `"contradiction"` value) —
+    `render_violation`'s delegate for this shape, mirroring how `render()`
+    always kept this on its own (formerly `_render_contradiction`)."""
+    a_name = contradiction["rule"]
+    b_name = contradiction["with_rule"]
+    ea, eb = contradiction["effect"], contradiction["with_effect"]
+    line = (f"[{a_name}] contradicts [{b_name}]: both apply to this "
+            f"program — [{a_name}] at line {ea['line']} "
+            f"({_render_effect_text(ea)}), "
+            f"[{b_name}] at line {eb['line']} "
+            f"({_render_effect_text(eb)})")
+    because = fields["because"]
+    if because is None:
+        return line
+    return line + f'\n  [{a_name}] because "{because}"'
+
+
+def _render_vacuous_text(fields):
+    """§2's three vacuous situations, one message each — never the word
+    "violated" (§3.1) — rebuilt from `fields` instead of a `Rule` object.
+    `render_violation`'s delegate for this shape (formerly the method
+    `_render_vacuous`); grammar_gen.py's D.2 assembled-report scan still
+    names this function by name (`ASSEMBLED_MESSAGE_SITES`)."""
+    name, line, subject = fields["rule"], fields["rule_line"], fields["subject"]
+    kind, target = fields["kind"], fields["target"]
+    situation = fields["vacuous_situation"]
+
+    if situation == 1:
+        header = (f"[{name}] (line {line}) checked nothing "
+                  f"— subject '{subject}' resolves in this file, "
+                  f"but the program performs no '{kind}' effect "
+                  f"at all")
+        reason = "the rule is inert against this program as written"
+        fix = ("check the program still performs the effect you "
+              "expect, or remove the rule if it no longer applies")
+    elif situation == 3:
+        header = (f"[{name}] (line {line}) checked nothing "
+                  f"— subject '{subject}' derives a "
+                  f"'{kind}' effect, but the rule's target "
+                  f"excludes every one")
+        reason = (f"'{subject}' reaches this effect kind, but "
+                  f'never at "{escape_string_literal(target)}"')
+        fix = (f"check the target matches where '{subject}' "
+              f"actually goes, or remove the target to check every "
+              f"'{kind}' effect '{subject}' reaches")
+    else:
+        header = (f"[{name}] (line {line}) checked nothing "
+                  f"— subject '{subject}' resolves in this file, "
+                  f"but no '{kind}' effect derives from it")
+        reason = (f"the program performs '{kind}', but to a "
+                  f"target that does not derive from '{subject}'")
+        fix = ("check the subject names the value you meant, or "
+              "write the rule against 'anything'")
+
+    return "\n".join([header, f"  {reason}", f"  {fix}"])
+
+
+def render_violation(fields):
+    """`render()`'s text, computed purely from `Violation.as_json()`'s own
+    fields (B4) — never from a `Violation`/`Rule`/`Effect` object. This is
+    the proof B4 asks for: if the rendered text needed a fact this function
+    cannot read off `fields`, that fact was missing from the JSON, and
+    `Violation.render()` (which is defined as `render_violation(self.
+    as_json())`) would be wrong, not just under-documented.
+
+    `fields` is exactly the dict `as_json()` returns — including, in the
+    ordinary case, a `"message"` key already sitting in it — but that key
+    is never read here: this function is what PRODUCES it (`as_json()`
+    calls this before adding `"message"` at all), and a caller round-
+    tripping `as_json()`'s output through `json.dumps`/`json.loads` (or the
+    JS/Swift equivalents) and passing the result back in gets the identical
+    text regardless of whether a stale `"message"` is sitting alongside the
+    other fields — every OTHER field determines the answer.
+
+    Five shapes, told apart the same way `Violation.render()` always was:
+    `contradiction` non-None, then `vacuous`, then `cleared_by` non-None,
+    else the ordinary violation. The first two delegate (mirroring how
+    `render()` always delegated to `_render_contradiction`/
+    `_render_vacuous`); the last two stay inline, as `render()`'s own body
+    always had them.
+    """
+    contradiction = fields["contradiction"]
+    if contradiction is not None:
+        return _render_contradiction_text(fields, contradiction)
+
+    if fields["vacuous"]:
+        return _render_vacuous_text(fields)
+
+    cleared_by = fields["cleared_by"]
+    if cleared_by is not None:
+        return (f"[{fields['rule']}] would have been violated at "
+                f"line {fields['effect']['line']} — excepted by "
+                f"[{cleared_by['rule']}] "
+                f"(line {cleared_by['line']})")
+
+    effect = fields["effect"]
+    lines = [f"[{fields['rule']}] violated at line {effect['line']}."]
+    lines.append(f"  {_render_effect_text(effect)}")
+    if fields["uncertain"]:
+        lines.append(
+            "  target could not be pinned down statically — this "
+            f'computed value may or may not be '
+            f'"{escape_string_literal(fields["target"])}"')
+    lines.append(f"  rule declared at line {fields['rule_line']}: "
+                 f"{fields['condition']}")
+    if fields["narrowed_by"]:
+        names = ", ".join(f"[{r['rule']}] (line {r['line']})"
+                          for r in fields["narrowed_by"])
+        lines.append(f"  narrowed here by {names}")
+    if fields["origins"]:
+        parts = sorted({f"{o['name']} ({o['file']})" if o["file"] else o["name"]
+                       for o in fields["origins"]})
+        lines.append(f"  derived from: {', '.join(parts)}")
+    return "\n".join(lines)
 
 
 class RuleResults(list):

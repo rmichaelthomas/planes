@@ -80,6 +80,32 @@ same `Violation`s `rules.py` would report for a program performing those
 effects — plus each violated rule's `because`. `test_swift_host_rules.py`
 holds it to shapes.py and rules.py on that equivalent program.
 
+**Writing your own wording (B4).** A `Violation`'s useful facts are public
+properties, not prose to parse: `rule.subject`/`rule.assertion`/
+`rule.effectKind`/`rule.target`, `effect?.kind`/`.computed`/`.claimed`,
+`clearedBy`/`narrowedBy`/`vacuous`/`vacuousSituation`/`contradictsRule`, and
+`because` (the extension below). A host that wants Planes to stay backstage
+— Koncord's own refusal line, never Planes' `render()` text — builds it from
+those, never from `render()` or `asJSON()`:
+
+```swift
+let outcome = try rules.check([.ask("https://tracker.example/pixel")])
+for v in outcome.violations {
+    if let cleared = v.clearedBy {
+        continue  // excepted by cleared.name -- not a refusal
+    }
+    let reason = v.because ?? "this action is not permitted here"
+    print("Koncord blocked this: \(reason)")
+}
+```
+
+`render()` itself is no longer a special case: it is defined as
+`renderViolation(asJSON())`, a free function computed purely from the
+`GrammarJSON` document `asJSON()` returns — proof that every fact the
+rendered text states (including the effect's `" (computed)"`/`" (declared,
+not verified)"` suffixes and a vacuous rule's subject) is one of these
+public fields, not something only `render()` can see.
+
 ### Measuring `HostRules` cost (H4)
 
 `Sources/HostRulesBench` is a repo-internal timing tool (not an agreement

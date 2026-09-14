@@ -50,7 +50,8 @@ PARSER_PATH = os.path.join(REPO, "parser.py")
 #   is leaving one out.
 #
 #   An entry is a REPORT iff it is text a plane renders for a person without
-#   raising anything: rules.py's Violation.render and Violation._render_vacuous.
+#   raising anything: rules.py's render_violation and _render_vacuous_text
+#   (B4; Violation.render()/Violation.as_json() delegate to these).
 #   The catalogue inventories both, because both are text a person reads. The
 #   fix-clause commitment is measured over errors only — an error stops a
 #   program and leaves its author needing a next move; a report does not.
@@ -88,14 +89,25 @@ TARGET_EXCEPTIONS = tuple(ERROR_CLASSES)
 REPORT_KIND = "report"
 ERROR_KIND = "error"
 
-# rules.py's Violation.render and _render_vacuous build messages by
+# rules.py's render_violation and _render_vacuous_text build messages by
 # assembling several f-strings across branches rather than constructing one
 # of TARGET_EXCEPTIONS — D.2 asks for these as "assembled" entries by name,
 # since deriving a generic "this function assembles a message" detector
 # from arbitrary code is not what a form inventory can honestly claim to do
 # (the same honesty D.3 states outright for rules.json). C2 marks what they
 # produce a REPORT rather than an error, per the inclusion rule above.
-ASSEMBLED_MESSAGE_SITES = [("rules.py", "render"), ("rules.py", "_render_vacuous")]
+#
+# B4 moved this logic off `Violation.render`/`Violation._render_vacuous`
+# (methods reading `self.rule`/`self.effect` directly) onto these two
+# module-level functions, which read the same facts off a `Violation.
+# as_json()`-shaped dict instead — `render()` is now `render_violation(self.
+# as_json())`, proving the JSON fields are what the text is built from.
+# Same two message-assembling sites, same branch shapes (a delegating
+# `return _render_vacuous_text(fields)` inside `render_violation` is skipped
+# here exactly as `return self._render_vacuous()` always was — see
+# `_branch_message`'s "bare delegating return" rule below), so this is a
+# rename, not a change to what D.2 catalogues or why.
+ASSEMBLED_MESSAGE_SITES = [("rules.py", "render_violation"), ("rules.py", "_render_vacuous_text")]
 
 
 # ================================================================ escape-table drift guard
@@ -427,8 +439,8 @@ def _extract_branches(stmts):
 
 def _extract_assembled_entries(fname, tree, src_lines, method_name):
     """One entry per distinct message-producing branch of a message-
-    assembling method (D.2's "assembled": true case) -- rules.py's
-    Violation.render and Violation._render_vacuous, the two sites D.2
+    assembling function (D.2's "assembled": true case) -- rules.py's
+    render_violation and _render_vacuous_text (B4), the two sites D.2
     names because deriving "this function assembles a message"
     generically, for arbitrary code, is not what a form inventory can
     honestly claim (the same limit D.3 states for rules.json)."""

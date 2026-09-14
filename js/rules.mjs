@@ -88,84 +88,43 @@ export class Violation {
     return this.cleared_by === null && !this.vacuous;
   }
 
+  // The human-readable finding — a pure function of asJson()'s own fields
+  // (B4): see renderViolation below, which this simply calls. Proves the
+  // structured form is complete: nothing here reads this.rule/this.effect/…
+  // directly any more, only what asJson() already published.
   render() {
-    if (this.contradicts_rule !== null) return this._renderContradiction();
-
-    if (this.vacuous) return this._renderVacuous();
-
-    if (this.cleared_by !== null) {
-      return (
-        `[${this.rule.name}] would have been violated at ` +
-        `line ${this.effect.site} — excepted by ` +
-        `[${this.cleared_by.name}] ` +
-        `(line ${this.cleared_by.line})`
-      );
-    }
-
-    const lines = [`[${this.rule.name}] violated at line ${this.effect.site}.`];
-    lines.push(`  ${this.effect}`);
-    if (this.uncertain) {
-      lines.push(
-        "  target could not be pinned down statically — this " +
-          "computed value may or may not be " +
-          `"${escapeStringLiteral(this.rule.target)}"`,
-      );
-    }
-    lines.push(
-      `  rule declared at line ${this.rule.line}: ${condition(this.rule)}`,
-    );
-    if (this.narrowed_by.length) {
-      const names = this.narrowed_by
-        .map((r) => `[${r.name}] (line ${r.line})`)
-        .join(", ");
-      lines.push(`  narrowed here by ${names}`);
-    }
-    if (this.origins.length) {
-      const parts = [
-        ...new Set(this.origins.map(([n, f]) => (f ? `${n} (${f})` : n))),
-      ].sort(pyStrCmp);
-      lines.push(`  derived from: ${parts.join(", ")}`);
-    }
-    return lines.join("\n");
+    return renderViolation(this.asJson());
   }
 
-  // B3 (Track 0 #5): both rules of a declared `contradicts` pair matched
-  // at least one effect in this surface. this.rule is the rule that wrote
-  // the `contradicts` clause and this.effect is the effect it matched;
-  // contradicts_rule/contradicts_effect are the named rule's own match.
-  // Names both rules, one effect each matched, and the declaring rule's
-  // `because` if it has one — never the named rule's, since the
-  // declaration belongs to the rule that wrote the clause.
-  _renderContradiction() {
-    const a = this.rule;
-    const b = this.contradicts_rule;
-    const ea = this.effect;
-    const eb = this.contradicts_effect;
-    const line =
-      `[${a.name}] contradicts [${b.name}]: both apply to this ` +
-      `program — [${a.name}] at line ${ea.site} (${ea}), ` +
-      `[${b.name}] at line ${eb.site} (${eb})`;
-    if (!a.annotation) return line;
-    return line + `\n  [${a.name}] because "${a.annotation.text}"`;
-  }
-
-  // Every field render() reads, as data rather than prose (H1). A
+  // Every field render() reads, as data rather than prose (H1, B4). A
   // --json --rules consumer gets the rule name, the rule's own
-  // kind/target/assertion/because, the specific effect (kind, boundary,
-  // target, line) it matched or null for the vacuous shape, and the
-  // supersedes/permit outcome (cleared_by) or narrowing sibling
-  // (narrowed_by) — every structural fact render()'s prose is built from.
-  // `message` is render()'s own text, included verbatim beside the fields
-  // so a host can print exactly what text mode prints without re-deriving
-  // it (rules.py's Violation.as_json and Rules.swift's Violation.asJSON
-  // must agree with this field for field). `origins` dedupes the same way
-  // render()'s derivation line does — by the formatted "name (file)"
-  // string, not by the raw pair.
+  // subject/kind/target/assertion/because, the specific effect (kind,
+  // boundary, target, line, computed, declared) it matched or null for the
+  // vacuous shape, and the supersedes/permit outcome (cleared_by) or
+  // narrowing sibling (narrowed_by) — every structural fact render()'s
+  // prose is built from. `message` is render()'s own text, included
+  // verbatim beside the fields so a host can print exactly what text mode
+  // prints without re-deriving it (rules.py's Violation.as_json and
+  // Rules.swift's Violation.asJSON must agree with this field for field).
+  //
+  // B4: render() is itself defined as renderViolation(this.asJson()) —
+  // every fact the rendered text states is one of these fields, never
+  // something only render() itself knows. Two fields exist only because of
+  // that proof: `subject` (rule.subject — used raw in the vacuous shapes'
+  // prose, never folded into `condition` the way the other three are) and
+  // the effect object's `computed`/`declared` (Effect#computed/claimed —
+  // the source of the text rendering's " (computed)" / " (declared, not
+  // verified)" suffixes, §4.2 of docs/surface-format-v2.md). `message` is
+  // computed from the fields built so far — before it is itself added to
+  // the object — so this is never circular: renderViolation never reads
+  // fields.message.
   //
   // `contradiction` (B3) is null except for the contradiction shape,
   // where it names both rules of the declared pair and one effect each
   // matched — self-contained, so a consumer reading only this key gets
-  // both sides without also reading the top-level rule/effect.
+  // both sides without also reading the top-level rule/effect. `origins`
+  // dedupes the same way render()'s derivation line does — by the
+  // formatted "name (file)" string, not by the raw pair.
   asJson() {
     const rule = this.rule;
     const effect = this.effect;
@@ -178,9 +137,10 @@ export class Violation {
       const [n, f] = seen.get(key);
       return { name: n, file: f ?? null };
     });
-    return {
+    const fields = {
       rule: rule.name,
       rule_line: rule.line,
+      subject: rule.subject,
       assertion: rule.assertion,
       kind: rule.kind,
       target: rule.target ?? null,
@@ -190,14 +150,7 @@ export class Violation {
       vacuous: this.vacuous,
       vacuous_situation: this.vacuous_situation,
       uncertain: this.uncertain,
-      effect: effect
-        ? {
-            kind: effect.kind,
-            boundary: effect.boundary,
-            target: effect.target,
-            line: effect.site,
-          }
-        : null,
+      effect: effect ? effectJson(effect) : null,
       cleared_by: this.cleared_by
         ? { rule: this.cleared_by.name, line: this.cleared_by.line }
         : null,
@@ -205,75 +158,189 @@ export class Violation {
       contradiction: this.contradicts_rule
         ? {
             rule: rule.name,
-            effect: effect
-              ? {
-                  kind: effect.kind,
-                  boundary: effect.boundary,
-                  target: effect.target,
-                  line: effect.site,
-                }
-              : null,
+            effect: effect ? effectJson(effect) : null,
             with_rule: this.contradicts_rule.name,
-            with_effect: {
-              kind: this.contradicts_effect.kind,
-              boundary: this.contradicts_effect.boundary,
-              target: this.contradicts_effect.target,
-              line: this.contradicts_effect.site,
-            },
+            with_effect: effectJson(this.contradicts_effect),
           }
         : null,
       origins,
-      message: this.render(),
     };
-  }
-
-  _renderVacuous() {
-    const rule = this.rule;
-    const situation = this.vacuous_situation;
-    let header, reason, fix;
-
-    if (situation === 1) {
-      header =
-        `[${rule.name}] (line ${rule.line}) checked nothing ` +
-        `— subject '${rule.subject}' resolves in this file, ` +
-        `but the program performs no '${rule.kind}' effect ` +
-        `at all`;
-      reason = "the rule is inert against this program as written";
-      fix =
-        "check the program still performs the effect you " +
-        "expect, or remove the rule if it no longer applies";
-    } else if (situation === 3) {
-      header =
-        `[${rule.name}] (line ${rule.line}) checked nothing ` +
-        `— subject '${rule.subject}' derives a ` +
-        `'${rule.kind}' effect, but the rule's target ` +
-        `excludes every one`;
-      reason =
-        `'${rule.subject}' reaches this effect kind, but ` +
-        `never at "${escapeStringLiteral(rule.target)}"`;
-      fix =
-        `check the target matches where '${rule.subject}' ` +
-        `actually goes, or remove the target to check every ` +
-        `'${rule.kind}' effect '${rule.subject}' reaches`;
-    } else {
-      header =
-        `[${rule.name}] (line ${rule.line}) checked nothing ` +
-        `— subject '${rule.subject}' resolves in this file, ` +
-        `but no '${rule.kind}' effect derives from it`;
-      reason =
-        `the program performs '${rule.kind}', but to a ` +
-        `target that does not derive from '${rule.subject}'`;
-      fix =
-        "check the subject names the value you meant, or " +
-        "write the rule against 'anything'";
-    }
-
-    return [header, `  ${reason}`, `  ${fix}`].join("\n");
+    fields.message = renderViolation(fields);
+    return fields;
   }
 
   toString() {
     return this.render();
   }
+}
+
+// One matched effect, as asJson() publishes it (H1, B4): kind, boundary,
+// target, line (the H1 fields, unchanged), plus computed and declared — B4's
+// fill for a gap render() always had: the text rendering's " (computed)" and
+// " (declared, not verified)" suffixes (Effect#toString) come from
+// effect.computed/effect.claimed, which were readable nowhere in the JSON
+// before this. Same two booleans, same names, as the top-level surface's own
+// effects[] entries (embed.mjs's asJson) — one convention across the whole
+// document.
+function effectJson(effect) {
+  return {
+    kind: effect.kind,
+    boundary: effect.boundary,
+    target: effect.target,
+    line: effect.site,
+    computed: effect.computed,
+    declared: effect.claimed,
+  };
+}
+
+// The text Effect#toString renders, rebuilt from an effectJson object
+// instead of an Effect instance — renderViolation's equivalent of
+// `${effect}`. Must stay byte-for-byte what Effect#toString (shapes.mjs)
+// produces; rules.py's _render_effect_text and Rules.swift's effect
+// description must agree with this.
+function renderEffectText(effect) {
+  if (effect.kind === "unknown") {
+    return `unknown — ${effect.target} declares no effects`;
+  }
+  let t = effect.target;
+  if (effect.computed && !t.endsWith(")")) t += " (computed)";
+  if (effect.declared) t += " (declared, not verified)";
+  return `${effect.kind} ${t}`;
+}
+
+// The contradiction shape's text (B3), rebuilt from `contradiction` (a
+// Violation#asJson()-shaped object's own "contradiction" value) —
+// renderViolation's delegate for this shape, mirroring how render() always
+// kept this on its own (formerly _renderContradiction).
+function renderContradictionText(fields, contradiction) {
+  const aName = contradiction.rule;
+  const bName = contradiction.with_rule;
+  const ea = contradiction.effect;
+  const eb = contradiction.with_effect;
+  const line =
+    `[${aName}] contradicts [${bName}]: both apply to this ` +
+    `program — [${aName}] at line ${ea.line} (${renderEffectText(ea)}), ` +
+    `[${bName}] at line ${eb.line} (${renderEffectText(eb)})`;
+  const because = fields.because;
+  if (because === null || because === undefined) return line;
+  return line + `\n  [${aName}] because "${because}"`;
+}
+
+// §2's three vacuous situations, one message each — never the word
+// "violated" (§3.1) — rebuilt from `fields` instead of a rule AST node.
+// renderViolation's delegate for this shape (formerly the method
+// _renderVacuous).
+function renderVacuousText(fields) {
+  const name = fields.rule;
+  const line = fields.rule_line;
+  const subject = fields.subject;
+  const kind = fields.kind;
+  const target = fields.target;
+  const situation = fields.vacuous_situation;
+  let header, reason, fix;
+
+  if (situation === 1) {
+    header =
+      `[${name}] (line ${line}) checked nothing ` +
+      `— subject '${subject}' resolves in this file, ` +
+      `but the program performs no '${kind}' effect ` +
+      `at all`;
+    reason = "the rule is inert against this program as written";
+    fix =
+      "check the program still performs the effect you " +
+      "expect, or remove the rule if it no longer applies";
+  } else if (situation === 3) {
+    header =
+      `[${name}] (line ${line}) checked nothing ` +
+      `— subject '${subject}' derives a ` +
+      `'${kind}' effect, but the rule's target ` +
+      `excludes every one`;
+    reason =
+      `'${subject}' reaches this effect kind, but ` +
+      `never at "${escapeStringLiteral(target)}"`;
+    fix =
+      `check the target matches where '${subject}' ` +
+      `actually goes, or remove the target to check every ` +
+      `'${kind}' effect '${subject}' reaches`;
+  } else {
+    header =
+      `[${name}] (line ${line}) checked nothing ` +
+      `— subject '${subject}' resolves in this file, ` +
+      `but no '${kind}' effect derives from it`;
+    reason =
+      `the program performs '${kind}', but to a ` +
+      `target that does not derive from '${subject}'`;
+    fix =
+      "check the subject names the value you meant, or " +
+      "write the rule against 'anything'";
+  }
+
+  return [header, `  ${reason}`, `  ${fix}`].join("\n");
+}
+
+// render()'s text, computed purely from Violation#asJson()'s own fields
+// (B4) — never from a Violation/rule/Effect object. This is the proof B4
+// asks for: if the rendered text needed a fact this function cannot read
+// off `fields`, that fact was missing from the JSON, and Violation#render()
+// (which is defined as renderViolation(this.asJson())) would be wrong, not
+// just under-documented.
+//
+// `fields` is exactly the object asJson() returns — including, in the
+// ordinary case, a "message" property already sitting on it — but that
+// property is never read here: this function is what PRODUCES it (asJson()
+// calls this before adding "message" at all), and a caller round-tripping
+// asJson()'s output through JSON.stringify/JSON.parse and passing the
+// result back in gets the identical text regardless of whether a stale
+// "message" is sitting alongside the other fields — every OTHER field
+// determines the answer.
+//
+// Four shapes, told apart the same way Violation#render() always was:
+// contradiction non-null, then vacuous, then cleared_by non-null, else the
+// ordinary violation. The first two delegate (mirroring how render() always
+// delegated to _renderContradiction/_renderVacuous); the last two stay
+// inline, as render()'s own body always had them.
+export function renderViolation(fields) {
+  const contradiction = fields.contradiction;
+  if (contradiction !== null && contradiction !== undefined) {
+    return renderContradictionText(fields, contradiction);
+  }
+
+  if (fields.vacuous) return renderVacuousText(fields);
+
+  const clearedBy = fields.cleared_by;
+  if (clearedBy !== null && clearedBy !== undefined) {
+    return (
+      `[${fields.rule}] would have been violated at ` +
+      `line ${fields.effect.line} — excepted by ` +
+      `[${clearedBy.rule}] ` +
+      `(line ${clearedBy.line})`
+    );
+  }
+
+  const effect = fields.effect;
+  const lines = [`[${fields.rule}] violated at line ${effect.line}.`];
+  lines.push(`  ${renderEffectText(effect)}`);
+  if (fields.uncertain) {
+    lines.push(
+      "  target could not be pinned down statically — this " +
+        "computed value may or may not be " +
+        `"${escapeStringLiteral(fields.target)}"`,
+    );
+  }
+  lines.push(`  rule declared at line ${fields.rule_line}: ${fields.condition}`);
+  if (fields.narrowed_by.length) {
+    const names = fields.narrowed_by
+      .map((r) => `[${r.rule}] (line ${r.line})`)
+      .join(", ");
+    lines.push(`  narrowed here by ${names}`);
+  }
+  if (fields.origins.length) {
+    const parts = [
+      ...new Set(fields.origins.map((o) => (o.file ? `${o.name} (${o.file})` : o.name))),
+    ].sort(pyStrCmp);
+    lines.push(`  derived from: ${parts.join(", ")}`);
+  }
+  return lines.join("\n");
 }
 
 // check()'s return value: a plain array of Violation with resolvedSubjects

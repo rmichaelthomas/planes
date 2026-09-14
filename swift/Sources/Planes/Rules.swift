@@ -88,81 +88,49 @@ public final class Violation: CustomStringConvertible {
 
     public var isViolation: Bool { contradictsRule != nil ? true : (clearedBy == nil && !vacuous) }
 
-    public func render() -> String {
-        if let contradictsRule { return renderContradiction(contradictsRule) }
-        if vacuous { return renderVacuous() }
-        let site = effect?.site ?? 0
-
-        if let clearedBy {
-            return "[\(rule.name)] would have been violated at " +
-                "line \(site) — excepted by " +
-                "[\(clearedBy.name)] " +
-                "(line \(clearedBy.line))"
-        }
-
-        var lines = ["[\(rule.name)] violated at line \(site)."]
-        lines.append("  \(effect.map { String(describing: $0) } ?? "None")")
-        if uncertain {
-            lines.append(
-                "  target could not be pinned down statically — this " +
-                    "computed value may or may not be " +
-                    "\"\(escapeStringLiteral(rule.target ?? "None"))\"")
-        }
-        lines.append("  rule declared at line \(rule.line): \(condition(rule))")
-        if !narrowedBy.isEmpty {
-            let names = narrowedBy.map { "[\($0.name)] (line \($0.line))" }.joined(separator: ", ")
-            lines.append("  narrowed here by \(names)")
-        }
-        if !origins.isEmpty {
-            let parts = pySortedUnique(origins.map { o in
-                if let f = o.file, !f.isEmpty { return "\(o.name) (\(f))" }
-                return o.name
-            })
-            lines.append("  derived from: \(parts.joined(separator: ", "))")
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    /// B3 (Track 0 #5): both rules of a declared `contradicts` pair matched at
-    /// least one effect in this surface. `rule`/`effect` are the rule that
-    /// wrote the `contradicts` clause and the effect it matched; `other` is
-    /// the named rule and `contradictsEffect` its own match. Names both
-    /// rules, one effect each matched, and the declaring rule's `because` if
-    /// it has one — never the named rule's, since the declaration belongs to
-    /// the rule that wrote the clause.
-    private func renderContradiction(_ other: AST.Rule) -> String {
-        let ea = effect, eb = contradictsEffect
-        let eaText = ea.map { String(describing: $0) } ?? "None"
-        let ebText = eb.map { String(describing: $0) } ?? "None"
-        let line = "[\(rule.name)] contradicts [\(other.name)]: both apply to this " +
-            "program — [\(rule.name)] at line \(ea?.site ?? 0) (\(eaText)), " +
-            "[\(other.name)] at line \(eb?.site ?? 0) (\(ebText))"
-        guard let annotation = rule.annotation else { return line }
-        return line + "\n  [\(rule.name)] because \"\(annotation.text)\""
-    }
+    /// The human-readable finding — a pure function of `asJSON()`'s own
+    /// fields (B4): see `renderViolation` below, which this simply calls.
+    /// Proves the structured form is complete: nothing here reads `rule`/
+    /// `effect`/… directly any more, only what `asJSON()` already published.
+    public func render() -> String { renderViolation(asJSON()) }
 
     private static func effectJSON(_ e: Effect) -> GrammarJSON {
         .object([("kind", .string(e.kind)), ("boundary", .string(e.boundary)),
-                 ("target", .string(e.target)), ("line", .number(String(e.site)))])
+                 ("target", .string(e.target)), ("line", .number(String(e.site))),
+                 ("computed", .bool(e.computed)), ("declared", .bool(e.claimed))])
     }
 
-    /// Every field `render()` reads, as data rather than prose (H1). A
+    /// Every field `render()` reads, as data rather than prose (H1, B4). A
     /// `--json --rules` consumer gets the rule name, the rule's own
-    /// kind/target/assertion/`because`, the specific effect (kind, boundary,
-    /// target, line) it matched or null for the vacuous shape, and the
-    /// supersedes/permit outcome (`clearedBy`) or narrowing sibling
-    /// (`narrowedBy`) — every structural fact `render()`'s prose is built
-    /// from. `message` is `render()`'s own text, included verbatim beside the
-    /// fields so a host can print exactly what text mode prints without
-    /// re-deriving it (rules.py's `Violation.as_json` and js/rules.mjs's
-    /// `Violation.asJson` must agree with this field for field). `origins`
-    /// dedupes the same way `render()`'s derivation line does — by the
-    /// formatted "name (file)" string, not by the raw pair.
+    /// subject/kind/target/assertion/`because`, the specific effect (kind,
+    /// boundary, target, line, `computed`, `declared`) it matched or null
+    /// for the vacuous shape, and the supersedes/permit outcome
+    /// (`clearedBy`) or narrowing sibling (`narrowedBy`) — every structural
+    /// fact `render()`'s prose is built from. `message` is `render()`'s own
+    /// text, included verbatim beside the fields so a host can print
+    /// exactly what text mode prints without re-deriving it (rules.py's
+    /// `Violation.as_json` and js/rules.mjs's `Violation.asJson` must agree
+    /// with this field for field).
+    ///
+    /// B4: `render()` is itself defined as `renderViolation(asJSON())` —
+    /// every fact the rendered text states is one of these fields, never
+    /// something only `render()` itself knows. Two fields exist only
+    /// because of that proof: `subject` (`rule.subject` — used raw in the
+    /// vacuous shapes' prose, never folded into `condition` the way the
+    /// other three are) and the effect object's `computed`/`declared`
+    /// (`Effect.computed`/`Effect.claimed` — the source of the text
+    /// rendering's `" (computed)"` / `" (declared, not verified)"`
+    /// suffixes, §4.2 of docs/surface-format-v2.md). `message` is computed
+    /// from the fields built so far — before it is itself added to the
+    /// object — so this is never circular: `renderViolation` never reads
+    /// the `"message"` key.
     ///
     /// `contradiction` (B3) is null except for the contradiction shape,
     /// where it names both rules of the declared pair and one effect each
     /// matched — self-contained, so a consumer reading only this key gets
     /// both sides without also reading the top-level `rule`/`effect`.
+    /// `origins` dedupes the same way `render()`'s derivation line does —
+    /// by the formatted "name (file)" string, not by the raw pair.
     public func asJSON() -> GrammarJSON {
         var seenKeys = Set<String>()
         var pairs: [(key: String, name: String, file: String?)] = []
@@ -190,6 +158,7 @@ public final class Violation: CustomStringConvertible {
         let fields: [(String, GrammarJSON)] = [
             ("rule", .string(rule.name)),
             ("rule_line", .number(String(rule.line))),
+            ("subject", .string(rule.subject)),
             ("assertion", .string(rule.assertion)),
             ("kind", .string(rule.effectKind)),
             ("target", rule.target.map { GrammarJSON.string($0) } ?? .null),
@@ -204,48 +173,161 @@ public final class Violation: CustomStringConvertible {
             ("narrowed_by", narrowedByJSON),
             ("contradiction", contradictionJSON),
             ("origins", .array(originsJSON)),
-            ("message", .string(render())),
         ]
-        return .object(fields)
-    }
-
-    private func renderVacuous() -> String {
-        let header: String
-        let reason: String
-        let fix: String
-
-        if vacuousSituation == 1 {
-            header = "[\(rule.name)] (line \(rule.line)) checked nothing " +
-                "— subject '\(rule.subject)' resolves in this file, " +
-                "but the program performs no '\(rule.effectKind)' effect " +
-                "at all"
-            reason = "the rule is inert against this program as written"
-            fix = "check the program still performs the effect you " +
-                "expect, or remove the rule if it no longer applies"
-        } else if vacuousSituation == 3 {
-            header = "[\(rule.name)] (line \(rule.line)) checked nothing " +
-                "— subject '\(rule.subject)' derives a " +
-                "'\(rule.effectKind)' effect, but the rule's target " +
-                "excludes every one"
-            reason = "'\(rule.subject)' reaches this effect kind, but " +
-                "never at \"\(escapeStringLiteral(rule.target ?? "None"))\""
-            fix = "check the target matches where '\(rule.subject)' " +
-                "actually goes, or remove the target to check every " +
-                "'\(rule.effectKind)' effect '\(rule.subject)' reaches"
-        } else {
-            header = "[\(rule.name)] (line \(rule.line)) checked nothing " +
-                "— subject '\(rule.subject)' resolves in this file, " +
-                "but no '\(rule.effectKind)' effect derives from it"
-            reason = "the program performs '\(rule.effectKind)', but to a " +
-                "target that does not derive from '\(rule.subject)'"
-            fix = "check the subject names the value you meant, or " +
-                "write the rule against 'anything'"
-        }
-
-        return [header, "  \(reason)", "  \(fix)"].joined(separator: "\n")
+        let message: GrammarJSON = .string(renderViolation(.object(fields)))
+        return .object(fields + [("message", message)])
     }
 
     public var description: String { render() }
+}
+
+/// The text `Effect.description` renders, rebuilt from a `Violation.
+/// effectJSON`-shaped object instead of an `Effect` value —
+/// `renderViolation`'s equivalent of `String(describing: effect)`. Must
+/// stay byte-for-byte what `Effect.description` (EffectSurface.swift)
+/// produces; rules.py's `_render_effect_text` and js/rules.mjs's
+/// `renderEffectText` must agree with this.
+private func effectDescription(_ effect: GrammarJSON) -> String {
+    let kind = effect["kind"]?.string ?? ""
+    let target = effect["target"]?.string ?? ""
+    if sameText(kind, "unknown") { return "unknown — \(target) declares no effects" }
+    var t = target
+    if effect["computed"] == .bool(true), t.unicodeScalars.last != ")" { t += " (computed)" }
+    if effect["declared"] == .bool(true) { t += " (declared, not verified)" }
+    return "\(kind) \(t)"
+}
+
+/// The contradiction shape's text (B3), rebuilt from `contradiction` (a
+/// `Violation.asJSON()`-shaped object's own `"contradiction"` value) —
+/// `renderViolation`'s delegate for this shape, mirroring how `render()`
+/// always kept this on its own (formerly the method `renderContradiction`).
+private func renderContradictionText(_ fields: GrammarJSON, _ contradiction: GrammarJSON) -> String {
+    let aName = contradiction["rule"]?.string ?? ""
+    let bName = contradiction["with_rule"]?.string ?? ""
+    let ea = contradiction["effect"] ?? .null
+    let eb = contradiction["with_effect"] ?? .null
+    let line = "[\(aName)] contradicts [\(bName)]: both apply to this " +
+        "program — [\(aName)] at line \(ea["line"]?.int ?? 0) (\(effectDescription(ea))), " +
+        "[\(bName)] at line \(eb["line"]?.int ?? 0) (\(effectDescription(eb)))"
+    guard let because = fields["because"]?.string else { return line }
+    return line + "\n  [\(aName)] because \"\(because)\""
+}
+
+/// §2's three vacuous situations, one message each — never the word
+/// "violated" (§3.1) — rebuilt from `fields` instead of an `AST.Rule`.
+/// `renderViolation`'s delegate for this shape (formerly the method
+/// `renderVacuous`).
+private func renderVacuousText(_ fields: GrammarJSON) -> String {
+    let name = fields["rule"]?.string ?? ""
+    let line = fields["rule_line"]?.int ?? 0
+    let subject = fields["subject"]?.string ?? ""
+    let kind = fields["kind"]?.string ?? ""
+    let target = fields["target"]?.string
+    let situation = fields["vacuous_situation"]?.int
+
+    let header: String
+    let reason: String
+    let fix: String
+
+    if situation == 1 {
+        header = "[\(name)] (line \(line)) checked nothing " +
+            "— subject '\(subject)' resolves in this file, " +
+            "but the program performs no '\(kind)' effect " +
+            "at all"
+        reason = "the rule is inert against this program as written"
+        fix = "check the program still performs the effect you " +
+            "expect, or remove the rule if it no longer applies"
+    } else if situation == 3 {
+        header = "[\(name)] (line \(line)) checked nothing " +
+            "— subject '\(subject)' derives a " +
+            "'\(kind)' effect, but the rule's target " +
+            "excludes every one"
+        reason = "'\(subject)' reaches this effect kind, but " +
+            "never at \"\(escapeStringLiteral(target ?? "None"))\""
+        fix = "check the target matches where '\(subject)' " +
+            "actually goes, or remove the target to check every " +
+            "'\(kind)' effect '\(subject)' reaches"
+    } else {
+        header = "[\(name)] (line \(line)) checked nothing " +
+            "— subject '\(subject)' resolves in this file, " +
+            "but no '\(kind)' effect derives from it"
+        reason = "the program performs '\(kind)', but to a " +
+            "target that does not derive from '\(subject)'"
+        fix = "check the subject names the value you meant, or " +
+            "write the rule against 'anything'"
+    }
+
+    return [header, "  \(reason)", "  \(fix)"].joined(separator: "\n")
+}
+
+/// `render()`'s text, computed purely from `Violation.asJSON()`'s own
+/// fields (B4) — never from a `Violation`/`AST.Rule`/`Effect` value. This
+/// is the proof B4 asks for: if the rendered text needed a fact this
+/// function cannot read off `fields`, that fact was missing from the JSON,
+/// and `Violation.render()` (which is defined as `renderViolation(asJSON()
+/// )`) would be wrong, not just under-documented.
+///
+/// `fields` is exactly the `GrammarJSON` object `asJSON()` returns —
+/// including, in the ordinary case, a `"message"` key already sitting in
+/// it — but that key is never read here: this function is what PRODUCES it
+/// (`asJSON()` calls this before adding `"message"` at all), and a caller
+/// round-tripping `asJSON()`'s output through its `jsonText`/`GrammarJSON.
+/// parse` (the CLI JSON path — `EffectSurfaceCommand.swift`'s `--rules`)
+/// and passing the result back in gets the identical text regardless of
+/// whether a stale `"message"` is sitting alongside the other fields —
+/// every OTHER field determines the answer.
+///
+/// Four shapes, told apart the same way `Violation.render()` always was:
+/// `contradiction` non-null, then `vacuous`, then `cleared_by` non-null,
+/// else the ordinary violation. The first two delegate (mirroring how
+/// `render()` always delegated to `renderContradiction`/`renderVacuous`);
+/// the last two stay inline, as `render()`'s own body always had them.
+public func renderViolation(_ fields: GrammarJSON) -> String {
+    if let contradiction = fields["contradiction"], contradiction != .null {
+        return renderContradictionText(fields, contradiction)
+    }
+
+    if fields["vacuous"] == .bool(true) {
+        return renderVacuousText(fields)
+    }
+
+    if let clearedBy = fields["cleared_by"], clearedBy != .null {
+        let clearedByRule = clearedBy["rule"]?.string ?? ""
+        let clearedByLine = clearedBy["line"]?.int ?? 0
+        return "[\(fields["rule"]?.string ?? "")] would have been violated at " +
+            "line \(fields["effect"]?["line"]?.int ?? 0) — excepted by " +
+            "[\(clearedByRule)] " +
+            "(line \(clearedByLine))"
+    }
+
+    let effect = fields["effect"] ?? .null
+    var lines = ["[\(fields["rule"]?.string ?? "")] violated at line \(effect["line"]?.int ?? 0)."]
+    lines.append("  \(effectDescription(effect))")
+    if fields["uncertain"] == .bool(true) {
+        lines.append(
+            "  target could not be pinned down statically — this " +
+                "computed value may or may not be " +
+                "\"\(escapeStringLiteral(fields["target"]?.string ?? "None"))\"")
+    }
+    lines.append("  rule declared at line \(fields["rule_line"]?.int ?? 0): " +
+        "\(fields["condition"]?.string ?? "")")
+    let narrowedBy = fields["narrowed_by"]?.array ?? []
+    if !narrowedBy.isEmpty {
+        let names = narrowedBy.map { r in
+            "[\(r["rule"]?.string ?? "")] (line \(r["line"]?.int ?? 0))"
+        }.joined(separator: ", ")
+        lines.append("  narrowed here by \(names)")
+    }
+    let origins = fields["origins"]?.array ?? []
+    if !origins.isEmpty {
+        let parts = pySortedUnique(origins.map { o in
+            let name = o["name"]?.string ?? ""
+            if let f = o["file"]?.string, !f.isEmpty { return "\(name) (\(f))" }
+            return name
+        })
+        lines.append("  derived from: \(parts.joined(separator: ", "))")
+    }
+    return lines.joined(separator: "\n")
 }
 
 /// check()'s return value: every Violation, plus the subjects it resolved — the
