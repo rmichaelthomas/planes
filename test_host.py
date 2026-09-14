@@ -133,8 +133,13 @@ def test_the_host_surface_matches_the_effect_vocabulary():
     """Every effect kind the language can name is something a host does."""
     from shapes import EFFECT_KINDS
     for kind in EFFECT_KINDS:
-        if kind in ("random", "env"):
-            continue        # reachable only through `foreign`, by design
+        if kind in ("random", "env", "send"):
+            # reachable only through `foreign`, by design -- `send` (B1,
+            # Sprint B) joins random/env here: no dedicated Host method, no
+            # host method at all (Track 0 #7). A foreign claiming `doing
+            # send` is resolved and called exactly like any other foreign,
+            # through `Host.resolve`, never a `Host.send`.
+            continue
         assert hasattr(Host, kind), \
             f"effect '{kind}' has no host capability"
 

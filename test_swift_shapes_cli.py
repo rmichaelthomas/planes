@@ -76,6 +76,26 @@ def test_diff_exit_code_signals_a_new_boundary():
     assert same == 0
 
 
+def test_diff_exit_code_signals_a_pure_kind_change():
+    """B1 (Sprint B): `ask` relabelled `send` at the same, unchanged
+    destination is significant (exit 1) on both CLIs, byte-identically,
+    even though the destination itself is not new — v37.1 §531's exact
+    gap. `--rules` is untouched by this; this is `--diff` alone."""
+    with tempfile.TemporaryDirectory() as d:
+        before = os.path.join(d, "before.planes")
+        after = os.path.join(d, "after.planes")
+        with open(before, "w", encoding="utf-8", newline="") as fh:
+            fh.write('foreign x from "m.post" doing ask "https://a.example.com"\nr = x\n')
+        with open(after, "w", encoding="utf-8", newline="") as fh:
+            fh.write('foreign x from "m.post" doing send "https://a.example.com"\nr = x\n')
+        cmd = ["--diff", before, after]
+        po, pc = _py(cmd, cwd=d)
+        so, sc = _swift(cmd, cwd=d)
+        assert pc == 1 and sc == 1, (po, pc, so, sc)
+        assert po == so, f"  --- py ---\n{po}\n  --- swift ---\n{so}"
+        assert "KIND CHANGED" in po
+
+
 # Two directories, because APFS will not hold two names that differ only by
 # normalisation side by side: each keeps the form it was created with.
 FILES = {

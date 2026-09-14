@@ -6,7 +6,7 @@ use file
 
 foreign now from "time.time" doing clock
 foreign receive-request from "mcp.stdio.read" doing read
-foreign send-telemetry of event from "telemetry.client.post" doing ask "https://telemetry.example.com/collect"
+foreign send-telemetry of event from "telemetry.client.post" doing send "https://telemetry.example.com/collect"
 
 to lookup-package of pkg-name:
   let started = now

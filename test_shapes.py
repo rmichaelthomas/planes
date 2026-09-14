@@ -467,6 +467,109 @@ def test_diff_render_names_the_new_boundary():
     assert "network" in text
 
 
+# ==================================== B1: a foreign named after an effect kind
+
+def test_a_foreign_literally_named_send_is_not_double_counted():
+    """Found while adding `send` to EFFECT_KINDS: `foreign send of payload
+    from "m.post" doing send "..."`, called as `send of data`, must resolve
+    through `self.foreigns` FIRST — checking `node.name in EFFECT_KINDS`
+    before that would treat the call site itself as a second, bare `send`
+    effect (target read off the call's own argument), on top of the one the
+    `doing` clause correctly declares. This is exactly demo/fdiff/v1.planes."""
+    src = ('foreign send of payload from "mylib.post" doing send "https://api.example.com/events"\n'
+          'to report of data:\n'
+          '  give send of data\n\n'
+          'r = report of 1\n')
+    s = analyse(src)
+    assert len(s.declared) == 1, s.declared
+    e = s.declared[0]
+    assert e.kind == "send" and e.target == "https://api.example.com/events"
+
+
+def test_demo_fdiff_v1_surface_is_exactly_one_effect():
+    """The real file, not a reconstruction — pins the fix against the actual
+    demo B1 relabelled."""
+    s = analyse_file("demo/fdiff/v1.planes")
+    assert len(s.declared) == 1, s.declared
+
+
+def test_a_foreign_named_clock_is_also_not_double_counted():
+    """The same bug, pre-existing for `clock`/`random`/`env` before `send`
+    ever existed -- verified never to have had a real-world collision
+    (core_check.py: no `foreign clock/random/env ...` anywhere in the repo),
+    but the fix is general, not `send`-specific."""
+    src = ('foreign clock of x from "m.f" doing read "file.txt"\n'
+          'r = clock of 1\n')
+    s = analyse(src)
+    assert len(s.declared) == 1, s.declared
+    assert s.declared[0].kind == "read" and s.declared[0].target == "file.txt"
+
+
+# ============================================== B1: a kind change is significant
+
+def test_diff_of_a_pure_kind_change_is_significant():
+    """`ask` relabelled `send` at the SAME destination, nothing else
+    different — v37.1 §531's exact gap: `new_destinations()` alone misses
+    this, since the target was already reached, and a build must still
+    fail on it (B1 item 4)."""
+    before = analyse('foreign x from "m.post" doing ask "https://a.example.com"\n'
+                     'r = x\n')
+    after = analyse('foreign x from "m.post" doing send "https://a.example.com"\n'
+                    'r = x\n')
+    d = diff(before, after)
+    assert not d.is_empty()
+    assert d.new_destinations() == []          # the target itself is not new
+    assert not d.new_boundaries                 # still "network" both sides
+    assert d.is_significant(), "a kind change at an unchanged destination must fail a build"
+
+
+def test_diff_of_a_pure_kind_change_render_names_it():
+    before = analyse('foreign x from "m.post" doing ask "https://a.example.com"\n'
+                     'r = x\n')
+    after = analyse('foreign x from "m.post" doing send "https://a.example.com"\n'
+                    'r = x\n')
+    text = diff(before, after).render()
+    assert "KIND CHANGED" in text
+    assert "https://a.example.com" in text
+    assert "ask -> send" in text
+
+
+def test_diff_of_a_send_relabelled_back_to_ask_is_also_significant():
+    """The reverse direction: `send` narrowing back to `ask` is exactly as
+    significant a claim change as the other way."""
+    before = analyse('foreign x from "m.post" doing send "https://a.example.com"\n'
+                     'r = x\n')
+    after = analyse('foreign x from "m.post" doing ask "https://a.example.com"\n'
+                    'r = x\n')
+    d = diff(before, after)
+    assert d.is_significant()
+    assert "ask" in [e.kind for e in d.added]
+
+
+def test_diff_kind_change_does_not_confuse_different_boundaries():
+    """A coincidental target shared across two different boundaries is
+    never mistaken for a relabelling — changed_kinds() keys on boundary
+    too."""
+    before = analyse('use http\nx = ask "same-name"\n')
+    after = analyse('show "same-name"\n')
+    d = diff(before, after)
+    assert d.changed_kinds() == []
+
+
+def test_diff_new_boundary_still_takes_priority_over_a_kind_change():
+    """When both fire, render() leads with the boundary line, matching the
+    pre-existing precedence between new-boundary and new-destination."""
+    before = analyse('foreign x from "m.post" doing ask "https://a.example.com"\n'
+                     'r = x\n')
+    after = analyse('use file\n'
+                    'foreign x from "m.post" doing send "https://a.example.com"\n'
+                    'r = x\nwrite [1] to "out.json"\n')
+    d = diff(before, after)
+    text = d.render()
+    assert "NEW BOUNDARIES CROSSED" in text
+    assert d.is_significant()
+
+
 # ================================================================ libraries
 
 def test_library_with_no_toplevel_is_not_pure():

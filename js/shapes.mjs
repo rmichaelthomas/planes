@@ -707,15 +707,24 @@ export class Analyser {
 
     if (is(node, "Call")) {
       for (const a of node.args) out.union(this.walk(a, fnEffects, consts));
-      if (K.has(node.name) && !this.funcs.has(node.name)) {
-        const arg = node.args.length ? node.args[0] : null;
-        const [target, computed, deriv] = this.describe(arg, consts);
-        out.add(new Effect(node.name, K.get(node.name), target, computed, { site: node.line, derivation: deriv }));
-        return out;
-      }
+      // A foreign declaration is checked BEFORE the bare ambient/builtin
+      // fallback below (matches shapes.py's walk()): "clock", "random",
+      // "env" and (Sprint B) "send" are effect kinds with no native call
+      // of their own, reachable ONLY through a `foreign ... doing <kind>`
+      // declaration -- and "send" in particular must stay usable as an
+      // ordinary foreign/function name. Checking K.has(node.name) first
+      // would treat a call to a foreign literally named "send" (or
+      // "clock", etc.) as a bare ambient effect at the CALL SITE, hiding
+      // the foreign's real, declared destination.
       const target = this.local.get(this.currentFile)?.get(node.name) ?? node.name;
       if (this.foreigns.has(target)) {
         out.union(this.foreignEffects(this.foreigns.get(target), node.args, consts));
+        return out;
+      }
+      if (K.has(node.name) && !this.funcs.has(node.name)) {
+        const arg = node.args.length ? node.args[0] : null;
+        const [target2, computed, deriv] = this.describe(arg, consts);
+        out.add(new Effect(node.name, K.get(node.name), target2, computed, { site: node.line, derivation: deriv }));
         return out;
       }
       if (fnEffects.has(target)) {
@@ -1311,8 +1320,36 @@ export class SurfaceDiff {
     const before = new Set(this.removed.map((e) => e.target));
     return this.added.filter((e) => !before.has(e.target) && !e.computed);
   }
+  // B1 (Sprint B): the same destination, reached by a different effect kind
+  // now -- most importantly "ask" becoming "send" or the reverse. Matched
+  // on (boundary, target, computed) so a coincidental target shared by an
+  // unrelated boundary, or by a literal versus a computed pattern, is never
+  // mistaken for a relabelling. newDestinations() alone misses this: the
+  // target is not new, so `!before.has(e.target)` filters it out. But the
+  // kind is exactly what tells a reader whether the program's data left it
+  // or only came back (v37.1 §531) -- must agree with shapes.py's
+  // changed_kinds().
+  changedKinds() {
+    const removedByKey = new Map();
+    for (const e of this.removed) {
+      const key = `${e.boundary} ${e.target} ${e.computed}`;
+      if (!removedByKey.has(key)) removedByKey.set(key, []);
+      removedByKey.get(key).push(e);
+    }
+    const out = [];
+    for (const e of this.added) {
+      const key = `${e.boundary} ${e.target} ${e.computed}`;
+      const candidates = removedByKey.get(key) || [];
+      if (candidates.some((r) => r.kind !== e.kind)) out.push(e);
+    }
+    return out;
+  }
   isSignificant() {
-    return this.newBoundaries.length > 0 || this.newDestinations().length > 0;
+    return (
+      this.newBoundaries.length > 0 ||
+      this.newDestinations().length > 0 ||
+      this.changedKinds().length > 0
+    );
   }
   render() {
     if (this.isEmpty()) return "no change to the effect surface";
@@ -1324,6 +1361,20 @@ export class SurfaceDiff {
     if (fresh.length && !this.newBoundaries.length) {
       const dests = [...new Set(fresh.map((e) => e.target))].sort(pyStrCmp);
       lines.push("NEW DESTINATIONS: " + dests.join(", "));
+    }
+    const changed = this.changedKinds();
+    if (changed.length && !this.newBoundaries.length) {
+      const byRemoved = new Map();
+      for (const e of this.removed) {
+        byRemoved.set(`${e.boundary} ${e.target} ${e.computed}`, e);
+      }
+      const parts = [...changed]
+        .sort((a, b) => pyStrCmp(a.target, b.target))
+        .map((e) => {
+          const r = byRemoved.get(`${e.boundary} ${e.target} ${e.computed}`);
+          return `${e.target} (${r.kind} -> ${e.kind})`;
+        });
+      lines.push("KIND CHANGED: " + parts.join(", "));
     }
     for (const e of this.added) lines.push(`  + ${e.boundary}: ${e}`);
     for (const e of this.removed) lines.push(`  - ${e.boundary}: ${e}`);
@@ -1343,7 +1394,11 @@ export class SurfaceDiff {
 // the comparison is field-for-field, not a formatting decision.
 
 // Bumped when a field's meaning changes; matches shapes_cli.FORMAT_VERSION.
-export const FORMAT_VERSION = 1;
+//
+// 2 (B1, Sprint B): `send` joined the effect vocabulary and `ask` narrowed
+// to fetch-only -- the MEANING of an existing "ask" value changed. See
+// docs/surface-format-v2.md's "Changes from format 1".
+export const FORMAT_VERSION = 2;
 
 // The last path segment, without needing node:path (browser-safe).
 function basename(p) {

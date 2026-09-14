@@ -2014,13 +2014,14 @@ to parse-fail of cursor, known:
 to is-effect-kind of kind:
   a = kind == "ask" or kind == "read" or kind == "write" or kind == "show"
   b = kind == "clock" or kind == "random" or kind == "env"
-  give a or b
+  c = kind == "send"
+  give a or b or c
 
-# The seven kinds, written out, for the message. It has to stay in step with
+# The eight kinds, written out, for the message. It has to stay in step with
 # `is-effect-kind` directly above -- the vocabulary is closed, and both places
 # that name it are the same list in a different shape.
 to effect-kinds-text:
-  give "ask, clock, env, random, read, show, write"
+  give "ask, clock, env, random, read, send, show, write"
 
 # S160: the membership check lives HERE, so an unknown effect name is refused
 # in every position that reads one. It used to live in parse-rule, after the

@@ -10,7 +10,7 @@
 # just-vacated head position (`plus`); eating the apple appends without
 # dropping, which is the whole of how the snake grows.
 #
-# `random` is one of the seven effect kinds, but reaching it needs a
+# `random` is one of the eight effect kinds, but reaching it needs a
 # `foreign … doing random` declaration — and this build makes none (A.1,
 # A.3): a claimed effect surface wider than console-and-file is exactly what
 # this example exists to NOT show. So the apple's next cell is a

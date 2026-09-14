@@ -1,13 +1,13 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/rmichaelthomas/planes/grammar/protocols/surface-v1.json",
-  "title": "Planes effect-surface format 1",
-  "description": "shapes_cli.py --json [--rules] and its JS/Swift agreement oracles. See docs/surface-format-v1.md for the field-by-field specification this schema mirrors; that document is the source of truth in prose, this file is the machine-checkable form of the same fields. Deliberately written without $ref/definitions and using only anyOf for nullability, matching the subset test_surface_format.py's in-repo validator implements (no external JSON Schema library is a dependency of this project). Superseded: frozen as the sprint-a-2026-09 tag's record; current programs validate against grammar/protocols/surface-v2.json.",
+  "$id": "https://github.com/rmichaelthomas/planes/grammar/protocols/surface-v2.json",
+  "title": "Planes effect-surface format 2",
+  "description": "shapes_cli.py --json [--rules] and its JS/Swift agreement oracles. See docs/surface-format-v2.md for the field-by-field specification this schema mirrors; that document is the source of truth in prose, this file is the machine-checkable form of the same fields. Deliberately written without $ref/definitions and using only anyOf for nullability, matching the subset test_surface_format.py's in-repo validator implements (no external JSON Schema library is a dependency of this project). Format 2 (Sprint B): the `send` kind joined the network boundary beside `ask`, and `ask` narrowed to fetch-only (B1); a rule's target covers that address and everything under it (B2); and `contradicts` reports a fifth violation shape, the new `contradiction` field (B3) -- see docs/surface-format-v2.md's \"Changes from format 1\".",
   "type": "object",
   "properties": {
     "format": {
       "type": "integer",
-      "const": 1,
+      "const": 2,
       "description": "Bumped only when the meaning of an existing field changes, never for an added field."
     },
     "program": {
@@ -22,7 +22,7 @@
     "complete": { "type": "boolean" },
     "boundaries": {
       "type": "array",
-      "description": "Alphabetically sorted, deduped. 'foreign' appears only alongside the 'unknown' sentinel kind (docs/surface-format-v1.md section 3.1), never as a boundary for one of the seven vocabulary kinds.",
+      "description": "Alphabetically sorted, deduped. 'foreign' appears only alongside the 'unknown' sentinel kind (docs/surface-format-v2.md section 3.1), never as a boundary for one of the eight vocabulary kinds.",
       "items": {
         "type": "string",
         "enum": ["ambient", "console", "file", "foreign", "network"]
@@ -30,10 +30,10 @@
     },
     "kinds": {
       "type": "array",
-      "description": "Alphabetically sorted, deduped. 'unknown' is not one of the seven vocabulary kinds (docs/surface-format-v1.md section 3.1) -- an undeclared foreign function's sentinel.",
+      "description": "Alphabetically sorted, deduped. 'unknown' is not one of the eight vocabulary kinds (docs/surface-format-v2.md section 3.1) -- an undeclared foreign function's sentinel.",
       "items": {
         "type": "string",
-        "enum": ["ask", "clock", "env", "random", "read", "show", "unknown", "write"]
+        "enum": ["ask", "clock", "env", "random", "read", "send", "show", "unknown", "write"]
       }
     },
     "effects": {
@@ -44,7 +44,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["ask", "clock", "env", "random", "read", "show", "unknown", "write"]
+            "enum": ["ask", "clock", "env", "random", "read", "send", "show", "unknown", "write"]
           },
           "boundary": {
             "type": "string",
@@ -66,7 +66,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["ask", "clock", "env", "random", "read", "show", "unknown", "write"]
+            "enum": ["ask", "clock", "env", "random", "read", "send", "show", "unknown", "write"]
           },
           "boundary": {
             "type": "string",
@@ -94,7 +94,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["ask", "clock", "env", "random", "read", "show", "unknown", "write"]
+            "enum": ["ask", "clock", "env", "random", "read", "send", "show", "unknown", "write"]
           },
           "target": { "type": "string" }
         },
@@ -137,8 +137,8 @@
               },
               "kind": {
                 "type": "string",
-                "enum": ["ask", "clock", "env", "random", "read", "show", "write"],
-                "description": "One of the seven vocabulary kinds only -- never 'unknown'; the parser rejects any other word in a rule's kind position."
+                "enum": ["ask", "clock", "env", "random", "read", "send", "show", "write"],
+                "description": "One of the eight vocabulary kinds only -- never 'unknown'; the parser rejects any other word in a rule's kind position. This is the RULE's own declared kind (e.g. 'ask'), which may differ from the matched effect's actual kind (e.g. 'send') -- forbidding 'ask' also forbids 'send' (B1, Track 0 #10). See 'effect' below."
               },
               "target": {
                 "anyOf": [{ "type": "string" }, { "type": "null" }]
@@ -163,7 +163,8 @@
                     "properties": {
                       "kind": {
                         "type": "string",
-                        "enum": ["ask", "clock", "env", "random", "read", "show", "write"]
+                        "enum": ["ask", "clock", "env", "random", "read", "send", "show", "write"],
+                        "description": "The effect's ACTUAL kind, as performed -- may differ from the rule's own 'kind' above (a 'send' matched by an 'ask' forbid rule)."
                       },
                       "boundary": {
                         "type": "string",
@@ -204,6 +205,60 @@
                   "additionalProperties": false
                 }
               },
+              "contradiction": {
+                "description": "B3: null except for the contradiction shape, where it names both rules of a declared `contradicts` pair and one effect each matched.",
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "rule": { "type": "string" },
+                      "effect": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["ask", "clock", "env", "random", "read", "send", "show", "write"]
+                              },
+                              "boundary": {
+                                "type": "string",
+                                "enum": ["ambient", "console", "file", "network"]
+                              },
+                              "target": { "type": "string" },
+                              "line": { "type": "integer" }
+                            },
+                            "required": ["kind", "boundary", "target", "line"],
+                            "additionalProperties": false
+                          },
+                          { "type": "null" }
+                        ]
+                      },
+                      "with_rule": { "type": "string" },
+                      "with_effect": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": ["ask", "clock", "env", "random", "read", "send", "show", "write"]
+                          },
+                          "boundary": {
+                            "type": "string",
+                            "enum": ["ambient", "console", "file", "network"]
+                          },
+                          "target": { "type": "string" },
+                          "line": { "type": "integer" }
+                        },
+                        "required": ["kind", "boundary", "target", "line"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["rule", "effect", "with_rule", "with_effect"],
+                    "additionalProperties": false
+                  },
+                  { "type": "null" }
+                ]
+              },
               "origins": {
                 "type": "array",
                 "items": {
@@ -223,8 +278,8 @@
             "required": [
               "rule", "rule_line", "assertion", "kind", "target", "condition",
               "because", "is_violation", "vacuous", "vacuous_situation",
-              "uncertain", "effect", "cleared_by", "narrowed_by", "origins",
-              "message"
+              "uncertain", "effect", "cleared_by", "narrowed_by",
+              "contradiction", "origins", "message"
             ],
             "additionalProperties": false
           }

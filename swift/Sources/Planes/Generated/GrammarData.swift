@@ -9,8 +9,8 @@
 enum EmbeddedGrammar {
     static let vocabulary = EmbeddedGrammarFile(
         path: "grammar/vocabulary.json",
-        utf8Count: 18720,
-        fnv1a64: 0x8B8913EF859FC857,
+        utf8Count: 19255,
+        fnv1a64: 0x106A22A40E3AE7E8,
         text: ##"""
 {
   "format": 1,
@@ -260,12 +260,17 @@ enum EmbeddedGrammar {
       "note": "square root (square-root-spec.md, closing §253) -- the first operation whose exactness is decided by its ARGUMENT rather than by itself: `root of 9` is exactly 3 and `root of 2` is approximate, because sqrt(n/d) of a reduced fraction is rational exactly when n and d are both perfect squares and the exact answer is then integer arithmetic. This is deliberately unlike `sine`, which approximates at EVERY argument because its algorithm has no exact path at any of them. A negative argument is refused, tagged not-a-number: this language has no imaginary number and inventing one for a single builtin is a larger decision. Shadowable by a user function of the same name; never an effect kind"
     }
   ],
-  "effect_kinds_note": "The closed vocabulary of effect kinds, grouped by boundary. Lives here, rather than in shapes.py where it originated, because the parser also needs it -- to validate a rule's effect kind at parse time -- and parser.py cannot import shapes.py (shapes.py imports parser.py; the reverse would be a cycle). Closed is the point: an open vocabulary cannot be searched or diffed across packages, and duplicating it in two files would let the two copies drift.",
+  "effect_kinds_note": "The closed vocabulary of effect kinds, grouped by boundary. Lives here, rather than in shapes.py where it originated, because the parser also needs it -- to validate a rule's effect kind at parse time -- and parser.py cannot import shapes.py (shapes.py imports parser.py; the reverse would be a cycle). Closed is the point: an open vocabulary cannot be searched or diffed across packages, and duplicating it in two files would let the two copies drift. Grew from four kinds to seven in the FFI session of July 23, 2026 (clock, random, env), and from seven to eight for Sprint B's send effect (v37.1 addendum, Track 0 #7-#11): a foreign declaration's `doing` claim, like `clock`/`random`/`env`, never a builtin or keyword, and never callable natively -- `send` stays usable as an ordinary function name.",
   "effect_kinds": [
     {
       "kind": "ask",
       "boundary": "network",
-      "note": "request-with-response"
+      "note": "a request expecting a response -- fetch-only"
+    },
+    {
+      "kind": "send",
+      "boundary": "network",
+      "note": "a request that carries the program's data out (a message, form, upload or report)"
     },
     {
       "kind": "read",
@@ -492,11 +497,11 @@ enum EmbeddedGrammar {
     )
     static let core = EmbeddedGrammarFile(
         path: "grammar/core.json",
-        utf8Count: 4020,
-        fnv1a64: 0xB6088DB712624DA5,
+        utf8Count: 4177,
+        fnv1a64: 0x56BFA7F95BAC7F2D,
         text: #"""
 {
-  "note": "The core subset -- the port surface a second host must implement to run grammar/interp.planes AND EVERYTHING IT REACHES THROUGH `use`. Declared here as a single source of truth (as grammar/vocabulary.json is for the full surface) and enforced by core_check.py, which fails when any file in that graph uses a keyword or builtin outside it. Derived from evidence: every member is a construct the graph actually uses; every excluded construct is one it provably avoids. reports/CORE_SUBSET.md is the prose derivation; this file is what the checker reads. Effect kinds are NOT listed as constraints -- all seven are core (an interpreter performs whatever it interprets, confirmed by shapes in Phase 5), so they are never flagged. This file is HAND-EDITED and the language's vocabulary is not, so core_check.py also holds the two against each other: every name here must still exist in the vocabulary, and every keyword and builtin the vocabulary declares must appear either in the core lists or in the matching `excluded_` map with a reason. A builtin that is neither core nor explained is a violation -- which is what `root` was, silently, between its addition and this check. THE WORD `graph` IN THE FIRST SENTENCE IS LOAD-BEARING AND WAS NOT ALWAYS THERE: this file once derived the core from interp.planes ALONE and excluded `when` on that basis, while grammar/lexer.planes -- which interp.planes reaches through `use parser` -- dispatched on record shape with `when` sixteen times, in the loop every character of every program passes through. A host built to the core as declared then could not have run the interpreter it was the port surface for.",
+  "note": "The core subset -- the port surface a second host must implement to run grammar/interp.planes AND EVERYTHING IT REACHES THROUGH `use`. Declared here as a single source of truth (as grammar/vocabulary.json is for the full surface) and enforced by core_check.py, which fails when any file in that graph uses a keyword or builtin outside it. Derived from evidence: every member is a construct the graph actually uses; every excluded construct is one it provably avoids. reports/CORE_SUBSET.md is the prose derivation; this file is what the checker reads. Effect kinds are NOT listed as constraints -- all eight are core (an interpreter performs whatever it interprets, confirmed by shapes in Phase 5), so they are never flagged. `send` (B1, Sprint B) is core by the same rule though interp.planes never claims one itself -- see core_check.py's confirmation 2, which excepts it by name. This file is HAND-EDITED and the language's vocabulary is not, so core_check.py also holds the two against each other: every name here must still exist in the vocabulary, and every keyword and builtin the vocabulary declares must appear either in the core lists or in the matching `excluded_` map with a reason. A builtin that is neither core nor explained is a violation -- which is what `root` was, silently, between its addition and this check. THE WORD `graph` IN THE FIRST SENTENCE IS LOAD-BEARING AND WAS NOT ALWAYS THERE: this file once derived the core from interp.planes ALONE and excluded `when` on that basis, while grammar/lexer.planes -- which interp.planes reaches through `use parser` -- dispatched on record shape with `when` sixteen times, in the loop every character of every program passes through. A host built to the core as declared then could not have run the interpreter it was the port surface for.",
   "format": 1,
   "keywords": [
     "and", "as", "doing", "each", "else", "fail", "false", "first", "for",
@@ -521,7 +526,7 @@ enum EmbeddedGrammar {
   "size": {
     "keywords": "29 of 32 -- 28 of them used by grammar/interp.planes itself and the twenty-ninth, `when`, by grammar/lexer.planes beneath it. The two numbers used to be the same, which is exactly why the difference went unnoticed: core_check.py's CORE SIZE block reports what the ENTRY FILE uses and this field declares the CORE, and while the entry file happened to use every core keyword nobody could tell the two apart. They now differ by one on purpose",
     "builtins": "11 of 13 -- interp.planes delegates every ordinary builtin to the host, `number` (A-Q19) among them; `sine` and `root` are the two exceptions, each reimplemented from exact parts rather than called, and each reason is in `excluded_builtins` where a loader can read it rather than here in prose",
-    "effect_kinds": "7 of 7"
+    "effect_kinds": "8 of 8"
   }
 }
 

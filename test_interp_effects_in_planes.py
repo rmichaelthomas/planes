@@ -764,17 +764,21 @@ def test_real_mode_still_refuses_an_arbitrary_foreign_and_names_why():
 
 # =========================================== Phase 5: the effect surface (A.3)
 
-def test_effect_surface_of_interp_planes_is_all_seven_kinds():
+def test_effect_surface_of_interp_planes_is_all_but_send_kinds():
     # A.3's prediction, checked against the real artifact: the static effect
-    # surface of the interpreter is all seven kinds, because it performs
-    # whatever the program it runs performs. Sound and maximally imprecise.
+    # surface of the interpreter is every kind it has a reason to claim,
+    # because it performs whatever the program it runs performs. Sound and
+    # maximally imprecise. `send` (B1, Sprint B) is the one kind excepted by
+    # name here, the same way core_check.py's confirmation 2 excepts it:
+    # nothing in interp.planes's own graph carries the program's data out.
     from lexer import EFFECT_KINDS
     from shapes import analyse_file
     surface = analyse_file("grammar/interp.planes", follow=True)  # total: no raise
     kinds = {e.kind for e in surface.declared}
-    assert kinds >= set(EFFECT_KINDS), (
-        f"missing {set(EFFECT_KINDS) - kinds}")
-    assert kinds == set(EFFECT_KINDS), f"unexpected {kinds - set(EFFECT_KINDS)}"
+    expected = set(EFFECT_KINDS) - {"send"}
+    assert kinds >= expected, (
+        f"missing {expected - kinds}")
+    assert kinds == expected, f"unexpected {kinds - expected}"
 
 
 def test_effect_surface_analyser_stays_total_and_origins_do_not_crash():

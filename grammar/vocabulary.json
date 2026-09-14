@@ -246,12 +246,17 @@
       "note": "square root (square-root-spec.md, closing §253) -- the first operation whose exactness is decided by its ARGUMENT rather than by itself: `root of 9` is exactly 3 and `root of 2` is approximate, because sqrt(n/d) of a reduced fraction is rational exactly when n and d are both perfect squares and the exact answer is then integer arithmetic. This is deliberately unlike `sine`, which approximates at EVERY argument because its algorithm has no exact path at any of them. A negative argument is refused, tagged not-a-number: this language has no imaginary number and inventing one for a single builtin is a larger decision. Shadowable by a user function of the same name; never an effect kind"
     }
   ],
-  "effect_kinds_note": "The closed vocabulary of effect kinds, grouped by boundary. Lives here, rather than in shapes.py where it originated, because the parser also needs it -- to validate a rule's effect kind at parse time -- and parser.py cannot import shapes.py (shapes.py imports parser.py; the reverse would be a cycle). Closed is the point: an open vocabulary cannot be searched or diffed across packages, and duplicating it in two files would let the two copies drift.",
+  "effect_kinds_note": "The closed vocabulary of effect kinds, grouped by boundary. Lives here, rather than in shapes.py where it originated, because the parser also needs it -- to validate a rule's effect kind at parse time -- and parser.py cannot import shapes.py (shapes.py imports parser.py; the reverse would be a cycle). Closed is the point: an open vocabulary cannot be searched or diffed across packages, and duplicating it in two files would let the two copies drift. Grew from four kinds to seven in the FFI session of July 23, 2026 (clock, random, env), and from seven to eight for Sprint B's send effect (v37.1 addendum, Track 0 #7-#11): a foreign declaration's `doing` claim, like `clock`/`random`/`env`, never a builtin or keyword, and never callable natively -- `send` stays usable as an ordinary function name.",
   "effect_kinds": [
     {
       "kind": "ask",
       "boundary": "network",
-      "note": "request-with-response"
+      "note": "a request expecting a response -- fetch-only"
+    },
+    {
+      "kind": "send",
+      "boundary": "network",
+      "note": "a request that carries the program's data out (a message, form, upload or report)"
     },
     {
       "kind": "read",

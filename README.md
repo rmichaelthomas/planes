@@ -39,7 +39,7 @@ Not a single network call was made to produce that surface.
 | [Run it](#run-it) | the three implementations, and a browser |
 | [Three implementations](#three-implementations) | what self-hosting buys, and what "they agree" means |
 | [Performance](#performance) | four ordinary jobs, measured on one named Mac |
-| [The vocabulary](#the-vocabulary) | 32 words, 13 builtins, 7 effect kinds |
+| [The vocabulary](#the-vocabulary) | 32 words, 13 builtins, 8 effect kinds |
 | [The language](#the-language) | syntax, in one page |
 | [Numbers are exact](#numbers-are-exact) | rationals, not floats |
 | [Effect surface](#effect-surface) | what a program *can* do |
@@ -86,7 +86,7 @@ step one if they are missing.
 
 Anyone writing Planes for another project can check a file with Node or Swift
 alone. Both parse it and print its effect surface in the `--json` format
-([`docs/surface-format-v1.md`](docs/surface-format-v1.md)), and add rule
+([`docs/surface-format-v2.md`](docs/surface-format-v2.md)), and add rule
 results with `--rules`:
 
 ```bash
@@ -273,14 +273,26 @@ string, exponent notation, and a `~`-prefixed approximation (the language's
 own marker that a value's exact form could not be printed) all name their own
 error rather than returning `nothing` or `0`.
 
-**7 effect kinds** — the closed vocabulary a host can be asked for:
+**8 effect kinds** — the closed vocabulary a host can be asked for:
 
 ```
-ask  clock  env  random  read  show  write
+ask  clock  env  random  read  send  show  write
 ```
 
 `clock`, `random` and `env` are *ambient*: they make a result depend on
 something outside the program, so a function that reads the clock is not pure.
+
+`ask` and `send` share the network boundary but mean different things:
+`ask` is fetch-only, a request expecting a response; `send` is a request that
+carries the program's data out (a message, form, upload or report). Like
+`clock`/`random`/`env`, `send` is a `foreign`-only kind — no keyword, no
+builtin, no host method — and stays usable as an ordinary function name. The
+one rule for telling them apart: the author of the `foreign` declaration
+decides, by what the request does, not by its HTTP method — a GET can leak
+data through its query string and a POST can be a plain lookup. Planes
+doesn't guess from the method, and nothing checks beyond the declared label,
+the same trust every `doing` claim has. Data carried in a URL is still traced
+by derivation regardless of which kind claims it.
 
 Everything else is an ordinary name. Builtins are shadowable, and the analyser
 follows the shadow:
@@ -552,6 +564,15 @@ string and fragment are ignored, but a rule's own target may not carry one —
 isn't URL-shaped (a file path, a `queue:send`-style name, console text)
 still matches exactly, as every rule target did before B2.
 
+Forbidding `ask` also forbids `send` to the same address (B1) — a rule
+written before `send` existed never weakens under the new kind. Forbidding
+`send` forbids only `send`; permitting `ask` permits only `ask`. A permit's
+kind must match an effect's actual kind exactly to clear it, never
+widened: `rule [deny] anything may not ask` plus
+`rule [ok] anything may ask to "https://a" supersedes [deny] @fp` still
+forbids a `send` to `https://a` — only a permit written against `send`
+itself excepts one.
+
 A rule can also declare that it and another must never both apply —
 `rule [b] anything may not write contradicts [a]` — an authored
 incompatibility, distinct from the structural conflict the checker detects
@@ -688,7 +709,7 @@ foreign grab of u from "x.y"              doing ask, clock
 a parameter the caller supplies:
 
 ```
-foreign send of x    from "m.post"    doing ask "https://api.example.com"
+foreign send of x    from "m.post"    doing send "https://api.example.com"
 foreign fetch of url from "u.urlopen" doing ask url
 ```
 
@@ -785,8 +806,8 @@ than hand-kept, so a tool never has to parse prose to learn the vocabulary.
 
 `grammar_gen.py --check` fails the build if any of these drifts from the code it
 describes. `shapes_cli.py --json` emits an effect surface in the same spirit —
-the exact format, field by field, is `docs/surface-format-v1.md` and its JSON
-Schema, `grammar/protocols/surface-v1.json`.
+the exact format, field by field, is `docs/surface-format-v2.md` and its JSON
+Schema, `grammar/protocols/surface-v2.json`.
 
 ---
 

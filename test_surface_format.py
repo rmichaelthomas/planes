@@ -1,18 +1,23 @@
 """E1 -- the published effect-surface format, checked rather than just written.
 
-`docs/surface-format-v1.md` is the specification five downstream projects
+`docs/surface-format-v2.md` is the specification five downstream projects
 copy by hand (Undertow, Cutter, Omniglot, Koncord's `HostEffect`, 5xFive),
-and `grammar/protocols/surface-v1.json` is its JSON Schema. This file is what
+and `grammar/protocols/surface-v2.json` is its JSON Schema. This file is what
 keeps the three from drifting apart:
 
   1. every one of the three hosts' `shapes_cli --json [--rules]` output, over
      a spread of real programs, validates against the schema;
   2. the schema's effect-kind enums agree with `grammar/vocabulary.json`
-     (the closed seven-kind vocabulary, plus the `"unknown"` sentinel where
+     (the closed eight-kind vocabulary, plus the `"unknown"` sentinel where
      it is actually allowed to appear -- never inside a rule, since the
-     parser only ever accepts one of the seven there);
+     parser only ever accepts one of the eight there);
   3. the doc's own kind table (section 3) has not drifted from the same
      generated vocabulary.
+
+B1 (Sprint B) bumped the format from 1 to 2 (`send` joined the vocabulary,
+`ask` narrowed to fetch-only) and moved this suite from v1 to v2. Format 1's
+doc and schema stay in the repo, frozen, as the `sprint-a-2026-09` tag's
+record -- this file no longer checks them.
 
 No JSON Schema library is a project dependency (`import jsonschema` succeeds
 against the system `python3` on this machine but not against `.venv`, so
@@ -46,9 +51,9 @@ NODE = shutil.which("node")
 SWIFT = swift_host.SWIFT
 REPO = os.path.dirname(os.path.abspath(__file__))
 
-SCHEMA_PATH = os.path.join(REPO, "grammar", "protocols", "surface-v1.json")
+SCHEMA_PATH = os.path.join(REPO, "grammar", "protocols", "surface-v2.json")
 VOCAB_PATH = os.path.join(REPO, "grammar", "vocabulary.json")
-DOC_PATH = os.path.join(REPO, "docs", "surface-format-v1.md")
+DOC_PATH = os.path.join(REPO, "docs", "surface-format-v2.md")
 
 
 # ================================================================ the validator
@@ -150,7 +155,7 @@ def _load_vocab_effect_kinds():
 
 
 def _doc_kind_table():
-    """Parse docs/surface-format-v1.md section 3's table into
+    """Parse docs/surface-format-v2.md section 3's table into
     {kind: (boundary, meaning)}. A hand-maintained doc table is exactly the
     hazard scripts/check_derived_claims.py names -- a sentence that claims
     something about generated state with nothing holding the two together
@@ -291,8 +296,8 @@ def test_rules_field_validates_and_agrees_across_hosts():
 
 def test_schema_surface_kind_enum_matches_vocabulary_plus_unknown():
     """kinds / effects[].kind / runs_on_load[].kind / effects_undeclared[].kind
-    all admit the seven vocabulary kinds plus the `"unknown"` sentinel
-    (docs/surface-format-v1.md section 3.1) -- never an eighth real kind."""
+    all admit the eight vocabulary kinds plus the `"unknown"` sentinel
+    (docs/surface-format-v2.md section 3.1) -- never a ninth real kind."""
     vocab_kinds = sorted(e["kind"] for e in _load_vocab_effect_kinds())
     expected = sorted(vocab_kinds + ["unknown"])
     schema = _load_schema()
@@ -309,7 +314,7 @@ def test_schema_surface_kind_enum_matches_vocabulary_plus_unknown():
 
 def test_schema_rule_kind_enum_is_vocabulary_only():
     """A rule's own kind, and the kind of the effect it matched, are always
-    one of the seven vocabulary kinds -- the parser rejects any other word
+    one of the eight vocabulary kinds -- the parser rejects any other word
     in a rule's kind position, so `"unknown"` can never appear there."""
     vocab_kinds = sorted(e["kind"] for e in _load_vocab_effect_kinds())
     schema = _load_schema()

@@ -5,7 +5,7 @@ Reports, over a set of .planes files (`corpus/` by default):
 
   * which of the 32 reserved words appear,
   * which of the 13 builtins appear,
-  * which of the 7 effect kinds appear,
+  * which of the 8 effect kinds appear,
   * which grammar-derived compositions appear.
 
 Every list is DERIVED, never hand-written (S7, A.2). Reserved words come from
@@ -218,7 +218,7 @@ def builtins_in(prog):
 
 
 def effect_kinds_in(src):
-    """Which of the seven effect kinds the file's declared surface touches --
+    """Which of the eight effect kinds the file's declared surface touches --
     from shapes.analyse, the same static surface `shapes_cli.py` publishes."""
     surface = analyse(src)
     return set(surface.kinds())

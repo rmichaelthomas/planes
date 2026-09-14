@@ -3,8 +3,9 @@
 core_check.py confirms grammar/interp.planes uses nothing outside the declared
 core (grammar/core.json) — the last outstanding obligation from the core-subset
 ruling. These tests pin: it conforms today, it has teeth (a non-core construct
-fails it), `with` is confirmed used, all seven effect kinds are used, and the
-core size it reports is the port surface for a second host.
+fails it), `with` is confirmed used, seven of the eight effect kinds are
+used (`send` excepted by design), and the core size it reports is the
+port surface for a second host.
 
 THE SECOND HALF, added when the hand-edited files got the gate the generated
 ones already had. core.json is hand-edited and drifted: it said "11 of 12"
@@ -58,13 +59,18 @@ def test_with_is_confirmed_used():
     assert "CONFIRMED: `with` is used" in r.stdout
 
 
-def test_all_seven_effect_kinds_confirmed_used():
+def test_all_but_send_effect_kinds_confirmed_used():
+    """`send` (B1, Sprint B) is excepted by name: interp.planes has no
+    reason to claim a boundary crossing that carries the program's data
+    out, unlike clock/random/env, which it must claim to read the ambient
+    world at all."""
     r = _run()
-    assert "CONFIRMED: all seven effect kinds are used" in r.stdout
+    assert "CONFIRMED: 7 of 8 effect kinds are used" in r.stdout
+    assert "'send' is excluded by design" in r.stdout
 
 
 def test_reported_core_size_is_the_port_surface():
-    # 29 of 32 keywords, eleven of the 13 builtins, all 7 effect kinds — larger
+    # 29 of 32 keywords, eleven of the 13 builtins, 7 of the 8 effect kinds — larger
     # than the "half the keywords / 3 builtins" reports/CORE_SUBSET.md predicted.
     #
     # 29, not 28: the port surface is what a second host must implement to run

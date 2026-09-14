@@ -692,6 +692,27 @@ class Analyser:
         if isinstance(node, Call):
             for a in node.args:
                 out |= self.walk(a, fn_effects, consts)
+            # A foreign declaration is checked BEFORE the bare ambient/builtin
+            # fallback below: `clock`, `random`, `env` and (Sprint B) `send`
+            # are effect kinds with no native call of their own, reachable
+            # ONLY through a `foreign ... doing <kind>` declaration -- and
+            # `send` in particular is required to stay usable as an ordinary
+            # foreign/function name (`foreign send of x from "m.post" doing
+            # send "..."`). Checking EFFECT_KINDS membership first would treat
+            # a call to a foreign literally named "send" (or "clock", etc.) as
+            # a bare ambient effect at the CALL SITE — target read off the
+            # call's own argument rather than the foreign's declared `doing`
+            # clause — hiding the foreign's real, possibly different,
+            # destination. Found while adding `send`: demo/fdiff/v1.planes's
+            # `foreign send of payload from "mylib.post" doing send "..."`,
+            # called as `send of data`, would otherwise gain a spurious
+            # extra `send network` effect at the call site (in addition to
+            # the correctly declared one) once "send" joined EFFECT_KINDS.
+            target = self.local.get(self.current_file, {}).get(node.name, node.name)
+            if target in self.foreigns:
+                out |= self.foreign_effects(
+                    self.foreigns[target], node.args, consts)
+                return out
             # `ask` and `read` are ordinary builtin functions now, not keyword
             # nodes. They still produce effects, and a user function of the
             # same name shadows them — so a builtin only counts as an effect
@@ -701,11 +722,6 @@ class Analyser:
                 target, computed, deriv = self.describe(arg, consts)
                 out.add(Effect(node.name, EFFECT_KINDS[node.name],
                                target, computed, site=node.line, derivation=deriv))
-                return out
-            target = self.local.get(self.current_file, {}).get(node.name, node.name)
-            if target in self.foreigns:
-                out |= self.foreign_effects(
-                    self.foreigns[target], node.args, consts)
                 return out
             if target in fn_effects:
                 out |= self.specialise(
@@ -1445,9 +1461,36 @@ class SurfaceDiff:
         return [e for e in self.added
                 if e.target not in before and not e.computed]
 
+    def changed_kinds(self):
+        """The same destination, reached by a different effect kind now
+        (B1, Sprint B) — most importantly `ask` becoming `send` or the
+        reverse. Matched on `(boundary, target, computed)` so a coincidental
+        target shared by an unrelated boundary, or by a literal versus a
+        computed pattern, is never mistaken for a relabelling.
+
+        `new_destinations()` alone misses this: the target is not new, so
+        it is filtered out by `target not in before`. But the kind is
+        exactly what tells a reader whether the program's data left it or
+        only came back (v37.1 §531) — `ask` -> `send` on an unchanged
+        target is precisely the "existing claim, now correctly labelled"
+        case the surface must not silently treat as no change.
+        """
+        removed_by_key = {}
+        for e in self.removed:
+            removed_by_key.setdefault((e.boundary, e.target, e.computed), []).append(e)
+        out = []
+        for e in self.added:
+            for r in removed_by_key.get((e.boundary, e.target, e.computed), ()):
+                if r.kind != e.kind:
+                    out.append(e)
+                    break
+        return out
+
     def is_significant(self):
-        """Worth failing a build over: a new boundary, or a new destination."""
-        return bool(self.new_boundaries or self.new_destinations())
+        """Worth failing a build over: a new boundary, a new destination, or
+        the same destination reached by a different effect kind now (B1)."""
+        return bool(self.new_boundaries or self.new_destinations()
+                   or self.changed_kinds())
 
     def render(self):
         if self.is_empty():
@@ -1460,6 +1503,13 @@ class SurfaceDiff:
         if fresh and not self.new_boundaries:
             lines.append("NEW DESTINATIONS: "
                          + ", ".join(sorted({e.target for e in fresh})))
+        changed = self.changed_kinds()
+        if changed and not self.new_boundaries:
+            by_removed = {(e.boundary, e.target, e.computed): e for e in self.removed}
+            lines.append("KIND CHANGED: " + ", ".join(
+                f"{e.target} ({by_removed[(e.boundary, e.target, e.computed)].kind}"
+                f" -> {e.kind})"
+                for e in sorted(changed, key=lambda e: e.target)))
         for e in self.added:
             lines.append(f"  + {e.boundary}: {e}")
         for e in self.removed:

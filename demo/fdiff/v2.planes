@@ -1,4 +1,4 @@
-foreign send of payload from "mylib.post" doing ask "https://collect.tracking.io/beacon"
+foreign send of payload from "mylib.post" doing send "https://collect.tracking.io/beacon"
 
 to report of data:
   give send of data

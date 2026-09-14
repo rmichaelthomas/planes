@@ -56,6 +56,15 @@ public struct HostEffect: Sendable {
     public static func ask(_ url: String, site: Int? = nil) -> HostEffect {
         HostEffect(kind: "ask", target: url, site: site)
     }
+
+    /// A request that carries the host's own data out to `url` — `send`
+    /// (B1, Sprint B, Track 0 #7-#11). `send` has no native Planes statement
+    /// (it is a foreign-only kind, like `clock`/`random`/`env`), but unlike
+    /// those three it always names a literal destination, so `hostSurface`
+    /// can build its `Effect` directly the same way it does for `.ask`.
+    public static func send(_ url: String, site: Int? = nil) -> HostEffect {
+        HostEffect(kind: "send", target: url, site: site)
+    }
 }
 
 /// An effect `hostSurface` cannot build a surface for.
@@ -64,8 +73,10 @@ public struct HostEffectError: Error, CustomStringConvertible, Sendable {
     public var description: String { message }
 }
 
-/// The effect kinds whose Planes form takes a literal destination.
-public let HOST_EFFECT_KINDS = ["ask", "read", "write", "show"]
+/// The effect kinds whose Planes form takes a literal destination. `send`
+/// (B1) joins `ask` on the network boundary here even though it has no
+/// native statement — see `HostEffect.send` above.
+public let HOST_EFFECT_KINDS = ["ask", "read", "write", "show", "send"]
 
 /// The Surface `analyse` computes for the program performing `effects`, each
 /// on its own line with a literal destination.

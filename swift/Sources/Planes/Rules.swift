@@ -430,15 +430,48 @@ func sameScope(_ a: String?, _ b: String?) -> Bool {
     scopeCovers(a, b) && scopeCovers(b, a)
 }
 
+/// The set of effect kinds this rule's declared kind matches against (B1,
+/// Sprint B, Track 0 #10). Must agree with rules.py's `_covered_kinds` and
+/// js/rules.mjs's `coveredKinds`. Only a FORBID on "ask" widens (forbidding
+/// ask also forbids send, the same network boundary's outbound half); a
+/// PERMIT never widens ("may ask to X" permits only ask, "may send to X"
+/// permits only send); a forbid on any other kind, including "send" itself,
+/// covers only itself. Effect-kind words are always one of the closed,
+/// ASCII, parser-validated vocabulary, never arbitrary program text, so
+/// plain `Set<String>` equality (not `sameText`'s scalar-by-scalar compare)
+/// is exact here. Orthogonal to B2's scope generalisation above: this is
+/// about which KINDS a rule's declared kind stands for, `scopeCovers`/
+/// `sameScope` are about which ADDRESSES its target stands for. `narrows`
+/// and `checkConflicts` combine both, and this is `public`, the same as
+/// `narrows`, for a host that wants to introspect a rule's true coverage.
+public func coveredKinds(_ rule: AST.Rule) -> Set<String> {
+    if sameText(rule.assertion, "forbid") && sameText(rule.effectKind, "ask") {
+        return ["ask", "send"]
+    }
+    return [rule.effectKind]
+}
+
 /// Does rule `b` cover a strict subset of what rule `a` ranges over? (v2.0
-/// §30; re-proven for host/path covering at B2.) Kind and target only,
-/// never assertion. `b` narrows `a` when `a`'s covered set contains `b`'s
-/// and the two aren't the same scope -- the pre-B2 case (`a` has no target,
-/// `b` does) is one instance of this; a rule whose covered address set is
-/// strictly inside another's target now is too.
+/// §30; re-proven for host/path covering at B2, and for kind covering at
+/// B1.) Two dimensions, both required, never assertion:
+///
+/// - KIND: `a`'s and `b`'s covered kinds (`coveredKinds`, B1) must overlap.
+///   Comparable within the same literal kind (as before B1 -- `coveredKinds`
+///   always includes a rule's own kind); also comparable across ask/send
+///   when a forbid's widened coverage reaches a narrower rule's kind -- a
+///   `may send to X/public` permit can narrow a bare `may not ask` forbid
+///   the same way a `may ask to X/public` permit already did.
+/// - SCOPE: `a`'s target must cover `b`'s (B2's `scopeCovers`) and the two
+///   must not be the SAME scope -- the pre-B2 case (`a` has no target, `b`
+///   does) is one instance; a rule whose covered address set is strictly
+///   inside another's target now is too.
+///
+/// Two rules with overlapping kinds and the same scope are equally
+/// specific -- neither narrows the other; that pair is `checkConflicts`'s
+/// job.
 public func narrows(_ b: AST.Rule, _ a: AST.Rule) -> Bool {
     if sameText(a.name, b.name) { return false }
-    if !sameText(a.effectKind, b.effectKind) { return false }
+    if coveredKinds(a).isDisjoint(with: coveredKinds(b)) { return false }
     return scopeCovers(a.target, b.target) && !scopeCovers(b.target, a.target)
 }
 
@@ -731,8 +764,18 @@ func checkTargetIsAnAddress(_ rule: AST.Rule) throws {
 func checkPermitsAreRelated(_ active: [AST.Rule]) throws {
     let forbids = active.filter { sameText($0.assertion, "forbid") }
     for p in active where sameText(p.assertion, "permit") {
+        // B1: coveredKinds(f) replaces the old sameText(f.effectKind,
+        // p.effectKind) -- a "send" permit can be related to (named in
+        // supersedes, share a scope with, or be strictly narrower in BOTH
+        // scope and kind than) an "ask" forbid, since forbidding ask also
+        // forbids send. narrows(p, f) is itself now generalised the same
+        // way (kind overlap, not literal equality), so a `may send to
+        // X/public` permit narrows a bare `may not ask` forbid
+        // automatically, no supersedes needed. Only an equal-scope
+        // cross-kind pair still demands an explicit supersedes --
+        // checkConflicts's job.
         let related = forbids.contains { f in
-            sameText(f.effectKind, p.effectKind) &&
+            coveredKinds(f).contains(p.effectKind) &&
                 (sameOptionalText(p.supersedes, f.name) || narrows(p, f) || sameScope(p.target, f.target))
         }
         if !related {
@@ -747,15 +790,38 @@ func checkPermitsAreRelated(_ active: [AST.Rule]) throws {
     }
 }
 
+/// Equal-specificity conflicts (v2.0 §32; B2's `sameScope` in place of `==`
+/// on the target; B1's `coveredKinds` overlap in place of `==` on the kind
+/// for an opposite-assertion pair). Same assertion + different literal kind
+/// (two forbids, one ask one send) never conflicts -- both prohibit, so
+/// stacking agrees about everything. Opposite assertion + overlapping
+/// covered kinds + same scope does conflict — "rule [deny] anything may
+/// not ask to X" beside "rule [also] anything may send to X", with no
+/// supersedes, is exactly such a pair — resolved the same way as the
+/// same-kind case: an explicit supersedes naming the forbid. A strictly
+/// narrower scope needs no supersedes at all, since `narrows` (generalised
+/// the same way) resolves it.
 func checkConflicts(_ active: [AST.Rule]) throws {
     for (i, a) in active.enumerated() {
         for b in active[(i + 1)...] {
-            if !sameText(a.effectKind, b.effectKind) || !sameScope(a.target, b.target) { continue }
+            if !sameScope(a.target, b.target) { continue }
+            if sameText(a.assertion, b.assertion) {
+                if !sameText(a.effectKind, b.effectKind) { continue }
+            } else if coveredKinds(a).isDisjoint(with: coveredKinds(b)) {
+                continue
+            }
             if narrows(a, b) || narrows(b, a) { continue }
             if sameOptionalText(a.supersedes, b.name) || sameOptionalText(b.supersedes, a.name) { continue }
 
-            var whereText = "'\(a.effectKind)'"
-            if let t = a.target, !t.isEmpty { whereText += " to \"\(escapeStringLiteral(t))\"" }
+            var whereText: String
+            if sameText(a.effectKind, b.effectKind) {
+                whereText = "'\(a.effectKind)'"
+                if let t = a.target, !t.isEmpty { whereText += " to \"\(escapeStringLiteral(t))\"" }
+            } else {
+                let overlap = coveredKinds(a).intersection(coveredKinds(b)).sorted().joined(separator: "/")
+                whereText = "'\(a.effectKind)' and '\(b.effectKind)' (both reach \(overlap))"
+                if let t = a.target, !t.isEmpty { whereText += " to \"\(escapeStringLiteral(t))\"" }
+            }
             if !sameText(a.assertion, b.assertion) {
                 let (forbid, permit) = sameText(a.assertion, "forbid") ? (a, b) : (b, a)
                 throw RuleConflict(
@@ -785,11 +851,18 @@ func checkConflicts(_ active: [AST.Rule]) throws {
 /// rule this is the same widen-on-uncertainty rule the vacuous check uses;
 /// for a permit rule an uncertain match must NOT count — the conservatism
 /// flips at the permit boundary (v2.0 §34b), the same asymmetry `clearer`
-/// matching in `check` uses. Returns (applies, firstMatchingEffectOrNil) —
-/// the first effect by `surface.declared`'s existing ordering.
+/// matching in `check` uses. `coveredKinds(rule)` (B1) replaces a literal
+/// `effect.kind == rule.effectKind`: a `may not ask` rule that declares
+/// `contradicts` applies when the surface only ever sends (never asks) --
+/// `send` is inside what forbidding `ask` covers. A permit's own covered
+/// set is always just `{rule.effectKind}` (permits never widen), so this
+/// is a no-op change for permits. Returns (applies,
+/// firstMatchingEffectOrNil) — the first effect by `surface.declared`'s
+/// existing ordering.
 func ruleApplies(_ rule: AST.Rule, _ surface: Surface, _ declaringFile: String?) -> (Bool, Effect?) {
+    let covered = coveredKinds(rule)
     for effect in surface.declared {
-        if !sameText(effect.kind, rule.effectKind) { continue }
+        if !covered.contains(effect.kind) { continue }
         let (matched, uncertain) = targetMatches(rule, effect)
         if !matched { continue }
         if sameText(rule.assertion, "permit") && uncertain { continue }
@@ -848,11 +921,12 @@ public func check(_ rules: [AST.Rule], _ surface: Surface, declaringFile: String
 
     var results: [Violation] = []
     for rule in forbids {
+        let covered = coveredKinds(rule)
         var nKind = 0
         var nKindSubject = 0
         var matchedAny = false
         for effect in surface.declared {
-            if !sameText(effect.kind, rule.effectKind) { continue }
+            if !covered.contains(effect.kind) { continue }
             nKind += 1
             let (matched, uncertain) = targetMatches(rule, effect)
             let subjectOk = subjectMatches(rule, effect, surface, declaringFile)
@@ -862,6 +936,10 @@ public func check(_ rules: [AST.Rule], _ surface: Surface, declaringFile: String
 
             var clearer: AST.Rule?
             for p in permits {
+                // A permit never widens: it clears an effect only when its
+                // own kind is the effect's actual kind, exactly — "a permit
+                // for ask never clears a forbidden send" (B1, Track 0 #10).
+                if !sameText(p.effectKind, effect.kind) { continue }
                 if !(sameOptionalText(p.supersedes, rule.name) || narrows(p, rule)) { continue }
                 let (pMatched, pUncertain) = targetMatches(p, effect)
                 // A computed permit target clears nothing: widening is safe for a

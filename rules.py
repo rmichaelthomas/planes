@@ -499,26 +499,60 @@ def _same_scope(a, b):
     return _scope_covers(a, b) and _scope_covers(b, a)
 
 
+def _covered_kinds(rule):
+    """The set of effect kinds this rule's declared kind matches against
+    (B1, Sprint B, Track 0 #10).
+
+    Only a FORBID on `ask` widens: forbidding `ask` also forbids `send`,
+    because `send` is data going out on the same network boundary `ask`
+    fetches from, and "no rule written before send ever weakens" (v37.1
+    §533) — a rule an author wrote to keep a program from asking a place
+    must not go on permitting the strictly more dangerous act of sending
+    it data. A PERMIT never widens: `may ask to X` permits only `ask`, and
+    `may send to X` permits only `send` — narrow is the safe default for a
+    grant, exactly backwards from a prohibition. A forbid on any other kind
+    (including `send` itself) covers only itself, same as before this
+    kind ever existed.
+
+    Orthogonal to B2's scope generalisation: this is about which KINDS a
+    rule's declared kind stands for, `_scope_covers`/`_same_scope` are
+    about which ADDRESSES its target stands for. `narrows` and
+    `_check_conflicts` combine both.
+    """
+    if rule.assertion == "forbid" and rule.kind == "ask":
+        return {"ask", "send"}
+    return {rule.kind}
+
+
 def narrows(b, a):
     """Does rule `b` cover a strict subset of what rule `a` ranges over?
 
-    (v2.0 §30; re-proven for host/path covering at B2.) A pure scope
-    comparison — kind and target only, never assertion — so the same
-    function resolves specificity between two forbids, two permits, or a
-    permit and the forbid it excepts. Comparable only within the same
-    kind. `b` narrows `a` when `a`'s covered set contains `b`'s and the
-    two aren't the same scope (B2's `_scope_covers`) — the pre-B2 case
-    (`a` has no target, `b` does) is one instance of this; a rule whose
-    covered address set is strictly inside another's target now is too
-    (`rule [ok] ... to "https://x/public"` narrows `rule [deny] ... to
-    "https://x"`). Two rules of the same scope (including both
+    (v2.0 §30; re-proven for host/path covering at B2, and for kind
+    covering at B1.) Two dimensions, both required, never assertion:
+
+    - KIND: `a`'s and `b`'s covered kinds (`_covered_kinds`, B1) must
+      overlap. Comparable within the same literal kind (as before B1 —
+      `_covered_kinds` always includes a rule's own kind, so two rules of
+      equal literal kind always overlap here); also comparable across
+      `ask`/`send` when a forbid's widened coverage reaches a narrower
+      rule's kind — a `may send to X/public` permit can narrow a bare
+      `may not ask` forbid the same way a `may ask to X/public` permit
+      already did, since sending is inside what forbidding ask covers.
+    - SCOPE: `a`'s target must cover `b`'s (B2's `_scope_covers`) and the
+      two must not be the SAME scope — the pre-B2 case (`a` has no
+      target, `b` does) is one instance; a rule whose covered address set
+      is strictly inside another's target now is too (`rule [ok] ... to
+      "https://x/public"` narrows `rule [deny] ... to "https://x"`).
+
+    Two rules with overlapping kinds and the same scope (including both
     unrestricted, or two spellings of the same address family) are
-    equally specific — neither narrows the other, even if their names or
-    exact target strings differ.
+    equally specific — neither narrows the other, even if their names,
+    exact target strings, or literal kinds differ; that pair is
+    `_check_conflicts`'s job, not this function's.
     """
     if a.name == b.name:
         return False
-    if a.kind != b.kind:
+    if not (_covered_kinds(a) & _covered_kinds(b)):
         return False
     return _scope_covers(a.target, b.target) and not _scope_covers(b.target, a.target)
 
@@ -876,13 +910,25 @@ def _check_permits_are_related(active):
     `_check_conflicts` gives the precise diagnostic for it. Excluding it
     here would let this check's coarser "excepts no forbid rule" message
     fire first and hide the more accurate one.
+
+    B1: `p.kind in _covered_kinds(f)` replaces the old `f.kind == p.kind` —
+    a `send` permit can be related to (name in `supersedes`, or share a
+    scope with, or be strictly narrower in BOTH scope and kind than) an
+    `ask` forbid, since forbidding `ask` also forbids `send`. `narrows(p,
+    f)` is itself now generalised the same way (kind overlap, not literal
+    equality — see its docstring), so a `may send to X/public` permit
+    narrows a bare `may not ask` forbid exactly as a `may ask to X/public`
+    permit already did: automatically, no `supersedes` needed. Only an
+    equal-scope cross-kind pair — `may not ask to X` beside `may send to
+    X` — still demands an explicit `supersedes`; that is `_check_conflicts`'s
+    job, documented there.
     """
     forbids = [r for r in active if r.assertion == "forbid"]
     for p in active:
         if p.assertion != "permit":
             continue
         related = any(
-            f.kind == p.kind and
+            p.kind in _covered_kinds(f) and
             (p.supersedes == f.name or narrows(p, f)
              or _same_scope(p.target, f.target))
             for f in forbids)
@@ -916,27 +962,65 @@ def _check_conflicts(active):
     nesting case (v2.0 §30 — a rule strictly more specific than another
     need not also declare `supersedes`; B2 extends this to a rule whose
     covered address set is strictly inside another's, e.g. a `/public`
-    permit under a host-wide forbid); an explicit `supersedes` resolves
+    permit under a host-wide forbid; B1 extends it again to a rule whose
+    covered KIND is a subset of another's, e.g. a `may send to X/public`
+    permit under a bare `may not ask`); an explicit `supersedes` resolves
     an equal-specificity pair even when neither narrows the other, which
-    is the only way two rules of the same scope and kind can coexist.
+    is the only way two rules of the same scope and overlapping kind can
+    coexist.
 
     Two URL-shaped targets on the same scheme and host can never overlap
     without one covering the other or the two being the same scope — a
     "/" boundary prefix relation is laminar, never partial — so B2 needs
     no additional overlap-without-narrowing case here beyond widening
     what "equally specific" means.
+
+    B1 (Sprint B) widens WHICH PAIRS are even candidates: a forbid on
+    `ask` covers `send` too (`_covered_kinds`), so a forbid/permit pair of
+    DIFFERENT literal kinds can now collide — `rule [deny] anything may
+    not ask to X` beside `rule [also] anything may send to X`, with no
+    `supersedes`, is exactly such a pair: the permit's `send` sits inside
+    the forbid's covered set, at the same scope, and nothing says whether
+    a send there is forbidden (by `deny`) or permitted (by `also`).
+    Decided CONSISTENTLY with the same-kind case above, rather than
+    picking a silent winner:
+
+    - Same assertion, different literal kind (two forbids, one `ask` and
+      one `send`, say): NOT a conflict, unlike the same-kind case. Both
+      prohibit, so stacking them disagrees about nothing — whichever
+      "wins" on paper, the effect stays forbidden. Only literally-equal
+      kinds reach the equally-specific check for same-assertion pairs.
+    - Opposite assertion, covered kinds overlapping, same scope: a
+      conflict, resolved the same way as the same-kind case — an
+      explicit `supersedes` naming the forbid. This is what makes `may
+      send to X supersedes [deny]` valid: naming the forbid explicitly is
+      the one way to except a `send` from a broader `ask` prohibition
+      when the scopes are equal (`_check_permits_are_related` grants the
+      permit force, and the `supersedes` check below lets the pair
+      through) — a STRICTLY NARROWER scope needs no `supersedes` at all,
+      since `narrows` (generalised the same way) already resolves it.
     """
     for i, a in enumerate(active):
         for b in active[i + 1:]:
-            if a.kind != b.kind or not _same_scope(a.target, b.target):
+            if not _same_scope(a.target, b.target):
+                continue
+            if a.assertion == b.assertion:
+                if a.kind != b.kind:
+                    continue
+            elif not (_covered_kinds(a) & _covered_kinds(b)):
                 continue
             if narrows(a, b) or narrows(b, a):
                 continue
             if a.supersedes == b.name or b.supersedes == a.name:
                 continue
 
-            where = f"'{a.kind}'" + (
-                f' to "{escape_string_literal(a.target)}"' if a.target else "")
+            if a.kind == b.kind:
+                where = f"'{a.kind}'" + (
+                    f' to "{escape_string_literal(a.target)}"' if a.target else "")
+            else:
+                overlap = "/".join(sorted(_covered_kinds(a) & _covered_kinds(b)))
+                where = (f"'{a.kind}' and '{b.kind}' (both reach {overlap})") + (
+                    f' to "{escape_string_literal(a.target)}"' if a.target else "")
             if a.assertion != b.assertion:
                 forbid, permit = (
                     (a, b) if a.assertion == "forbid" else (b, a))
@@ -973,12 +1057,21 @@ def _rule_applies(rule, surface, declaring_file):
     the permit as "applying" on it would be unsound the same way clearing
     a violation on it would be.
 
+    `_covered_kinds(rule)` (B1) replaces a literal `effect.kind ==
+    rule.kind`: a `may not ask` rule that DECLARES `contradicts` applies
+    when the surface only ever sends (never asks) — `send` is inside what
+    forbidding `ask` covers, so a `contradicts` clause on it must see that
+    reach too, or a contradiction real by widened kind coverage would go
+    unreported. A permit's own covered set is always just `{rule.kind}`
+    (permits never widen), so this is a no-op change for permits.
+
     Returns (applies, first_matching_effect_or_None) — the first effect by
     `surface.declared`'s existing ordering, for a caller that needs one to
     name in a message.
     """
+    covered = _covered_kinds(rule)
     for effect in surface.declared:
-        if effect.kind != rule.kind:
+        if effect.kind not in covered:
             continue
         matched, uncertain = _target_matches(rule, effect)
         if not matched:
@@ -1092,11 +1185,12 @@ def check(rules, surface, declaring_file=None):
         # subject (regardless of target). matched_any tracks whether any
         # effect passed both gates — the pre-existing violation condition,
         # unchanged.
+        covered = _covered_kinds(rule)
         n_kind = 0
         n_kind_subject = 0
         matched_any = False
         for effect in surface.declared:
-            if effect.kind != rule.kind:
+            if effect.kind not in covered:
                 continue
             n_kind += 1
             matched, uncertain = _target_matches(rule, effect)
@@ -1109,6 +1203,17 @@ def check(rules, surface, declaring_file=None):
 
             clearer = None
             for p in permits:
+                # A permit never widens (`_covered_kinds`): it clears an
+                # effect only when its OWN kind is the effect's actual
+                # kind, exactly — "a permit for ask never clears a
+                # forbidden send" (B1, Track 0 #10). `rule [deny] anything
+                # may not ask` plus `rule [ok] anything may ask to X
+                # supersedes [deny]` still forbids a `send` to X: `ok`
+                # relates to `deny` (supersedes), but `ok.kind == "ask"`
+                # never equals a `send` effect's kind, so it is never even
+                # considered a candidate clearer for that effect.
+                if p.kind != effect.kind:
+                    continue
                 if not (p.supersedes == rule.name or narrows(p, rule)):
                     continue
                 p_matched, p_uncertain = _target_matches(p, effect)
