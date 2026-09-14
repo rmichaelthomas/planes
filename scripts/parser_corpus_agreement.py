@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Corpus agreement: run grammar/parser.planes against parser.py across the
-full 31-file corpus, and write parser-in-planes-verification.md.
+full 33-file corpus, and write parser-in-planes-verification.md.
 
 PASS / PARTIAL / FAIL per file, with the first disagreeing canonical-form
 line for anything not PASS. As of S3a Phase 4 the corpus reaches FULL

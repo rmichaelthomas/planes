@@ -656,7 +656,9 @@ def _outcome_js(expr, names):
 def _outcome_planes(expr, names):
     """Through grammar/interp.planes — the self-hosted interpreter, running on
     interp.py. `builtin-text` is its own `fmt`, so a successful result comes back
-    in the same form the other two show."""
+    in the same form the other two show. Since F2 that is `text-of-value`, not
+    `builtin-text`: `text of` renders a list or record in full, and
+    `builtin-text` is still `show`'s placeholder form."""
     from interp import Deriv as _D
     from interp import Traced as _T
     i = _planes_interp()
@@ -669,7 +671,7 @@ def _outcome_planes(expr, names):
                       [_T(expr, _D("literal", "<src>", expr, []))], i.env)
         val = i.call("eval", [node, env], i.env)
         return ("ok", "",
-                i.call("builtin-text", [val], i.env).value.get("value"), "")
+                i.call("text-of-value", [val], i.env).value.get("value"), "")
     except PlanesError as e:
         return ("error", e.tag, e.detail, e.fix)
     except Exception as e:                                   # noqa: BLE001
