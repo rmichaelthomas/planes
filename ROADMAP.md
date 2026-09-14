@@ -1,6 +1,6 @@
 # Planes roadmap
 
-**Updated:** September 13, 2026, after the Track 0, register and parked-item walkthroughs, after Sprint A merged (PRs #111–#134), and after Sprint B merged (PRs #135–#138, September 14). Nothing on the chain is open (base `c4400ad`, addendum v37.1)
+**Updated:** September 13, 2026, after the Track 0, register and parked-item walkthroughs, after Sprint A merged (PRs #111–#134), and after Sprint B merged (PRs #135–#138, September 14), and after its downstream moves and #140 (September 14). Nothing on the chain is open (base `c4400ad`, addendum v37.1)
 **Supersedes as the working roadmap:** `reports/planes_handoff_2026_08_01_language_and_performance_roadmap.md`. That file is archival and unedited. Its phase order still stands, and each phase's current status is below.
 **Near-term work:** [`docs/planes_sprint_2026_09_hardening.md`](docs/planes_sprint_2026_09_hardening.md)
 
@@ -10,8 +10,8 @@ It is also used by other projects now, so this roadmap tracks their needs as wel
 
 | Project | How it uses Planes | Pinned at |
 |---|---|---|
-| 5xFive | Automations compile to Planes and run on the JS interpreter in a Cloudflare Worker; compliance rules compile to Planes rules | `sprint-a-2026-09` (vendored, 5xfive #73) |
-| Koncord | Swift `HostRules`: a page's requests checked against `rules.planes` (the `koncord-shared-agency` package, from its networking layer on) | `sprint-a-2026-09` through the root `Package.swift` (koncord-shared-agency #38) |
+| 5xFive | Automations compile to Planes and run on the JS interpreter in a Cloudflare Worker; compliance rules compile to Planes rules | `sprint-b-2026-09` (vendored, 5xfive #74) |
+| Koncord | Swift `HostRules`: a page's requests checked against `rules.planes` (the `koncord-shared-agency` package, from its networking layer on) | `sprint-a-2026-09` through the root `Package.swift` (koncord-shared-agency #38); `sprint-b-2026-09.1` in open PR #40 |
 | Omniglot, Cartouche | A `.planes` manifest analysed, never run, with the Python CLI | — |
 | Undertow, Cutter | Re-implement the surface JSON format and effect vocabulary in TypeScript | format 1, by hand |
 | Motif | Ported the tutor's typing loop and why-card; a Planes voice is planned | `1d8a833` (copied JS) |
@@ -38,7 +38,11 @@ Built and merged September 14, 2026 (PRs #135–#138). `scripts/ci.sh` passed in
 3. **`contradicts`, and mandatory supersession fingerprints** (#136). `supersedes` without the overridden rule's fingerprint is refused, printing the one to add. `contradicts [other]` reports a violation when both rules apply. The audit lists both as built; `until` stays withdrawn.
 4. **Structured violations** (#138). Every fact a rendered violation states is a field, and `render()` is computed from those fields in Python, JS and Swift. `js/embed.d.mts` types them; the README and `swift/README.md` show a host writing its own wording.
 
-Downstream, not yet done: 5xFive and Koncord still pin `sprint-a-2026-09` (format 1). Moving them to Sprint B means format 2, Koncord's `AdmissionRules.swift` compiling rule targets as prefixes (`^` + escaped address + `(/|$|[?#])`), and 5xFive dropping its `{...}` wildcard workaround.
+Tagged `sprint-b-2026-09` (cc7b08f). Moving Koncord to it found a slowdown: B2 made Swift's `HostRules` check about 100× slower. #140 fixed it and is tagged `sprint-b-2026-09.1`. The JS matcher has the same pattern (28× on 50 rules), still unfixed.
+
+Downstream:
+- **5xFive** vendors `sprint-b-2026-09` (5xfive #74, merged). Its `{...}` wildcard stays: B2 covers only URL-shaped addresses, and 5xFive's are `5x:…`.
+- **Koncord** covers addresses in its compiled list and page watch, pinned at `sprint-b-2026-09.1` (koncord-shared-agency #40, open). It waits on the architect's reading of a parity flag: The New York Times now loses fonts on Koncord's path, on `main` too.
 
 ---
 

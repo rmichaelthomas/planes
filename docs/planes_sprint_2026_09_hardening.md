@@ -269,7 +269,17 @@ Built in parallel on three branches, then B4; `scripts/ci.sh` passed in full on 
 - **A `foreign` named after an effect kind was counted twice** by all three analysers (`foreign send of payload … doing send`). Fixed in B1.
 - **`contradicts` missed a rule that applies only through `ask` covering `send`.** Fixed when B1 was reconciled with B3.
 - **Full Unicode lowercasing disagrees across hosts** (a final Σ), so host comparison folds ASCII only. Fixed in B2.
-- **Downstream work B2 and B1 create:** Koncord's `AdmissionRules.swift` compiles rule targets to exact-URL regexes and needs prefix matching; 5xFive's `{...}` wildcard can go; both pin format 1 at `sprint-a-2026-09` until they move.
+- **Downstream work B2 and B1 create:** Koncord's `AdmissionRules.swift` compiles rule targets to exact-URL regexes and needs prefix matching; 5xFive's `{...}` wildcard can go (it can't; see Downstream below); both pin format 1 at `sprint-a-2026-09` until they move.
+
+### Downstream (September 14, 2026)
+
+| Project | PR | What happened |
+|---|---|---|
+| Planes | tags; #140 | `sprint-b-2026-09` tagged at cc7b08f. Koncord's rule-cost measurement on it found B2 had made Swift checks two orders of magnitude slower (0.139 → 14.9 ms release, 50 rules; HostRulesBench page 1.03 → 77 ms). URL targets were re-parsed into copies on every pairwise comparison. #140 parses each once into UTF-8 views, rejects pairs by folded origin, and restores 0.148 ms and 1.63 ms. Matching unchanged. Tagged `sprint-b-2026-09.1` |
+| 5xFive | 5xfive #74, merged | Vendors `sprint-b-2026-09`: four modules and two grammar files changed, blobs verified. `rules.d.mts` types B3/B4. No wrapper code changed. **The `{...}` wildcard stays**: B2 covers only URL-shaped addresses, so a rule on `5x:acme:member:` matches no tagging write. A test holds that. Typecheck, lint, 1,208 tests, CI green |
+| Koncord | koncord-shared-agency #40, open | The compiled list and page watch cover addresses, as two WebKit triggers per address (its URL filter has no `|`). `send` rules are left out, because Koncord checks requests as `ask`. Pinned at `sprint-b-2026-09.1`. 783 tests pass. Parity: Etsy and Airbnb fail on pixels as already accepted. The New York Times fails on fonts (12 vs 20), on `main` as well. It waits on the architect's reading |
+
+Still open from this: `js/rules.mjs` has the same parsing pattern (0.049 → 1.38 ms on 50 rules), which matters once a JS host checks many rules.
 
 ### The plan as written
 
