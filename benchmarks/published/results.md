@@ -23,14 +23,15 @@ using the CPU concurrently.
 
 ## Method
 
-- **Set A** — `benchmarks/published/set_a_bench.py`. Four jobs
-  (`benchmarks/published/jobs/*.{planes,py,mjs}`), each checked for
-  identical output across all four execution paths before any timing runs,
-  then each path run 5 times as a fresh subprocess; wall clock is
-  `time.perf_counter()` around the whole `subprocess.run` call, so process
-  startup is included in every number. A `hello` job (`show "hello"` /
-  `print("hello")` / `console.log("hello")`) is measured the same way as a
-  startup baseline. Reported: median and min, in milliseconds, over 5 runs.
+- **Set A** — `benchmarks/published/set_a_bench.py`. Four jobs, each
+  written in Planes, plain Python and plain Node by
+  `benchmarks/published/gen_jobs.py`, checked for identical output across
+  all four execution paths before any timing runs, then each path run 5
+  times as a fresh subprocess; wall clock is `time.perf_counter()` around
+  the whole `subprocess.run` call, so process startup is included in every
+  number. A `hello` job (`show "hello"` / `print("hello")` /
+  `console.log("hello")`) is measured the same way as a startup baseline.
+  Reported: median and min, in milliseconds, over 5 runs.
 - **Set B** — `benchmarks/published/set_b_bench.py`. `python3 shapes_cli.py
   <file> --json` and `node js/cli.mjs shapes <file>` timed the same way,
   5 runs per file, median taken per file and summed for the total, over
@@ -38,11 +39,31 @@ using the CPU concurrently.
   "pass"` / `node -e ""`, 5 runs, median) is reported separately rather
   than subtracted, so the total above stays an honest wall-clock number.
 
+**No job program is committed to this repo.** `gen_jobs.py` writes the
+`.planes`/`.py`/`.mjs` sources for all four jobs (plus `hello`) to a temp
+directory at benchmark time, not to `benchmarks/published/`. This is not
+a style choice: `test_js_metacircular.py` and `test_js_core_restricted.py`
+both glob every `**/*.planes` file anywhere under the repo and run each
+one through the self-hosted interpreter and the restricted-core check,
+and these programs — sized for a wall-clock benchmark, not for that —
+broke three of those suites the first time they were committed under
+`benchmarks/published/jobs/`. `gen_jobs.py --out DIR` writes the same
+sources to any directory a reader wants to inspect them from, and
+`set_a_bench.py` calls `gen_jobs.py` (default output) itself before every
+run. Before removing the once-committed copies, the generator (already
+updated to take `--out`) was run to a fresh temp directory and diffed
+against them (`diff -rq`): the two trees were byte-identical, so this
+change is a relocation of where the sources live, not a re-measurement —
+the numbers above are the ones originally measured against the committed
+files, unchanged.
+
 Rerun either with `python3 benchmarks/published/set_a_bench.py --runs 5
 --out /tmp/set_a.json` / `python3 benchmarks/published/set_b_bench.py
 --runs 5 --out /tmp/set_b.json` — both regenerate their own inputs first
-(`set_a_bench.py` calls `gen_jobs.py`; Set B reads the corpus directly) and
-write only under `/tmp`, never the repo.
+(`set_a_bench.py` calls `gen_jobs.py`; Set B reads the corpus directly)
+and write only under `/tmp`, never the repo. To read the job sources
+without running anything, `python3 benchmarks/published/gen_jobs.py --out
+DIR` writes them to `DIR`.
 
 ---
 
@@ -121,8 +142,9 @@ collection from a bare count. That shapes all four Planes programs:
   is `decimal.Decimal`, not float — float would drift from an exact
   rational sum over 5,000 lines. JS's fair idiomatic choice is integer
   arithmetic (`BigInt` cents, scaled by 100 again so the 8% tax divides
-  out evenly with no remainder — see `jobs/invoice.mjs`'s comment for why
-  that scale is exact for these inputs). All three land on the same
+  out evenly with no remainder — see `gen_jobs.py`'s `gen_invoice_mjs`
+  (the generated `invoice.mjs`'s own comment explains why that scale is
+  exact for these inputs). All three land on the same
   total, `2854966.72`, before any language-specific rounding could
   disagree.
 - **file transform** — Planes has no `split`, so the CSV parse is another

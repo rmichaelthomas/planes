@@ -19,6 +19,20 @@ is written under TMP_DIR (never the repo -- see set_a_bench.py's module
 docstring for why a fixed path, not tempfile.gettempdir()) and each
 program's `read`/open() call names that same fixed path.
 
+NO JOB PROGRAM IS COMMITTED TO THE REPO. The metacircular suites
+(test_js_metacircular.py, test_js_core_restricted.py) glob every
+`**/*.planes` file anywhere under the repo and run each one through the
+self-hosted interpreter and the restricted-core check; three of those
+suites broke the first time this script wrote its output under
+`benchmarks/published/jobs/` -- these programs are sized for a wall-clock
+benchmark, not for that. So this script writes to a temp directory by
+default (`DEFAULT_JOBS_DIR`, under `TMP_DIR`) and `set_a_bench.py` reads
+its inputs from there; nothing under `benchmarks/published/` in the repo
+itself is a `.planes`, `.py`, or `.mjs` job program. `--out DIR` writes
+the same, byte-identical sources to any directory a reader wants to
+inspect them from (outside the repo, so it still can't reach the
+metacircular glob).
+
 Planes has no range/repeat construct ("Planes iterates collections, not
 ranges" -- grammar/json.planes) and no dict/map -- `for each` walks an
 existing collection or a string's code points, nothing manufactures one
@@ -31,17 +45,26 @@ so word counting bumps one named counter per vocabulary word instead
 (the same shape corpus/histogram.planes already uses: "three plain
 counters read as what they count").
 
-Usage:  python3 benchmarks/published/gen_jobs.py
+Usage:  python3 benchmarks/published/gen_jobs.py [--out DIR]
 """
 from __future__ import annotations
 
+import argparse
 import decimal
 import os
 import random
 
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-JOBS_DIR = os.path.join(REPO, "benchmarks", "published", "jobs")
 TMP_DIR = "/tmp/planes_h7_bench"
+
+# No job program is committed to the repo (see results.md): the metacircular
+# suites (test_js_metacircular.py, test_js_core_restricted.py) glob every
+# **/*.planes file under the repo and run each through the self-hosted
+# interpreter and the restricted-core check, and these programs -- sized for
+# a wall-clock benchmark, not for that -- broke three of them. So the
+# default output directory is a temp one, generated fresh at benchmark time;
+# `--out DIR` writes the same, byte-identical sources anywhere a reader
+# wants to inspect them.
+DEFAULT_JOBS_DIR = os.path.join(TMP_DIR, "jobs")
 
 WORD_COUNT_INPUT = os.path.join(TMP_DIR, "word_count_input.txt")
 FILE_TRANSFORM_INPUT = os.path.join(TMP_DIR, "file_transform_input.csv")
@@ -584,8 +607,9 @@ def gen_hello_mjs():
 
 # ========================================================================
 
-def main():
-    os.makedirs(JOBS_DIR, exist_ok=True)
+def main(jobs_dir=None):
+    jobs_dir = jobs_dir or DEFAULT_JOBS_DIR
+    os.makedirs(jobs_dir, exist_ok=True)
     os.makedirs(TMP_DIR, exist_ok=True)
 
     # shared inputs (temp dir only -- never the repo)
@@ -614,11 +638,17 @@ def main():
         "file_transform.mjs": gen_file_transform_mjs(ft_out_mjs),
     }
     for name, content in files.items():
-        write(os.path.join(JOBS_DIR, name), content)
+        write(os.path.join(jobs_dir, name), content)
 
-    print(f"wrote {len(files)} job files under {JOBS_DIR}")
+    print(f"wrote {len(files)} job files under {jobs_dir}")
     print(f"wrote shared inputs under {TMP_DIR}")
+    return jobs_dir
 
 
 if __name__ == "__main__":
-    main()
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--out", default=None,
+        help=f"directory to write the job programs to (default: {DEFAULT_JOBS_DIR})")
+    args = ap.parse_args()
+    main(args.out)

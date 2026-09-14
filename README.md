@@ -196,7 +196,10 @@ method, per-file numbers, and how each job is shaped by the language (no
 `range`, no dict) are in
 [`benchmarks/published/results.md`](benchmarks/published/results.md); rerun
 with `python3 benchmarks/published/set_a_bench.py` and `python3
-benchmarks/published/set_b_bench.py`.
+benchmarks/published/set_b_bench.py`. Set A's job programs are generated,
+not committed (the metacircular suites glob every `.planes` file in the
+repo, and these are sized for a benchmark, not for that) — read them with
+`python3 benchmarks/published/gen_jobs.py --out DIR`.
 
 **Set A — four ordinary jobs**, each written in Planes, plain Python and
 plain Node, wall clock including process startup, median of 5 runs:
@@ -225,10 +228,11 @@ boundary** — a program whose surface has at least one effect with
 rather than a builtin the analyser understands.
 
 Planes is a tree-walking interpreter that tracks exact-rational arithmetic
-and full provenance on every value; plain Python and Node do neither. That
-cost is the whole of what these numbers show — Planes is 2–170x slower than
-plain Python and 2–12x slower than plain Node on ordinary computation,
-depending on how much of the job is arithmetic (closer) versus per-element
+and full provenance on every value; plain Python and Node do neither. These
+numbers include that cost — they don't separate it from the interpreter's
+own per-node overhead — and show Planes running 2–170x slower than plain
+Python and 2–12x slower than plain Node on ordinary computation, depending
+on how much of the job is arithmetic (closer) versus per-element
 interpretation overhead (farther).
 
 ---

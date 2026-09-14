@@ -9,13 +9,15 @@ written in Planes, plain Python and plain Node, measured end to end
 README.md's own documented invocation, "the JavaScript implementation"),
 5 runs each, median and min reported.
 
-WHY A FIXED /tmp PATH, NOT tempfile.gettempdir(). The job programs under
-jobs/*.planes bake in an absolute path to their shared input (there is no
-way to pass a Planes program an argument -- the host is 7 methods, none of
-them argv). tempfile.gettempdir() can rotate between shells on macOS, which
-would silently orphan the path a committed .planes file names. A fixed,
-well-known directory under /tmp is stable across runs and is still a temp
-dir, never the repo (gen_jobs.py's TMP_DIR).
+WHY A FIXED /tmp PATH, NOT tempfile.gettempdir(). The job programs
+(themselves generated fresh by gen_jobs.py before every run -- see its
+module docstring for why none is committed to the repo) bake in an
+absolute path to their shared input, since there is no way to pass a
+Planes program an argument -- the host is 7 methods, none of them argv.
+tempfile.gettempdir() can rotate between shells on macOS, which would
+silently orphan a path a generated .planes file names moments later in the
+same run. A fixed, well-known directory under /tmp is stable across runs
+and is still a temp dir, never the repo (gen_jobs.py's TMP_DIR).
 
 WHY THE JS PLANES VARIANT PASSES A HOSTCONFIG JSON BLOB. js/cli.mjs's `run`
 and `run-file` subcommands both construct a TestHost (in-memory) -- there
@@ -40,11 +42,16 @@ import sys
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-JOBS_DIR = os.path.join(REPO, "benchmarks", "published", "jobs")
 TMP_DIR = "/tmp/planes_h7_bench"
 
 sys.path.insert(0, os.path.join(REPO, "benchmarks", "published"))
 import gen_jobs  # noqa: E402
+
+# Job programs are never committed to the repo -- see gen_jobs.py's module
+# docstring: the metacircular suites glob every **/*.planes file under the
+# repo, and these programs broke three of them. gen_jobs.main() (called in
+# main() below) writes them fresh, here, before every timed run.
+JOBS_DIR = gen_jobs.DEFAULT_JOBS_DIR
 
 DEFAULT_RUNS = 5
 
