@@ -482,10 +482,37 @@ export class Parser {
           `line ${at_tok.line}: a fingerprint must be exactly ` +
             `six hex characters after '@', found ` +
             `'${bad.value || "end of line"}'\n` +
-            `  try: ${form} supersedes [${supersedes}] @abcdef ` +
-            `— or omit it for an unverified override`,
+            `  try: ${form} supersedes [${supersedes}] @abcdef`,
         );
       }
+    }
+    // B3 (Track 0 #5): `contradicts [other-name]` — no fingerprint. It
+    // declares an incompatibility with the OTHER rule itself, not a claim
+    // about its current text, so unlike supersedes there is nothing here
+    // for a later edit to invalidate. Fixed order: read only after
+    // supersedes above.
+    let contradicts = null;
+    if (this.at("NAME", "contradicts")) {
+      this.next();
+      if (!this.at("OP", "[")) {
+        const g = this.peek();
+        throw new PlanesSyntaxError(
+          `line ${g.line}: 'contradicts' needs a bracketed rule ` +
+            `name, found '${g.value || "end of line"}'\n` +
+            `  try: ${form} contradicts [other-rule-name]`,
+        );
+      }
+      this.next();
+      if (!this.at("NAME")) {
+        const g = this.peek();
+        throw new PlanesSyntaxError(
+          `line ${g.line}: 'contradicts' needs a bracketed rule ` +
+            `name, found '${g.value || "end of line"}'\n` +
+            `  try: ${form} contradicts [other-rule-name]`,
+        );
+      }
+      contradicts = this.next().value;
+      this.expect("OP", "]");
     }
     return Rule(
       name,
@@ -496,6 +523,8 @@ export class Parser {
       supersedes,
       assertion,
       supersedes_fingerprint,
+      null,
+      contradicts,
     );
   }
 

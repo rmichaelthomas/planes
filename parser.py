@@ -437,8 +437,14 @@ class Parser:
     def parse_rule(self):
         """`rule [name] subject may not kind` (forbid) or
         `rule [name] subject may kind` (permit), each optionally with
-        `to "target"` and a `supersedes [other-name]` clause, which may
-        itself carry a fingerprint (`@xxxxxx`) of the rule it overrides.
+        `to "target"`, a `supersedes [other-name]` clause (which may itself
+        carry a fingerprint, `@xxxxxx`, of the rule it overrides — the
+        parser only checks the fingerprint's own shape; whether one was
+        written at all is refused where supersedes resolves, in rules.py,
+        since the parser has no other rule to compare against), and a
+        `contradicts [other-name]` clause declaring that this rule and the
+        named one must never both apply (B3, Track 0 #5). Fixed order:
+        supersedes first, then contradicts.
 
         A rule is a constraint the checker reads, never an action the
         program takes (unbound v2.0 §33) — nothing here executes anything.
@@ -519,11 +525,34 @@ class Parser:
                     f"line {at_tok.line}: a fingerprint must be exactly "
                     f"six hex characters after '@', found "
                     f"'{bad.value or 'end of line'}'\n"
-                    f"  try: {form} supersedes [{supersedes}] @abcdef "
-                    f"— or omit it for an unverified override")
+                    f"  try: {form} supersedes [{supersedes}] @abcdef")
+
+        # B3 (Track 0 #5): `contradicts [other-name]` — no fingerprint. It
+        # declares an incompatibility with the OTHER rule itself, not a
+        # claim about its current text, so unlike supersedes there is
+        # nothing here for a later edit to invalidate. Fixed order: this
+        # clause is only read after supersedes above.
+        contradicts = None
+        if self.at("NAME", "contradicts"):
+            self.next()
+            if not self.at("OP", "["):
+                g = self.peek()
+                raise PlanesSyntaxError(
+                    f"line {g.line}: 'contradicts' needs a bracketed rule "
+                    f"name, found '{g.value or 'end of line'}'\n"
+                    f"  try: {form} contradicts [other-rule-name]")
+            self.next()
+            if not self.at("NAME"):
+                g = self.peek()
+                raise PlanesSyntaxError(
+                    f"line {g.line}: 'contradicts' needs a bracketed rule "
+                    f"name, found '{g.value or 'end of line'}'\n"
+                    f"  try: {form} contradicts [other-rule-name]")
+            contradicts = self.next().value
+            self.expect("OP", "]")
 
         return Rule(name, subject, kind, target, rule_tok.line, supersedes,
-                   assertion, supersedes_fingerprint)
+                   assertion, supersedes_fingerprint, contradicts=contradicts)
 
     def parse_funcdef(self):
         self.expect("TO")

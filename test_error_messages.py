@@ -565,7 +565,12 @@ def test_the_reference_work_list_is_still_empty_too():
     # on a query string or fragment in a rule target -- 117 + 1. It names a
     # fix ("drop everything from the '?' or '#' onward"), so the shortfall
     # stays 0.
-    assert cov["errors"] == 118, cov["errors"]
+    # B3 (Track 0 #3, #5) added six more: parser.py's two `contradicts`
+    # clause syntax refusals (missing bracket, missing name), and rules.py's
+    # four resolution errors -- the mandatory-fingerprint refusal, and
+    # contradicts naming an unknown rule, naming itself, or the same pair
+    # declared from both sides -- 118 + 6.
+    assert cov["errors"] == 124, cov["errors"]
 
 
 def test_every_deliberate_self_hosted_silence_states_a_reason():

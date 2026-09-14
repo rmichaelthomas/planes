@@ -104,7 +104,8 @@ class Violation:
     """One forbid rule matched against one effect — or, for the vacuous
     shape below, matched against nothing at all.
 
-    Four shapes, told apart by `cleared_by` / `narrowed_by` / `vacuous`:
+    Five shapes, told apart by `cleared_by` / `narrowed_by` / `vacuous` /
+    `contradicts_rule`:
 
     - A real violation: none set.
     - A violation narrowed by a more specific sibling forbid rule that
@@ -121,10 +122,19 @@ class Violation:
       effect, that is the point. `is_violation` is False for the same
       reason `cleared_by` makes it False: this is not a violation, it is a
       fact about the check the reader needs, not a failure of the program.
+    - A contradiction (B3, Track 0 #5): both rules of a declared
+      `contradicts` pair matched at least one effect in this surface.
+      `self.rule`/`self.effect` are the declaring rule and the effect it
+      matched; `contradicts_rule`/`contradicts_effect` are the named
+      rule's own match. `is_violation` is True — an authored
+      incompatibility both sides actually reach is a real problem with the
+      program, exit code 1 like a genuine violation, not an inert fact
+      like `vacuous`.
     """
 
     def __init__(self, rule, effect, uncertain=False, cleared_by=None,
-                narrowed_by=None, origins=None, vacuous=False):
+                narrowed_by=None, origins=None, vacuous=False,
+                contradicts_rule=None, contradicts_effect=None):
         self.rule = rule
         self.effect = effect
         # True when the effect's target is computed=True: the analyser
@@ -145,12 +155,21 @@ class Violation:
         # subject; 3 = the subject derives an effect of the kind, but the
         # rule's target excludes every one.
         self.vacuous_situation = None
+        # The other rule of a declared `contradicts` pair, and the effect
+        # IT matched — set only for the contradiction shape (B3).
+        self.contradicts_rule = contradicts_rule
+        self.contradicts_effect = contradicts_effect
 
     @property
     def is_violation(self):
+        if self.contradicts_rule is not None:
+            return True
         return self.cleared_by is None and not self.vacuous
 
     def render(self):
+        if self.contradicts_rule is not None:
+            return self._render_contradiction()
+
         if self.vacuous:
             return self._render_vacuous()
 
@@ -178,6 +197,24 @@ class Violation:
             lines.append(f"  derived from: {', '.join(parts)}")
         return "\n".join(lines)
 
+    def _render_contradiction(self):
+        """B3 (Track 0 #5): both rules of a declared `contradicts` pair
+        matched at least one effect in this surface. `self.rule` is the
+        rule that wrote the `contradicts` clause and `self.effect` is the
+        effect it matched; `contradicts_rule`/`contradicts_effect` are the
+        named rule's own match. Names both rules, one effect each matched,
+        and the declaring rule's `because` if it has one — never the named
+        rule's, since the declaration belongs to the rule that wrote the
+        clause."""
+        a, b = self.rule, self.contradicts_rule
+        ea, eb = self.effect, self.contradicts_effect
+        line = (f"[{a.name}] contradicts [{b.name}]: both apply to this "
+                f"program — [{a.name}] at line {ea.site} ({ea}), "
+                f"[{b.name}] at line {eb.site} ({eb})")
+        if a.annotation is None:
+            return line
+        return line + f'\n  [{a.name}] because "{a.annotation.text}"'
+
     def as_json(self):
         """Every field `render()` reads, as data rather than prose (H1).
 
@@ -190,6 +227,11 @@ class Violation:
         the fields so a host can print exactly what text mode prints without
         re-deriving it (js/rules.mjs's Violation.asJson and Rules.swift's
         Violation.asJSON must agree with this field for field).
+
+        `contradiction` (B3) is None except for the contradiction shape,
+        where it names both rules of the declared pair and one effect
+        each matched — self-contained, so a consumer reading only this key
+        gets both sides without also reading the top-level `rule`/`effect`.
 
         `origins` dedupes the same way `render()`'s derivation line does —
         by the formatted "name (file)" string, not by the raw pair — so the
@@ -227,6 +269,22 @@ class Violation:
             },
             "narrowed_by": [{"rule": r.name, "line": r.line}
                            for r in self.narrowed_by],
+            "contradiction": None if self.contradicts_rule is None else {
+                "rule": rule.name,
+                "effect": None if effect is None else {
+                    "kind": effect.kind,
+                    "boundary": effect.boundary,
+                    "target": effect.target,
+                    "line": effect.site,
+                },
+                "with_rule": self.contradicts_rule.name,
+                "with_effect": {
+                    "kind": self.contradicts_effect.kind,
+                    "boundary": self.contradicts_effect.boundary,
+                    "target": self.contradicts_effect.target,
+                    "line": self.contradicts_effect.site,
+                },
+            },
             "origins": origins,
             "message": self.render(),
         }
@@ -713,10 +771,20 @@ def _resolve_active(rules):
     is a compile error: an external registry was refused, so the rule set
     itself is the only source of truth, and a dangling reference in it is
     an authoring mistake, not something to silently ignore. A fingerprint
-    on the clause (v2.0 §29) is checked here too, for either kind of
-    supersedes: the named rule having changed since the override was
-    written against it is exactly as much a problem whether the relation
-    is a version bump or an exception.
+    on the clause (v2.0 §29) is required — not merely checked when present
+    (B3, Track 0 #3): the parser cannot know the other rule's fingerprint,
+    so a `supersedes` clause naming no fingerprint at all is refused here,
+    where the named rule is actually in hand to compute one from. Whether
+    present or freshly required, the named rule having changed since the
+    override was written against it is exactly as much a problem whether
+    the relation is a version bump or an exception.
+
+    `contradicts` (B3, Track 0 #5) is resolved in the same pass, with the
+    same error class: naming an unknown rule, naming itself, or the same
+    pair being declared from both sides. Checked against `by_name` — every
+    named rule, whether or not it later gets dropped below — since these
+    are facts about the clause as written, not about which rules survive
+    supersedes.
     """
     by_name = {}
     for r in rules:
@@ -743,20 +811,50 @@ def _resolve_active(rules):
                 f"  check the name, or remove the supersedes clause")
 
         target_rule = by_name[r.supersedes]
-        if r.supersedes_fingerprint is not None:
-            actual = fingerprint(target_rule)
-            if actual != r.supersedes_fingerprint:
-                raise RuleConflict(
-                    f"rule [{r.name}] (line {r.line}) supersedes "
-                    f"[{r.supersedes}] (line {target_rule.line}) as of "
-                    f"@{r.supersedes_fingerprint}, but [{r.supersedes}] "
-                    f"is now @{actual} — it changed after [{r.name}] was "
-                    f"written to override it\n"
-                    f"  confirm the override still means what it meant, "
-                    f"then update the fingerprint to @{actual}")
+        actual = fingerprint(target_rule)
+        if r.supersedes_fingerprint is None:
+            raise RuleConflict(
+                f"rule [{r.name}] (line {r.line}) supersedes "
+                f"[{r.supersedes}] (line {target_rule.line}) without its "
+                f"fingerprint\n"
+                f"  write supersedes [{r.supersedes}] @{actual}")
+        if actual != r.supersedes_fingerprint:
+            raise RuleConflict(
+                f"rule [{r.name}] (line {r.line}) supersedes "
+                f"[{r.supersedes}] (line {target_rule.line}) as of "
+                f"@{r.supersedes_fingerprint}, but [{r.supersedes}] "
+                f"is now @{actual} — it changed after [{r.name}] was "
+                f"written to override it\n"
+                f"  confirm the override still means what it meant, "
+                f"then update the fingerprint to @{actual}")
 
         if target_rule.assertion == r.assertion:
             dropped.add(r.supersedes)
+
+    contradicted_pairs = {}
+    for r in rules:
+        if r.contradicts is None:
+            continue
+        if r.contradicts == r.name:
+            raise RuleConflict(
+                f"rule [{r.name}] (line {r.line}) contradicts itself\n"
+                f"  contradicts should name a different rule")
+        if r.contradicts not in by_name:
+            raise RuleConflict(
+                f"rule [{r.name}] (line {r.line}) contradicts "
+                f"[{r.contradicts}], which is not a rule in this file\n"
+                f"  check the name, or remove the contradicts clause")
+
+        pair = frozenset((r.name, r.contradicts))
+        if pair in contradicted_pairs:
+            first = contradicted_pairs[pair]
+            raise RuleConflict(
+                f"rule [{r.name}] (line {r.line}) contradicts "
+                f"[{r.contradicts}], but [{first.name}] (line "
+                f"{first.line}) already contradicts [{first.contradicts}] "
+                f"— the pair only needs declaring once\n"
+                f"  remove the contradicts clause from one of them")
+        contradicted_pairs[pair] = r
 
     return [r for r in rules if r.name not in dropped]
 
@@ -859,6 +957,72 @@ def _check_conflicts(active):
                 f"reverse), or give one of them a target the other lacks")
 
 
+def _rule_applies(rule, surface, declaring_file):
+    """Does this rule's condition match at least one effect in the
+    surface (B3, Track 0 #5)? A rule *applies* when it matches, whether
+    as a forbid rule that would be violated or cleared, or as a permit
+    rule that matched an effect; a rule matching nothing (vacuous) does
+    not apply.
+
+    For a forbid rule this is the same widen-on-uncertainty rule the
+    vacuous check uses: an effect whose target is computed and not ruled
+    out still counts, because widening a prohibition is sound (v2.0 §34).
+    For a permit rule, the same uncertainty must NOT count — the
+    conservatism flips at the permit boundary (v2.0 §34b): an uncertain
+    match might not be the effect the permit actually names, so reporting
+    the permit as "applying" on it would be unsound the same way clearing
+    a violation on it would be.
+
+    Returns (applies, first_matching_effect_or_None) — the first effect by
+    `surface.declared`'s existing ordering, for a caller that needs one to
+    name in a message.
+    """
+    for effect in surface.declared:
+        if effect.kind != rule.kind:
+            continue
+        matched, uncertain = _target_matches(rule, effect)
+        if not matched:
+            continue
+        if rule.assertion == "permit" and uncertain:
+            continue
+        if not _subject_matches(rule, effect, surface, declaring_file):
+            continue
+        return True, effect
+    return False, None
+
+
+def _check_contradictions(active, surface, declaring_file):
+    """Contradiction violations (B3, Track 0 #5): every declared
+    `contradicts` pair where both rules apply to this surface.
+
+    Iterates `active` in its existing order, so this is deterministic and
+    identical across hosts given the same source. `_resolve_active`
+    already refused declaring the same pair from both sides, so at most
+    one of the two rules carries the `contradicts` clause and no pair is
+    ever reported twice. A pair naming a rule `_resolve_active` dropped
+    (superseded away, same-assertion version replacement) can never fire:
+    a dropped rule is not in `active` and so cannot apply.
+    """
+    by_name = {r.name: r for r in active}
+    results = []
+    for r in active:
+        if r.contradicts is None:
+            continue
+        other = by_name.get(r.contradicts)
+        if other is None:
+            continue
+        applies, effect = _rule_applies(r, surface, declaring_file)
+        if not applies:
+            continue
+        other_applies, other_effect = _rule_applies(
+            other, surface, declaring_file)
+        if not other_applies:
+            continue
+        results.append(Violation(r, effect, contradicts_rule=other,
+                                 contradicts_effect=other_effect))
+    return results
+
+
 def check(rules, surface, declaring_file=None):
     """Every violation of every rule, given a computed effect surface.
 
@@ -883,6 +1047,11 @@ def check(rules, surface, declaring_file=None):
     matches a single effect is reported as a fourth, vacuous `Violation`
     shape rather than silently as "no violations" (P-Q19) — a rule that
     never did any work must not look like a rule that passed.
+
+    A fifth shape, the contradiction (B3, Track 0 #5), is appended after
+    every forbid rule's own violations: for each declared `contradicts`
+    pair among the active rules, one `Violation` when both rules apply to
+    this surface. `is_violation` is True for it, same as a real violation.
 
     Reads only the public queries on Surface. If this function needs to
     reach into the analyser's internals, that is a finding about
@@ -975,5 +1144,7 @@ def check(rules, surface, declaring_file=None):
             else:
                 vacuous.vacuous_situation = 3
             results.append(vacuous)
+
+    results.extend(_check_contradictions(active, surface, declaring_file))
 
     return RuleResults(results, resolved_subjects=resolved_subjects)

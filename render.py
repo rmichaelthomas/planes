@@ -359,6 +359,8 @@ def render_rule(node):
         text += f" supersedes [{node.supersedes}]"
         if node.supersedes_fingerprint is not None:
             text += f" @{node.supersedes_fingerprint}"
+    if node.contradicts is not None:
+        text += f" contradicts [{node.contradicts}]"
     return text + render_because_suffix(node)
 
 

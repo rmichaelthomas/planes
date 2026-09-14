@@ -204,6 +204,59 @@
                   "additionalProperties": false
                 }
               },
+              "contradiction": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "rule": { "type": "string" },
+                      "effect": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["ask", "clock", "env", "random", "read", "show", "write"]
+                              },
+                              "boundary": {
+                                "type": "string",
+                                "enum": ["ambient", "console", "file", "network"]
+                              },
+                              "target": { "type": "string" },
+                              "line": { "type": "integer" }
+                            },
+                            "required": ["kind", "boundary", "target", "line"],
+                            "additionalProperties": false
+                          },
+                          { "type": "null" }
+                        ]
+                      },
+                      "with_rule": { "type": "string" },
+                      "with_effect": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": ["ask", "clock", "env", "random", "read", "show", "write"]
+                          },
+                          "boundary": {
+                            "type": "string",
+                            "enum": ["ambient", "console", "file", "network"]
+                          },
+                          "target": { "type": "string" },
+                          "line": { "type": "integer" }
+                        },
+                        "required": ["kind", "boundary", "target", "line"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["rule", "effect", "with_rule", "with_effect"],
+                    "additionalProperties": false
+                  },
+                  { "type": "null" }
+                ]
+              },
               "origins": {
                 "type": "array",
                 "items": {
@@ -223,8 +276,8 @@
             "required": [
               "rule", "rule_line", "assertion", "kind", "target", "condition",
               "because", "is_violation", "vacuous", "vacuous_situation",
-              "uncertain", "effect", "cleared_by", "narrowed_by", "origins",
-              "message"
+              "uncertain", "effect", "cleared_by", "narrowed_by",
+              "contradiction", "origins", "message"
             ],
             "additionalProperties": false
           }

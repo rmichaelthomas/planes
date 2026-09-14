@@ -496,6 +496,30 @@ def test_list_and_record_literals_and_let_agree():
         assert_program_agrees(src)
 
 
+# ================================================================ rule statements (B3: contradicts)
+
+RULE_PROGRAMS_WITH_CONTRADICTS = [
+    "rule [a] anything may not write\n"
+    "rule [b] anything may not ask contradicts [a]\n",
+    'rule [a] anything may not ask to "https://x.example.com"\n'
+    "rule [b] anything may ask supersedes [a] @3f9c2d contradicts [c]\n"
+    '  because "reason"\n',
+    "rule [a] anything may not ask\n",  # no contradicts clause at all
+]
+
+
+def test_rule_statements_with_contradicts_agree():
+    """B3 (Track 0 #5): the self-hosted parser's contradicts clause and its
+    canonical-of-rule dump must agree with parser.py's, field for field —
+    including field ORDER: contradicts is appended after annotation in
+    lexer.py's Rule dataclass (matching supersedes_fingerprint's own
+    precedent), so canonical-of-rule in grammar/parser.planes renders it
+    last too, even though the source syntax reads supersedes-then-
+    contradicts-then-because."""
+    for src in RULE_PROGRAMS_WITH_CONTRADICTS:
+        assert_program_agrees(src)
+
+
 # ================================================================ Phase 4: corpus agreement
 #
 # scripts/parser_corpus_agreement.py runs the full scan

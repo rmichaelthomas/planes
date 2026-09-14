@@ -175,33 +175,38 @@ program performs without the matching `use http` / `use file`. Preserves
 
 ### 2.6 One entry in `rules.violations`
 
-One `Violation.as_json()` (`rules.py`), fourteen keys in this order — one
-per forbid rule matched against one effect, or against nothing at all (the
-vacuous shape):
+One `Violation.as_json()` (`rules.py`), sixteen keys in this order — one per
+forbid rule matched against one effect, against nothing at all (the vacuous
+shape), or one declared `contradicts` pair where both rules apply (the
+contradiction shape, B3):
 
 | key | type | meaning |
 |---|---|---|
-| `rule` | string | the forbid rule's name |
+| `rule` | string | the rule's name — the forbid rule for the first four shapes, or the rule that wrote the `contradicts` clause for the contradiction shape |
 | `rule_line` | integer | the line the rule is declared on |
-| `assertion` | string enum: `"forbid"` \| `"permit"` | always `"forbid"` here — only a forbid rule ever produces a `Violation` |
+| `assertion` | string enum: `"forbid"` \| `"permit"` | `"forbid"` for the first four shapes — only a forbid rule ever produces one of those. For the contradiction shape this is `rule`'s own assertion, which may be `"permit"`: `contradicts` can be declared on either kind of rule |
 | `kind` | string, one of the seven vocabulary kinds (never `"unknown"` — the parser rejects any other word here at parse time) | the rule's own effect kind |
 | `target` | string or `null` | the rule's declared target, or `null` when the rule names none (matches every target of its kind) |
 | `condition` | string | the rule's condition rendered as source (`rules.condition()`) |
 | `because` | string or `null` | the rule's `because` annotation text, or `null` if it has none |
-| `is_violation` | boolean | `false` for a cleared (`cleared_by` set) or vacuous match — see below |
+| `is_violation` | boolean | `false` for a cleared (`cleared_by` set) or vacuous match; `true` for a real violation and for a contradiction — see below |
 | `vacuous` | boolean | `true` for the fourth shape: a named-subject rule that resolved but matched no effect at all |
 | `vacuous_situation` | integer (`1`, `2`, or `3`) or `null` | which of the three vacuous cases (§4.6), `null` unless `vacuous` is `true` |
 | `uncertain` | boolean | `true` when the match is against a computed target that could not be ruled out, not confirmed |
-| `effect` | object or `null` (§2.7) | the specific effect matched, `null` for the vacuous shape |
+| `effect` | object or `null` (§2.7) | the specific effect matched, `null` for the vacuous shape; for the contradiction shape, the effect `rule` itself matched |
 | `cleared_by` | object or `null` (§2.8) | the permit rule that excepted this match, or `null` |
 | `narrowed_by` | array of objects (§2.8) | sibling forbid rules with a narrower scope that also matched — reported as related, not independent |
+| `contradiction` | object or `null` (§2.10) | `null` except for the contradiction shape, where it names both rules of the declared pair and one effect each matched |
 | `origins` | array of objects (§2.9) | every name/file the effect's target provably derives from, alphabetically sorted and deduplicated |
 | `message` | string | `render()`'s own text, verbatim — so a host can print exactly what `--rules` prints without re-deriving it |
 
 A violation is genuine — should fail a build — exactly when
 `is_violation` is `true`. `cleared_by` non-`null` and `vacuous` are the two
-reasons it can be `false`; both are still reported (so the reader sees the
-exception or the inert rule working), just not counted.
+reasons it can be `false` for the first four shapes; both are still reported
+(so the reader sees the exception or the inert rule working), just not
+counted. A contradiction (`contradiction` non-`null`) is always genuine:
+`is_violation` is `true`, the same as a real violation, and it counts toward
+a caller's exit code the same way.
 
 ### 2.7 `effect` (inside a violation)
 
@@ -232,6 +237,40 @@ call with no path, matching every node's `file` being `None`). Deduplicated
 and sorted by the same `"name (file)"` string `render()`'s derivation line
 uses, so the structured list and the rendered line never disagree about
 what counts as one origin.
+
+### 2.10 `contradiction` (B3, Track 0 #5)
+
+An authored `contradicts [other-name]` clause declares that two rules must
+never both apply. A rule *applies* to a checked surface when its condition
+matches at least one effect there — whether as a forbid rule that would be
+violated or cleared, or as a permit rule that matched an effect; a rule
+matching nothing does not apply. When both rules of a declared pair apply,
+the checker reports the contradiction as a `Violation` in its own right,
+distinct from the four shapes above and distinct from the structural
+conflict detection `RuleConflict` performs at compile time (v2.0 §32):
+`contradicts` is an authored declaration that reaches pairs no structural
+check can see — different kinds, different targets, incompatible in intent
+rather than in shape.
+
+```
+{
+  "rule": "no-sends",
+  "effect": { "kind": "ask", "boundary": "network", "target": "https://x.example.com", "line": 11 },
+  "with_rule": "no-writes",
+  "with_effect": { "kind": "write", "boundary": "file", "target": "out.txt", "line": 10 }
+}
+```
+
+`rule` and `effect` name the rule that wrote the `contradicts` clause and
+the effect it matched — the same values the violation's own top-level
+`rule`/`effect` keys carry, repeated here so a consumer reading only this
+key gets both sides of the pair without also reading the top-level fields.
+`with_rule` and `with_effect` (§2.7's shape, never `null`) name the rule
+`contradicts` pointed at and the effect *that* rule matched. Only one rule
+of a declared pair ever carries the `contradicts` clause — the checker
+refuses declaring the same pair from both sides — so a contradiction is
+never reported twice for one pair, and `null` here means every other
+shape.
 
 ## 3. The effect-kind vocabulary
 

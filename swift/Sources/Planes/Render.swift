@@ -168,6 +168,9 @@ private func renderRule(_ node: AST.Rule) -> String {
         text += " supersedes [\(supersedes)]"
         if let fp = node.supersedesFingerprint { text += " @\(fp)" }
     }
+    if let contradicts = node.contradicts {
+        text += " contradicts [\(contradicts)]"
+    }
     return text + renderBecauseSuffix(node.annotation)
 }
 

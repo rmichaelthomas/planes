@@ -276,6 +276,9 @@ function renderRule(node) {
       text += ` @${node.supersedes_fingerprint}`;
     }
   }
+  if (node.contradicts !== null && node.contradicts !== undefined) {
+    text += ` contradicts [${node.contradicts}]`;
+  }
   return text + renderBecauseSuffix(node);
 }
 

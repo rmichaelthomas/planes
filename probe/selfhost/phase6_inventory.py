@@ -30,8 +30,10 @@ BUILTINS = [b["name"] for b in VOCAB["builtins"]]
 EFFECT_KINDS = [e["kind"] for e in VOCAB["effect_kinds"]]
 # Positional words (§ vocabulary.json positional_words) — grammar read at one
 # site each, deliberately NOT in the 32. An inventory that ignored them would
-# miss `may`, `is`, `because`, `supersedes`, `note`, `derives-from`.
-POSITIONAL = ["may", "is", "because", "supersedes", "note", "derives-from"]
+# miss `may`, `is`, `because`, `supersedes`, `contradicts`, `note`,
+# `derives-from`.
+POSITIONAL = ["may", "is", "because", "supersedes", "contradicts", "note",
+              "derives-from"]
 
 FILES = ["grammar/lexer.planes", "grammar/parser.planes"]
 

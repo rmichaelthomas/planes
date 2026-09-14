@@ -290,7 +290,8 @@ def test_cleared_match_still_shows_the_marker():
     not that the reader should be worried."""
     src = (
         'rule [no-write] anything may not write to "a.json"\n'
-        'rule [allow-a] anything may write to "a.json" supersedes [no-write]\n'
+        'rule [allow-a] anything may write to "a.json" '
+        'supersedes [no-write] @7785b4\n'
         '\n'
         'use file\n'
         'write [1] to "a.json"\n'

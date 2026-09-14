@@ -110,9 +110,15 @@ RULE_PROGRAMS = [
      'rule [no-telemetry] anything may not ask to "https://telemetry.example.com"\n'
      'x = ask "https://telemetry.example.com"\n'),
     ('use http\nrule [old] anything may not ask to "https://a.example.com"\n'
-     'rule [new] anything may not ask to "https://b.example.com" supersedes [old]\n'
+     'rule [new] anything may not ask to "https://b.example.com" '
+     'supersedes [old] @375bb2\n'
      'x = ask "https://a.example.com"\n'),
     'rule [new] anything may not ask supersedes [ghost]\n',
+    # missing fingerprint (raises) -- B3, Track 0 #3
+    ('use http\nrule [old] anything may not ask to "https://a.example.com"\n'
+     'rule [new] anything may not ask to "https://b.example.com" '
+     'supersedes [old]\n'
+     'x = ask "https://a.example.com"\n'),
     # equal-specificity conflict, quote in the shared target, supersedes resolves it
     ('use http\nrule [a] anything may not ask to "https://x.example.com"\n'
      'rule [b] anything may not ask to "https://x.example.com"\n'
@@ -121,12 +127,13 @@ RULE_PROGRAMS = [
      'rule [b] anything may not ask to "https://x.example.com/a\\"b"\n'
      'y = ask "https://x.example.com/a\\"b"\n'),
     ('use http\nrule [a] anything may not ask to "https://x.example.com"\n'
-     'rule [b] anything may not ask to "https://x.example.com" supersedes [a]\n'
+     'rule [b] anything may not ask to "https://x.example.com" '
+     'supersedes [a] @8e65b9\n'
      'y = ask "https://x.example.com"\n'),
     # permits: supersedes-clears, narrows-clears, broad-still-applies, different-target
     ('use http\nrule [no-external-sends] anything may not ask\n'
      'rule [audit-allowed] anything may ask to "https://audit.internal" '
-     'supersedes [no-external-sends]\nx = ask "https://audit.internal"\n'),
+     'supersedes [no-external-sends] @960178\nx = ask "https://audit.internal"\n'),
     ('use http\nrule [no-external-sends] anything may not ask\n'
      'rule [audit-allowed] anything may ask to "https://audit.internal"\n'
      'x = ask "https://audit.internal"\n'),
@@ -145,11 +152,36 @@ RULE_PROGRAMS = [
      'rule [b] anything may ask to "https://x.example.com"\n'
      'y = ask "https://x.example.com"\n'),
     ('use http\nrule [a] anything may not ask to "https://x.example.com"\n'
-     'rule [b] anything may ask to "https://x.example.com" supersedes [a]\n'
+     'rule [b] anything may ask to "https://x.example.com" '
+     'supersedes [a] @8e65b9\n'
      'y = ask "https://x.example.com"\n'),
     # vacuous: subject resolves, but the program performs no effect of the kind
     ('cap = "a.json"\nrule [cap-guard] cap may not ask\n'
      'use file\nwrite [1] to cap\n'),
+    # B3 (Track 0 #5): contradicts -- parse/resolution errors, a pair that
+    # both apply (reported), a pair where one is vacuous (not reported),
+    # and a contradiction involving a permit rule.
+    'rule [a] anything may not ask contradicts [ghost]\n',
+    'rule [a] anything may not ask contradicts [a]\n',
+    ('rule [a] anything may not ask contradicts [b]\n'
+     'rule [b] anything may not write contradicts [a]\n'),
+    ('use http\nuse file\n'
+     'rule [no-writes] anything may not write\n'
+     '  because "writes are audited separately"\n'
+     'rule [no-sends] anything may not ask contradicts [no-writes]\n'
+     'write 1 to "out.txt"\n'
+     'x = ask "https://x.example.com"\n'),
+    ('use http\n'
+     'rule [no-writes] anything may not write\n'
+     'rule [no-sends] anything may not ask contradicts [no-writes]\n'
+     'x = ask "https://x.example.com"\n'),
+    ('use http\nuse file\n'
+     'rule [no-sends] anything may not ask\n'
+     'rule [audit-allowed] anything may ask to "https://audit.internal" '
+     'supersedes [no-sends] @960178\n'
+     'rule [no-writes] anything may not write contradicts [audit-allowed]\n'
+     'x = ask "https://audit.internal"\n'
+     'write 1 to "out.txt"\n'),
 ]
 
 
@@ -236,6 +268,39 @@ def test_json_rules_agree_on_the_corpus_rule_files():
         assert js == py, f"{path}:\n  py={json.dumps(py)}\n  js={json.dumps(js)}"
 
 
+def test_json_rules_agree_on_a_contradiction():
+    """B3 (Track 0 #5): the "contradiction" field the corpus rule files
+    above never exercise (none declares `contradicts`) -- a dedicated file
+    that does, checked the same way test_json_rules_agree_on_the_corpus_
+    rule_files checks the others."""
+    src = ('use http\nuse file\n'
+           'rule [no-writes] anything may not write\n'
+           'rule [no-sends] anything may not ask contradicts [no-writes]\n'
+           'write 1 to "out.txt"\n'
+           'x = ask "https://x.example.com"\n')
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "contradicts.planes")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(src)
+        found = [s for s in parse(src) if isinstance(s, Rule)]
+        surface = analyse_file(path, follow=True)
+        results = check(found, surface, declaring_file=os.path.abspath(path))
+        py = as_json(surface, path, rules=rules_json(found, results))
+        js = _run(["shapes", path, "--rules"])
+    assert js == py, f"py={json.dumps(py)}\n  js={json.dumps(js)}"
+    contradiction_docs = [v["contradiction"] for v in py["rules"]["violations"]
+                          if v["contradiction"] is not None]
+    assert len(contradiction_docs) == 1
+    assert contradiction_docs[0] == {
+        "rule": "no-sends",
+        "effect": {"kind": "ask", "boundary": "network",
+                   "target": "https://x.example.com", "line": 6},
+        "with_rule": "no-writes",
+        "with_effect": {"kind": "write", "boundary": "file",
+                        "target": "out.txt", "line": 5},
+    }
+
+
 # ============================================================ fingerprints
 
 FINGERPRINT_FILES = ["annotated.planes", "demo/rules/exception.planes"]
@@ -284,7 +349,8 @@ MARKER_SRCS = [
      'use file\nresults = { total: 1 }\nwrite results to "refunds.json"\n'),
     # a cleared match still shows the marker
     ('rule [no-write] anything may not write to "a.json"\n'
-     'rule [allow-a] anything may write to "a.json" supersedes [no-write]\n\n'
+     'rule [allow-a] anything may write to "a.json" supersedes [no-write] '
+     '@7785b4\n\n'
      'use file\nwrite [1] to "a.json"\n'),
     # a vacuous rule gets no marker
     ('cap = "a.json"\nrule [cap-guard] cap may not ask\n\n'
@@ -329,7 +395,7 @@ MORE_RULE_PROGRAMS = [
      'x = ask "https://x"\n'),
     # a permit over a computed target clears nothing
     ('use http\nrule [no-net] anything may not ask\n'
-     'rule [ok] anything may ask to "https://a" supersedes [no-net]\n'
+     'rule [ok] anything may ask to "https://a" supersedes [no-net] @960178\n'
      'for each u in ["https://a"]:\n  x = ask u\n'),
     # vacuous situation 2: the kind is performed, but not from the subject
     ('use http\ncap = "https://a"\nrule [cap-guard] cap may not ask\n'
@@ -442,7 +508,8 @@ NON_ASCII_RULES = [
     ('use http\nrule [no-t] anything may not ask to "https://t\u00e9l\u00e9m\u00e9trie"\n'
      'for each u in ["https://t\u00e9l\u00e9m\u00e9trie"]:\n  x = ask u\n'),
     ('use http\nrule [deny] anything may not ask\n'
-     'rule [allow] anything may ask to "https://\u4f8b\u3048.jp" supersedes [deny] '
+     'rule [allow] anything may ask to "https://\u4f8b\u3048.jp" '
+     'supersedes [deny] @960178 '
      'because "\u8a31\u53ef \U0001f44d"\n'
      'x = ask "https://\u4f8b\u3048.jp"\ny = ask "https://\u4f8b\u3048.jp/\u0301"\n'),
     # derived-from order over names, and violations sorted by non-ASCII targets
@@ -558,6 +625,42 @@ def test_render_rules_agrees_across_the_corpus():
         checked += 1
     assert checked >= 40, checked
     assert not mismatches, f"render divergences: {mismatches}"
+
+
+# ============================================================ contradicts parse errors (B3)
+
+CONTRADICTS_SYNTAX_ERRORS = [
+    # missing bracket / missing name / unterminated bracket
+    "rule [a] anything may not ask contradicts b\n",
+    "rule [a] anything may not ask contradicts [\n",
+    'rule [a] anything may not ask contradicts ["x"]\n',
+    # fixed order: contradicts before supersedes is not accepted
+    'rule [new] anything may ask contradicts [other] supersedes [old] @abcdef\n',
+]
+
+
+def test_contradicts_parse_errors_are_byte_identical():
+    """Every raise site parse_rule's contradicts clause can hit, checked
+    against js/parser.mjs the same way test_swift_parser.py's SYNTAX_ERRORS
+    checks Swift: parser.py raises, and js/cli.mjs's `ast` command must
+    raise the identical message."""
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "r.planes")
+        for src in CONTRADICTS_SYNTAX_ERRORS:
+            try:
+                parse(src)
+                raise AssertionError(
+                    f"parser.py accepted a bad scenario:\n{src}")
+            except PlanesSyntaxError as e:
+                py_msg = str(e)
+            with open(p, "w", encoding="utf-8") as fh:
+                fh.write(src)
+            r = subprocess.run([NODE, "js/cli.mjs", "ast", p], cwd=REPO,
+                               capture_output=True, text=True)
+            js_doc = json.loads(r.stdout)
+            assert js_doc["error"] == "PlanesSyntaxError", (src, js_doc)
+            assert js_doc["message"] == py_msg, (
+                f"src:\n{src}\n  py={py_msg!r}\n  js={js_doc['message']!r}")
 
 
 if __name__ == "__main__":

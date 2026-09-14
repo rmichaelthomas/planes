@@ -131,7 +131,7 @@ def test_the_exception_is_matched_by_code_point():
     same-looking URL spelled with a combining accent, nor the reverse."""
     src = ('rule [deny] anything may not ask\n  because "d\u00e9fense par d\u00e9faut \U0001f6ab"\n'
            'rule [cafe-ok] anything may ask to "https://caf\u00e9.example/\u00fc" '
-           'supersedes [deny]\n')
+           'supersedes [deny] @960178\n')
     out = _agree(src, [
         {"kind": "ask", "target": "https://caf\u00e9.example/\u00fc"},
         {"kind": "ask", "target": "https://cafe\u0301.example/\u00fc"},
