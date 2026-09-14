@@ -11,7 +11,7 @@ It is also used by other projects now, so this roadmap tracks their needs as wel
 | Project | How it uses Planes | Pinned at |
 |---|---|---|
 | 5xFive | Automations compile to Planes and run on the JS interpreter in a Cloudflare Worker; compliance rules compile to Planes rules | `sprint-b-2026-09` (vendored, 5xfive #74) |
-| Koncord | Swift `HostRules`: a page's requests checked against `rules.planes` (the `koncord-shared-agency` package, from its networking layer on) | `sprint-a-2026-09` through the root `Package.swift` (koncord-shared-agency #38); `sprint-b-2026-09.1` in open PR #40 |
+| Koncord | Swift `HostRules`: a page's requests checked against `rules.planes` (the `koncord-shared-agency` package, from its networking layer on) | `sprint-b-2026-09.1` through the root `Package.swift` (koncord-shared-agency #40) |
 | Omniglot, Cartouche | A `.planes` manifest analysed, never run, with the Python CLI | — |
 | Undertow, Cutter | Re-implement the surface JSON format and effect vocabulary in TypeScript | format 1, by hand |
 | Motif | Ported the tutor's typing loop and why-card; a Planes voice is planned | `1d8a833` (copied JS) |
@@ -42,7 +42,7 @@ Tagged `sprint-b-2026-09` (cc7b08f). Moving Koncord to it found a slowdown: B2 m
 
 Downstream:
 - **5xFive** vendors `sprint-b-2026-09` (5xfive #74, merged). Its `{...}` wildcard stays: B2 covers only URL-shaped addresses, and 5xFive's are `5x:…`.
-- **Koncord** covers addresses in its compiled list and page watch, pinned at `sprint-b-2026-09.1` (koncord-shared-agency #40, open). It waits on the architect's reading of a parity flag: The New York Times now loses fonts on Koncord's path, on `main` too.
+- **Koncord** covers addresses in its compiled list and page watch, pinned at `sprint-b-2026-09.1` (koncord-shared-agency #40, merged). The architect accepted the one new parity flag: The New York Times loses fonts on Koncord's path, as it already did on Koncord's `main`.
 
 ---
 
