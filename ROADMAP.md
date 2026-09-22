@@ -55,7 +55,7 @@ Built September 21, 2026, for Koncord's reader file: a browser's refusal rules h
 - **Swift `HostRules` cost** is unchanged within noise on the H4 fixture (p50 +0.7% at 50 rules, +2.6% at 200).
 
 Downstream:
-- **Koncord** is next: it compiles each rule into its own content rule list and page watch, so it moves to the new tag and learns the dot in both.
+- **Koncord** pins `host-tree-2026-09` and covers trees in its content rule list and page watch (koncord-shared-agency #110, merged). A tree is the first rule address that can overlap another without holding it — `.x.com/ads` and `a.x.com` — so Koncord closes its rule addresses under intersection and asks Planes about each overlap, rather than taking the deepest rule address above a request.
 
 ---
 
