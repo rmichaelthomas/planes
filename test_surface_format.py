@@ -1,8 +1,8 @@
 """E1 -- the published effect-surface format, checked rather than just written.
 
-`docs/surface-format-v2.md` is the specification five downstream projects
+`docs/surface-format-v3.md` is the specification five downstream projects
 copy by hand (Undertow, Cutter, Omniglot, Koncord's `HostEffect`, 5xFive),
-and `grammar/protocols/surface-v2.json` is its JSON Schema. This file is what
+and `grammar/protocols/surface-v3.json` is its JSON Schema. This file is what
 keeps the three from drifting apart:
 
   1. every one of the three hosts' `shapes_cli --json [--rules]` output, over
@@ -51,9 +51,9 @@ NODE = shutil.which("node")
 SWIFT = swift_host.SWIFT
 REPO = os.path.dirname(os.path.abspath(__file__))
 
-SCHEMA_PATH = os.path.join(REPO, "grammar", "protocols", "surface-v2.json")
+SCHEMA_PATH = os.path.join(REPO, "grammar", "protocols", "surface-v3.json")
 VOCAB_PATH = os.path.join(REPO, "grammar", "vocabulary.json")
-DOC_PATH = os.path.join(REPO, "docs", "surface-format-v2.md")
+DOC_PATH = os.path.join(REPO, "docs", "surface-format-v3.md")
 
 
 # ================================================================ the validator
@@ -155,7 +155,7 @@ def _load_vocab_effect_kinds():
 
 
 def _doc_kind_table():
-    """Parse docs/surface-format-v2.md section 3's table into
+    """Parse docs/surface-format-v3.md section 3's table into
     {kind: (boundary, meaning)}. A hand-maintained doc table is exactly the
     hazard scripts/check_derived_claims.py names -- a sentence that claims
     something about generated state with nothing holding the two together
@@ -297,7 +297,7 @@ def test_rules_field_validates_and_agrees_across_hosts():
 def test_schema_surface_kind_enum_matches_vocabulary_plus_unknown():
     """kinds / effects[].kind / runs_on_load[].kind / effects_undeclared[].kind
     all admit the eight vocabulary kinds plus the `"unknown"` sentinel
-    (docs/surface-format-v2.md section 3.1) -- never a ninth real kind."""
+    (docs/surface-format-v3.md section 3.1) -- never a ninth real kind."""
     vocab_kinds = sorted(e["kind"] for e in _load_vocab_effect_kinds())
     expected = sorted(vocab_kinds + ["unknown"])
     schema = _load_schema()

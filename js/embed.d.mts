@@ -195,7 +195,7 @@ export function fingerprint(rule: PlanesNode): string;
 export function condition(rule: PlanesNode): string;
 
 /** One matched effect, as a violation's `effect`/`cleared_by`/`contradiction`
- * fields carry it (docs/surface-format-v2.md §2.7) — `kind`/`boundary` are
+ * fields carry it (docs/surface-format-v3.md §2.7) — `kind`/`boundary` are
  * the effect's ACTUAL kind/boundary (which can differ from the violated
  * rule's own declared `kind`: forbidding `ask` also forbids `send`, B1),
  * `line` is its source line, and `computed`/`declared` are `Effect#computed`/
@@ -228,7 +228,7 @@ export interface OriginJson {
   file: string | null;
 }
 
-/** B3's contradiction shape (docs/surface-format-v2.md §2.10): both rules
+/** B3's contradiction shape (docs/surface-format-v3.md §2.10): both rules
  * of a declared `contradicts` pair matched at least one effect. `rule`/
  * `effect` name the rule that wrote the `contradicts` clause and the effect
  * it matched — the same values the violation's own top-level `rule`/`effect`
@@ -243,7 +243,7 @@ export interface ContradictionJson {
 }
 
 /**
- * `Violation#asJson()`'s exact document (H1, B4; docs/surface-format-v2.md
+ * `Violation#asJson()`'s exact document (H1, B4; docs/surface-format-v3.md
  * §2.6) — every field `render()`'s text is built from, so a host never has
  * to parse `message`/`render()` to get at a fact this interface already
  * names. Five shapes, told apart by `contradiction` (non-null), `vacuous`
@@ -286,7 +286,7 @@ export interface ViolationJson {
  * from `shapes_cli.py --json --rules`) to get the identical text without
  * re-deriving it — or, more to B4's point, skip this entirely and build its
  * own wording straight from the fields (see README's "Embedding from
- * JavaScript" and docs/surface-format-v2.md's "Writing your own wording"). */
+ * JavaScript" and docs/surface-format-v3.md's "Writing your own wording"). */
 export function renderViolation(fields: ViolationJson): string;
 
 /** One `forbid` rule matched — or, for the vacuous shape, not matched

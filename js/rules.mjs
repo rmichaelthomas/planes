@@ -114,7 +114,7 @@ export class Violation {
   // prose, never folded into `condition` the way the other three are) and
   // the effect object's `computed`/`declared` (Effect#computed/claimed —
   // the source of the text rendering's " (computed)" / " (declared, not
-  // verified)" suffixes, §4.2 of docs/surface-format-v2.md). `message` is
+  // verified)" suffixes, §4.2 of docs/surface-format-v3.md). `message` is
   // computed from the fields built so far — before it is itself added to
   // the object — so this is never circular: renderViolation never reads
   // fields.message.
@@ -474,9 +474,24 @@ function urlCovers(ruleTarget, effectTarget) {
   return scopeCoversParsed(urlScope(ruleTarget), urlScope(effectTarget));
 }
 
+// Does the rule's host cover the effect's (B2, and the host tree)? Both are
+// already ASCII-folded. "x.com" covers "x.com" and nothing else; ".x.com" --
+// a leading dot, the cookie and Public Suffix List reading -- covers "x.com"
+// and every host under it, matched at the host's END so "evilx.com" and
+// "x.com.evil.com" are never covered. A port stays part of the host in both
+// forms. Opt-in by spelling: a host without the dot compares exactly as it
+// did at B2. Must agree with rules.py's _host_covers.
+function hostCovers(ruleHost, effectHost) {
+  if (ruleHost.startsWith(".")) {
+    return effectHost === ruleHost.slice(1) || effectHost.endsWith(ruleHost);
+  }
+  return ruleHost === effectHost;
+}
+
 // A URL-shaped target reduced to what covering compares, parsed once: its
-// ASCII-folded "scheme://host" (unambiguous, since a scheme holds no ":" and
-// a host no "/") and its path; null when the target isn't URL-shaped.
+// ASCII-folded scheme and host, kept apart because a host tree (".x.com")
+// is compared by suffix rather than equality, and its path; null when the
+// target isn't URL-shaped.
 // Every scope comparison used to re-parse both targets, and the comparisons
 // run pairwise, which made a 50-rule check about 27x slower than exact
 // matching was (Rules.swift had the same pattern; Planes #140).
@@ -485,12 +500,12 @@ function urlScope(target) {
   const parsed = parseUrlTarget(target);
   if (parsed === null) return null;
   const [scheme, host, path] = parsed;
-  return { origin: `${asciiLower(scheme)}://${asciiLower(host)}`, path };
+  return { scheme: asciiLower(scheme), host: asciiLower(host), path };
 }
 
 // urlCovers for two already-parsed URL scopes.
 function scopeCoversParsed(r, e) {
-  return r.origin === e.origin && pathCovers(r.path, e.path);
+  return r.scheme === e.scheme && hostCovers(r.host, e.host) && pathCovers(r.path, e.path);
 }
 
 // Does every address `narrow` (a target string, or null/undefined) ranges
@@ -675,12 +690,18 @@ function urlPatternExcludes(rScheme, rHost, rPath, effectTarget) {
     // from this chunk. Whatever it resolves to will still start with this
     // prefix, so a rule host that does NOT start with it can never be
     // that host.
+    //
+    // A host tree is matched at the host's END, and the hole comes after
+    // every known character, so it can always finish the host as ".x.com".
+    // A tree is never excluded here -- never hiding a real reach (v37.0
+    // §514).
+    if (rHost.startsWith(".")) return false;
     return !asciiLower(rHost).startsWith(asciiLower(remainder));
   }
 
   const eHost = remainder.slice(0, term);
   const rest = remainder.slice(term);
-  if (asciiLower(eHost) !== asciiLower(rHost)) return true;
+  if (!hostCovers(asciiLower(rHost), asciiLower(eHost))) return true;
 
   if (rest[0] === "?" || rest[0] === "#") {
     // The path is fully known here, from certain text -- and empty.
@@ -851,7 +872,19 @@ function checkTargetIsAnAddress(rule) {
   if (rule.target === null || rule.target === undefined) return;
   const parsed = parseUrlTarget(rule.target);
   if (parsed === null) return;
-  const [, , , query, fragment] = parsed;
+  const [, host, , query, fragment] = parsed;
+  if (host.startsWith(".") && ["", ".", ":"].includes(host.slice(1, 2))) {
+    // A leading dot means a host and everything under it (hostCovers), so
+    // it needs a host after it. ".", "..x" and ".:443" name none.
+    throw new RuleConflict(
+      `rule [${rule.name}] (line ${rule.line}): target ` +
+        `"${escapeStringLiteral(rule.target)}" starts its host ` +
+        `with "." but names no host after it — a leading "." ` +
+        `means a host and everything under it\n` +
+        `  write the host straight after the dot, as in ` +
+        `"https://.example.com"`,
+    );
+  }
   if (query === null && fragment === null) return;
   throw new RuleConflict(
     `rule [${rule.name}] (line ${rule.line}): target ` +

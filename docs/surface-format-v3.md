@@ -1,11 +1,4 @@
-# The effect-surface format, version 2
-
-**Superseded.** This is the frozen record of the format at the
-`sprint-b-2026-09.1` tag. Current programs use format 3 —
-[`docs/surface-format-v3.md`](surface-format-v3.md) — where a rule target's
-host written with a leading dot (`https://.x.com`) covers that host and
-every host under it. This document and `grammar/protocols/surface-v2.json`
-are otherwise unchanged.
+# The effect-surface format, version 3
 
 This is the specification for `shapes_cli.py --json` (and its JS and Swift
 counterparts) — the document a downstream project should read instead of
@@ -20,7 +13,7 @@ This document is written directly from the code that produces the format —
 and their JS (`js/cli.mjs`, `js/rules.mjs`) and Swift
 (`swift/Sources/Planes/EffectSurface.swift`, `.../Rules.swift`) counterparts —
 not from memory of what it should look like. A machine-checked companion,
-`grammar/protocols/surface-v2.json`, is a JSON Schema for exactly what is
+`grammar/protocols/surface-v3.json`, is a JSON Schema for exactly what is
 described here; `test_surface_format.py` runs all three hosts over a spread
 of real programs and validates every one of them against it, and separately
 checks that the kind table in §3 has not drifted from
@@ -29,8 +22,8 @@ checks that the kind table in §3 has not drifted from
 How to produce this document yourself:
 
 ```
-python3 shapes_cli.py program.planes --json               # format 2
-python3 shapes_cli.py program.planes --json --rules        # format 2 + rules
+python3 shapes_cli.py program.planes --json               # format 3
+python3 shapes_cli.py program.planes --json --rules        # format 3 + rules
 
 node js/cli.mjs shapes program.planes                       # the JS oracle
 node js/cli.mjs shapes program.planes --rules
@@ -47,6 +40,49 @@ which is why every table below states an exact key order rather than "an
 object with these fields."
 
 ---
+
+## Changes from format 2
+
+Format 2's record is [`docs/surface-format-v2.md`](surface-format-v2.md),
+frozen as the `sprint-b-2026-09.1` tag's format — unchanged since, apart
+from the pointer line at its own top. One change, and it is why the format
+bumped:
+
+1. **A rule target's host may be a tree.** A host written with a leading
+   dot — `rule [x] anything may not ask to "https://.doubleclick.net"` —
+   covers `doubleclick.net` and every host under it: `ad.doubleclick.net`,
+   `a.b.doubleclick.net`, and the tree `.a.doubleclick.net`. It is the
+   cookie and Public Suffix List reading of a leading dot. A tree is
+   matched at the host's **end**, and the dot before the name is required,
+   so it never covers a longer name that ends the same way
+   (`evildoubleclick.net`) or the name reused as the start of another host
+   (`doubleclick.net.evil.com`) — B2's
+   `tracker.example.evil.com` refusal holds under the tree. The port stays
+   part of the host (`.x.com:8443` covers `a.x.com:8443`, not `a.x.com`),
+   the path still matches at `/` boundaries, and forbidding `ask` to a
+   tree also forbids `send` into it (B1). A leading dot with no host after
+   it (`https://.`, `https://..x.com`, `https://.:443`) is refused at
+   check time, naming the fix.
+
+   **Why this bumps rather than adding:** under format 2 the string
+   `"https://.x.com"` was already a legal rule target — one naming a host
+   literally called `.x.com`, which no request ever reaches. Format 3 gives
+   that same value a different meaning. §6's rule is that a changed meaning
+   for an existing value bumps, so a consumer that matches rule targets
+   itself and does not know the tree refuses a format-3 document rather
+   than reading a tree as one impossible host and forbidding nothing.
+
+   **What does not change:** every rule host that does not begin with a
+   dot compares exactly as it did in format 2. A subdomain of `x.com` is
+   still not covered by a rule naming `x.com`. No field's shape changed;
+   only what a leading dot in a rule target's host means.
+
+   The tree changes what `narrows` and the structural conflict check see
+   (§2.9): `a.x.com` exact ⊂ `.a.x.com` ⊂ `.x.com`, so each narrows the
+   ones after it, and `.x.com` and `x.com` are never the same scope. And
+   `_pattern_excludes` (§4.1) never excludes a computed host from a tree:
+   the tree is matched at the host's end, and a hole comes after every
+   known character, so it can always finish the host as `.x.com`.
 
 ## Changes from format 1
 
@@ -152,7 +188,7 @@ the only key that is ever absent — see §2.2.
 
 | key | type | meaning |
 |---|---|---|
-| `format` | integer, always `2` today | the format version (§6) |
+| `format` | integer, always `3` today | the format version (§6) |
 | `program` | string | the file's base name (`os.path.basename`), not a path |
 | `kind` | string enum: `"library"` \| `"pure"` \| `"program"` | see §2.1 |
 | `pure` | boolean | `Surface.is_pure()` — no declared effects at all |
@@ -487,7 +523,7 @@ x = mystery
 
 $ python3 shapes_cli.py undeclared.planes --json
 {
-  "format": 2, "program": "undeclared.planes", "kind": "program",
+  "format": 3, "program": "undeclared.planes", "kind": "program",
   "pure": false, "complete": false,
   "boundaries": ["foreign"], "kinds": ["unknown"],
   "effects": [{"kind": "unknown", "boundary": "foreign",
@@ -543,6 +579,13 @@ could ever be *covered* by the rule — not merely that it could never *equal*
 the rule's target outright. A target that isn't URL-shaped (a file path, a
 `queue:send`-style name, console text) still matches exactly, as every rule
 target did before B2.
+
+A rule host written with a leading dot is a tree (format 3): it covers that
+host and every host under it, matched at the host's end. A computed target
+whose host is not fully known is never excluded from a tree — whatever its
+known prefix, the hole that follows can finish the host as `.x.com` — and
+one whose host is fully known is excluded exactly when that host is outside
+the tree.
 
 ### 4.2 `(destination not stated)`
 
@@ -642,7 +685,9 @@ bumping the version: it added the entire `rules` key described in §2.2, and
 exactly what it meant before. B1 (this version) is the worked example for a
 bump: `ask` narrowed from "a request at the network boundary" to
 "fetch-only", which is a change to what an EXISTING value means — see
-"Changes from format 1" above.
+"Changes from format 1" above. The host tree (format 3) is the second: a
+rule target such as `"https://.x.com"` was already legal and meant one
+host, and now means a tree of them — see "Changes from format 2" above.
 
 ## 7. Worked example
 
@@ -658,7 +703,7 @@ committed at `demo/mcp/v2.surface.json` and gated by `test_mcp_demo.py`):
 
 ```json
 {
-  "format": 2,
+  "format": 3,
   "program": "v2.planes",
   "kind": "program",
   "pure": false,

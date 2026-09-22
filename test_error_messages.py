@@ -571,7 +571,10 @@ def test_the_reference_work_list_is_still_empty_too():
     # four resolution errors -- the mandatory-fingerprint refusal, and
     # contradicts naming an unknown rule, naming itself, or the same pair
     # declared from both sides -- 118 + 6.
-    assert cov["errors"] == 124, cov["errors"]
+    # The host tree added one: _check_target_is_an_address's RuleConflict on
+    # a leading "." with no host after it -- 124 + 1. It names a fix ("write
+    # the host straight after the dot"), so the shortfall stays 0.
+    assert cov["errors"] == 125, cov["errors"]
 
 
 def test_every_deliberate_self_hosted_silence_states_a_reason():

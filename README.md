@@ -86,7 +86,7 @@ step one if they are missing.
 
 Anyone writing Planes for another project can check a file with Node or Swift
 alone. Both parse it and print its effect surface in the `--json` format
-([`docs/surface-format-v2.md`](docs/surface-format-v2.md)), and add rule
+([`docs/surface-format-v3.md`](docs/surface-format-v3.md)), and add rule
 results with `--rules`:
 
 ```bash
@@ -575,7 +575,26 @@ and not `https://tracker.example.com/ingest` or
 `https://api.example.com.evil.com/ingest` (scheme and host must match,
 case-insensitively; a different host, or a subdomain, is never covered). A
 bare host (no path, or `/`) covers every path on it; a path ending in `/`
-covers everything under it but not the bare path itself. Ports are part of
+covers everything under it but not the bare path itself.
+
+A host written with a leading dot is a **tree**: it covers that host and
+every host under it.
+
+```
+rule [no-doubleclick] anything may not ask to "https://.doubleclick.net"
+  because "it is only here to follow the reader"
+```
+
+forbids `https://doubleclick.net/`, `https://ad.doubleclick.net/pixel.gif`
+and `https://a.b.doubleclick.net/`. A tree is matched at the host's end, and
+the dot before the name is required, so it never covers
+`https://evildoubleclick.net/` or `https://doubleclick.net.evil.com/`. It is
+the cookie and Public Suffix List reading of a leading dot, and it is opt-in
+by spelling: a host without the dot means exactly one host, as above. A
+permit can still carve one address out of a tree — forbid `.x.com`, permit
+`https://login.x.com` with `supersedes` — and a dot with no host after it
+(`https://.`) is refused, naming the fix. The tree is why the surface format
+is version 3. Ports are part of
 the host and compared exactly as written — `https://x` and `https://x:443`
 are different targets, with no default-port folding. The effect's own query
 string and fragment are ignored, but a rule's own target may not carry one —
@@ -603,7 +622,7 @@ violation.
 as `render()`'s prose** (B4) — a rule's own subject, an effect's `computed`/
 `declared` flags, a vacuous rule's situation, a contradiction's two sides —
 so a host writes its own wording without parsing rendered text. See
-[`docs/surface-format-v2.md`](docs/surface-format-v2.md)'s "Writing your own
+[`docs/surface-format-v3.md`](docs/surface-format-v3.md)'s "Writing your own
 wording".
 
 ---
@@ -644,9 +663,9 @@ every error names its fix, and that is counted rather than asserted:
 
 ```
 $ python3 errors_coverage.py
-  names a fix                  119 of 124  (96%)
-  deliberately names none        5 of 124  (4%)
-  should name one and does not   0 of 124  (0%)
+  names a fix                  120 of 125  (96%)
+  deliberately names none        5 of 125  (4%)
+  should name one and does not   0 of 125  (0%)
 
   120 raise sites across interp.planes, parser.planes, lexer.planes, json.planes:
   names a fix                   80 of 120  (67%)
@@ -832,8 +851,8 @@ than hand-kept, so a tool never has to parse prose to learn the vocabulary.
 
 `grammar_gen.py --check` fails the build if any of these drifts from the code it
 describes. `shapes_cli.py --json` emits an effect surface in the same spirit —
-the exact format, field by field, is `docs/surface-format-v2.md` and its JSON
-Schema, `grammar/protocols/surface-v2.json`.
+the exact format, field by field, is `docs/surface-format-v3.md` and its JSON
+Schema, `grammar/protocols/surface-v3.json`.
 
 ---
 
