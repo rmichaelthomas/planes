@@ -45,7 +45,16 @@ from shapes import analyse, analyse_file, diff
 # changed (a value that was "an ask, could be a fetch or a send" is now
 # certainly a fetch), which is exactly what this field exists to flag. See
 # docs/surface-format-v2.md's "Changes from format 1".
-FORMAT_VERSION = 2
+#
+# 3 (the host tree): a rule target whose host begins with "." --
+# "https://.x.com" -- covers x.com and every host under it. Under format 2
+# the same string named a host literally called ".x.com", which matches
+# nothing; the MEANING of an existing rule-target value changed, so the
+# version bumps and a format-2 consumer refuses a format-3 document rather
+# than silently matching a tree as one impossible host. No rule written
+# without the dot changes. See docs/surface-format-v3.md's "Changes from
+# format 2".
+FORMAT_VERSION = 3
 
 
 def as_json(surface, path, rules=None):

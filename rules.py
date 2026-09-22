@@ -196,7 +196,7 @@ class Violation:
         the way the other three are) and the effect object's `computed`/
         `declared` (`Effect.computed`/`Effect.claimed` — the source of the
         text rendering's `" (computed)"` / `" (declared, not verified)"`
-        suffixes, §4.2 of docs/surface-format-v2.md). `message` is computed
+        suffixes, §4.2 of docs/surface-format-v3.md). `message` is computed
         from the fields built so far — before it is itself added to the
         dict — so this is never circular: `render_violation` never reads
         `fields["message"]`.
@@ -533,10 +533,43 @@ def _path_covers(rule_path, effect_path):
     return effect_path[len(rule_path):len(rule_path) + 1] == "/"
 
 
+def _host_covers(rule_host, effect_host):
+    """Does `rule_host` cover `effect_host` (B2, and the host tree)?
+
+    A host is compared case-insensitively, ASCII only, with its port as
+    part of it and never folded (B2). Two forms:
+
+    - `x.com` covers `x.com` and nothing else. A subdomain is a different
+      address, and `x.com.evil.com` is a different host (B2).
+    - `.x.com` — a host written with a leading dot — covers `x.com` and
+      every host under it: `a.x.com`, `a.b.x.com`, and the tree `.a.x.com`.
+      The leading dot is the cookie and Public Suffix List convention for
+      "this domain and below", so it is already read that way. It never
+      covers `evilx.com` (the dot before `x.com` is required) or
+      `x.com.evil.com` (a host is matched at its END, where the registered
+      name is, not at its start).
+
+    A port stays part of the host in both forms, so `.x.com:8443` covers
+    `a.x.com:8443` and not `a.x.com`: the suffix comparison carries the
+    port the way B2's exact comparison already did.
+
+    Opt-in by spelling, so no rule written before the host tree changes
+    meaning: every rule host that does not begin with a dot compares
+    exactly as it did at B2. `_check_target_is_an_address` refuses a dot
+    with no host after it.
+    """
+    r = _ascii_lower(rule_host)
+    e = _ascii_lower(effect_host)
+    if r.startswith("."):
+        return e == r[1:] or e.endswith(r)
+    return r == e
+
+
 def _url_covers(rule_target, effect_target):
     """Does the URL-shaped `rule_target` cover the URL-shaped
-    `effect_target` (B2)? Same scheme and host, compared case-
-    insensitively; port is part of the host and compared exactly as
+    `effect_target` (B2)? Same scheme, compared case-insensitively; the
+    host by `_host_covers`, which is exact unless the rule's host is a
+    tree (`.x.com`); port is part of the host and compared exactly as
     written — no default-port folding, so `https://x` and `https://x:443`
     differ. The effect's own query and fragment are ignored entirely —
     only its path is compared, against the rule's path, by `_path_covers`.
@@ -545,7 +578,7 @@ def _url_covers(rule_target, effect_target):
     e_scheme, e_host, e_path, _, _ = _parse_url_target(effect_target)
     if _ascii_lower(r_scheme) != _ascii_lower(e_scheme):
         return False
-    if _ascii_lower(r_host) != _ascii_lower(e_host):
+    if not _host_covers(r_host, e_host):
         return False
     return _path_covers(r_path, e_path)
 
@@ -763,10 +796,18 @@ def _url_pattern_excludes(r_scheme, r_host, r_path, effect_target):
         # is, from this chunk. Whatever it resolves to will still start
         # with this prefix, so a rule host that does NOT start with it
         # can never be that host.
+        #
+        # A host tree is matched at the host's END, and the hole comes
+        # after every known character: whatever the prefix is, the hole
+        # can finish it as `.x.com`. Nothing the prefix says rules a tree
+        # out, so a tree is never excluded here -- the conservative side,
+        # never hiding a real reach (v37.0 §514).
+        if r_host.startswith("."):
+            return False
         return not _ascii_lower(r_host).startswith(_ascii_lower(remainder))
 
     e_host, rest = remainder[:term], remainder[term:]
-    if _ascii_lower(e_host) != _ascii_lower(r_host):
+    if not _host_covers(r_host, e_host):
         return True
 
     if rest[:1] in ("?", "#"):
@@ -854,7 +895,19 @@ def _check_target_is_an_address(rule):
     parsed = _parse_url_target(rule.target)
     if parsed is None:
         return
-    _, _, _, query, fragment = parsed
+    _, host, _, query, fragment = parsed
+    if host.startswith(".") and (host[1:2] in ("", ".", ":")):
+        # A leading dot means a host and everything under it
+        # (`_host_covers`), so it needs a host after it. `.`, `..x` and
+        # `.:443` name none, and a rule that could never match anything
+        # would forbid nothing while reading as though it forbade a site.
+        raise RuleConflict(
+            f"rule [{rule.name}] (line {rule.line}): target "
+            f"\"{escape_string_literal(rule.target)}\" starts its host "
+            f"with \".\" but names no host after it — a leading \".\" "
+            f"means a host and everything under it\n"
+            f"  write the host straight after the dot, as in "
+            f"\"https://.example.com\"")
     if query is None and fragment is None:
         return
     raise RuleConflict(

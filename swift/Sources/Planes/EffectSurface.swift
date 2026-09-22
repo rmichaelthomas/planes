@@ -1472,7 +1472,11 @@ private struct NameMapByKey {
 /// 2 (B1, Sprint B): `send` joined the effect vocabulary and `ask` narrowed
 /// to fetch-only -- the MEANING of an existing "ask" value changed. See
 /// docs/surface-format-v2.md's "Changes from format 1".
-public let FORMAT_VERSION = 2
+///
+/// 3 (the host tree): a rule target whose host begins with "." covers that
+/// host and every host under it -- the MEANING of an existing rule-target
+/// value changed. See docs/surface-format-v3.md's "Changes from format 2".
+public let FORMAT_VERSION = 3
 
 /// `os.path.basename`: the text after the last "/".
 func basename(_ p: String) -> String {

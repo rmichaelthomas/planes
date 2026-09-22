@@ -46,6 +46,19 @@ Downstream:
 
 ---
 
+## Done — the host tree
+
+Built September 21, 2026, for Koncord's reader file: a browser's refusal rules have to be able to name a company, and B2 made subdomains separate on purpose. A host written with a leading dot — `rule [x] anything may not ask to "https://.doubleclick.net"` — covers that host and every host under it, matched at the host's end so `evildoubleclick.net` and `doubleclick.net.evil.com` stay uncovered and B2's `tracker.example.evil.com` refusal holds. Opt-in by spelling: no rule written without the dot changes. The cookie and Public Suffix List reading, and no new vocabulary.
+- **All three hosts** under the agreement suites: `_host_covers` in Python, `hostCovers` in JS and Swift, with `narrows`, same-scope and `_pattern_excludes` re-proven (a computed host is never excluded from a tree).
+- **A dot with no host after it is refused**, naming the fix. The catalogue is 125 errors, shortfall still 0.
+- **Surface format 3** (`docs/surface-format-v3.md`, `grammar/protocols/surface-v3.json`): `"https://.x.com"` was already a legal target naming one impossible host, and now names a tree, so §6's rule bumps the version. Format 2 is frozen with a pointer.
+- **Swift `HostRules` cost** is unchanged within noise on the H4 fixture (p50 +0.7% at 50 rules, +2.6% at 200).
+
+Downstream:
+- **Koncord** is next: it compiles each rule into its own content rule list and page watch, so it moves to the new tag and learns the dot in both.
+
+---
+
 ## Later — by theme
 
 Each item says where it came from and what it waits on. The Aug 1 handoff's phases are marked **P0–P4**.
@@ -58,7 +71,7 @@ Each item says where it came from and what it waits on. The Aug 1 handoff's phas
 | Canonical AST serialization and a public conformance corpus | Partial. The canonical form exists in Python, JS and Swift, and agreement suites run it. Not yet published as fixtures a stranger can run. | Sprint A tag |
 | Structured run receipt: sources, seed, host, surface, observed effects, rule decisions | Partial. The record plane (#7), fingerprints and the event log (#85) exist; nothing is signed. | Omniglot O-Q3 and 5xFive refusal receipts want surface→receipt wiring |
 | `planes describe`, a manifest of manifests | Admitted at v18.0 §200, not built | — |
-| Surface format versioning | Format 1 (Sprint A E1) and format 2 (Sprint B: `send`, address-covering rules, contradictions, full violation fields) published with schemas | — |
+| Surface format versioning | Format 1 (Sprint A E1), format 2 (Sprint B: `send`, address-covering rules, contradictions, full violation fields) and format 3 (the host tree) published with schemas | — |
 
 ### 2. Authority, budgets and the rule plane (handoff P1)
 

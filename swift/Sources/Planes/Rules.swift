@@ -120,7 +120,7 @@ public final class Violation: CustomStringConvertible {
     /// other three are) and the effect object's `computed`/`declared`
     /// (`Effect.computed`/`Effect.claimed` — the source of the text
     /// rendering's `" (computed)"` / `" (declared, not verified)"`
-    /// suffixes, §4.2 of docs/surface-format-v2.md). `message` is computed
+    /// suffixes, §4.2 of docs/surface-format-v3.md). `message` is computed
     /// from the fields built so far — before it is itself added to the
     /// object — so this is never circular: `renderViolation` never reads
     /// the `"message"` key.
@@ -516,12 +516,40 @@ private func isSchemeBytes(_ s: URLPieces.Bytes) -> Bool {
     return s.dropFirst().allSatisfy { isLetter($0) || ($0 >= 0x30 && $0 <= 0x39) || $0 == 0x2B || $0 == 0x2D || $0 == 0x2E }
 }
 
+private let dot = UInt8(ascii: ".")
+
+/// Does the rule's host cover the effect's (B2, and the host tree)?
+///
+/// `x.com` covers `x.com` and nothing else. `.x.com` -- a leading dot, the
+/// cookie and Public Suffix List reading -- covers `x.com` and every host
+/// under it, matched at the host's END so `evilx.com` and `x.com.evil.com`
+/// are never covered. A port stays part of the host in both forms. Opt-in
+/// by spelling: a host without the dot compares exactly as it did at B2.
+/// rules.py's `_host_covers` and js/rules.mjs's `hostCovers` must agree.
+///
+/// A byte suffix is a code-point suffix here: the rule's host begins with
+/// ".", an ASCII byte, so the effect's tail that matches it cannot begin
+/// inside a multi-byte scalar (see `URLPieces`).
+private func hostCovers(_ rule: URLPieces.Bytes, _ effect: URLPieces.Bytes) -> Bool {
+    guard rule.first == dot else { return sameASCIIFolded(rule, effect) }
+    if sameASCIIFolded(rule.dropFirst(), effect) { return true }
+    guard effect.count >= rule.count else { return false }
+    return sameASCIIFolded(rule, effect[effect.index(effect.startIndex, offsetBy: effect.count - rule.count)...])
+}
+
+/// `hostCovers` over two strings, for the callers that hold text rather than
+/// views.
+func hostCovers(_ ruleHost: String, _ effectHost: String) -> Bool {
+    hostCovers(ruleHost.utf8[...], effectHost.utf8[...])
+}
+
 private func urlCovers(_ r: URLPieces, _ e: URLPieces) -> Bool {
-    sameASCIIFolded(r.scheme, e.scheme) && sameASCIIFolded(r.host, e.host) && pathCovers(r.path, e.path)
+    sameASCIIFolded(r.scheme, e.scheme) && hostCovers(r.host, e.host) && pathCovers(r.path, e.path)
 }
 
 /// Does the URL-shaped `ruleTarget` cover the URL-shaped `effectTarget`
-/// (B2)? Same scheme and host, compared case-insensitively; port is part of
+/// (B2)? Same scheme, compared case-insensitively; the host by `hostCovers`,
+/// exact unless the rule's host is a tree (`.x.com`); port is part of
 /// the host and compared exactly as written -- no default-port folding, so
 /// `https://x` and `https://x:443` differ. The effect's own query and
 /// fragment are ignored entirely -- only its path is compared, against the
@@ -762,12 +790,18 @@ func urlPatternExcludes(_ rScheme: String, _ rHost: String, _ rPath: String, _ e
         // from this chunk. Whatever it resolves to will still start with
         // this prefix, so a rule host that does NOT start with it can
         // never be that host.
+        //
+        // A host tree is matched at the host's END, and the hole comes
+        // after every known character, so it can always finish the host as
+        // `.x.com`. A tree is never excluded here -- never hiding a real
+        // reach (v37.0 §514).
+        if rHost.hasPrefix(".") { return false }
         return !rHostLower.starts(with: asciiLower(remainder))
     }
 
     let eHost = Array(remainder[0..<term])
     let rest = Array(remainder[term...])
-    if asciiLower(eHost) != rHostLower { return true }
+    if !hostCovers(rHost, String(String.UnicodeScalarView(eHost))) { return true }
 
     if rest.first == "?" || rest.first == "#" {
         // The path is fully known here, from certain text -- and empty.
@@ -913,6 +947,20 @@ func resolveActive(_ rules: [AST.Rule]) throws -> [AST.Rule] {
 func checkTargetIsAnAddress(_ rule: AST.Rule) throws {
     guard let target = rule.target else { return }
     guard let parsed = urlPieces(target) else { return }
+    if parsed.host.first == dot {
+        // A leading dot means a host and everything under it (`hostCovers`),
+        // so it needs a host after it. `.`, `..x` and `.:443` name none.
+        let after = parsed.host.dropFirst().first
+        if after == nil || after == dot || after == colon {
+            throw RuleConflict(
+                "rule [\(rule.name)] (line \(rule.line)): target " +
+                    "\"\(escapeStringLiteral(target))\" starts its host " +
+                    "with \".\" but names no host after it — a leading \".\" " +
+                    "means a host and everything under it\n" +
+                    "  write the host straight after the dot, as in " +
+                    "\"https://.example.com\"")
+        }
+    }
     if parsed.query == nil && parsed.fragment == nil { return }
     throw RuleConflict(
         "rule [\(rule.name)] (line \(rule.line)): target " +

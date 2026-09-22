@@ -256,6 +256,47 @@ RULE_PROGRAMS = [
      'rule [deny-ask] anything may not ask to "https://host/path"\n'
      'rule [permit-ask] anything may ask to "https://host/path" '
      'supersedes [deny-ask] @c5d290\n'),
+    # The host tree: a leading dot covers a host and everything under it,
+    # matched at the host's end. Hit on a subdomain, a deep subdomain and
+    # the base; miss on a longer word and on the name reused as a prefix.
+    ('use http\nrule [no-dc] anything may not ask to "https://.doubleclick.net"\n'
+     'a = ask "https://ad.doubleclick.net/pixel.gif"\n'
+     'b = ask "https://a.b.doubleclick.net/"\n'
+     'c = ask "https://doubleclick.net/"\n'),
+    ('use http\nrule [no-x] anything may not ask to "https://.x.com"\n'
+     'a = ask "https://evilx.com/"\n'
+     'b = ask "https://x.com.evil.com/"\n'),
+    # ...its port stays part of the host, and its path still matches at "/"
+    ('use http\nrule [no-x] anything may not ask to "https://.X.com:8443/ads"\n'
+     'a = ask "https://A.x.COM:8443/ads/1.js"\n'
+     'b = ask "https://a.x.com/ads/1.js"\n'
+     'c = ask "https://a.x.com:8443/adsense"\n'),
+    # ...a forbid on ask to a tree also forbids a send into it (B1)
+    ('foreign beacon of x from "m.post" doing send "https://t.x.com/c"\n'
+     'rule [no-x] anything may not ask to "https://.x.com"\n'
+     'y = beacon of 1\n'),
+    # ...a computed host is never excluded from a tree; a known host outside
+    # it is
+    ('use http\nrule [no-x] anything may not ask to "https://.x.com"\n'
+     'hosts = ["ads.x.com", "evil.com"]\n'
+     'for each h in hosts:\n  y = ask "https://" + h + "/p"\n'),
+    ('use http\nrule [no-x] anything may not ask to "https://.x.com"\n'
+     'paths = ["a", "b"]\n'
+     'for each p in paths:\n  y = ask "https://evil.com/" + p\n'),
+    # ...an exact host and a subtree both narrow the tree that holds them
+    ('use http\nrule [tree] anything may not ask to "https://.x.com"\n'
+     'rule [subtree] anything may not ask to "https://.a.x.com"\n'
+     'rule [exact] anything may not ask to "https://a.x.com"\n'
+     'y = ask "https://a.x.com/"\n'),
+    # ...a permit inside a tree needs its supersedes, and the refusal names
+    # the fingerprint to add
+    ('use http\nrule [no-x] anything may not ask to "https://.x.com"\n'
+     'rule [login] anything may ask to "https://login.x.com" supersedes [no-x] @000000\n'
+     'y = ask "https://login.x.com/start"\n'),
+    # ...and a dot with no host after it is refused, with the fix
+    ('use http\nrule [r] anything may not ask to "https://."\nx = ask "https://a.example/"\n'),
+    ('use http\nrule [r] anything may not ask to "https://..x.com"\nx = ask "https://a.example/"\n'),
+    ('use http\nrule [r] anything may not ask to "https://.:443"\nx = ask "https://a.example/"\n'),
 ]
 
 

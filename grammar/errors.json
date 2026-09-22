@@ -1,7 +1,7 @@
 {
   "format": 1,
   "generated_by": "grammar_gen.py",
-  "count": 129,
+  "count": 130,
   "entries": [
     {
       "id": "interp.cannot-compare.equal-1",
@@ -1521,7 +1521,7 @@
       "kind": "error",
       "class": "RuleNotSupported",
       "tag": null,
-      "source": "rules.py:813",
+      "source": "rules.py:854",
       "raised_in": "_resolve_subject",
       "template": "rule [{rule.name}] (line {rule.line}): subject '{rule.subject}' only resolves in {other}, not in the file that declares this rule \u2014 a rule cannot reach across an import boundary to a name it never saw declared\n  write the rule in {other} instead, or name a subject local to this file",
       "slots": [
@@ -1537,7 +1537,7 @@
       "kind": "error",
       "class": "RuleNotSupported",
       "tag": null,
-      "source": "rules.py:820",
+      "source": "rules.py:861",
       "raised_in": "_resolve_subject",
       "template": "rule [{rule.name}] (line {rule.line}): subject '{rule.subject}' does not resolve to anything in the traced effect surface \u2014 checking it needs a value this file's derivation graph can reach\n  check the name is spelled as it appears in this file, or write the rule against 'anything' instead",
       "slots": [
@@ -1547,11 +1547,25 @@
       ]
     },
     {
-      "id": "rules.ruleconflict-site._check_target_is_an_address",
+      "id": "rules.ruleconflict-site._check_target_is_an_address-1",
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:860",
+      "source": "rules.py:904",
+      "raised_in": "_check_target_is_an_address",
+      "template": "rule [{rule.name}] (line {rule.line}): target \"{escape_string_literal(rule.target)}\" starts its host with \".\" but names no host after it \u2014 a leading \".\" means a host and everything under it\n  write the host straight after the dot, as in \"https://.example.com\"",
+      "slots": [
+        "rule.name",
+        "rule.line",
+        "escape_string_literal(rule.target)"
+      ]
+    },
+    {
+      "id": "rules.ruleconflict-site._check_target_is_an_address-2",
+      "kind": "error",
+      "class": "RuleConflict",
+      "tag": null,
+      "source": "rules.py:913",
       "raised_in": "_check_target_is_an_address",
       "template": "rule [{rule.name}] (line {rule.line}): target \"{escape_string_literal(rule.target)}\" has a query string or fragment \u2014 a rule target names an address, and only an effect's own query and fragment are ever ignored, never the rule's\n  drop everything from the \"?\" or \"#\" onward",
       "slots": [
@@ -1565,7 +1579,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:907",
+      "source": "rules.py:960",
       "raised_in": "_resolve_active",
       "template": "two rules are both named [{r.name}] (line {other.line} and line {r.line}) \u2014 a rule name must be unique\n  rename one of them",
       "slots": [
@@ -1579,7 +1593,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:918",
+      "source": "rules.py:971",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes itself\n  supersedes should name an earlier, different rule",
       "slots": [
@@ -1592,7 +1606,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:922",
+      "source": "rules.py:975",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes [{r.supersedes}], which is not a rule in this file\n  check the name, or remove the supersedes clause",
       "slots": [
@@ -1606,7 +1620,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:930",
+      "source": "rules.py:983",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes [{r.supersedes}] (line {target_rule.line}) without its fingerprint\n  write supersedes [{r.supersedes}] @{actual}",
       "slots": [
@@ -1623,7 +1637,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:936",
+      "source": "rules.py:989",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) supersedes [{r.supersedes}] (line {target_rule.line}) as of @{r.supersedes_fingerprint}, but [{r.supersedes}] is now @{actual} \u2014 it changed after [{r.name}] was written to override it\n  confirm the override still means what it meant, then update the fingerprint to @{actual}",
       "slots": [
@@ -1643,7 +1657,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:953",
+      "source": "rules.py:1006",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) contradicts itself\n  contradicts should name a different rule",
       "slots": [
@@ -1656,7 +1670,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:957",
+      "source": "rules.py:1010",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) contradicts [{r.contradicts}], which is not a rule in this file\n  check the name, or remove the contradicts clause",
       "slots": [
@@ -1670,7 +1684,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:965",
+      "source": "rules.py:1018",
       "raised_in": "_resolve_active",
       "template": "rule [{r.name}] (line {r.line}) contradicts [{r.contradicts}], but [{first.name}] (line {first.line}) already contradicts [{first.contradicts}] \u2014 the pair only needs declaring once\n  remove the contradicts clause from one of them",
       "slots": [
@@ -1687,7 +1701,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:1016",
+      "source": "rules.py:1069",
       "raised_in": "_check_permits_are_related",
       "template": "rule [{p.name}] (line {p.line}) permits '{p.kind}' but excepts no forbid rule \u2014 a permit only has force against a prohibition it supersedes or narrows\n  add 'supersedes [name-of-the-forbid-rule]' to [{p.name}], or give it a target that narrows one of the forbid rules over '{p.kind}'",
       "slots": [
@@ -1703,7 +1717,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:1107",
+      "source": "rules.py:1160",
       "raised_in": "_check_conflicts",
       "template": "rule [{forbid.name}] (line {forbid.line}) and rule [{permit.name}] (line {permit.line}) demand opposite things over {where} \u2014 one forbids it, the other permits it, and neither narrows nor supersedes the other\n  add 'supersedes [{forbid.name}]' to [{permit.name}] to make the exception explicit, or give one of them a target the other lacks",
       "slots": [
@@ -1721,7 +1735,7 @@
       "kind": "error",
       "class": "RuleConflict",
       "tag": null,
-      "source": "rules.py:1116",
+      "source": "rules.py:1169",
       "raised_in": "_check_conflicts",
       "template": "rule [{a.name}] (line {a.line}) and rule [{b.name}] (line {b.line}) are equally specific over {where} \u2014 neither narrows nor supersedes the other\n  add 'supersedes [{a.name}]' to [{b.name}] (or the reverse), or give one of them a target the other lacks",
       "slots": [
@@ -2012,46 +2026,49 @@
       "rules.py:385-388"
     ],
     "rules.rulenotsupported-site._resolve_subject-1": [
-      "rules.py:813"
+      "rules.py:854"
     ],
     "rules.rulenotsupported-site._resolve_subject-2": [
-      "rules.py:820"
+      "rules.py:861"
     ],
-    "rules.ruleconflict-site._check_target_is_an_address": [
-      "rules.py:860"
+    "rules.ruleconflict-site._check_target_is_an_address-1": [
+      "rules.py:904"
+    ],
+    "rules.ruleconflict-site._check_target_is_an_address-2": [
+      "rules.py:913"
     ],
     "rules.ruleconflict-site._resolve_active-1": [
-      "rules.py:907"
+      "rules.py:960"
     ],
     "rules.ruleconflict-site._resolve_active-2": [
-      "rules.py:918"
+      "rules.py:971"
     ],
     "rules.ruleconflict-site._resolve_active-3": [
-      "rules.py:922"
+      "rules.py:975"
     ],
     "rules.ruleconflict-site._resolve_active-4": [
-      "rules.py:930"
+      "rules.py:983"
     ],
     "rules.ruleconflict-site._resolve_active-5": [
-      "rules.py:936"
+      "rules.py:989"
     ],
     "rules.ruleconflict-site._resolve_active-6": [
-      "rules.py:953"
+      "rules.py:1006"
     ],
     "rules.ruleconflict-site._resolve_active-7": [
-      "rules.py:957"
+      "rules.py:1010"
     ],
     "rules.ruleconflict-site._resolve_active-8": [
-      "rules.py:965"
+      "rules.py:1018"
     ],
     "rules.ruleconflict-site._check_permits_are_related": [
-      "rules.py:1016"
+      "rules.py:1069"
     ],
     "rules.ruleconflict-site._check_conflicts-1": [
-      "rules.py:1107"
+      "rules.py:1160"
     ],
     "rules.ruleconflict-site._check_conflicts-2": [
-      "rules.py:1116"
+      "rules.py:1169"
     ]
   }
 }

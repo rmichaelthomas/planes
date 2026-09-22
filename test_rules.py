@@ -681,6 +681,126 @@ def test_b2_a_scheme_or_host_that_is_fully_literal_and_different_is_excluded():
     assert _pattern_excludes("https://x/a", "https://y/{...}") is True
 
 
+# ================================================================ the host tree: a leading dot
+
+def test_tree_host_covers_itself_and_every_host_under_it():
+    """`.x.com` covers `x.com`, `a.x.com`, and deeper — the cookie and
+    Public Suffix List reading of a leading dot."""
+    from rules import _target_matches
+    rule = Rule("r", "anything", "ask", "https://.doubleclick.net", 1)
+    for host in ("doubleclick.net", "ad.doubleclick.net", "a.b.doubleclick.net"):
+        assert _target_matches(rule, lit(f"https://{host}/pixel.gif")) == (True, False), host
+
+
+def test_tree_host_is_matched_at_the_end_never_the_start():
+    """The dot before the name is required, and the name must be the
+    host's END: neither a longer word nor the name reused as a prefix of
+    somebody else's host is covered. B2's `tracker.example.evil.com`
+    attack stays refused under the tree."""
+    from rules import _target_matches
+    rule = Rule("r", "anything", "ask", "https://.x.com", 1)
+    assert _target_matches(rule, lit("https://evilx.com/"))[0] is False
+    assert _target_matches(rule, lit("https://x.com.evil.com/"))[0] is False
+    assert _target_matches(rule, lit("https://x.co/"))[0] is False
+
+
+def test_a_host_without_the_dot_still_never_covers_a_subdomain():
+    """Opt-in by spelling: every rule written before the tree means what
+    it meant at B2."""
+    from rules import _target_matches
+    rule = Rule("r", "anything", "ask", "https://x.com", 1)
+    assert _target_matches(rule, lit("https://api.x.com/"))[0] is False
+    assert _target_matches(rule, lit("https://x.com/"))[0] is True
+
+
+def test_tree_host_is_ascii_case_insensitive_and_keeps_its_port():
+    from rules import _target_matches
+    rule = Rule("r", "anything", "ask", "https://.X.com:8443", 1)
+    assert _target_matches(rule, lit("https://A.x.COM:8443/"))[0] is True
+    assert _target_matches(rule, lit("https://a.x.com/"))[0] is False
+    assert _target_matches(rule, lit("https://a.x.com:443/"))[0] is False
+
+
+def test_tree_host_still_matches_its_path_at_slash_boundaries():
+    from rules import _target_matches
+    rule = Rule("r", "anything", "ask", "https://.x.com/ads", 1)
+    assert _target_matches(rule, lit("https://cdn.x.com/ads/1.js"))[0] is True
+    assert _target_matches(rule, lit("https://cdn.x.com/adsense"))[0] is False
+    assert _target_matches(rule, lit("https://cdn.x.com/news"))[0] is False
+
+
+def test_forbidding_ask_to_a_tree_also_forbids_send_to_it():
+    """B1 under the tree: a forbid on `ask` still covers `send`, at every
+    host the tree covers."""
+    src = ('foreign beacon of x from "m.post" doing send "https://t.x.com/c"\n'
+           'rule [no-x] anything may not ask to "https://.x.com"\n'
+           'y = beacon of 1\n')
+    violations = [v for v in rule_violations(src) if v.is_violation]
+    assert [v.rule.name for v in violations] == ["no-x"]
+
+
+def test_a_tree_narrows_a_wider_tree_and_an_exact_host_narrows_its_tree():
+    """What a rule ranges over, as sets: `a.x.com` exact ⊂ `.a.x.com` ⊂
+    `.x.com`. A tree never narrows the exact host it contains."""
+    exact = Rule("exact", "anything", "ask", "https://a.x.com", 1)
+    subtree = Rule("subtree", "anything", "ask", "https://.a.x.com", 2)
+    tree = Rule("tree", "anything", "ask", "https://.x.com", 3)
+    assert narrows(subtree, tree)
+    assert narrows(exact, subtree)
+    assert narrows(exact, tree)
+    assert not narrows(tree, subtree)
+    assert not narrows(tree, exact)
+
+
+def test_a_tree_and_its_base_host_are_not_the_same_scope():
+    """`.x.com` holds `x.com` and more, so the two are not equally
+    specific: one narrows the other, and they are never reported as a
+    same-scope conflict."""
+    from rules import _same_scope
+    assert not _same_scope("https://.x.com", "https://x.com")
+    assert _same_scope("https://.x.com", "https://.X.com/")
+
+
+def test_a_permit_on_one_host_excepts_it_from_a_tree_forbid():
+    """The exception mechanism reaches into a tree: forbid the company,
+    permit the one address the reader needs."""
+    fp = fingerprint(Rule("no-x", "anything", "ask", "https://.x.com", 1))
+    src = ('use http\n'
+           'rule [no-x] anything may not ask to "https://.x.com"\n'
+           f'rule [login] anything may ask to "https://login.x.com" supersedes [no-x] @{fp}\n'
+           'a = ask "https://login.x.com/start"\n'
+           'b = ask "https://ads.x.com/pixel"\n')
+    violations = [v for v in rule_violations(src) if v.is_violation]
+    assert [v.effect.target for v in violations] == ["https://ads.x.com/pixel"]
+
+
+def test_a_computed_host_is_never_excluded_from_a_tree():
+    """A tree is matched at the host's END, and a hole comes after every
+    known character, so it can always finish the host as `.x.com`.
+    Excluding it would hide a real reach (v37.0 §514)."""
+    from rules import _pattern_excludes
+    assert _pattern_excludes("https://.x.com", "https://{...}/pixel") is False
+    assert _pattern_excludes("https://.x.com", "https://ads.{...}/pixel") is False
+    assert _pattern_excludes("https://.x.com", "https://evil.{...}") is False
+
+
+def test_a_fully_known_host_outside_the_tree_is_excluded():
+    from rules import _pattern_excludes
+    assert _pattern_excludes("https://.x.com", "https://evil.com/{...}") is True
+    assert _pattern_excludes("https://.x.com", "https://x.com.evil.com/{...}") is True
+    assert _pattern_excludes("https://.x.com", "https://ads.x.com/{...}") is False
+    assert _pattern_excludes("https://.x.com", "http://ads.x.com/{...}") is True
+
+
+def test_a_leading_dot_with_no_host_after_it_is_refused_with_the_fix():
+    for target in ("https://.", "https://..x.com", "https://.:443"):
+        e = expect_conflict(f'use http\nrule [r] anything may not ask to "{target}"\n'
+                            'x = ask "https://a.example/"\n')
+        message = str(e)
+        assert "starts its host" in message and "names no host after it" in message, target
+        assert "https://.example.com" in message, target
+
+
 # ================================================================ narrows / supersedes / conflict
 
 def test_rule_with_a_target_narrows_one_without():
