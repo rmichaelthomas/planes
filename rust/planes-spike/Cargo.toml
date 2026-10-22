@@ -1,0 +1,13 @@
+[package]
+name = "planes-spike"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "planes_spike"
+path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]
+
+[[bin]]
+name = "planes-spike"
+path = "src/main.rs"

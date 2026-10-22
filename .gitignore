@@ -65,6 +65,7 @@ docs/superpowers/
 # arm64-apple-ios/ when built for another platform.
 swift/.build/
 /.build/
+rust/planes-spike/target/
 
 # Xcode's per-checkout SwiftPM state when a package is opened directly in
 # Xcode (e.g. to verify an iOS destination) — machine-local, never committed.
