@@ -57,6 +57,11 @@ def require_all_agreement(case_outputs: dict[str, dict[str, str]]) -> dict[str, 
     return expected
 
 
+def measure_after_agreement(case_outputs: dict[str, dict[str, str]], operation):
+    expected = require_all_agreement(case_outputs)
+    return expected, operation()
+
+
 def command_output(command: list[str]) -> tuple[str, str]:
     result = subprocess.run(command, cwd=REPO, capture_output=True, text=True, timeout=180)
     if result.returncode:
@@ -160,23 +165,40 @@ def run_benchmark(runs: int) -> dict:
     invoice_path = TMP_DIR / "invoice_rust_input.csv"
     write_invoice_data(invoice_path)
 
-    subprocess.run(["cargo", "clean", "--manifest-path", str(RUST_MANIFEST)],
-                   cwd=REPO, capture_output=True, text=True, timeout=180, check=True)
-    build_start = time.perf_counter_ns()
+    subprocess.run(
+        ["cargo", "clean", "--manifest-path", str(RUST_MANIFEST)],
+        cwd=REPO, capture_output=True, text=True, timeout=180, check=True,
+    )
     build = subprocess.run(
         ["cargo", "build", "--release", "--manifest-path", str(RUST_MANIFEST)],
         cwd=REPO, capture_output=True, text=True, timeout=180,
     )
     if build.returncode:
         raise RuntimeError(f"Rust release build failed: {build.stderr}")
-    build_ms = (time.perf_counter_ns() - build_start) / 1_000_000
 
     keys = ("record_updates", "invoice")
     outputs_by_case = {
         key: {name: collect_output(name, command) for name, command in runtime_commands(key, invoice_path).items()}
         for key in keys
     }
-    expected_by_case = require_all_agreement(outputs_by_case)
+
+    def timed_clean_release_build() -> float:
+        subprocess.run(
+            ["cargo", "clean", "--manifest-path", str(RUST_MANIFEST)],
+            cwd=REPO, capture_output=True, text=True, timeout=180, check=True,
+        )
+        started = time.perf_counter_ns()
+        result = subprocess.run(
+            ["cargo", "build", "--release", "--manifest-path", str(RUST_MANIFEST)],
+            cwd=REPO, capture_output=True, text=True, timeout=180,
+        )
+        if result.returncode:
+            raise RuntimeError(f"Rust release build failed: {result.stderr}")
+        return (time.perf_counter_ns() - started) / 1_000_000
+
+    expected_by_case, build_ms = measure_after_agreement(
+        outputs_by_case, timed_clean_release_build,
+    )
 
     cases = {}
     for key in keys:

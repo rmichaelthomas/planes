@@ -35,6 +35,23 @@ class RustBenchmarkTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "invoice.*results differ"):
             rust_bench.require_all_agreement(outputs)
 
+    def test_release_build_timing_waits_for_parity_across_all_cases(self):
+        outputs = {
+            "record_updates": {"Rust": "total 2550000", "Python": "total 2550000"},
+            "invoice": {"Rust": "due 2854966.73", "Python": "due 2854966.72"},
+        }
+        self.assertTrue(
+            hasattr(rust_bench, "measure_after_agreement"),
+            "build duration must be measured only after full workload parity",
+        )
+        build_calls = []
+        with self.assertRaisesRegex(RuntimeError, "invoice.*results differ"):
+            rust_bench.measure_after_agreement(
+                outputs,
+                lambda: build_calls.append("measured") or 12.5,
+            )
+        self.assertEqual(build_calls, [])
+
 
 if __name__ == "__main__":
     unittest.main()
