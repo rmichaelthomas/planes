@@ -17,9 +17,14 @@ pub extern "C" fn planes_input_capacity() -> usize {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn planes_invoice(input_len: usize) -> u64 {
+    if input_len > INPUT_CAPACITY {
+        return write_output(Err(format!(
+            "invoice input exceeds {INPUT_CAPACITY}-byte limit"
+        )));
+    }
     let input = unsafe {
         let ptr = std::ptr::addr_of!(INPUT).cast::<u8>();
-        std::slice::from_raw_parts(ptr, input_len.min(INPUT_CAPACITY))
+        std::slice::from_raw_parts(ptr, input_len)
     };
     let result = std::str::from_utf8(input)
         .map_err(|_| "input is not UTF-8".to_owned())
@@ -40,9 +45,20 @@ pub extern "C" fn planes_records(count: usize, bump_count: usize) -> u64 {
 }
 
 fn write_output(result: Result<String, String>) -> u64 {
-    let text = result.unwrap_or_else(|error| format!("error {error}"));
+    let text = match result {
+        Ok(text) if text.len() <= OUTPUT_CAPACITY => text,
+        Ok(_) => "error output exceeds buffer capacity".to_owned(),
+        Err(error) => {
+            let message = format!("error {error}");
+            if message.len() <= OUTPUT_CAPACITY {
+                message
+            } else {
+                "error message exceeds buffer capacity".to_owned()
+            }
+        }
+    };
     let bytes = text.as_bytes();
-    let cursor = bytes.len().min(OUTPUT_CAPACITY);
+    let cursor = bytes.len();
     unsafe {
         let output = std::ptr::addr_of_mut!(OUTPUT).cast::<u8>();
         std::ptr::copy_nonoverlapping(bytes.as_ptr(), output, cursor);

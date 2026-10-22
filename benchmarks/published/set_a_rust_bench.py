@@ -42,6 +42,21 @@ def require_agreement(outputs: dict[str, str]) -> str:
     return expected
 
 
+def require_all_agreement(case_outputs: dict[str, dict[str, str]]) -> dict[str, str]:
+    if not case_outputs:
+        raise RuntimeError("no workload results were collected")
+    expected = {}
+    failures = []
+    for case, outputs in case_outputs.items():
+        try:
+            expected[case] = require_agreement(outputs)
+        except RuntimeError as error:
+            failures.append(f"{case}: {error}")
+    if failures:
+        raise RuntimeError("runtime results differ; all timing is blocked: " + "; ".join(failures))
+    return expected
+
+
 def command_output(command: list[str]) -> tuple[str, str]:
     result = subprocess.run(command, cwd=REPO, capture_output=True, text=True, timeout=180)
     if result.returncode:
@@ -156,10 +171,17 @@ def run_benchmark(runs: int) -> dict:
         raise RuntimeError(f"Rust release build failed: {build.stderr}")
     build_ms = (time.perf_counter_ns() - build_start) / 1_000_000
 
+    keys = ("record_updates", "invoice")
+    outputs_by_case = {
+        key: {name: collect_output(name, command) for name, command in runtime_commands(key, invoice_path).items()}
+        for key in keys
+    }
+    expected_by_case = require_all_agreement(outputs_by_case)
+
     cases = {}
-    for key in ("record_updates", "invoice"):
-        outputs = {name: collect_output(name, command) for name, command in runtime_commands(key, invoice_path).items()}
-        expected = require_agreement(outputs)
+    for key in keys:
+        outputs = outputs_by_case[key]
+        expected = expected_by_case[key]
         commands = runtime_commands(key, invoice_path)
         process_ms = {name: median_process_ms(command, runs) for name, command in commands.items()}
         cases[key] = {

@@ -34,3 +34,12 @@ test("WebAssembly rejects malformed invoice input with a visible error", async (
   new Uint8Array(exports.memory.buffer, exports.planes_input_ptr(), bytes.length).set(bytes);
   assert.match(output(exports, exports.planes_invoice(bytes.length)), /^error /);
 });
+
+test("WebAssembly rejects an invoice length larger than its input buffer", async () => {
+  const exports = await loadWasm();
+  const length = exports.planes_input_capacity() + 1;
+  assert.equal(
+    output(exports, exports.planes_invoice(length)),
+    `error invoice input exceeds ${exports.planes_input_capacity()}-byte limit`,
+  );
+});

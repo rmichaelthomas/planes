@@ -111,8 +111,8 @@ function timeWarm(run) {
 try {
   const started = performance.now();
   const [moduleResponse, csvResponse] = await Promise.all([
-    fetch("./rust/planes-spike/target/wasm32-unknown-unknown/release/planes_spike.wasm"),
-    fetch("./rust/planes-spike/data/h7_invoice.csv"),
+    fetch("./target/wasm32-unknown-unknown/release/planes_spike.wasm"),
+    fetch("./data/h7_invoice.csv"),
   ]);
   if (!moduleResponse.ok) throw new Error("WebAssembly file missing; build the wasm32-unknown-unknown release target first.");
   if (!csvResponse.ok) throw new Error("Generated H7 invoice fixture is missing.");

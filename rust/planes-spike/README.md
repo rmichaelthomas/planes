@@ -24,7 +24,7 @@ cargo build --release --target wasm32-unknown-unknown --manifest-path rust/plane
 python3 -m http.server 8000
 ```
 
-Open `http://127.0.0.1:8000/planes-rust.html`. The page compares direct JavaScript with Rust compiled to WebAssembly for the same H7 inputs, verifies output equality before timing, and reports module fetch/initialization separately. The browser invoice fixture is committed at `rust/planes-spike/data/h7_invoice.csv`; its test confirms it still matches the deterministic H7 generator.
+Open `http://127.0.0.1:8000/rust/planes-spike/demo.html`. The local-only page compares direct JavaScript with Rust compiled to WebAssembly for the same H7 inputs, verifies output equality before timing, and reports module fetch/initialization separately. It is kept out of the deployed Planes site. The browser invoice fixture is committed at `rust/planes-spike/data/h7_invoice.csv`; its test confirms it still matches the deterministic H7 generator.
 
 ## Checks
 
