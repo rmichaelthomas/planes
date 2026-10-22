@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Planes Rust experiment</title>
+  <style>
+    :root { color-scheme: light; --paper:#F7F2E9; --ink:#211D19; --line:#D6C9B4; --clay:#A65A2E; --muted:rgba(33,29,25,.62); }
+    * { box-sizing:border-box; }
+    body { margin:0 auto; padding:36px 18px 60px; max-width:860px; background:var(--paper); color:var(--ink); font:13px/1.7 ui-monospace,"SF Mono",Menlo,monospace; }
+    h1 { font:900 30px/1.08 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; letter-spacing:-.03em; margin:0 0 8px; }
+    h2 { font-size:12px; font-weight:500; margin:0 0 8px; color:var(--muted); }
+    p { color:var(--muted); max-width:72ch; }
+    .controls, .pane, .note { padding:14px; border:1px solid var(--line); border-radius:3px; background:#fff; }
+    .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:20px 0 12px; }
+    select, button { padding:8px 10px; border:1px solid var(--line); border-radius:3px; background:transparent; color:var(--ink); font:inherit; }
+    button { color:var(--clay); border-color:var(--clay); cursor:pointer; }
+    button:disabled { opacity:.5; cursor:wait; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
+    pre { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; min-height:72px; }
+    .verdict { margin:12px 0 0; padding:12px 14px; border:1px solid var(--line); background:#fff; }
+    .verdict.bad, .error { color:var(--clay); border-color:var(--clay); }
+    .note { margin-top:18px; color:var(--muted); font-size:11px; }
+    code { font-size:.92em; }
+    @media (max-width:620px) { .grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <h1>Planes, Rust, and the same work</h1>
+  <p>This small experiment implements two existing Planes H7 workloads in a bounded Rust runtime: 2,000 immutable record updates and 5,000 exact-decimal invoice lines. The browser runs matching JavaScript and Rust/WebAssembly implementations against the same inputs, checks their output, then times repeated runs.</p>
+  <div class="controls">
+    <label for="case">Workload</label>
+    <select id="case"><option value="records">2,000 records × 50 updates</option><option value="invoice">5,000 invoice lines</option></select>
+    <button id="run">Run both</button>
+    <span id="status" aria-live="polite">Loading WebAssembly…</span>
+  </div>
+  <div class="grid">
+    <section class="pane"><h2>JavaScript · warm median</h2><pre id="js-output">—</pre></section>
+    <section class="pane"><h2>Rust / WebAssembly · warm median</h2><pre id="wasm-output">—</pre></section>
+  </div>
+  <div class="verdict" id="verdict" aria-live="polite">Build the WebAssembly module and serve this folder locally to run the comparison.</div>
+  <div class="note" id="details">Rust compile time is measured by the native benchmark, not this browser page. WebAssembly initialization time is reported separately from the repeated workload timings. These are two hand-bounded workload implementations, not a Rust port of the Planes interpreter.</div>
+<script type="module">
+const status = document.querySelector("#status");
+const runButton = document.querySelector("#run");
+const verdict = document.querySelector("#verdict");
+const jsOutput = document.querySelector("#js-output");
+const wasmOutput = document.querySelector("#wasm-output");
+const details = document.querySelector("#details");
+const warmSamples = 7;
+let wasm;
+let invoiceCsv;
+let initMs = 0;
+
+function browserName() {
+  const ua = navigator.userAgent;
+  if (/Firefox\//.test(ua)) return `Firefox ${ua.match(/Firefox\/([\d.]+)/)?.[1] ?? ""}`.trim();
+  if (/Edg\//.test(ua)) return `Edge ${ua.match(/Edg\/([\d.]+)/)?.[1] ?? ""}`.trim();
+  if (/Chrome\//.test(ua)) return `Chromium ${ua.match(/Chrome\/([\d.]+)/)?.[1] ?? ""}`.trim();
+  if (/Safari\//.test(ua)) return `Safari ${ua.match(/Version\/([\d.]+)/)?.[1] ?? ""}`.trim();
+  return "browser engine not identified";
+}
+
+function recordJs() {
+  let total = 0;
+  for (let id = 1; id <= 2000; id += 1) {
+    let record = { id, value: 0 };
+    for (let bump = 1; bump <= 50; bump += 1) record = { id: record.id, value: record.value + bump };
+    total += record.value;
+  }
+  return `total ${total}`;
+}
+function invoiceJs() {
+  let cents = 0n;
+  for (const row of invoiceCsv.trim().split("\n")) {
+    const [quantity, price] = row.split(",");
+    cents += BigInt(quantity) * BigInt(price);
+  }
+  const taxed = cents * 108n;
+  const roundedCents = (taxed + 50n) / 100n;
+  return `due ${(roundedCents / 100n)}.${String(roundedCents % 100n).padStart(2, "0")}`;
+}
+function wasmText(packed) {
+  const ptr = Number((packed >> 32n) & 0xffff_ffffn);
+  const len = Number(packed & 0xffff_ffffn);
+  return new TextDecoder().decode(new Uint8Array(wasm.memory.buffer, ptr, len));
+}
+function runJs(kind) { return kind === "records" ? recordJs() : invoiceJs(); }
+function runWasm(kind) {
+  if (kind === "records") return wasmText(wasm.planes_records(2000, 50));
+  const bytes = new TextEncoder().encode(invoiceCsv);
+  if (bytes.length > wasm.planes_input_capacity()) throw new Error("Invoice input exceeds this experiment's WebAssembly buffer.");
+  new Uint8Array(wasm.memory.buffer, wasm.planes_input_ptr(), bytes.length).set(bytes);
+  return wasmText(wasm.planes_invoice(bytes.length));
+}
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+function timeWarm(run) {
+  const durations = [];
+  for (let sample = 0; sample < warmSamples; sample += 1) {
+    let count = 0;
+    const start = performance.now();
+    do { run(); count += 1; } while (performance.now() - start < 60);
+    durations.push((performance.now() - start) / count);
+  }
+  return median(durations);
+}
+
+try {
+  const started = performance.now();
+  const [moduleResponse, csvResponse] = await Promise.all([
+    fetch("./rust/planes-spike/target/wasm32-unknown-unknown/release/planes_spike.wasm"),
+    fetch("./rust/planes-spike/data/h7_invoice.csv"),
+  ]);
+  if (!moduleResponse.ok) throw new Error("WebAssembly file missing; build the wasm32-unknown-unknown release target first.");
+  if (!csvResponse.ok) throw new Error("Generated H7 invoice fixture is missing.");
+  invoiceCsv = await csvResponse.text();
+  const { instance } = await WebAssembly.instantiate(await moduleResponse.arrayBuffer());
+  wasm = instance.exports;
+  initMs = performance.now() - started;
+    status.textContent = `Ready · ${browserName()} · ${initMs.toFixed(2)} ms to fetch and initialize`;
+} catch (error) {
+  status.textContent = "Not ready";
+  verdict.textContent = `${error.message} Then serve the Planes folder over HTTP and reload.`;
+  verdict.classList.add("bad");
+}
+
+runButton.addEventListener("click", () => {
+  if (!wasm) return;
+  runButton.disabled = true;
+  status.textContent = "Checking outputs, then timing…";
+  verdict.classList.remove("bad");
+  try {
+    const kind = document.querySelector("#case").value;
+    const js = runJs(kind);
+    const rust = runWasm(kind);
+    if (js.startsWith("error ") || rust.startsWith("error ")) throw new Error(`Workload error: JS=${js}; Rust/Wasm=${rust}`);
+    if (js !== rust) throw new Error(`Output mismatch: JavaScript=${js}; Rust/Wasm=${rust}. Timing was skipped.`);
+    const jsMs = timeWarm(() => runJs(kind));
+    const wasmMs = timeWarm(() => runWasm(kind));
+    jsOutput.textContent = `${js}\n${jsMs.toFixed(4)} ms per run`;
+    wasmOutput.textContent = `${rust}\n${wasmMs.toFixed(4)} ms per run`;
+    verdict.innerHTML = `<strong>Outputs agree.</strong> Warm median of ${warmSamples} samples; each sample runs for at least 60 ms.`;
+    details.textContent = `${browserName()}. WebAssembly fetch + initialization: ${initMs.toFixed(2)} ms. The Rust build duration is captured in the native benchmark results. Browser timings vary with device, browser, and power state.`;
+    status.textContent = "Done";
+  } catch (error) {
+    verdict.textContent = error.message;
+    verdict.classList.add("bad");
+    status.textContent = "Comparison stopped";
+  } finally {
+    runButton.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
