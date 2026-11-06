@@ -70,3 +70,5 @@ rust/planes-spike/target/
 # Xcode's per-checkout SwiftPM state when a package is opened directly in
 # Xcode (e.g. to verify an iOS destination) — machine-local, never committed.
 .swiftpm/
+# Internal planning files: kept locally, copied to the vault
+/docs/checkpoints/
